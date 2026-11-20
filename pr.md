@@ -1,7 +1,12 @@
 # openHealth — Product Requirements & Feature Specification
 
-**Version:** 0.1 (draft for build planning)  
+**Version:** 0.3 (draft for build planning)  
 **Status:** Living document  
+**Last revision:** 2026-11-20 — platform pass: the first releases are Android
+only (0.1), iOS/web deferred behind a gate (13.17), section 8.1 superseded by
+`Tech-Stack.md`. Previous pass: MVP retagged, cut list recorded (14.5),
+missing sections added (6.27–6.31, 7.9, 8.7), external constraints written
+down (12).  
 **Product:** openHealth, a private, local-first home for every health signal  
 **Reference library:** [`references/`](references/README.md)
 
@@ -22,6 +27,29 @@ Priority tags:
 
 The rule for every feature: if it does not make the daily loop faster, the
 trend clearer, or the data more trustworthy, it waits.
+
+---
+
+## 0.1 Platform scope
+
+**The first releases are Android only.** Phases 0 to 2 ship an Android phone
+app, with Wear OS added in Phase 2. iOS, watchOS, the web client and desktop
+are deferred — not cancelled. Starting iOS is an explicit gate (13.17 below,
+`BUILD-PLAN.md` section 2).
+
+What that changes in this document:
+
+- Any feature below that names HealthKit, Apple Watch, iOS or a browser build
+  is **Later**, whatever tag it carries, until the iOS gate opens. Health
+  Connect is the platform bus for the first release.
+- File-based imports stay fully in scope: an Apple Health export, a Garmin or
+  Strava archive, FIT/GPX/TCX and CSV are read from the file system and need
+  no vendor platform.
+- Nothing in the data model, the formats or the server is Android-specific.
+  The canonical schema keeps its `healthkit` source value and every
+  iOS-shaped field, so the port is additive and never a migration.
+- `Tech-Stack.md` records how this is built and supersedes section 8 where
+  the two overlap.
 
 ---
 
@@ -85,7 +113,7 @@ A number without provenance is a decoration. We do not ship decorations.
 
 ### 2.3 Local-first, server optional
 
-- The phone and the browser hold the truth they can see.
+- The device holds the truth it can see.
 - The server is optional: self-hosted, family-hosted, or a managed instance.
 - Sync is incremental, conflict-aware, and never blocks logging.
 - Export is a first-class feature, not a support ticket.
@@ -240,8 +268,8 @@ minutes.
 
 **V1**
 
-- Import from Apple Health, Health Connect, Fitbit, Garmin, Withings, Oura,
-  WHOOP, Strava, CSV, and other apps.
+- Import from Health Connect, and from exported files: Apple Health, Fitbit,
+  Garmin, Withings, Oura, WHOOP, Strava, CSV, and other apps.
 - Guided first-week plan.
 - “What do you want to improve first?” personalization.
 - Unit and language auto-detection with an easy override.
@@ -251,7 +279,6 @@ minutes.
 
 - Clinician-shared profile.
 - Family/household setup.
-- Insurance or employer program import (only with explicit consent).
 
 **Acceptance criteria**
 
@@ -310,8 +337,12 @@ when you want it.
 **MVP**
 
 - Food diary by day and meal (breakfast, lunch, dinner, snacks; custom meals).
-- Search local foods, Open Food Facts, USDA FoodData Central, and the German
-  BLS (and other national databases as they are added).
+- Search local foods, Open Food Facts, and USDA FoodData Central. Other
+  national databases arrive in V1, once each licence position is settled (12.2).
+- A bundled offline index: the most-used foods for the user's region plus
+  everything they have ever logged, so search and barcode lookup work on a
+  plane. The full remote corpus is fetched and cached on demand, never shipped
+  whole: Open Food Facts alone is far too large to bundle.
 - Barcode scanning with offline fallback and a clear “found / not found” state.
 - Serving units: grams, millilitres, household measures, servings, portions.
 - Quick add calories and macros.
@@ -327,6 +358,8 @@ when you want it.
 
 **V1**
 
+- National food databases: German BLS, Swiss Food Composition, Canadian
+  Nutrient File, each carrying its licence, version and attribution.
 - Meal plans and weekly planning.
 - Restaurant and branded menu items (manual or community).
 - Photo-assisted portion estimation, clearly labelled as an estimate and
@@ -341,8 +374,6 @@ when you want it.
 **Later**
 
 - Grocery list generation and pantry integration.
-- Restaurant menu database partnerships.
-- Community recipe library with moderation and attribution.
 - Lab-informed nutrition suggestions (for example, iron or vitamin D), only
   as education, never as medical advice.
 
@@ -413,26 +444,34 @@ five-year history.
 - Custom exercises with photo, video, and notes.
 - Routines by weekday or rotation (A/B/C), with folders and favourites.
 - Programmes: multi-week blocks with percentage, RPE, or top-set targets.
+  (First to be cut if the date slips: routines plus a progression policy cover
+  most people, and the programme builder is V1 anyway.)
 - Session flow: start today’s plan, freestyle, or log a past workout.
 - Fast set logging: weight, reps, RIR/RPE, done, rest.
-- Warm-up ramps, work sets, back-off sets, drop sets, rest-pause, cluster sets,
-  failure flags, tempo, and per-side work.
+- Warm-up ramps, work sets, back-off sets, drop sets, failure flags, and tempo.
+  Rest-pause, cluster sets and per-side work are V1: each one changes the set
+  model, and the set model has to be right before it is wide.
 - Supersets, circuits, and combined routines.
 - Plate math for barbells, EZ bars, trap bars, Smith machines, and custom bars.
-- Equipment profiles per gym: plates, dumbbells, bars, machine stacks.
-- Progression policies: linear, Greyskull LP, double, steady, triple,
-  undulating, density, ladder, time, and off.
+- One equipment profile: plates, dumbbells, bars. Multiple per-gym profiles
+  are V1.
+- Progression policies: linear, double progression, and off. The other seven
+  (Greyskull LP, steady, triple, undulating, density, ladder, time) are V1.
+  The policy interface ships in the MVP so the rest are additive, not a
+  rewrite.
 - Deloads, stalls, PR detection, estimated 1RM, and per-exercise history.
 - Rest timer with sound, vibration, and native alerts.
 - Session summary: volume, sets, PRs, duration, notes.
 - Edit any saved workout; move it to another date; delete with undo.
 - Bodyweight and assisted exercises; band and chain support.
 - Notes per exercise, per set, and per session.
-- Form videos attached to a set, stored privately.
 
 **V1**
 
-- Watch support: Apple Watch, Wear OS, Garmin, Zepp.
+- Watch support: Wear OS first, then Garmin and Zepp; Apple Watch after the
+  iOS gate (0.1).
+- Form videos attached to a set, stored privately.
+- Rest-pause, cluster sets, per-side work, and per-gym equipment profiles.
 - Live Activity / Lock Screen controls.
 - Plate-loading suggestions with a visual plate stack.
 - Warm-up and work-set auto-regulation from readiness.
@@ -447,11 +486,7 @@ five-year history.
 
 **Later**
 
-- Form-check AI with pose estimation (optional, private, on-device where
-  possible).
-- Velocity-based training and bar-path capture.
 - Community programmes and coach-authored plans.
-- Live group sessions.
 
 **Acceptance criteria**
 
@@ -470,11 +505,12 @@ double-counts.
 **MVP**
 
 - Phone step counter (hardware sensor where available; fallback detector).
-- Health Connect and HealthKit import.
+- Health Connect import (HealthKit after the iOS gate, 0.1).
 - Daily steps, distance, active calories, active minutes, floors where
   available.
 - Goal setting and weekly average.
-- Source priority and deduplication: take the best source, never sum sources.
+- Source priority and deduplication: one source wins the day by configured
+  priority, never the largest value and never the sum (7.6).
 - Local-day rollups with timezone handling.
 - Manual correction and “exclude this day.”
 - Steps from walking pads and treadmills where the device exposes them.
@@ -529,15 +565,13 @@ video library with a timer bolted on.
 - Breathwork and meditation sessions.
 - Mobility tests (sit-and-reach, shoulder, ankle, hip) with progress.
 - Voice selection and cue timing.
-- Health Connect / HealthKit mindful-session export.
+- Health Connect mindful-session export.
 - Watch support for timers and heart rate.
 - “Yoga after leg day” and “mobility for desk workers” recommendations.
 
 **Later**
 
-- On-device pose estimation with real-time alignment feedback.
 - Adaptive flows based on soreness and readiness.
-- Teacher mode for classes.
 - Community flows with attribution and licensing.
 
 **Acceptance criteria**
@@ -576,9 +610,7 @@ video library with a timer bolted on.
 
 **Later**
 
-- 3D body scan import.
 - Clothing-size tracking.
-- Photo-based body composition estimates (clearly experimental).
 
 **Acceptance criteria**
 
@@ -604,18 +636,23 @@ without pretending to be a medical device.
 - Symptoms and episodes: type, severity, duration, triggers, notes.
 - Allergies and conditions.
 - Vaccinations.
-- Lab results: LOINC-coded where possible, reference ranges, trend, PDF import.
-- Clinical reference ranges with user/clinician overrides.
+- Lab results: manual entry and CSV, LOINC-coded where possible, with
+  reference ranges and trends. PDF import and parsing is V1.
+- Clinical reference ranges with user and clinician overrides. Every range
+  records the guideline and region it came from, because BP and glucose
+  thresholds genuinely differ between ESC, ACC/AHA and national guidance. A
+  range without a citation is an opinion.
 - Context-aware charts and averages.
-- Doctor-ready PDF report.
-- FHIR R4 and Open mHealth export.
+- Doctor-ready PDF report and a plain CSV export.
 
 **V1**
 
+- FHIR R4 and Open mHealth export.
 - CGM integration: Dexcom, Libre, Nightscout, xDrip.
 - Blood pressure monitor import over Bluetooth.
 - Home BP protocol: 2 readings, morning and evening, 7 days.
-- Medication interaction warnings (education only, with sources).
+- Medication interaction warnings: education only, with named sources, a
+  licensed data set, and the gate in 12.1.
 - Symptom correlation with sleep, food, cycle, and training.
 - Lab PDF parsing with review.
 - FHIR import from providers.
@@ -636,7 +673,7 @@ without pretending to be a medical device.
 - A doctor report is generated in under 30 seconds and is readable without
   the app.
 - No alert is ever presented as a diagnosis.
-- Data can be exported in FHIR and a plain CSV.
+- Data can be exported as plain CSV from the MVP, and as FHIR R4 from V1.
 
 ---
 
@@ -666,8 +703,8 @@ picture.
 
 **Later**
 
-- Sleep apnea risk screening (not diagnosis).
-- Smart alarm.
+- Sleep apnea risk screening: a signposted, cited questionnaire the person
+  chooses to take, never a passive alert (see 12.1).
 - Environmental inputs (temperature, noise) with user permission.
 
 **Acceptance criteria**
@@ -713,8 +750,6 @@ network.
 
 - Social feed, clubs, challenges, and leaderboards as an optional module.
 - Segment explorer and route popularity.
-- Live coaching and race plans.
-- Safety beacon and incident detection.
 
 **Acceptance criteria**
 
@@ -751,7 +786,6 @@ into a clinical claim.
 **Later**
 
 - Therapist-shared summaries.
-- Community challenges.
 - Voice journaling.
 
 **Acceptance criteria**
@@ -805,20 +839,25 @@ leak.
 - Multiple profiles on one instance.
 - Separate data, settings, and goals per profile.
 - Optional caregiver mode with read-only or limited access.
+- An emergency card: conditions, allergies, medications, blood type and
+  contacts, printable and readable without unlocking the app. It is cheap to
+  build and it is the one screen that might matter most.
 
 **V1**
 
 - Granular permissions by data category and time range.
 - Invite by link or code, with expiry.
 - Audit log of who saw or changed what.
-- Child and dependent profiles with guardian consent.
+- Child and dependent profiles with guardian consent, age-appropriate
+  content, growth percentiles in place of BMI, and no calorie targets for
+  minors. Adult BMR formulas and adult reference ranges do not apply to
+  children and must be blocked, not merely discouraged (13.14).
 - Shared medication and appointment reminders.
 
 **Later**
 
 - Household dashboards.
 - Clinician accounts with scoped access.
-- Emergency information card.
 
 **Acceptance criteria**
 
@@ -843,7 +882,11 @@ not a chatbot that guesses.
 - Validates exercise ids, sets, reps, loads, and dates against the data model.
 - One repair round when output is invalid.
 - Conversation history, proposal snapshots, and undo.
-- Clear privacy disclosure about what is sent to the provider.
+- Clear privacy disclosure about what is sent to the provider, by category,
+  with a separate opt-in for each. Data read from Health Connect (and from
+  HealthKit once iOS ships) is excluded from provider requests unless the
+  user opts that category in: platform terms restrict passing it onward, and
+  this is a Play Store rejection risk as much as a privacy one (12.3).
 
 **V1**
 
@@ -858,8 +901,6 @@ not a chatbot that guesses.
 
 **Later**
 
-- Multi-agent coaching (training, nutrition, sleep).
-- Voice coach.
 - On-device small models.
 - Research-mode experiments with consent.
 
@@ -898,7 +939,8 @@ not a chatbot that guesses.
 **Later**
 
 - Anomaly detection with careful thresholds.
-- Predictive alerts for overtraining or illness risk (experimental).
+- Predictive alerts for overtraining or illness risk: experimental, opt-in,
+  and gated by 12.1.
 - Research export with consent.
 
 **Acceptance criteria**
@@ -918,14 +960,15 @@ not a chatbot that guesses.
 - Local-first storage with full JSON export.
 - CSV export for food, workouts, body metrics, and vitals.
 - Import from CSV, JSON, and common health exports.
-- Health Connect and HealthKit read/write.
+- Health Connect read/write (HealthKit after the iOS gate, 0.1).
 - WebDAV backup.
 - Encrypted backup file.
 
 **V1**
 
-- Apple Health, Health Connect, Garmin, Fitbit, Withings, Oura, WHOOP, Polar,
-  Suunto, COROS, Strava, Dexcom, Libre, Nightscout, Omron.
+- Health Connect, Garmin, Fitbit, Withings, Oura, WHOOP, Polar, Suunto,
+  COROS, Strava, Dexcom, Libre, Nightscout, Omron; Apple Health by export
+  file.
 - Open Food Facts, USDA, BLS, Swiss, Canadian Nutrient File.
 - Mealie and Tandoor recipe import.
 - FHIR R4 and Open mHealth export.
@@ -961,12 +1004,12 @@ not a chatbot that guesses.
 - Bluetooth heart-rate straps.
 - Bluetooth scales (OpenScale-compatible).
 - Bluetooth blood-pressure cuffs.
-- Health Connect and HealthKit as platform buses.
+- Health Connect as the platform bus (HealthKit after the iOS gate, 0.1).
 
 **V1**
 
-- Apple Watch: workout, sets, rest timer, heart rate, complications.
-- Wear OS: workout, sets, rest timer, tiles.
+- Wear OS: workout, sets, rest timer, heart rate, tiles, complications.
+- Apple Watch: the same, after the iOS gate (0.1).
 - Garmin: Connect IQ app and FIT import.
 - Zepp OS: relay through the server.
 - CGM: Dexcom, Libre, Nightscout.
@@ -977,14 +1020,14 @@ not a chatbot that guesses.
 
 - Smart rings and sleep buds.
 - ECG devices.
-- Smart clothing.
-- Vehicle and gym equipment integrations.
 
 **Acceptance criteria**
 
 - A device that disconnects mid-workout loses nothing.
 - The app degrades gracefully to manual logging.
-- No vendor cloud account is required.
+- No vendor cloud account is required for core logging. Where an integration
+  genuinely needs one (Garmin Connect, Fitbit, Oura, WHOOP, Dexcom Share), the
+  app says so plainly before the user connects it.
 
 ---
 
@@ -1091,11 +1134,14 @@ not a chatbot that guesses.
 - Full RTL support for Arabic, Hebrew, Persian, and Urdu.
 - Units: kg/lb, cm/in, km/mi, kcal/kJ, mg/dL/mmol/L.
 - Local date, number, and time formats.
-- 10+ languages at launch; community translations after.
+- Three languages at launch (English plus two), every string externalized,
+  and the community translation pipeline open from day one. Ten shipped badly
+  is worse than three shipped well, and exercise, pose and food names are a
+  far larger translation problem than UI strings.
 
 **V1**
 
-- 25+ languages.
+- 10+ languages, then 25+ as the community pipeline fills.
 - Localized food databases and exercise names.
 - Voice-over and TalkBack tested flows.
 - One-handed mode.
@@ -1103,8 +1149,8 @@ not a chatbot that guesses.
 
 **Later**
 
-- Sign-language video for key flows.
-- Offline translation of user notes.
+- Captions and transcripts for every instructional video.
+- Community translation of exercise, pose and food names, not only UI strings.
 
 ---
 
@@ -1174,7 +1220,6 @@ not a chatbot that guesses.
 
 **Later**
 
-- Real-time collaborative editing for coaches.
 - CRDT-backed notes (only where it helps).
 - Peer-to-peer sync on the local network.
 
@@ -1198,6 +1243,17 @@ not a chatbot that guesses.
 - Eating-disorder content avoids calorie shaming and unsafe targets.
 - AI output is reviewed, validated, and never authoritative.
 - A clear disclaimer appears during onboarding and in exported reports.
+- **Weight-neutral mode.** One switch hides calories, weight, body fat and
+  progress photos across the whole app, while training, steps, sleep and
+  vitals keep working. Nothing is deleted; the numbers simply stop being
+  shown. This is a first-class mode, not a settings footnote, and it is
+  offered during onboarding to anyone who says their relationship with food or
+  weight is difficult. It is also the single most defensible feature in this
+  document: no major tracker has it.
+- **Scope discipline.** Any feature that screens for, predicts, or warns about
+  a condition moves this product toward being a regulated medical device in
+  the EU and UK. Those features stay off by default, carry their evidence and
+  citation, and are checked against 12.1 before they ship.
 
 ---
 
@@ -1228,6 +1284,183 @@ Reliability rules:
 
 ---
 
+### 6.27 Timeline, quick add and backfill
+
+**Goal:** one place where everything that happened shows up, and one gesture
+that gets anything into it.
+
+Both are promised in the information architecture and neither had a spec.
+
+**MVP**
+
+- Timeline: every observation, session, meal, reading and note, newest first,
+  grouped by local day.
+- Filters: module, type, source, and manual vs imported.
+- Every row opens the thing it came from. Every number shows its provenance in
+  one tap: source, device, method, when it happened, when it was recorded, and
+  whether anyone edited it.
+- Quick add from anywhere: food, water, weight, set, vitals, note, with the
+  most recent items first.
+- Backfill: every log accepts a past date and time, keeps "happened at"
+  separate from "recorded at", and marks the entry as entered late.
+- Undo on every write, from the timeline row itself.
+
+**V1**
+
+- Attachments on any entry: photo, file, lab PDF.
+- Timeline search, date jump, and "on this day".
+- Life events as annotations: injury, illness, travel, a new job, a new
+  medication. They draw as bands across every chart and explain more trends
+  than any correlation engine will.
+
+**Later**
+
+- Shareable, redacted timeline slices for a clinician or coach.
+
+**Acceptance criteria**
+
+- Anything the app stores appears in the timeline; nothing is invisible.
+- Quick add to a committed entry is two taps for a recent item.
+- A backdated entry never rewrites when it was recorded, and the affected
+  day's rollups recompute.
+
+---
+
+### 6.28 Data quality, duplicates and corrections
+
+**Goal:** provenance is only worth storing if the person can act on it.
+
+The document is built on provenance but never says where a user resolves a
+conflict. This is that place.
+
+**MVP**
+
+- A review inbox: imports that matched no known food or exercise, probable
+  duplicates, values outside a plausible range, and days where two sources
+  disagree. Each item offers accept, merge, edit, or ignore.
+- Import dry run: every import shows what will be created, merged and skipped
+  before anything is written.
+- Source health: last sync, expected cadence, and gaps, stated plainly:
+  "no steps from your watch since Tuesday."
+- Correction history: editing a value keeps the original and the reason, and
+  everything derived from it recomputes.
+- "Exclude this reading from trends" without deleting it.
+
+**V1**
+
+- Bulk corrections: a unit mistake, a mis-set scale, a week logged in the
+  wrong timezone.
+- A source-priority editor per data type that previews what would change
+  before it changes.
+- Per-module data quality summary, explained, never gamified.
+
+**Acceptance criteria**
+
+- No import writes anything the user has not seen summarized first.
+- A merge that cannot be undone is never performed automatically.
+- Every number in the app can answer "where did you come from, and has anyone
+  touched you?"
+
+---
+
+### 6.29 Undo, trash and recovery
+
+**Goal:** "zero tolerance for data loss" is a claim that needs machinery
+behind it.
+
+**MVP**
+
+- Undo for every destructive action, for the length of the session, not three
+  seconds.
+- Trash: deleted entries recoverable for 30 days per profile, with an explicit
+  "delete permanently".
+- An automatic local snapshot before every schema migration and every bulk
+  import, restorable from settings.
+- Backup health: when the last backup succeeded, how large it was, and a
+  one-tap verify-restore into a sandbox.
+- An export complete enough that the acceptance test is rebuilding the account
+  on a clean install from the export alone.
+
+**V1**
+
+- Version history with restore for editable documents: routines, plans, notes.
+- Point-in-time restore of a single day.
+- Scheduled, verified backups that notify on failure.
+
+**Acceptance criteria**
+
+- A restore test runs in CI against a real export on every release.
+- No code path removes an observation without a tombstone.
+- One screen answers "if this phone died right now, what would I lose?"
+
+---
+
+### 6.30 Automation and the developer surface
+
+**Goal:** the data tinkerer is one of eight personas and currently has nothing
+before V1.
+
+**MVP**
+
+- A local HTTP API, on device or server, with per-module read and write
+  scopes.
+- Android intents and quick-settings tiles: log water, log weight, start a
+  session, add a note, read today's summary. iOS Shortcuts after the iOS
+  gate (0.1).
+- Deep links to every screen.
+
+**V1**
+
+- Webhooks: workout finished, PR, weigh-in, a vital outside a user-set band.
+- MCP server with scoped tokens and a documented tool surface.
+- A CLI for import, export, backup and bulk correction.
+- Calendar feed (ICS) for planned sessions and appointments.
+- Parquet export for people who want to do their own analysis.
+
+**Later**
+
+- A sandboxed, permissioned plugin interface for community connectors.
+
+**Acceptance criteria**
+
+- Every automation path runs the same validation as the UI; nothing can write
+  an invalid record through the back door.
+- A token's scope is visible, and revoking it takes effect on the next
+  request.
+
+---
+
+### 6.31 Diagnostics and support without telemetry
+
+**Goal:** we promised no telemetry. We still have to be able to fix things, and
+section 10 is full of numbers we currently have no honest way to measure.
+
+**MVP**
+
+- A local, rotating diagnostic log: sync attempts, migration results, import
+  outcomes, crashes. It never leaves the device unless the user sends it.
+- "Send a diagnostic bundle": a redacted archive the user reviews in full
+  before it is attached to a support request.
+- Crash reporting off by default, opt-in, with no health data in the payload.
+- An in-app changelog and a known-issues line.
+
+**V1**
+
+- Either opt-in aggregate product measurement, with a published schema,
+  visible in settings, off by default and never tied to an identity, or an
+  explicit decision to measure only through recruited beta cohorts (13.12).
+- A self-hoster dashboard: sync queue depth, failed jobs, storage use, backup
+  status.
+
+**Acceptance criteria**
+
+- Nothing leaves the device without an explicit, per-event user action.
+- A support request can be diagnosed from the bundle alone in common cases.
+- Every metric in section 10 either has a legitimate way to be measured, or is
+  removed from section 10.
+
+---
+
 ## 7. Data model
 
 The product is built around five layers. This is the most important design
@@ -1250,6 +1483,14 @@ ingestion record:
 
 This lets us replay, audit, and debug without guessing.
 
+Raw payloads are not free, and an append-only log on a phone grows without
+limit. The policy: keep the full payload for 90 days on device and for as long
+as the user chooses on the server (default forever, configurable); keep the
+hash, source, timestamps and idempotency key permanently. A compacted record
+stays auditable and still explains everything derived from it; it simply
+cannot be re-parsed from scratch. Raw storage cost is shown in settings with a
+one-tap compaction.
+
 ### 7.2 Layer 2: canonical observations
 
 Normalized, typed measurements:
@@ -1263,6 +1504,7 @@ Normalized, typed measurements:
 - context (resting, post-meal, fasting, pre-workout, arm, position)
 - method (cuff, CGM, BIA, DEXA, manual)
 - confidence and quality
+- user-verified and user-edited flags, with the original value kept on edit
 - raw ingestion id
 
 ### 7.3 Layer 3: daily summaries
@@ -1278,7 +1520,12 @@ Rollups computed at the user’s local midnight:
 - mood, stress, symptoms
 - adherence
 
-Rollups are derived, never the source of truth.
+Rollups are derived, never the source of truth. Late data is the normal case,
+not the exception: a watch that syncs on Tuesday afternoon rewrites Monday.
+Every rollup records the observation watermark it was computed from, and any
+write bearing an older local date enqueues a recompute of that day and of
+everything downstream of it: weekly averages, streaks, sleep debt, adaptive
+TDEE.
 
 ### 7.4 Layer 4: domain objects
 
@@ -1313,10 +1560,16 @@ Each source has:
 
 Default rules:
 
-- Steps: take the largest trusted source for the day, never sum.
+- Steps: the highest-priority source that covers the day wins. Never sum, and
+  never choose by magnitude: "largest wins" systematically rewards the
+  worst-calibrated device. If the winning source has a gap longer than an
+  hour, fall back to the next source for the whole day and say so, rather than
+  stitching two sources into one number.
 - Sleep: take the most detailed record; never replace a full night with a
   partial one.
-- Weight: manual or latest measurement wins; duplicates within a minute merge.
+- Weight: one value per local day. A manual entry beats a device entry;
+  between two of the same kind, the later wins. Duplicates within a minute
+  merge.
 - Blood pressure: keep every reading; average with context.
 - Heart rate: keep per-source series; do not average across devices blindly.
 - Nutrition: user-edited entries win over imported ones.
@@ -1341,27 +1594,40 @@ Every rule is visible and overridable.
 - Rollups use the local day, not UTC.
 - Handle DST and travel explicitly.
 
+### 7.9 Schema versions and mixed-version sync
+
+Two of the user's own devices will run different app versions for months, and
+a self-hoster will run a server older than both of them.
+
+- Every payload carries a schema version.
+- The server accepts any version inside a supported window and never silently
+  drops fields it does not understand: unknown fields are stored verbatim and
+  returned on read.
+- Migrations are forward-only on device, each preceded by an automatic local
+  snapshot, each with a documented rollback for that release.
+- A client too old to sync safely is told to update and keeps logging locally
+  in the meantime. It is never allowed to write a shape the server cannot
+  store.
+
 ---
 
 ## 8. Recommended architecture
 
-This section is a starting point, not a locked decision.
+Sections 8.1 to 8.4 are decided in `Tech-Stack.md` and summarised here; 8.5
+to 8.7 still hold as written.
 
 ### 8.1 Client
 
-- **Option A (recommended for speed):** React + TypeScript + Vite PWA with
-  Capacitor shells for iOS/Android, sharing the openGym experience. Best for
-  web, self-hosting, and fast iteration.
-- **Option B (deeper native health):** React Native or Expo with native
-  HealthKit/Health Connect modules. Better for background sensors and watch
-  integration, heavier to build.
-- **Option C (maximum native):** Swift + Kotlin. Best performance and device
-  access, highest cost.
+A native **Android** app in Kotlin and Jetpack Compose, with the domain,
+storage and sync written as platform-neutral Kotlin modules so an iOS client
+can be added later without reimplementing a single rule. The three options
+this section used to list — Capacitor PWA, React Native, dual native — were
+weighed in `Tech-Stack.md` section 2 and rejected there.
 
 ### 8.2 Local storage
 
 - SQLite on device, with a typed query layer.
-- OPFS/IndexedDB for the web build.
+- OPFS/IndexedDB when the web client is built (0.1).
 - Media in the app’s private storage, encrypted where possible.
 - A single local schema with migrations and backups.
 
@@ -1383,7 +1649,7 @@ This section is a starting point, not a locked decision.
 
 ### 8.5 Standards
 
-- Health Connect and HealthKit for platform data.
+- Health Connect for platform data; HealthKit from the iOS gate (0.1).
 - FHIR R4 for clinical export.
 - LOINC for observation codes.
 - UCUM for units.
@@ -1401,6 +1667,20 @@ This section is a starting point, not a locked decision.
 - Structured output validation.
 - Proposal, review, approve, undo.
 - No diagnosis, no dosing, no emergency advice.
+
+### 8.7 Keys and recovery
+
+End-to-end encryption is the easiest way in this product to destroy someone's
+data permanently, so the recovery story is designed before the encryption is.
+
+- A recovery code generated at setup, shown once, confirmed by re-entry, and
+  re-issuable from any signed-in device.
+- Any enrolled device can admit another, so a second device is a real backup.
+- An explicit, understood choice at setup: if the code and every device are
+  lost, the backup is gone. No silent key escrow, and no pretending the risk
+  is not there.
+- Local-only users see the same prompt about export, because a lost phone with
+  no server and no backup is exactly the same loss.
 
 ---
 
@@ -1425,11 +1705,18 @@ This section is a starting point, not a locked decision.
 - Nutrition diary, calories, water.
 - Today, Timeline, basic Insights.
 - Local-first storage and backup.
-- Health Connect / HealthKit read.
+- Health Connect read.
 - CSV/JSON export.
 
 **Exit:** a person can run their whole day in openHealth without another app
 for training, food, weight and steps.
+
+**On the dates.** The MVP above, a full strength log, a food diary with a real
+database, deduplicated steps, body metrics, Today, Timeline, local-first
+storage with sync, and WCAG 2.2 AA throughout, is not three to four months of
+work for a small team. Plan for six to nine, or cut nutrition to Phase 2 and
+ship training, body and steps first. Decide which now, rather than discovering
+it in month five (13.16).
 
 ### Phase 2 — Depth (3–4 months)
 
@@ -1439,7 +1726,7 @@ for training, food, weight and steps.
 - Activities, FIT/GPX/TCX, maps.
 - Weekly review and reports.
 - Doctor PDF and FHIR export.
-- Watch support.
+- Wear OS support.
 
 **Exit:** a person with a wearable and a home BP cuff can replace three apps
 and take a clean report to a clinician.
@@ -1462,7 +1749,7 @@ write with scoped consent.
 - Community programmes and yoga flows.
 - Optional social module.
 - Research exports.
-- On-device AI and pose estimation.
+- On-device AI for search, summaries and natural-language logging.
 - Independent security audit.
 - Accessibility and localization excellence.
 
@@ -1480,7 +1767,7 @@ write with scoped consent.
 
 - 4+ active days per week for retained users.
 - Median food log time under 20 seconds per meal.
-- Median set log time under 3 seconds.
+- Median set log time under 2 seconds, matching the bar in 2.7.
 - Weekly review opened by 30% of active users.
 
 ### Trust
@@ -1519,39 +1806,148 @@ write with scoped consent.
 - **Not a supplement store.** No affiliate pressure, no miracle cures.
 - **Not a subscription trap.** Core health data is never held hostage.
 - **Not a data broker.** No ads, no resale, no hidden telemetry.
+- **Not a form coach.** We do not tell you your squat is wrong from a camera.
+- **Not funded by you being the product.** How it is actually paid for is
+  12.5, and it is decided before Phase 2, not after.
 
 ---
 
-## 12. Open decisions
+## 12. Constraints that shape the product
+
+Four things in this document are not engineering problems and will not be
+solved by building harder. They decide scope, so they belong in the spec.
+
+### 12.1 Regulatory scope
+
+Under EU MDR, software intended for prediction or prognosis of disease is a
+medical device, and Rule 11 puts most software that informs a clinical
+decision into Class IIa. The UK and most other markets follow similar logic;
+the US FDA's general wellness policy is more forgiving but still turns on the
+claims made in the UI, not the ones in the privacy policy.
+
+Features in this document that cross the line if their wording is not
+disciplined: sleep apnea risk screening, predictive alerts for overtraining or
+illness risk, medication interaction warnings, configurable clinical alerts,
+lab interpretation, and anything the AI Coach says about a symptom.
+
+Position: each of those ships either as a neutral display of the person's own
+data against a cited published range, or not at all until a regulated build is
+funded. Section 11 says "not a medical device"; the feature list has to agree
+with it, and today it does not quite.
+
+### 12.2 Data and content licensing
+
+Every bundled dataset records its licence, version and attribution, in the app
+and in every export. Specifically:
+
+- **Open Food Facts** is ODbL. Exporting a user's own diary is fine; shipping
+  a bundled index is a derived database and carries attribution and
+  share-alike obligations.
+- **USDA FoodData Central** is public domain. Safe.
+- **German BLS** is licensed by the Max Rubner-Institut and is not freely
+  redistributable. Budget for a licence or drop it; do not plan around it.
+- **Compendium of Physical Activities** MET values are published under terms
+  that require attribution and restrict redistribution. Check before embedding
+  the table.
+- **LOINC** is free but requires registration and attribution.
+- **FIT SDK** is under Garmin's developer terms.
+- **Exercise and pose media** must be our own or clearly licensed. wger's
+  library is CC-BY-SA, which is share-alike on derivatives.
+
+### 12.3 Platform rules
+
+- **HealthKit** — binds from the iOS gate (0.1); Health Connect is what binds
+  the first release. Data read from HealthKit may not be used for advertising
+  or data mining, may not be sold, and may not be disclosed to third parties
+  without explicit user consent. That directly constrains the AI Coach: a
+  provider call containing HealthKit-derived data needs its own consent and
+  its own disclosure, or the app gets rejected.
+- **Health Connect:** equivalent policy, plus a declared health-permissions
+  use case in the Play console.
+- **Strava:** the API terms restrict retention and prohibit using Strava data
+  to build a competing analysis product. Assume Strava import is read and
+  display only, and treat "own your history" as the user exporting their own
+  archive and importing the files.
+- **Garmin, Fitbit, Oura, WHOOP, Dexcom:** partner-gated APIs with approval
+  processes measured in weeks to months. Start those applications in Phase 1,
+  not Phase 3.
+
+### 12.4 Licence and distribution
+
+AGPL-3.0 and App Store distribution conflict: GPL-family terms clash with the
+store's redistribution restrictions, and GPL apps have been removed over it.
+The split that works is AGPL-3.0 for the server and Apache-2.0 or MPL-2.0 for
+the client. That keeps self-hosting honest, keeps server improvements flowing
+back, and still allows a store presence.
+
+Decide before the first public commit. Relicensing after contributors arrive
+means chasing every one of them for permission.
+
+### 12.5 How this is paid for
+
+The product promises no ads, no data sale, and no subscription trap. That
+leaves paid managed hosting, a one-off app purchase, donations and
+sponsorship, and paid support for self-hosters. Pick a primary source before
+Phase 2, because it decides whether there is a server team at all, and
+therefore whether Phase 3 exists.
+
+Whatever is chosen, core logging, full export, and self-hosting stay free
+permanently. That is the promise; everything else is negotiable.
+
+---
+
+## 13. Open decisions
 
 These need a decision before the schema is frozen:
 
-1. **Client stack:** React + Capacitor, React Native/Expo, or native.
+1. **Client stack:** decided — native Android (Kotlin + Compose) with
+   platform-neutral core modules; iOS later (`Tech-Stack.md`, 0.1).
 2. **Local database:** SQLite + custom sync, WatermelonDB, PowerSync, or
    ElectricSQL.
 3. **Server:** Node/TypeScript or Go; Postgres; self-host and managed.
 4. **Account model:** local-only first, optional server, family accounts.
-5. **Licence:** AGPL-3.0, Apache-2.0, or open-core. This affects contributions
-   and store distribution.
+5. **Licence:** a split licence, AGPL-3.0 server and Apache-2.0 or MPL-2.0
+   client, is the only combination that survives App Store distribution. See
+   12.4. Decide before the first public commit.
 6. **Medical scope:** wellness only, or a regulated clinical product later.
 7. **AI:** provider strategy, BYOK, local models, and data retention.
 8. **First devices:** which watches, scales, cuffs and CGMs are supported at
    launch.
 9. **First languages:** launch set and translation workflow.
 10. **Brand and domain:** openHealth naming, logo, and store presence.
+11. **Offline food index:** which foods ship in the bundle, how large it may
+    be, how it updates, and the ODbL obligations that come with it (12.2).
+12. **Measurement:** how section 10 is measured without telemetry. Opt-in
+    aggregate metrics, recruited beta cohorts, or deleting the metrics that
+    cannot be measured honestly. Today the document asks for retention and
+    crash-rate numbers it has forbidden itself from collecting.
+13. **Business model:** managed hosting, paid app, donations, or paid support
+    (12.5).
+14. **Minors:** supported with guardian consent and pediatric-appropriate
+    content, or blocked under 16 until it can be done properly. Adult
+    formulas and reference ranges are wrong for children, and consent rules
+    differ by jurisdiction.
+15. **Encryption:** end-to-end by default or opt-in, and which recovery model
+    (8.7).
+16. **Nutrition in the MVP:** in, or deferred to Phase 2 to protect the date
+    (section 9).
+17. **iOS start:** what has to be true before an iOS client begins — Android
+    adoption, a second engineer who owns it, or a funded port. Until that is
+    answered the answer is "not yet", and it is reviewed at every phase exit
+    (0.1).
 
 ---
 
-## 13. Appendix
+## 14. Appendix
 
-### 13.1 Reference library
+### 14.1 Reference library
 
 The `references/` folder contains 40 upstream projects and the original
 openGym codebase. See [`references/README.md`](references/README.md) for the
 study index and [`references/MANIFEST.md`](references/MANIFEST.md) for sizes
 and commits.
 
-### 13.2 What we borrow from each category
+### 14.2 What we borrow from each category
 
 | Area | References | What to learn |
 |---|---|---|
@@ -1565,10 +1961,10 @@ and commits.
 | Gym | openGym, wger, Liftosaur, FastNFitness | Progression, routines, programmable plans, simple logging |
 | Sync | PowerSync, WatermelonDB, ElectricSQL, openGym | Offline-first sync and conflict handling |
 
-### 13.3 Standards to follow
+### 14.3 Standards to follow
 
 - Health Connect (Android)
-- HealthKit (Apple)
+- HealthKit (Apple) — from the iOS gate (0.1)
 - FHIR R4
 - LOINC
 - UCUM
@@ -1578,7 +1974,7 @@ and commits.
 - MCP
 - WCAG 2.2 AA
 
-### 13.4 Glossary
+### 14.4 Glossary
 
 - **Observation:** a single typed measurement with time, unit, source and
   context.
@@ -1590,6 +1986,29 @@ and commits.
 - **Local-first:** the device can read and write without a server.
 - **Self-host:** the user runs the server on their own hardware.
 - **MCP:** Model Context Protocol, used to expose tools to AI assistants.
+
+### 14.5 What we deliberately cut
+
+Recorded so it cannot creep back in without an argument.
+
+| Cut | Why |
+|---|---|
+| Form-check AI and pose estimation, gym and yoga | A model good enough to correct a loaded squat is a product in itself. One that is not good enough gives injury-causing advice through a confident interface. |
+| Velocity-based training and bar-path capture | Phone-camera VBT is not accurate enough to autoregulate load, and sensor VBT serves a few thousand people worldwide. |
+| Photo-based body composition, 3D body scan import | Error bars wider than the change being measured, and no scanner ecosystem to import from. |
+| Smart alarm | Continuous overnight sensing and background audio on two platforms, for something a cheap single-purpose app already does well. |
+| Safety beacon and incident detection | A safety promise we cannot keep. If it fails once, it fails at the worst possible moment, and the liability is real. |
+| Live group sessions, teacher mode, live coaching, race plans | Real-time multi-user infrastructure for a product whose core is one person's private record. |
+| Community recipe library, community challenges | Moderation is a staffed, permanent job, not a feature. File and QR recipe sharing covers the actual need. |
+| Restaurant menu database partnerships | Business development, not engineering, and the underlying data is unreliable. |
+| Insurance or employer program import | At odds with the privacy promise regardless of what the consent screen says. |
+| Multi-agent coaching, voice coach | Cost and complexity with no evidence they beat one well-grounded, reviewable proposal. |
+| Real-time collaborative editing for coaches | CRDT infrastructure for a use case nobody has asked for. |
+| Sign-language video, offline note translation | Replaced by captions and transcripts on instructional media, which is achievable and helps more people. |
+| Smart clothing, vehicle and gym equipment integrations | No open protocols, no installed base. |
+
+Moved later rather than cut: social feed and segments, SMART on FHIR, research
+export, peer-to-peer sync.
 
 ---
 
