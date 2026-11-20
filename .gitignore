@@ -1,0 +1,27 @@
+# The reference library is a local study checkout of upstream projects.
+# Keep the index and manifest, but never vendor the 5+ GB of cloned code.
+references/*
+!references/README.md
+!references/MANIFEST.md
+
+# Dependencies and build output for the app that comes next
+node_modules/
+dist/
+build/
+coverage/
+.next/
+out/
+
+# Local health data and secrets: never commit these
+data/
+.env
+.env.*
+!.env.example
+*.log
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
