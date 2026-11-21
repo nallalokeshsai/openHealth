@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 450 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .device-frame { fill: #000000; stroke: #333; stroke-width: 2; }
+      .header-bg { fill: #1C1C1E; }
+      .card-bg { fill: #1C1C1E; stroke: #545458; stroke-width: 0.5; }
+      .tab-bar { fill: #0E0E10; stroke: #545458; stroke-width: 0.5; }
+      .accent { fill: #A3E635; }
+      .text-header { font-size: 28px; font-weight: bold; fill: #FFFFFF; font-family: system-ui; }
+      .text-label { font-size: 11px; fill: rgba(235,235,245,0.60); font-family: system-ui; }
+      .text-body { font-size: 12px; fill: #FFFFFF; font-family: system-ui; }
+      .text-value { font-size: 14px; font-weight: bold; fill: #FFFFFF; font-family: system-ui; }
+      .text-accent { font-size: 12px; font-weight: bold; fill: #A3E635; font-family: system-ui; }
+      .separator { stroke: rgba(84,84,88,0.60); stroke-width: 0.5; }
+    </style>
+  </defs>
+
+  <rect class="device-frame" x="20" y="20" width="410" height="960" rx="20"/>
+  
+  <!-- HEADER -->
+  <rect class="header-bg" x="20" y="60" width="410" height="52"/>
+  <text class="text-header" x="35" y="90">Nutrition</text>
+  <text class="text-label" x="35" y="105">Thursday 21 November</text>
+  <circle fill="#A3E635" cx="410" cy="85" r="12"/>
+  <text class="text-body" x="405" y="90" text-anchor="middle">📷</text>
+
+  <!-- DATE STRIP CARD -->
+  <rect class="card-bg" x="30" y="118" width="390" height="68" rx="8"/>
+  <g id="week-strip">
+    <rect fill="#2C2C2E" x="50" y="130" width="32" height="40" rx="4"/>
+    <text class="text-label" x="66" y="140" text-anchor="middle">Mon</text>
+    <text class="text-body" x="66" y="160" text-anchor="middle">18</text>
+    
+    <rect fill="#2C2C2E" x="90" y="130" width="32" height="40" rx="4"/>
+    <text class="text-label" x="106" y="140" text-anchor="middle">Tue</text>
+    <text class="text-body" x="106" y="160" text-anchor="middle">19</text>
+    
+    <rect fill="#2C2C2E" x="130" y="130" width="32" height="40" rx="4"/>
+    <text class="text-label" x="146" y="140" text-anchor="middle">Wed</text>
+    <text class="text-body" x="146" y="160" text-anchor="middle">20</text>
+    
+    <rect class="accent" x="170" y="130" width="32" height="40" rx="4"/>
+    <text class="text-body" x="186" y="140" text-anchor="middle">Thu</text>
+    <text class="text-body" x="186" y="160" text-anchor="middle">21</text>
+    
+    <rect fill="#2C2C2E" x="210" y="130" width="32" height="40" rx="4"/>
+    <text class="text-label" x="226" y="140" text-anchor="middle">Fri</text>
+    <text class="text-body" x="226" y="160" text-anchor="middle">22</text>
+    
+    <rect fill="#2C2C2E" x="250" y="130" width="32" height="40" rx="4"/>
+    <text class="text-label" x="266" y="140" text-anchor="middle">Sat</text>
+    <text class="text-body" x="266" y="160" text-anchor="middle">23</text>
+    
+    <rect fill="#2C2C2E" x="290" y="130" width="32" height="40" rx="4"/>
+    <text class="text-label" x="306" y="140" text-anchor="middle">Sun</text>
+    <text class="text-body" x="306" y="160" text-anchor="middle">24</text>
+  </g>
+
+  <!-- ENERGY CARD -->
+  <rect class="card-bg" x="30" y="202" width="390" height="156" rx="8"/>
+  <text class="text-body" x="50" y="222">Energy</text>
+  
+  <!-- Ring visualization -->
+  <circle cx="225" cy="260" r="40" fill="none" stroke="#2C2C2E" stroke-width="6"/>
+  <circle cx="225" cy="260" r="40" fill="none" stroke="#A3E635" stroke-width="6" stroke-dasharray="69.73 251.33" stroke-linecap="round"/>
+  <text class="text-value" x="225" y="265" text-anchor="middle">1680</text>
+  <text class="text-label" x="225" y="278" text-anchor="middle">/ 2200</text>
+  
+  <!-- Macro bars -->
+  <text class="text-label" x="50" y="305">Protein</text>
+  <text class="text-label" x="390" y="305" text-anchor="end">128g / 160g</text>
+  <rect fill="#2C2C2E" x="50" y="312" width="390" height="4" rx="2"/>
+  <rect class="accent" x="50" y="312" width="312" height="4" rx="2"/>
+
+  <text class="text-label" x="50" y="335">Carbs</text>
+  <text class="text-label" x="390" y="335" text-anchor="end">280g / 300g</text>
+  <rect fill="#2C2C2E" x="50" y="342" width="390" height="4" rx="2"/>
+  <rect class="accent" x="50" y="342" width="351" height="4" rx="2"/>
+
+  <!-- BREAKFAST SECTION -->
+  <text class="text-body" x="50" y="378">Breakfast</text>
+  <rect class="card-bg" x="30" y="384" width="390" height="52" rx="8" fill="#2C2C2E"/>
+  <rect fill="#545458" x="50" y="398" width="44" height="44" rx="4"/>
+  <text class="text-body" x="72" y="423" text-anchor="middle">🥣</text>
+  <text class="text-body" x="110" y="413">Oatmeal with berries</text>
+  <text class="text-label" x="110" y="428">08:30 · Logged</text>
+  <text class="text-value" x="390" y="423" text-anchor="end">420 cal</text>
+
+  <!-- LUNCH SECTION -->
+  <text class="text-body" x="50" y="460">Lunch</text>
+  <rect class="card-bg" x="30" y="466" width="390" height="52" rx="8" fill="#2C2C2E"/>
+  <rect fill="#545458" x="50" y="480" width="44" height="44" rx="4"/>
+  <text class="text-body" x="72" y="505" text-anchor="middle">🥗</text>
+  <text class="text-body" x="110" y="495">Grilled chicken salad</text>
+  <text class="text-label" x="110" y="510">13:20 · Logged</text>
+  <text class="text-value" x="390" y="505" text-anchor="end">580 cal</text>
+
+  <!-- SNACKS SECTION -->
+  <text class="text-body" x="50" y="542">Snacks</text>
+  <rect class="card-bg" x="30" y="548" width="390" height="52" rx="8" fill="#2C2C2E"/>
+  <rect fill="#545458" x="50" y="562" width="44" height="44" rx="4"/>
+  <text class="text-body" x="72" y="587" text-anchor="middle">🥛</text>
+  <text class="text-body" x="110" y="577">Greek yogurt & honey</text>
+  <text class="text-label" x="110" y="592">16:45 · Logged</text>
+  <text class="text-value" x="390" y="587" text-anchor="end">280 cal</text>
+
+  <!-- ADD MEAL BUTTON -->
+  <rect class="accent" x="30" y="620" width="390" height="44" rx="8"/>
+  <text class="text-body" x="225" y="648" text-anchor="middle" fill="#0C0E12">Add meal</text>
+
+  <!-- TAB BAR -->
+  <rect class="tab-bar" x="20" y="900" width="410" height="80"/>
+  <line class="separator" x1="20" y1="900" x2="430" y2="900"/>
+  
+  <text class="text-label" x="60" y="925" text-anchor="middle">📅</text>
+  <text class="text-label" x="60" y="945" text-anchor="middle" font-size="10">Today</text>
+  
+  <text class="text-label" x="130" y="925" text-anchor="middle">🏋️</text>
+  <text class="text-label" x="130" y="945" text-anchor="middle" font-size="10">Train</text>
+  
+  <text class="text-accent" x="200" y="925" text-anchor="middle">🍽️</text>
+  <text class="text-accent" x="200" y="945" text-anchor="middle" font-size="10">Food</text>
+  
+  <text class="text-label" x="270" y="925" text-anchor="middle">👤</text>
+  <text class="text-label" x="270" y="945" text-anchor="middle" font-size="10">Body</text>
+  
+  <text class="text-label" x="340" y="925" text-anchor="middle">📊</text>
+  <text class="text-label" x="340" y="945" text-anchor="middle" font-size="10">Insights</text>
+  
+  <text class="text-label" x="410" y="925" text-anchor="middle">⋯</text>
+  <text class="text-label" x="410" y="945" text-anchor="middle" font-size="10">More</text>
+
+  <rect x="20" y="980" width="410" height="20" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="3,3"/>
+</svg>
