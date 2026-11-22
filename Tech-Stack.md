@@ -1,6 +1,6 @@
 # openHealth — Technology Stack
 
-**Version:** 2.0 · 2026-11-20 — **Android only for the first releases** (`pr.md` §0.1)
+**Version:** 2.1 · 2026-11-22 (navigation row: five tabs; Garmin is the primary watch, see `pr.md` §6.18) — **Android only for the first releases** (`pr.md` §0.1)
 **Status:** Closes `pr.md` §13 decisions 1, 2, 3 and supersedes `pr.md` §8.1–8.4.
 **Companions:** [`pr.md`](pr.md) · [`DESIGN.md`](DESIGN.md) · [`BUILD-PLAN.md`](BUILD-PLAN.md) · ADR [`docs/adr/0001-android-first.md`](docs/adr/0001-android-first.md)
 
@@ -78,7 +78,7 @@ Day one of the iOS port is "add the KMP targets and write the actuals", not "fin
 |---|---|---|
 | Language | Kotlin 2.x | JDK 21 toolchain |
 | UI | Jetpack Compose, Compose BOM | Material components are **not** the look; `DESIGN.md` tokens drive a custom theme. Material 3 is used only as behaviour primitives where it saves work |
-| Navigation | Navigation Compose, type-safe routes | Six tabs + sheet layer (`DESIGN.md` §4.3, §5.15); predictive back supported |
+| Navigation | Navigation Compose, type-safe routes | Five tabs (raised centre Train) + top bar + sheet layer (`DESIGN.md` §4.3, §5.15); predictive back supported |
 | State | Coroutines + Flow, one state holder per screen | Unidirectional; no extra reactive framework |
 | DI | Koin | No annotation processing, KMP-ready |
 | Charts | Hand-built Compose canvas | Library charts cannot honour `DESIGN.md` §6; each chart is ~150 lines |

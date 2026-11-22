@@ -4,6 +4,8 @@
 **Date:** 2026-11-21  
 **Reference:** pr.md, DESIGN.md, WIREFRAMES.md, COMPOSE-GUIDE.md, Tech-Stack.md
 
+> **2026-11-22:** navigation is now five tabs (Today, Vitals, Train, Nutrition, Stats) with Train raised and a top bar carrying app name, date, quick add and settings (`DESIGN.md` §4.4, §5.15). Wherever this file says six tabs or a More screen, read that. The rest of this file stays stale as `AGENTS.md` describes.
+
 This document lays out the phase-gated build sequence for the first usable Android release, mapping features to deliverables and exit tests.
 
 ---

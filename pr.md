@@ -2,7 +2,9 @@
 
 **Version:** 0.3 (draft for build planning)  
 **Status:** Living document  
-**Last revision:** 2026-11-20 — platform pass: the first releases are Android
+**Last revision:** 2026-11-22 — five-tab IA (5), tiered onboarding and splash
+(6.1), dynamic body model (6.8), Garmin as the watch (6.18, 13.8). Earlier
+2026-11-20 — platform pass: the first releases are Android
 only (0.1), iOS/web deferred behind a gate (13.17), section 8.1 superseded by
 `Tech-Stack.md`. Previous pass: MVP retagged, cut list recorded (14.5),
 missing sections added (6.27–6.31, 7.9, 8.7), external constraints written
@@ -227,16 +229,20 @@ deliberately built and certified.
 
 Primary navigation, designed so the common loop is always one tap away:
 
+Revised 2026-11-22: five tabs, Train as the raised centre (`DESIGN.md` §5.15).
+Settings is a top-bar gear, not a tab. The first launch runs onboarding (6.1);
+every later launch shows a splash, then Today.
+
 | Tab | What lives there |
 |---|---|
-| **Today** | Readiness, plan, calories/macros, steps, water, due meds/vitals, quick actions |
-| **Train** | Gym sessions, yoga, activities, programmes, routines, history |
-| **Food** | Diary, recipes, meal plans, water, fasting, supplements |
-| **Body** | Weight, measurements, photos, vitals, sleep, cycle |
-| **Insights** | Trends, correlations, weekly review, reports, coach |
-| **More** | Profile, modules, devices, integrations, data, settings |
+| **Today** | Readiness, plan, dynamic body model with recovery colours, calories in/out/net and goal ETA, steps, water, due meds/vitals |
+| **Vitals** | Weight, measurements, composition, photos, vitals, sleep, cycle |
+| **Train** (centre) | Gym, yoga, cardio and imported activities (Strava archive, FIT/GPX/TCX), programmes, routines, history, recovery map, programme coverage map |
+| **Nutrition** | Diary, macros, micros, water, recipes, meal plans, fasting, supplements |
+| **Stats** | Trends, body and workout statistics, correlations, weekly review, reports, coach |
+| **Settings** (top bar) | Profile, modules, devices, integrations, data, privacy, appearance |
 
-Global layers:
+Global layers (quick add is the top-bar plus):
 
 - **Quick add** from anywhere: food, water, weight, set, note, vitals.
 - **Timeline**: every event, newest first, filterable by type and source.
@@ -265,6 +271,19 @@ minutes.
 - Privacy choice: local-only, self-hosted server, or managed server.
 - Passkey or password sign-in on the server; local-only needs no account.
 - Demo mode with realistic sample data.
+- **Tiered intake (revised 2026-11-22).** Tier 1 is required and takes about a
+  minute: name, date of birth, sex at birth, height, weight, units, goal. Tier 2
+  is recommended: activity level, training experience, equipment, dietary
+  pattern, allergies, sleep schedule, modules. Tier 3 is optional and can be
+  deferred: body fat %, body composition source, tape measurements at neck,
+  shoulders, chest, waist, hips, upper arm, forearm, thigh, calf, wrist and ankle,
+  resting heart rate, blood pressure, injuries and limitations, medications, cycle
+  tracking, a baseline photo, and goal weight with target date. Each field says
+  what uses it. Anything skipped is asked once, later, where it is used.
+- Under 18 or an aggressive goal rate shows a neutral notice, not a refusal (13.14).
+- Weight-neutral mode is offered during onboarding.
+- **Splash.** Every launch after onboarding shows the Android system splash, then
+  Today, without waiting on a network or a sync.
 
 **V1**
 
@@ -597,6 +616,11 @@ video library with a timer bolted on.
 - Unit handling: kg/lb, cm/in, percentage, and canonical storage.
 - CSV import/export, including Apple Health weight exports.
 - “One check-in per day” merge rule for sync.
+- Dynamic body model: a 2D schematic whose adipose layer follows body fat % and
+  tape measurements and thins as they fall; estimate-labelled, hidden in
+  weight-neutral mode (`DESIGN.md` §9.1.1).
+- Body-fat estimate from tape measurements (US Navy method), tagged as an
+  estimate and overridden by any scale or DEXA reading.
 
 **V1**
 
@@ -1010,7 +1034,11 @@ not a chatbot that guesses.
 
 - Wear OS: workout, sets, rest timer, heart rate, tiles, complications.
 - Apple Watch: the same, after the iOS gate (0.1).
-- Garmin: Connect IQ app and FIT import.
+- Garmin (the owner's primary watch, 2026-11-22): FIT import first, then
+  Health Connect for whatever Garmin Connect writes to it (verify data types and
+  latency before promising any), then a Connect IQ app. Garmin's Health API is
+  partner-only and is not assumed. Gadgetbridge's Garmin support is GPL: study
+  only, never bundled.
 - Zepp OS: relay through the server.
 - CGM: Dexcom, Libre, Nightscout.
 - Pulse oximeters and thermometers where standard GATT profiles exist.
@@ -1912,7 +1940,8 @@ These need a decision before the schema is frozen:
 6. **Medical scope:** wellness only, or a regulated clinical product later.
 7. **AI:** provider strategy, BYOK, local models, and data retention.
 8. **First devices:** which watches, scales, cuffs and CGMs are supported at
-   launch.
+   launch. Partly answered 2026-11-22: the watch is a Garmin (6.18); the model,
+   scale, cuff and CGM are still open.
 9. **First languages:** launch set and translation workflow.
 10. **Brand and domain:** openHealth naming, logo, and store presence.
 11. **Offline food index:** which foods ship in the bundle, how large it may
