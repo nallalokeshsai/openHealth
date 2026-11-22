@@ -74,8 +74,11 @@ abstract class CheckLicencesTask : DefaultTask() {
     }
 
     private companion object {
+        // Matches GPL, GPLv2, GPL-2.0-only, AGPLv3, LGPL-2.1 and the spelled-out GNU names. The
+        // trailing boundary is deliberately loose: a POM that writes "GPLv2" instead of an SPDX id
+        // must still fail, and the registry's SPDX convention is a review rule, not the guard.
         val GPL_FAMILY = Regex(
-            "(?i)(\\b(?:A|L)?GPL\\b)|(GNU (?:Affero |Lesser |Library )?General Public License)",
+            "(?i)(\\b(?:A|L)?GPL)|(GNU (?:Affero |Lesser |Library )?General Public License)",
         )
     }
 }

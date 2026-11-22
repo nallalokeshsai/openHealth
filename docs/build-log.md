@@ -14,8 +14,9 @@ Nothing is pushed from a build session.
 
 **Status:** Completed · 2026-11-22
 **Branch:** `build/b0-foundation`
-**Commits:** `190e80c` (build, modules, guards, app) and the commit that adds this log (licences
-note, pinned-version ADR, CI file, log, `AGENTS.md` current state).
+**Commits:** `190e80c` (build, modules, guards, app), `66ea81a` (pinned-version ADR, notices,
+CI file, this log) and the third commit that applies the reviewer's fixes (executable wrapper bit,
+three missing pins, tighter GPL regex, log corrections, Android bytecode test).
 
 ### Owner questions asked (one batched dialog, asked before any work)
 
@@ -75,18 +76,37 @@ Deliverable 6. `:app-android` builds a blank Compose screen (no tokens, no copy,
 defaults — B1 replaces it). **Ran:** `gradlew :app-android:installDebug`, then
 `adb shell am start -n app.openhealth/app.openhealth.android.MainActivity`. Confirmed
 `topResumedActivity=app.openhealth/.android.MainActivity` and `pidof app.openhealth` = 4801, and
-captured a screenshot showing the blank dark surface on the API 36 emulator (1080×2400).
+captured a screenshot showing the blank dark surface on the API 36 emulator (1080×2400). A second
+build-infrastructure test, `app-android/.../BytecodeTargetTest.kt`, proves the Android half also
+compiles to Java 17 bytecode (class-file major 61); it runs in `check`.
 
 ### Milestone 5 — Licences, CI file, pinned versions, this log
 
 Deliverables 2, 4 and 5 and the log. `LICENSE` is the Apache-2.0 text fetched from
-`apache.org/licenses/LICENSE-2.0.txt` (169 lines, ends at the appendix). `NOTICE.md` carries the
+`apache.org/licenses/LICENSE-2.0.txt` (202 lines, ending with the "APPENDIX: How to apply the
+Apache License" section). `NOTICE.md` carries the
 MuscleMap MIT notice (copied from `references/openGym/NOTICE.md`, geometry only, first used in
 B4) and a table of notices each later phase must add. `server/` is recorded as AGPL-3.0, to be
 built in B13. `.gitignore` no longer ignores `data/` (it is a module now; local data is
 `local-data/`) and ignores `.gradle/`, `local.properties`, keystores and `*.jks`.
 `.github/workflows/ci.yml` installs `platforms;android-37.2` and `build-tools;37.0.0`, then runs
 `check` and `assembleDebug`; it has never run because nothing is pushed.
+
+### Reviewer pass
+
+A fresh reviewer agent was given only the branch diff and the `AGENTS.md` invariants, read-only.
+It confirmed the portability scope, that the registry matches what ships, the emulator run, the
+invariant set (no GPL/analytics dependency, no keystore, no `references/` code, `allowBackup=false`,
+no `INTERNET` permission) and the ADR's pin evidence. It raised five things, all fixed in the commit
+that follows:
+
+| Finding | Fix |
+|---|---|
+| `gradlew` was committed mode `100644`, so the CI file would fail on Linux before Gradle ran | exec bit set on the index (`100755`), plus a `chmod +x` step in the workflow |
+| `activity-compose`, `core-ktx` and `lifecycle` pins were missing from ADR 0003 although the catalogue says every pin is recorded there | three rows added with their release evidence |
+| `GPL_FAMILY` missed `GPLv2`/`AGPLv3`/`LGPLv2.1` spellings, which real POMs use | regex loosened; proven by recording `org.jspecify:jspecify = GPLv2` and watching `checkLicences` fail, then reverting |
+| this log said `LICENSE` was 169 lines and pointed the ktlint deprecation at the wrong line | corrected to 202 lines and the ktlint `apply` line |
+| the licence registry's header was double-encoded UTF-8 (`Â§`) | rewritten; every file in the tree is now plain UTF-8 |
 
 ### Exit tests
 
@@ -115,9 +135,9 @@ built in B13. `.gitignore` no longer ignores `data/` (it is a module now; local 
 - **Two Gradle deprecations are third-party, not ours:** `Configuration.setVisible(boolean)`
   (scheduled for Gradle 11) comes from AGP/ktlint internals, and
   `ReportingExtension.file(String)` (scheduled for Gradle 10) is called by the ktlint Gradle
-  plugin when it is applied (`openhealth.quality.gradle.kts:4`). Both clear when those plugins
-  update; no action available in this repository. The build reports "incompatible with Gradle 10"
-  because of them.
+  plugin when it is applied (`openhealth.quality.gradle.kts`, the ktlint `apply` on line 3).
+  Both clear when those plugins update; no action available in this repository. The build reports
+  "incompatible with Gradle 10" because of them.
 - **`checkLicences` only covers the runtime classpath**, so a test-only dependency is not
   reviewed. That is deliberate (test libraries never ship) but it means a licence problem in a
   test library is invisible — the rule for those is in `AGENTS.md`, not in a task.
@@ -128,3 +148,6 @@ built in B13. `.gitignore` no longer ignores `data/` (it is a module now; local 
   stale copy of `main` as of B0, not a build tree. The owner can delete it.
 - **`targetSdk` 37 is untested against real behaviour changes**: the only device here runs API 36.
   B10's device pass is where that gets checked.
+- **The Gradle daemon ran out of metaspace once** during the B0 runs (with eight JVM projects and
+  Detekt/ktlint per module). The cap was raised to 1.5 GB in `gradle.properties`; if the warning
+  returns, raise it again before assuming a build problem.

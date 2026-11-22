@@ -28,6 +28,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The wrapper bit is committed executable, but a checkout on a filesystem that drops the
+      # mode would otherwise fail here before Gradle runs.
+      - name: Make the wrapper executable
+        run: chmod +x ./gradlew
+
       - name: Check
         run: ./gradlew check --no-daemon --console=plain
 

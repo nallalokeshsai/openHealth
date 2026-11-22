@@ -19,10 +19,13 @@ Checked on 2026-11-22 against the publishers' own metadata (Google Maven
 | Kotlin | 2.2.10 | **AGP 9.5.2's built-in Kotlin version** (`kotlin-gradle-plugin:2.2.10` in AGP's POM). See decision 1. Kotlin 2.4.21 is the current release and satisfies the §14 floor of 2.1+, but it is not what AGP 9.5 compiles with. |
 | Compose Compiler Gradle plugin | 2.2.10 | Must equal the Kotlin version in use. |
 | Compose BOM | 2026.11.01 | Latest stable on Google Maven; resolves Compose 1.13.0. |
+| activity-compose | 1.13.0 | Latest stable (1.14.0-alpha03 is the newest alpha). |
+| core-ktx | 1.19.1 | Latest stable (1.20.0-alpha01 is the newest alpha). |
+| lifecycle (runtime-ktx) | 2.11.1 | Latest stable (2.12.0-alpha06 is the newest alpha). |
 | compileSdk | 37, minor level 2 | `platforms;android-37.2` is installed and Compose 1.13.0 refuses anything below 37.1. |
 | targetSdk | 37 | Current release platform (Android 17). |
 | minSdk | 28 | Health Connect floor (`Tech-Stack.md` §8, §14). |
-| Bytecode target | Java 17 | Toolchain is JDK 21; `jvmTarget`/`options.release` are 17 for every module, which D8 desugars. `core`'s `ToolchainTest` asserts the class-file level so this cannot drift silently. |
+| Bytecode target | Java 17 | Toolchain is JDK 21; `jvmTarget`/`options.release` are 17 for every module, which D8 desugars. Two build-infrastructure tests assert the class-file level — `core`'s `ToolchainTest` for the pure modules and `app-android`'s `BytecodeTargetTest` for the Android side — so drift in either half fails `check`. |
 | detekt | 1.23.8 | Latest stable (`dev.detekt:detekt-gradle-plugin` 2.0.0-alpha.6 is an alpha). |
 | ktlint Gradle plugin | 14.2.0 | Latest on the Plugin Portal. |
 | JUnit Jupiter | 6.1.3 | Latest stable (6.2.0-M1 is a milestone). |

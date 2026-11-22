@@ -1,7 +1,7 @@
 # Reviewed dependency licences for the shipped client classpath.
 #
-# checkLicences (Tech-Stack.md Â§16) fails when a module on :app-android's runtime classpath is
-# missing from this file (unreviewed) or carries a GPL/AGPL/LGPL-family licence (pr.md Â§12.4).
+# checkLicences (Tech-Stack.md §16) fails when a module on :app-android's runtime classpath is
+# missing from this file (unreviewed) or carries a GPL/AGPL/LGPL-family licence (pr.md §12.4).
 #
 # Format: group:module = SPDX identifier, one per line, '#' starts a comment.
 # Where a dependency offers a choice of licences, the permissive arm is recorded and the choice
