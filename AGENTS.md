@@ -23,7 +23,7 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 | `Tech-Stack.md` | 2.1 · 2026-11-22 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
 | `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
 | `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
-| `docs/adr/` | 0002 · 2026-11-22 | Dated closed decisions. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 pinned versions is written in B0 | **Decision record.** |
+| `docs/adr/` | 0003 · 2026-11-22 | Dated closed decisions. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 the pinned build versions | **Decision record.** |
 | `.opencode/commands/build-phase.md`, `opencode.json` | 2026-11-22 | The `/build-phase n or next` OpenCode command that runs a phase from `prompts.md`, and the permission policy (no push, no blind `git add -A`) | **Launcher.** Never overrides `prompts.md`. |
 | `docs/build-log.md` | created in B0 | What each phase did, ran and left open | **Memory between sessions.** |
 | `COMPOSE-GUIDE.md` | 0.1 · 2026-11-21 | Compose snippets, a token-file sketch, one screen template, a file tree | **Patterns only.** Not authoritative on values or structure; see conflicts. |
@@ -196,6 +196,6 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: none (no code yet; next is B0).
-- Build: not started.
+- Last completed phase: B0 (Foundation) · 2026-11-22 — green `./gradlew check` and `:app-android:assembleDebug`, both architecture guards proven by making them fail and pass, debug app installed and launched on the API 36 emulator. Next is B1.
+- Build: B0 complete; no feature code yet.
 - Open issues: see `docs/build-log.md`.
