@@ -161,3 +161,24 @@ that follows:
 - **The Gradle daemon ran out of metaspace once** during the B0 runs (with eight JVM projects and
   Detekt/ktlint per module). The cap was raised to 1.5 GB in `gradle.properties`; if the warning
   returns, raise it again before assuming a build problem.
+
+### Owner follow-up after the B0 exit (2026-11-22)
+
+Recorded because it changes the operating rules, not because it changes the build.
+
+- **The stale OneDrive tree was deleted** at the owner's instruction, after verifying that
+  `C:\dev\openHealth` contains every commit of it. Contents are gone; the empty folder entry stays
+  until OneDrive releases its handle.
+- **The GitHub Actions quota ($12) is spent until the next billing period**, so the CI workflow
+  cannot be proven this month. The earlier caveat was closed instead of guessed: the SDK package
+  ids now come from the installed SDK's own `package.xml`, the licences are accepted before the
+  install, `workflow_dispatch` lets the owner start it by hand later, and the YAML was parsed with
+  a YAML parser as a syntax check. CI remains unchecked behaviour, not a passed gate.
+- **The owner authorised pushes from agent sessions permanently.** `opencode.json` now allows
+  `git push`; `prompts.md` is at 1.1 with its Standing rule changed from "never push" to "push
+  only when the owner asks for it in that session, and never force-push"; the `AGENTS.md` policy
+  row and the prompts version row were updated to match. Pushing still requires an explicit ask
+  from the owner in each session.
+- **`build/b0-foundation` was pushed to origin** (`github.com/nallalokeshsai/openHealth`) at the
+  owner's request. `main` is untouched; merging the branch is the owner's call, and the first
+  Actions run will fail at queue time until the quota resets.

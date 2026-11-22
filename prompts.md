@@ -1,6 +1,6 @@
 # openHealth — Build prompts
 
-**Version:** 1.0 · 2026-11-22
+**Version:** 1.1 · 2026-11-22 (Standing rules amended: the owner allows a push when a session is asked to push, `docs/build-log.md` B0)
 **What this is:** one copy-paste prompt per build phase of [`BUILD-ROADMAP.md`](BUILD-ROADMAP.md). Paste a prompt into a fresh agent session opened in this repository, answer the few questions it asks up front, and let it run to the phase exit.
 **What it is not:** a spec. The specs are `pr.md` (behaviour), `DESIGN.md` (appearance), `Tech-Stack.md` (build) and the phase section of `BUILD-ROADMAP.md`. The prompts only point at them.
 
@@ -37,7 +37,7 @@ What you will be asked, across the whole build (everything else is already decid
 2. **Precondition:** the previous phase must have a "Completed" entry in `docs/build-log.md` and a green `./gradlew check`. If not, say so and do that phase first (or ask the owner to paste its prompt) rather than building on sand.
 3. **Resume:** if the log shows this phase in progress, continue from its last milestone; do not redo finished work.
 
-**Authority you have been given by running this prompt.** Create and edit any file in this repository outside `references/`; run Gradle, `adb`, the emulator and `sdkmanager`/`avdmanager`; install the debug app on an attached emulator or device; create a branch `build/<phase>-<slug>` and **commit locally** at each milestone (stage explicit paths, never a blind `git add -A`, never anything under `references/`, never a keystore, `local.properties` or secret; follow the commit attribution rule in effect). **Never push, publish, upload, or send anything off the machine.** Network use is limited to downloading build dependencies, SDK components and the open data sources a phase names.
+**Authority you have been given by running this prompt.** Create and edit any file in this repository outside `references/`; run Gradle, `adb`, the emulator and `sdkmanager`/`avdmanager`; install the debug app on an attached emulator or device; create a branch `build/<phase>-<slug>` and **commit locally** at each milestone (stage explicit paths, never a blind `git add -A`, never anything under `references/`, never a keystore, `local.properties` or secret; follow the commit attribution rule in effect). **Push only when the owner asks for it in that session** (owner decision, 2026-11-22: `git push` is allowed in `opencode.json`); never publish, upload or send anything else off the machine, and never force-push or rewrite published history. Network use is limited to downloading build dependencies, SDK components and the open data sources a phase names.
 
 **When to ask the owner** (use the question dialog, batch every question into one dialog right after orienting, put the recommended option first, give each question enough context to stand alone):
 - Anything the phase section lists under "Ask the owner".
