@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Placeholder platform theme for B0 only: it exists so the window has a neutral frame before
+      Compose draws. B1 replaces it with the DESIGN.md tokens, window background, splash and
+      edge-to-edge behaviour. No colour is invented here: the platform default is inherited.
+    -->
+    <style name="Theme.OpenHealth" parent="@android:style/Theme.Material.NoActionBar" />
+</resources>

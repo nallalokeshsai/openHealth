@@ -2,20 +2,34 @@
 # Keep the index and manifest, but never vendor the 5+ GB of cloned code.
 references/
 
-# Dependencies and build output for the app that comes next
+# Gradle and Android build output. `data/` is a source module (Tech-Stack.md §13), so it is
+# tracked; never name a build directory or a local data dump that.
+.gradle/
+.kotlin/
+build/
+local.properties
+*.hprof
+captures/
+.cxx/
+
+# Dependencies and build output for tooling that comes later
 node_modules/
 dist/
-build/
 coverage/
 .next/
 out/
 
 # Local health data and secrets: never commit these
-data/
+local-data/
 .env
 .env.*
 !.env.example
 *.log
+
+# A keystore never enters the repository (pr.md §12.4, Tech-Stack.md §11)
+*.jks
+*.keystore
+keystore.properties
 
 # Local agent tooling (OpenCode command and permissions)
 .opencode/

@@ -1,0 +1,9 @@
+# Detekt configuration. Only deviations from the default rule set are listed;
+# buildUponDefaultConfig is set in build-logic/src/main/kotlin/openhealth.quality.gradle.kts.
+# Rationale for each entry sits on the line above it.
+
+naming:
+  FunctionNaming:
+    # Compose composables are PascalCase by convention (DESIGN.md §1.1 screens are composables).
+    ignoreAnnotated:
+      - Composable
