@@ -89,8 +89,10 @@ MuscleMap MIT notice (copied from `references/openGym/NOTICE.md`, geometry only,
 B4) and a table of notices each later phase must add. `server/` is recorded as AGPL-3.0, to be
 built in B13. `.gitignore` no longer ignores `data/` (it is a module now; local data is
 `local-data/`) and ignores `.gradle/`, `local.properties`, keystores and `*.jks`.
-`.github/workflows/ci.yml` installs `platforms;android-37.2` and `build-tools;37.0.0`, then runs
-`check` and `assembleDebug`; it has never run because nothing is pushed.
+`.github/workflows/ci.yml` accepts the SDK licences, installs `platforms;android-37.2` and
+`build-tools;37.0.0` (ids read from the installed SDK's `package.xml`), then runs `check` and
+`assembleDebug`; it has never run because nothing is pushed, and the owner's Actions quota is
+spent until the next billing period (see Open issues).
 
 ### Reviewer pass
 
@@ -128,7 +130,7 @@ that follows:
 | `app-android/src/main/res/values/themes.xml` inherits a platform theme | B1 |
 | `core/src/test/.../ToolchainTest.kt` proves test wiring and the 17 bytecode target | B2 replaces it with domain tests |
 | `:data`, `:sync`, `:integrations` and `:ui` are empty modules | B2, B13, B8 and B1 |
-| CI workflow written, never run | owner's first push |
+| CI workflow written, never run | the owner's first manual dispatch, once the Actions quota resets |
 
 ### Open issues
 
@@ -144,10 +146,18 @@ that follows:
 - **SQLDelight, Koin, Ktor and Kotest are pinned but unproven** at this Gradle/Kotlin pair; the
   phase that applies each one proves it and amends ADR 0003 if a pin moves (§14 floors are all
   satisfied).
-- **The OneDrive copy still exists** at `C:\Users\naidu\OneDrive\Desktop\openHealth`. It is a
-  stale copy of `main` as of B0, not a build tree. The owner can delete it.
+- **The OneDrive copy is deleted**: its 5 GB of contents are gone and `C:\dev\openHealth` was
+  verified to hold every commit first. An empty folder entry at
+  `C:\Users\naidu\OneDrive\Desktop\openHealth` could not be removed because OneDrive still holds a
+  handle on it (0 items inside); a OneDrive restart or reboot clears it.
 - **`targetSdk` 37 is untested against real behaviour changes**: the only device here runs API 36.
   B10's device pass is where that gets checked.
+- **The GitHub Actions quota is spent until the next billing period**, so the workflow cannot be
+  proven this month. It is not a gate for B0: `./gradlew check` and `:app-android:assembleDebug`
+  ran locally from a clean tree instead. Pushing a `build/**` branch will show a queue-time
+  failure until the quota resets; start the workflow by hand (`workflow_dispatch`) after that.
+- **`gh` is not installed on this workstation**, so no session can read run results; the GitHub
+  web UI is the place to look.
 - **The Gradle daemon ran out of metaspace once** during the B0 runs (with eight JVM projects and
   Detekt/ktlint per module). The cap was raised to 1.5 GB in `gradle.properties`; if the warning
   returns, raise it again before assuming a build problem.

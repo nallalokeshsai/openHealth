@@ -1,10 +1,15 @@
-# Build and verify openHealth. Written in B0 and never pushed from an agent session.
+# Build and verify openHealth. Written in B0; the first run is the owner's (see docs/build-log.md).
+#
+# The SDK package ids below are taken from the installed SDK's own package.xml
+# (platforms/android-37.2/package.xml, build-tools/37.0.0/package.xml), not guessed, and match
+# compileSdk 37 minor 2 in docs/adr/0003-pinned-versions.md.
 name: build
 
 on:
   push:
     branches: [main, "build/**"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,9 +27,10 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      # compileSdk 37 with minor level 2, matching docs/adr/0003-pinned-versions.md.
-      - name: Install the pinned SDK platform
-        run: sdkmanager "platforms;android-37.2" "build-tools;37.0.0"
+      - name: Install the pinned SDK platform and build tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-37.2" "build-tools;37.0.0"
 
       - uses: gradle/actions/setup-gradle@v4
 

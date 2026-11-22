@@ -76,5 +76,9 @@ B13 with the server image.
 - SQLDelight 2.4.1, Koin 4.2.2, Ktor 3.6.1 and Kotest 6.2.7 are pinned but **not yet applied**.
   Their compatibility with Gradle 9.9.2 and Kotlin 2.2.10 is proven by the phase that applies
   them (B2, B3, B13), and this ADR is amended with a dated line if a pin has to move.
-- The GitHub Actions workflow is written but has never run: nothing is pushed from a build
-  session. Its first run is the owner's.
+- The GitHub Actions workflow is written but has never run: nothing was pushed from a build
+  session. The SDK package ids it installs (`platforms;android-37.2`, `build-tools;37.0.0`) are
+  read from the installed SDK's own `package.xml`, not guessed. The owner's Actions quota is spent
+  until the next billing period, so the first run is deferred; it can be started by hand with
+  `workflow_dispatch` when the quota returns, and it checks nothing that the local
+  `./gradlew check` and `:app-android:assembleDebug` runs above did not already check.
