@@ -1,6 +1,6 @@
 # openHealth — Product Requirements & Feature Specification
 
-**Version:** 0.3 (draft for build planning)  
+**Version:** 0.4 (build-ready draft)  
 **Status:** Living document  
 **Last revision:** 2026-11-22 — five-tab IA (5), tiered onboarding and splash
 (6.1), dynamic body model (6.8), Garmin as the watch (6.18, 13.8). Earlier
@@ -37,7 +37,7 @@ trend clearer, or the data more trustworthy, it waits.
 **The first releases are Android only.** Phases 0 to 2 ship an Android phone
 app, with Wear OS added in Phase 2. iOS, watchOS, the web client and desktop
 are deferred — not cancelled. Starting iOS is an explicit gate (13.17 below,
-`BUILD-PLAN.md` section 2).
+`docs/adr/0001-android-first.md`, `BUILD-ROADMAP.md` section 1).
 
 What that changes in this document:
 
@@ -280,7 +280,7 @@ minutes.
   resting heart rate, blood pressure, injuries and limitations, medications, cycle
   tracking, a baseline photo, and goal weight with target date. Each field says
   what uses it. Anything skipped is asked once, later, where it is used.
-- Under 18 or an aggressive goal rate shows a neutral notice, not a refusal (13.14).
+- Under 16 is not supported and says so plainly; 16–17 can track but get no calorie deficit target or weight-loss goal. An aggressive goal rate shows a neutral notice with a cited range, not a refusal (13.14).
 - Weight-neutral mode is offered during onboarding.
 - **Splash.** Every launch after onboarding shows the Android system splash, then
   Today, without waiting on a network or a sync.
@@ -743,7 +743,7 @@ picture.
 - Sleep stages from wearables where available.
 - Sleep debt and consistency.
 - Resting heart rate and HRV trends.
-- Readiness score with an explanation.
+- Readiness score with an explanation. **Formula v1 (2026-11-22, versioned, shown in the explanation sheet):** each available input is scored 0–100 against the person's own 28-day baseline: sleep duration against the sleep need set in profile (default 8 h), resting heart rate (lower than baseline scores higher), HRV where a source provides it (higher scores higher), and recent training load (heavy last 48 h scores lower). Weights are 0.35 sleep, 0.25 resting heart rate, 0.20 HRV, 0.20 load, renormalised over the inputs present. Fewer than two inputs or fewer than 7 days of baseline shows "Not enough data yet" instead of a number. It is an estimate, labelled so, and never a health claim.
 - Fatigue and muscle-recovery map from training.
 - Deload suggestions.
 
@@ -1968,46 +1968,33 @@ permanently. That is the promise; everything else is negotiable.
 
 ---
 
-## 13. Open decisions
+## 13. Decisions register
 
-These need a decision before the schema is frozen:
+Closed 2026-11-22 with the recommended default; the full reasoning is in
+`docs/adr/0002-closed-defaults.md` and the owner may overrule any row.
 
-1. **Client stack:** decided — native Android (Kotlin + Compose) with
-   platform-neutral core modules; iOS later (`Tech-Stack.md`, 0.1).
-2. **Local database:** SQLite + custom sync, WatermelonDB, PowerSync, or
-   ElectricSQL.
-3. **Server:** Node/TypeScript or Go; Postgres; self-host and managed.
-4. **Account model:** local-only first, optional server, family accounts.
-5. **Licence:** a split licence, AGPL-3.0 server and Apache-2.0 or MPL-2.0
-   client, is the only combination that survives App Store distribution. See
-   12.4. Decide before the first public commit.
-6. **Medical scope:** wellness only, or a regulated clinical product later.
-7. **AI:** provider strategy, BYOK, local models, and data retention.
-8. **First devices:** which watches, scales, cuffs and CGMs are supported at
-   launch. Partly answered 2026-11-22: any Garmin, with the vívoactive 5 as the
-   reference device (6.18); scale, cuff and CGM are still open.
-9. **First languages:** launch set and translation workflow.
-10. **Brand and domain:** openHealth naming, logo, and store presence.
-11. **Offline food index:** which foods ship in the bundle, how large it may
-    be, how it updates, and the ODbL obligations that come with it (12.2).
-12. **Measurement:** how section 10 is measured without telemetry. Opt-in
-    aggregate metrics, recruited beta cohorts, or deleting the metrics that
-    cannot be measured honestly. Today the document asks for retention and
-    crash-rate numbers it has forbidden itself from collecting.
-13. **Business model:** managed hosting, paid app, donations, or paid support
-    (12.5).
-14. **Minors:** supported with guardian consent and pediatric-appropriate
-    content, or blocked under 16 until it can be done properly. Adult
-    formulas and reference ranges are wrong for children, and consent rules
-    differ by jurisdiction.
-15. **Encryption:** end-to-end by default or opt-in, and which recovery model
-    (8.7).
-16. **Nutrition in the MVP:** in, or deferred to Phase 2 to protect the date
-    (section 9).
-17. **iOS start:** what has to be true before an iOS client begins — Android
-    adoption, a second engineer who owns it, or a funded port. Until that is
-    answered the answer is "not yet", and it is reviewed at every phase exit
-    (0.1).
+| # | Topic | Status | Decision |
+|---|---|---|---|
+| 1 | Client stack | Closed | Native Android, Kotlin + Compose, KMP-ready core (`Tech-Stack.md`, 0.1) |
+| 2 | Local database | Closed | SQLite via SQLDelight + SQLCipher, custom append-only log (`Tech-Stack.md` §5–6) |
+| 3 | Server | Closed | Kotlin/Ktor 3 + PostgreSQL 16, optional, after the MVP (`Tech-Stack.md` §7) |
+| 4 | Account model | Closed | Local-only, no accounts; an optional single-household server later |
+| 5 | Licence | Closed | AGPL-3.0 `server/`, Apache-2.0 everything else |
+| 6 | Medical scope | Closed | Wellness only (12.1) |
+| 7 | AI | Closed | Off, BYOK or self-hosted, proposals only; not before build phase B11 |
+| 8 | First devices | Closed | Any Garmin (vívoactive 5 reference) via FIT then Health Connect; phone sensors; standard-GATT HR strap, scale, cuff (6.18) |
+| 9 | First languages | Closed | English; strings keyed for translation; RTL-correct |
+| 10 | Brand and domain | Closed (placeholder) | "openHealth", `app.openhealth`; no domain or store claim |
+| 11 | Offline food index | Closed | USDA FoodData Central (CC0) generic foods bundled; barcodes via Open Food Facts on demand, cached, attributed (12.2) |
+| 12 | Measurement | Closed | No telemetry; budgets measured on the owner's phone and an emulator; section 10 retention metrics not measured |
+| 13 | Business model | Closed | None: personal and household use |
+| 14 | Minors | Closed | Under 16 blocked; 16–17 track only, no deficit target or weight-loss goal |
+| 15 | Encryption | Closed | SQLCipher always on, Keystore key, optional biometric lock; passphrase-encrypted exports; no recovery of a lost passphrase |
+| 16 | Nutrition in the MVP | Closed | In |
+| 17 | iOS start | Deferred | "Not yet"; reviewed at every phase exit (0.1) |
+
+Section 8.1–8.4 of this file are superseded by `Tech-Stack.md`; where they
+name Node, Go, WatermelonDB, PowerSync or ElectricSQL they are historical.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Version:** 2.1 · 2026-11-22 (navigation row: five tabs; Garmin is the primary watch, see `pr.md` §6.18) — **Android only for the first releases** (`pr.md` §0.1)
 **Status:** Closes `pr.md` §13 decisions 1, 2, 3 and supersedes `pr.md` §8.1–8.4.
-**Companions:** [`pr.md`](pr.md) · [`DESIGN.md`](DESIGN.md) · [`BUILD-PLAN.md`](BUILD-PLAN.md) · ADR [`docs/adr/0001-android-first.md`](docs/adr/0001-android-first.md)
+**Companions:** [`pr.md`](pr.md) · [`DESIGN.md`](DESIGN.md) · [`BUILD-ROADMAP.md`](BUILD-ROADMAP.md) · [`prompts.md`](prompts.md) · ADR [`docs/adr/0001-android-first.md`](docs/adr/0001-android-first.md)
 
 ---
 
@@ -172,7 +172,7 @@ The server stores and relays. It never becomes required for a core action.
 | Property-based | Kotest property | **Sync merges, dedup, idempotency**: random interleavings must converge |
 | Golden corpus | `tools/fixtures` | Real FIT/GPX/CSV/Health Connect exports, byte-compared importer output |
 | Screenshot | Roborazzi | Every component and state, at 200% font scale and in RTL |
-| E2E | Maestro | One flow per phase exit test in `BUILD-PLAN.md` |
+| E2E | Maestro | One flow per build-phase exit test in `BUILD-ROADMAP.md` |
 | Performance | Macrobenchmark + baseline profiles | §12 budgets, against the five-year corpus |
 | Migration | Every released schema version | Upgrade with data, each version |
 
@@ -214,7 +214,7 @@ openhealth/
   server/          # Ktor, Postgres, migrations, storage, auth
   tools/           # food index builder, fixture corpora, benchmarks
   docs/adr/        # one dated file per closed decision
-  pr.md  DESIGN.md  BUILD-PLAN.md  Tech-Stack.md
+  pr.md  DESIGN.md  BUILD-ROADMAP.md  prompts.md  Tech-Stack.md
 ```
 
 Deferred modules (`app-ios/`, `app-watchos/`, `app-web/`, `app-desktop/`) are created when the gate opens, not before.
@@ -237,6 +237,22 @@ Pin at the first commit, record in `docs/adr/`. Known-good floors: Kotlin 2.1+, 
 | 2 Local DB + sync | SQLite/SQLDelight + custom append-only log with per-entity merge policies |
 | 3 Server | Kotlin/Ktor + PostgreSQL + S3-compatible storage, Docker Compose |
 | 5 Licence | AGPL-3.0 server, Apache-2.0 client — **close before the first public commit** |
-| 17 iOS start | Deferred; reviewed at every phase exit (`BUILD-PLAN.md` §2) |
+| 17 iOS start | Deferred; reviewed at every phase exit (`BUILD-ROADMAP.md` §1) |
 
-Open and owned by `BUILD-PLAN.md` §2: account model, medical scope, encryption and recovery, minors, nutrition timing, food index, first devices, measurement, AI provider strategy, languages, business model, brand.
+All other `pr.md` §13 items were closed on 2026-11-22 with recommended defaults; see `docs/adr/0002-closed-defaults.md` and `pr.md` §13.
+
+---
+
+## 16. Build conventions (added 2026-11-22)
+
+What an agent needs to start without asking.
+
+- **Root package / applicationId:** `app.openhealth` (placeholder, ADR 0002). Module packages: `app.openhealth.core`, `.data`, `.sync`, `.integrations`, `.ui`, `.android`.
+- **Gradle projects:** `:core`, `:data`, `:sync`, `:integrations`, `:ui`, `:app-android`, later `:app-wear`, `:server`, `:tools:*`. `settings.gradle.kts` uses `include` for exactly these; the layout in §13 is the directory layout.
+- **Plugins:** a `build-logic/` included build with convention plugins (`openhealth.kotlin.library`, `openhealth.android.library`, `openhealth.android.app`), a version catalogue at `gradle/libs.versions.toml`, Gradle wrapper committed. Pure modules apply the Kotlin JVM plugin only, with the KMP plugin switched on at the iOS gate.
+- **Toolchain on the owner's workstation:** JDK 21, Android SDK in `%LOCALAPPDATA%\Android\Sdk`, `minSdk` 28, `compileSdk`/`targetSdk` the current stable at pin time, Gradle wrapper (the system Gradle 9.x is only for bootstrapping the wrapper).
+- **Core guard:** a Gradle task `checkPortability` fails if any file under `core/`, `data/`, `sync/` or `integrations/src/commonMain`-equivalent contains `import android.` or `import androidx.`; it runs in `check`.
+- **Licence guard:** a task `checkLicences` fails on a GPL/AGPL/LGPL-family dependency in any client module.
+- **Tests:** unit and property tests in each module's `src/test`; golden fixtures in `tools/fixtures`; screenshot tests in `ui` with Roborazzi; instrumented tests in `app-android/src/androidTest`.
+- **Commands every phase must keep green:** `./gradlew check` (unit, property, lint, ktlint, Detekt, both guards) and `./gradlew :app-android:assembleDebug`. Instrumented and benchmark tasks run when an emulator or device is attached.
+- **Definition of done for any task:** the above commands pass; the review gate (`DESIGN.md` §14.5) passes for any screen touched; the `docs/build-log.md` entry is written.

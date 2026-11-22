@@ -4,7 +4,9 @@ Guidance for agent sessions in this repository.
 
 ## What this repo is
 
-A **documentation-only product and design contract** for openHealth, a private, local-first personal health record. There is no application code, no Gradle project, no linter, no test runner and no CI. Do not scaffold an app, add a package manager, create source directories or start a framework unless explicitly asked. When the build starts it follows `Tech-Stack.md` §13 for layout and `BUILD-ROADMAP.md` Phase 0 for the first UI slice, with `Tech-Stack.md` and `DESIGN.md` overriding that phase's Hilt/Room/token values.
+The **contract and the build of openHealth**, a private, local-first personal health record for Android. The contract documents (`pr.md`, `DESIGN.md`, `Tech-Stack.md`, `BUILD-ROADMAP.md`, `docs/adr/`) are complete enough to build from. The build proceeds one phase at a time (B0 to B15) by pasting a prompt from `prompts.md` into a fresh session; `docs/build-log.md` is the memory between sessions. If `docs/build-log.md` does not exist, no code has been written and the next phase is B0.
+
+**If you were not given a phase prompt,** do not scaffold or build: answer, review or edit the documents. If you were given one, follow `prompts.md` "Standing rules" exactly; they say what you may do, when to ask the owner and how to finish.
 
 **The product in one paragraph.** One Android app for the whole of a person's health: a daily loop (Today → log → trend), five tabs (Today, Vitals, Train, Nutrition, Stats) with a raised-centre Train and Settings in the top bar, thirteen switchable modules, and a five-layer data model (raw → observation → daily rollup → domain → settings) in which every value carries provenance. It is local-first with an optional, self-hostable server; open-format; no ads, no telemetry; not a medical device; and complete enough to export and leave with. Android ships first. iOS, watchOS, the web client and desktop are deferred behind the gate at `pr.md` §13.17 — do not write, design or plan them before it opens.
 
@@ -16,21 +18,25 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 
 | File | Version | Owns | Authority |
 |---|---|---|---|
-| `pr.md` | 0.3 · 2026-11-20 | Features and MVP/V1/Later tags (§6); five-layer data model (§7); architecture summary (§8); product roadmap (§9); metrics (§10); non-goals (§11); regulatory, licensing and platform constraints (§12); open decisions (§13); cut list (§14.5) | **Behaviour contract.** Wins on scope, wording and what a screen does. |
-| `DESIGN.md` | 0.1 · 2026-11-21 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
-| `Tech-Stack.md` | 2.0 · 2026-11-20 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
-| `BUILD-ROADMAP.md` | 0.1 · 2026-11-21 | UI-first phase order 0–6 + beta, component/screen deliverables, exit tests, effort estimates, risks | **Sequence only, and stale.** Never evidence for stack, tokens or a11y. |
+| `pr.md` | 0.4 · 2026-11-22 | Features and MVP/V1/Later tags (§6); five-layer data model (§7); architecture summary (§8); product roadmap (§9); metrics (§10); non-goals (§11); regulatory, licensing and platform constraints (§12); open decisions (§13); cut list (§14.5) | **Behaviour contract.** Wins on scope, wording and what a screen does. |
+| `DESIGN.md` | 0.2 · 2026-11-22 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
+| `Tech-Stack.md` | 2.1 · 2026-11-22 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
+| `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
+| `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
+| `docs/adr/` | 0002 · 2026-11-22 | Dated closed decisions. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 pinned versions is written in B0 | **Decision record.** |
+| `.opencode/commands/build-phase.md`, `opencode.json` | 2026-11-22 | The `/build-phase n or next` OpenCode command that runs a phase from `prompts.md`, and the permission policy (no push, no blind `git add -A`) | **Launcher.** Never overrides `prompts.md`. |
+| `docs/build-log.md` | created in B0 | What each phase did, ran and left open | **Memory between sessions.** |
 | `COMPOSE-GUIDE.md` | 0.1 · 2026-11-21 | Compose snippets, a token-file sketch, one screen template, a file tree | **Patterns only.** Not authoritative on values or structure; see conflicts. |
 
-Resolution: each file wins in its own domain, and a specialist beats a generalist (`Tech-Stack` > `pr.md` §8; `DESIGN` > `COMPOSE-GUIDE`). `pr.md` wins on behaviour, `DESIGN` on appearance, `Tech-Stack` on build. When `Tech-Stack` and `BUILD-ROADMAP` disagree, `Tech-Stack` wins.
+Resolution: each file wins in its own domain, and a specialist beats a generalist (`Tech-Stack` > `pr.md` §8; `DESIGN` > `COMPOSE-GUIDE`). `pr.md` wins on behaviour, `DESIGN` on appearance, `Tech-Stack` on build. When `Tech-Stack` and `BUILD-ROADMAP` disagree, `Tech-Stack` wins; `prompts.md` never overrides a contract document.
 
 ## Scope, schedule and tags
 
 - **Tags:** `MVP`, `V1`, `Later` in `pr.md` §6 are the schedule. There is no V2; if a stale file says V2, read `Later`.
 - **Product phases:** `pr.md` §9 — Phase 0 Foundations, Phase 1 MVP, Phase 2 Depth, Phase 3 Ecosystem, Phase 4 Best in the world. `Tech-Stack`'s Phase 0/1/2 labels refer to those phases, not to `BUILD-ROADMAP`'s UI phases.
-- **Build phases:** `BUILD-ROADMAP` Phase 0–6 + beta are a UI implementation order (tokens → screens → logging → sheets → charts → sync → a11y). Do not map them 1:1 to `pr.md` §9, and do not cite them as product scope.
+- **Build phases:** `BUILD-ROADMAP` B0–B15 are the build order and are named B-numbers so they are never confused with `pr.md` §9 product phases. B0–B10 are the MVP (with nutrition in); B11–B12 are early depth; B13–B15 start only when the owner asks. Do not cite them as product scope.
 - **Android only:** phone first, Wear OS in Phase 2 (`pr.md` §0.1, `Tech-Stack` §2); Garmin is the owner's primary watch (`pr.md` §6.18 V1). Health Connect is the platform bus. Any HealthKit, Apple Watch, iOS or browser feature is `Later` until §13.17 opens, whatever tag it carries. File imports (Apple Health export, Garmin/Strava archive, FIT/GPX/TCX/CSV) stay in scope because they need no vendor platform.
-- **Phase 1 reality:** `pr.md` §9 prices the MVP at 6–9 months, not 3–4, or nutrition moves to Phase 2 (§13.16). `BUILD-ROADMAP`'s 20-week single-dev plan is a UI schedule, not that estimate.
+- **Phase 1 reality:** nutrition is in the MVP (ADR 0002, `pr.md` §13.16), so the MVP is the long version priced in `pr.md` §9. The roadmap carries no calendar estimates.
 
 ## Decisions already made
 
@@ -73,14 +79,13 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 
 ### DI and database
 
-`Tech-Stack.md` §3 requires **Koin** and **SQLDelight** and rejects **Room** explicitly. `BUILD-ROADMAP.md` says "Hilt + Compose + Material 3 configured" and "Models map to room DB"/"Local database (Room)" in Phase 5; `COMPOSE-GUIDE.md`'s screen template uses `hiltViewModel()`. `Tech-Stack` wins. Do not add Hilt, Room or `androidx` to `core/` or `data/`.
+`Tech-Stack.md` §3 requires **Koin** and **SQLDelight** and rejects **Room** and **Hilt**. `COMPOSE-GUIDE.md`'s screen template uses `hiltViewModel()`; ignore it. Do not add Hilt, Room or `androidx` to `core/` or `data/`.
 
 ### Tokens and component counts
 
 - `DESIGN.md` Appendix A is canonical and §0.2 is closed: 11 type roles (9 text roles plus `display` and `timer`), 9 spacing values (`2 4 6 8 10 12 16 22 32`), 6 radii (`8 10 12 14 16 22`) plus full, 19 components, 9 accent presets. Dark is canonical; light is a verified sibling.
 - `COMPOSE-GUIDE.md`'s `tokens.kt` is not usable as a source of values: spacing 4–40, radii 4–20, different type role names and sizes, light `bg` `#FFFFFF`, borders on cards, 44 dp buttons, 60 dp nav, sheet on `surface` with 14 dp corners and a 32% scrim.
 - Every `Color(0x…)` literal in `COMPOSE-GUIDE.md` is six hex digits, so all of them are alpha-zero (invisible) in Compose. Write `Color(0xFFRRGGBB)`. Its `gold` `0xFFB84D` is not `DESIGN.md`'s `#FFD60A`; its `red` `0xFF453A` has the right RGB but is still alpha-zero as a Compose literal.
-- `BUILD-ROADMAP.md` Phase 0 is wrong too: "11 colours", spacing 4–40, radii 4–20, "13 sp baseline → 34 sp" (DESIGN starts at `caption2` 11 sp and adds `display` 28 / `timer` 28–64), and "All 10 components" where `DESIGN.md` has 19.
 - Sizes differ: `DESIGN.md` rows are ≥46 dp, the primary button is 50 dp and the tab bar is 56 dp; both guides use 44 dp rows/buttons, and `COMPOSE-GUIDE.md` uses a 60 dp nav.
 
 ### `COMPOSE-GUIDE.md` is patterns, not a style contract
@@ -93,29 +98,13 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 - Its file tree (`app/src/main/kotlin/com/openhealth/…`, `:design`) does not match `Tech-Stack.md` §13 (`app-android/`, `ui/`, `core/`, …), and its `OHBottomNavigation` builds six tabs; the contract is five tabs with a raised Train and top-bar Settings (`DESIGN.md` §4.4, §5.15).
 - The snippets are illustrative and do not compile as written (for example `Modifier.border(bottom = …)`, undefined `isDarkTheme`, `hiltViewModel()` without Hilt). Rebuild from `DESIGN.md` §5 and Appendix B.
 
-### `BUILD-ROADMAP.md` is stale outside its sequence
+### `BUILD-ROADMAP.md` was rewritten (2026-11-22)
 
-- Stack: Hilt/Room/Material 3 setup (above), and an `:app`/`:core`/`:data`/`:feature:*`/`:design` layout where `Tech-Stack.md` §13 defines `core/`, `data/`, `sync/`, `integrations/`, `ui/`, `app-android/`, `app-wear/`, `server/` and `tools/`.
-- Navigation: the body now uses five roots and a 5-tab bar, but its banner still refers to six tabs/More and its Settings screen is defined as a root rather than top-bar gear; the contract is five tabs with Train raised and Settings in the top bar (`DESIGN.md` §4.4, §5.15).
-- A11y: "WCAG 2.1 AA" and "1.3× font scale" throughout; the contract is WCAG 2.2 AA at 200% (`pr.md` §6.22; `DESIGN.md` §11). A11y is a per-screen gate from Phase 1 (`DESIGN.md` §14.5), not a Phase 6 retrofit.
-- Themes: light theme deferred to Phase 6; `DESIGN.md` ships dark canonical and light as an equal from 1.0 (§12.1–12.2).
-- Telemetry and distribution: Crashlytics and a Play Integrity token in Beta; the contract is no telemetry and a Play-Services-free F-Droid build (`pr.md` §6.31; `Tech-Stack.md` §4, §12).
-- Sync: "last-write-wins + source priority"; `Tech-Stack.md` §6 requires per-entity merge policies, tombstones and surfaced conflicts.
-- Undo: Phase 2 says "undo toast (3–5 s)"; the contract is a session-length tombstone plus 30-day Trash (`DESIGN.md` §5.18; `pr.md` §6.29).
-- Calculations: the readiness formula `(sleep % × 0.4) + (HRV % × 0.3) + (RHR % × 0.3)` appears only in `BUILD-ROADMAP.md`; `pr.md` §6.10 requires an explainable score and `DESIGN.md` §14.2 an explanation line, but neither defines the formula. Treat it as a proposal, not a contract.
-- Devices: "Health Kit (Android 12+)" is wrong — the Android bus is Health Connect; HealthKit is Apple and gated. Oura/Galaxy Watch pairing in Phase 5 also contradicts `pr.md` §9's Phase 2/3 placement.
-- Server timing: `BUILD-ROADMAP.md` puts the sync engine and server in Phase 5, `Tech-Stack.md` §2 puts the server in Phase 1, and `pr.md` §9 puts multi-device sync and managed hosting in Phase 3. Only the stack choice is settled; the timing is not.
-- Vocabulary: "V2" does not exist; use `Later`.
-- Citations: `Tech-Stack.md` §8.2 in Phase 5 does not exist (the server is §7). "SVG-to-Compose" conflicts with `DESIGN.md` Appendix B's path renderer, and the review gate points at dead `WIREFRAMES.md` §end — use `DESIGN.md` §14.5.
-- Component count: "All 10 components" versus `DESIGN.md`'s 19.
+Version 1.0 replaces the stale 0.1 (Hilt, Room, six tabs, WCAG 2.1, Crashlytics, undo toasts). Anything you remember from 0.1 is wrong; read the current file. The readiness formula is now defined in `pr.md` §6.10.
 
 ### `pr.md`'s own stale spots
 
-`pr.md` §13.1 is marked decided, but §13.2 (local DB), §13.3 (server) and §13.5 (licence) still read as open and list options `Tech-Stack.md` has rejected. `pr.md` §8.3 still says "Node/TypeScript or Go" even though §8's introduction says 8.1–8.4 are superseded. `Tech-Stack.md` wins; do not reopen settled questions. If the task is to update the contract, fix these and record the change rather than routing around them.
-
-### `DESIGN.md`'s five-tab leftovers
-
-`DESIGN.md` §4.5 still says a tab is `1/6 width`; §14.4 still says "No 5-tab bar; no raised Start" and "No muscle-recovery red map on Today". The newer §5.15, §13.1, §13.9 and §14.1 say five tabs with a raised Train and a recovery map allowed on Today, Train and Stats. Follow the newer sections.
+`pr.md` §13 is now a closed decisions register. §8.1–8.4 still name Node, Go, WatermelonDB, PowerSync and ElectricSQL and are superseded by `Tech-Stack.md`; treat them as history. Do not reopen settled questions. If you change a decision, record it in an ADR and propagate it.
 
 ### Reference library count
 
@@ -123,12 +112,7 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 
 ## Dead references (do not chase them)
 
-`BUILD-PLAN.md`, `WIREFRAMES.md`, `wireframes.html`, `wireframes-*.svg`, `CLAUDE.md`, `docs/adr/` and the old mockup export **do not exist**, though the live docs still cite them.
-
-- `BUILD-PLAN.md` was replaced by `BUILD-ROADMAP.md`. `pr.md` §0.1 cites its §2; `Tech-Stack.md`'s header, §10, §13 and §15 cite it too.
-- `WIREFRAMES.md` / `wireframes.html` pointers in `BUILD-ROADMAP.md` and `COMPOSE-GUIDE.md` are dangling. The screen review gate is `DESIGN.md` §14.5; the inventory and recipes are §14.1–14.2.
-- `docs/adr/` is the intended home for dated closed decisions (`Tech-Stack.md` §13–14) but does not exist. `Tech-Stack.md`'s header links a non-existent `docs/adr/0001-android-first.md`.
-- There is no root `README.md`; `references/README.md` is the study-library index, not product documentation.
+`WIREFRAMES.md`, `wireframes.html`, `wireframes-*.svg`, `CLAUDE.md`, `BUILD-PLAN.md` and the old mockup export do not exist and are not cited by the live documents any more. The screen review gate is `DESIGN.md` §14.5; the inventory and recipes are §14.1–14.2. `COMPOSE-GUIDE.md` still points at `WIREFRAMES.md`; ignore it. There is no root `README.md`; this file is the entry point and `references/README.md` indexes the study library.
 
 ## Where to look
 
@@ -149,14 +133,13 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 | Android APIs and permissions | `Tech-Stack.md` §8 |
 | Performance budgets | `Tech-Stack.md` §12; `pr.md` §6.26 |
 | Tests and CI | `Tech-Stack.md` §10–11 |
-| Build order | `BUILD-ROADMAP.md` phases (UI only) |
+| Build order, exit tests | `BUILD-ROADMAP.md`; run with `prompts.md` |
+| Why a decision was made | `docs/adr/` |
 | Open decisions | `pr.md` §13 |
 
-## Open decisions
+## Decisions
 
-`pr.md` §13 is the register. `Tech-Stack.md` §15 closes items 1, 2, 3 and 5. Genuinely open: 4 account model; 6 medical scope; 7 AI provider strategy; 8 first devices; 9 first languages; 10 brand/domain; 11 offline food index; 12 measurement without telemetry; 13 business model; 14 minors; 15 encryption and recovery; 16 nutrition in the MVP; 17 iOS start (deferred, reviewed at every phase exit).
-
-No live document owns them: `Tech-Stack.md` §15 still says they are "owned by `BUILD-PLAN.md` §2", and `BUILD-ROADMAP.md` does not answer them. Do not invent an answer in code, a screen or a plan. Record a decision in `pr.md` §13 and propagate it to the other files.
+All 17 items of `pr.md` §13 are closed or deferred (iOS). On 2026-11-22 the owner delegated every open item to the recommended default; `docs/adr/0002-closed-defaults.md` records each with its reason. The owner may overrule a row; an agent never does, and asks instead (`prompts.md` "When to ask").
 
 ## Commands
 
@@ -171,12 +154,12 @@ git -C references/<name> pull --ff-only
 rg -n --glob '!**/.git/**' '<pattern>' references/<name>
 ```
 
-If `git` or `rg` is not on PATH (neither is currently available on this workstation), use PowerShell:
+`git`, `adb`, JDK 21, Gradle 9.x and the Android SDK are installed on this workstation (verified 2026-11-22); `rg` may not be. If something is missing, use PowerShell:
 
 ```powershell
 Test-Path references\wger
 Get-ChildItem references -Directory | Select-Object -ExpandProperty Name
-Select-String -Path *.md -Pattern 'WIREFRAMES|BUILD-PLAN|docs/adr'
+Select-String -Path *.md -Pattern 'WIREFRAMES|BUILD-PLAN'
 ```
 
 `references/` is ~5 GB and gitignored except `README.md` and `MANIFEST.md`. **Never `git add -A` from the repo root without checking `git status` first**, and never commit anything under `references/`. The working tree may hold deliberate deletions of superseded docs; do not restore them with `git checkout .`.
@@ -205,6 +188,14 @@ Non-negotiables in the visual contract:
 - Cite sections when claiming scope (e.g. `pr.md` §6.5 MVP); the MVP/V1/Later tags are the schedule. Do not cite line numbers — the docs move.
 - Keep the markdown style of the file you touch: dense prose, tables, section numbering, no filler.
 - Prefer `Later` over "V2".
-- Do not fix unrelated stale cross-references in passing. Correct the text your change touches and flag the rest; a docs sweep is its own task.
-- Do not add a new document, section, token, component, metric or licence without an explicit request. `docs/adr/` gets its first file only when a decision is actually closed.
+- Correct the text your change touches and flag unrelated staleness; a docs sweep is its own task.
+- Do not add a new document, section, token, component, metric or licence without an explicit request or a phase that calls for it. ADRs go in `docs/adr/` with the next free number when a decision with consequences is made.
 - UI copy bans "OK", "Submit", "Yes/No", "Are you sure?", exclamation marks, streak guilt, em dashes, and any wording that diagnoses or shames (`DESIGN.md` §11.7). This restriction is for product copy, not these documents.
+
+## Current state
+
+Updated by every build phase at its exit (`prompts.md` "Log and finish").
+
+- Last completed phase: none (no code yet; next is B0).
+- Build: not started.
+- Open issues: see `docs/build-log.md`.

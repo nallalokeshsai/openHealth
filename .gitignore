@@ -1,8 +1,6 @@
 # The reference library is a local study checkout of upstream projects.
 # Keep the index and manifest, but never vendor the 5+ GB of cloned code.
-references/*
-!references/README.md
-!references/MANIFEST.md
+references/
 
 # Dependencies and build output for the app that comes next
 node_modules/
@@ -18,6 +16,10 @@ data/
 .env.*
 !.env.example
 *.log
+
+# Local agent tooling (OpenCode command and permissions)
+.opencode/
+opencode.json
 
 # OS and editor noise
 .DS_Store

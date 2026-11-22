@@ -1,6 +1,6 @@
 # openHealth — Design System
 
-**Version:** 0.1
+**Version:** 0.2
 **Status:** Living document, first pass
 **Last revision:** 2026-11-22 — five-tab bar with a raised centre Train (§5.15,
 §13.1), global top bar (§4.4), `fat` and `recovery` data hues (§2.5, App. A),
@@ -551,7 +551,7 @@ A screen may skip parts; it may not reorder them.
 | Icon button | 36 dp circle | 44 dp via 4 dp hit slop |
 | Chip | 32 dp tall | 44 dp vertical slop inside a strip |
 | Switch | 51 × 31 dp | 44 dp via slop |
-| Tab | 1/6 width × 56 dp | full cell |
+| Tab | 1/5 width × 56 dp (Train: 56 dp raised disc, centre) | full cell |
 | Set's done circle | 38 dp | 44 dp via slop |
 | Chart point | 4.5 dp dot | 44 dp scrub area |
 
@@ -1732,11 +1732,10 @@ The most important four screens, and their interaction budget:
 
 ### 14.4 Deltas from openGym's screens
 
-- No 5-tab bar; no raised Start (§13).
+- Five tabs with Train as the raised centre, as openGym, but Today, Vitals, Nutrition and Stats replace its other destinations, and a global top bar carries quick add and Settings (§4.4, §5.15, §13.1).
 - No streak/level/challenge cards on the home.
 - No exercise media from openGym; use our own.
-- No muscle-recovery red map on Today; recovery is a sentence with an orange
-  or green glyph, and the map lives one level down.
+- The muscle recovery map (red, orange, green) is allowed on Today, Train and Stats (§9.1, §13.9); it is never on a vital, a clinical card or a report.
 - The previous mockup canvas and its downloaded `openHealth App Mockups.html`
   are superseded by this document and must not be used as a visual reference.
 - Keep: the large title, the week strip, the plan row with a mini body map, the

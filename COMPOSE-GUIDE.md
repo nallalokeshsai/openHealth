@@ -1,5 +1,7 @@
 # openHealth — Compose Implementation Guide
 
+> **Patterns only, not values (2026-11-22).** Every colour, size, radius, type role and structure in this file is superseded by `DESIGN.md` Appendix A and B and `Tech-Stack.md` §13. Do not copy a literal from here: hex literals below are six digits (alpha zero in Compose), spacing and radii are wrong, it uses Hilt and `MaterialTheme`, and it shows six tabs. Use it only to see what idiomatic Compose looks like; `AGENTS.md` lists every known error.
+
 **Version:** 0.1  
 **Date:** 2026-11-21  
 **Reference:** DESIGN.md, WIREFRAMES.md, Tech-Stack.md §11

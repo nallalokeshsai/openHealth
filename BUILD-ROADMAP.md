@@ -1,601 +1,270 @@
 # openHealth — Build Roadmap
 
-**Version:** 0.1  
-**Date:** 2026-11-21  
-**Reference:** pr.md, DESIGN.md, WIREFRAMES.md, COMPOSE-GUIDE.md, Tech-Stack.md
-
-> **2026-11-22:** navigation is now five tabs (Today, Vitals, Train, Nutrition, Stats) with Train raised and a top bar carrying app name, date, quick add and settings (`DESIGN.md` §4.4, §5.15). Wherever this file says six tabs or a More screen, read that. The rest of this file stays stale as `AGENTS.md` describes.
-
-This document lays out the phase-gated build sequence for the first usable Android release, mapping features to deliverables and exit tests.
+**Version:** 1.0 · 2026-11-22 — rewritten; supersedes 0.1 (UI-first, Hilt/Room, six tabs)
+**Authority:** the **sequence and exit tests** of the build. It owns no values: stack is `Tech-Stack.md`, appearance is `DESIGN.md`, behaviour and scope are `pr.md`. Decisions are closed in `pr.md` §13 and `docs/adr/`.
+**Run it with:** [`prompts.md`](prompts.md) — one prompt per phase below.
+**Progress log:** `docs/build-log.md` (created in B0; every phase appends to it).
 
 ---
 
-## Phase Overview
+## 1. How the build is organised
 
-| Phase | Duration | Scope | Gates |
-|-------|----------|-------|-------|
-| **0** | Weeks 1–3 | Gradle project, theme, 6 reusable components, bottom nav | Tokens frozen, components testable in isolation |
-| **1** | Weeks 4–7 | Five root screens (MVP), no detail sheets | Each screen passes review gate (§WIREFRAMES.md §end) |
-| **2** | Weeks 8–10 | Quick-add sheet, provenance sheets, live session | Logging loop under 2–5 s per action |
-| **3** | Weeks 11–12 | Detail sheets (readiness, session summary, vital detail) | All numbers provenance-linked, all destructive undo-able |
-| **4** | Weeks 13–15 | Charts (trends, heatmap, body map renderer) | Charts have table alternative + 1-sentence text |
-| **5** | Weeks 16–18 | Sync engine, server integration (opt-in), device pairing | Local-first works offline, sync is optional |
-| **6** | Weeks 19–20 | Accessibility audit + remediation, RTL, font scale | WCAG 2.1 AA on all screens, 1.3× font scale verified |
-| **Beta** | Weeks 21+ | Bug fixes, performance tuning, play store submission | Signed APK, internal testing |
+- **Thin vertical order, correctness first.** Design system and data model before screens; logic as pure Kotlin with tests before UI that calls it; every phase ends with something runnable on an emulator or phone.
+- **Phases are named B0–B15** so they are never confused with `pr.md` §9 product phases. B0–B10 deliver the MVP (`pr.md` §9 Phase 0 and 1, with nutrition in per ADR 0002); B11–B12 deliver depth the owner asked for early; B13–B15 are the ecosystem.
+- **Scope rule.** A phase builds the `MVP`-tagged items of the `pr.md` sections it names, plus any `V1` item it names explicitly. Everything else waits. Never build `Later` items or the cut list (`pr.md` §14.5).
+- **Gate at every exit.** (1) `./gradlew check` and `./gradlew :app-android:assembleDebug` pass. (2) Every screen touched passes `DESIGN.md` §14.5. (3) The exit tests below pass, run on an emulator or device where they are UI. (4) `docs/build-log.md` has an entry. (5) The iOS gate (`pr.md` §13.17) is reviewed: answer is recorded, default "not yet".
+- **No time estimates.** Order and exit tests are the plan; calendar time depends on the owner's agent budget.
+- **Stable interfaces between phases.** Each phase lists what it hands to the next so a fresh agent can resume from the repo and the log alone.
 
----
+## 2. Phase map
 
-## Phase 0: Foundation (Weeks 1–3)
+| Phase | Name | Delivers | Needs |
+|---|---|---|---|
+| B0 | Foundation | Gradle build, toolchain, guards, CI file, licences, log | — |
+| B1 | Design system | `OhTheme`, 19 components, icons, bars, gallery, screenshot tests | B0 |
+| B2 | Core and data | Domain, units, provenance, five-layer schema, rollups, dedup, formulas, export/restore | B0 |
+| B3 | Shell and onboarding | Splash, onboarding, five tabs, top bar, quick-add shell, settings, timeline, demo | B1, B2 |
+| B4 | Body model and exercise data | Path renderer, fat layer, recovery and plan maps, exercise library | B1, B2 |
+| B5 | Gym training | Routines, session, set logging, rest timer, progression, history, maps on Train | B3, B4 |
+| B6 | Nutrition | Diary, foods, macros and micros, water, barcode, recipes | B3 |
+| B7 | Body and vitals | Weight, measurements, composition, photos, vitals, dynamic body model data | B3, B4 |
+| B8 | Activity sources | Step sensor, Health Connect, Garmin FIT import, BLE devices, dedup | B2, B3 |
+| B9 | Today and Stats | Today dashboard, energy and goal ETA, readiness, Stats charts, tables | B5–B8 |
+| B10 | Hardening and MVP release | A11y, light theme, RTL, performance, backup, trash, release build | B0–B9 |
+| B11 | Yoga, cardio, GPS | Yoga flows, activities, GPS recording, FIT/GPX/TCX, Strava archive, maps | B10 |
+| B12 | Sleep, clinical, reports | Sleep, recovery depth, medications, labs, doctor PDF, FHIR export | B10 |
+| B13 | Sync and server | Change-log sync, Ktor server, Compose deployment | B10 |
+| B14 | Wear OS and Connect IQ | Watch apps | B10, B13 |
+| B15 | AI Coach and MCP | Proposals, BYOK, MCP server | B13 |
 
-**Goal:** Frozen design tokens, reusable component library, navigation skeleton.
-
-**Deliverables:**
-
-1. **Gradle project** (Tech-Stack.md §11)
-   - App module: `:app`
-   - Core module: `:core` (no Android deps)
-   - Data module: `:data` (database, sync, integrations)
-   - Feature modules: `:feature:today`, `:feature:train`, etc.
-   - Design module: `:design` (tokens, theme, components)
-   - Hilt + Compose + Material 3 configured
-
-2. **Token set** (`design/tokens.kt`)
-   - Dark theme: all 11 colours from §A.1 DESIGN.md
-   - Light theme: verified siblings with same contrast ratios
-   - 11-step typography scale (13 sp baseline → 34 sp)
-   - 9 spacing values (4–40 dp)
-   - 6 radii (4–20 dp)
-   - Motion constants (140–220 ms)
-   - **Exit test:** No hexes in any screen file; all values come from tokens
-
-3. **Material 3 theme** (`design/theme.kt`)
-   - `OpenHealthTheme` composable with dark/light toggling
-   - CompositionLocal providers for token access
-   - Type + shape + color mapped to Material 3 defaults
-   - **Exit test:** Theme switches instantly, all text reads in both themes
-
-4. **Reusable components** (`design/components/`)
-   - `OHCard` (surface bg, border, padding, 12 dp radius)
-   - `CardHeader` (icon + title + value row)
-   - `OHRowItem` (label + value, 44 dp min height, separator)
-   - `OHPrimaryButton` (accent bg, 44 dp min height, 140 ms press anim)
-   - `OHProgressRing` (canvas-drawn ring, centre text overlay, 96–120 dp)
-   - `OHChip` (selected/unselected states)
-   - `WeekStrip` (7 × 32×40 dp bubbles, today accent)
-   - `OHBottomNavigation` (5-tab, accent on active only)
-   - `OHBottomSheet` (Material 3, dismissible, header + content)
-   - **Exit test:** Each component renders in Compose Preview, light + dark themes verified
-
-5. **Navigation skeleton** (`navigation/`)
-   - `NavGraph` with 5 root destinations (Today, Vitals, Train, Nutrition, Stats) plus a top bar
-   - Bottom nav routing to each screen
-   - Sheet composable for modal detail (provenance, quick-add, etc.)
-   - **Exit test:** 5 tabs selectable, navigate between tabs, no crashes
-
-6. **Data models** (`core/model/`)
-   - `ReadinessData`, `WorkoutSession`, `Meal`, `Measurement`, `Vital`, `InsightMetric`
-   - Align with pr.md §7 (5 layers: raw → observations → rollups → domains → settings)
-   - Each model includes provenance fields: `sourceId`, `recordedAt`, `happendAt`, `method`
-   - **Exit test:** Models map to room DB, no serialization errors
-
-**Success Criteria:**
-- [ ] App launches, 5 tabs visible, can navigate between tabs
-- [ ] Every colour, size, shape from tokens (no hardcodes)
-- [ ] All 10 components render in Preview
-- [ ] Light + dark themes switch instantly
-- [ ] Font scale at 1.3× (200% user scaling) does not overflow or crash
+B11 and B12 are independent of each other. B13 onward only start when the owner asks.
 
 ---
 
-## Phase 1: Root Screens (five roots + Settings) (Weeks 4–7)
+## B0 — Foundation
 
-**Goal:** Five root screens, MVP scope, no detail sheets yet. Each screen is scrollable, card-based, shows real data model.
+**Goal:** an empty but correct multi-module project that builds and enforces the architecture.
+**Read:** `Tech-Stack.md` §2–3, §11, §13–14, §16; `docs/adr/0002-closed-defaults.md`.
 
-**Deliverables:**
+Deliver:
+1. Gradle wrapper, `settings.gradle.kts`, `gradle/libs.versions.toml`, `build-logic/` convention plugins, modules `:core :data :sync :integrations :ui :app-android` with the §13 directory layout.
+2. Verify every version floor in `Tech-Stack.md` §14 against its current release, pin them, and record in `docs/adr/0003-pinned-versions.md`.
+3. `checkPortability` and `checkLicences` tasks (`Tech-Stack.md` §16), ktlint, Detekt, wired into `check`.
+4. `LICENSE` (Apache-2.0), a note that `server/` will be AGPL-3.0 (built in B13), `NOTICE.md` with the MuscleMap MIT notice text copied from `references/openGym/NOTICE.md`.
+5. `.gitignore` (build outputs, `local.properties`, keystores, `references/` except the two indexes), GitHub Actions workflow file (not pushed).
+6. `app-android` shows one blank screen; `docs/build-log.md` started.
 
-### Today Screen
+Exit: `./gradlew check` green; a deliberate `import android.os.Bundle` in `core` makes `check` fail, then is removed; the app installs and launches on an emulator or the owner's phone.
+Hands to B1/B2: a green build and pinned versions.
+Ask the owner: emulator or physical phone (list `adb devices` first); and, because the repository sits in OneDrive, whether to move the working copy to `C:devopenHealth` (recommended) or pause OneDrive for build folders. Nothing else.
 
-**Wireframe:** See WIREFRAMES.md §1 and wireframes.html
+## B1 — Design system
 
-**Components:**
-- Page header (34 sp "Good morning", time, settings gear)
-- Connection banner (dismissible, orange/gold if sync paused)
-- Readiness card (score, 3 chips, explanation)
-- Week strip + plan card (7 bubbles, today accent, plan row with mini body map, **Start** button)
-- Nutrition card (120 dp ring, 4 macro bars, water row)
-- Steps card (96 dp ring, distance + active min)
-- Weight card (large value, signed delta, 30-day sparkline with goal)
-- Due items card (inset list of 46 dp rows, editable state)
-- Quick actions card (3×2 grid of 84 dp tiles)
-- Tab bar (5 tabs, Today active, Train raised)
+**Goal:** the closed token set and 19 components exist once, in code, and cannot drift.
+**Read:** `DESIGN.md` §0–6, §10–12, Appendix A–B; `AGENTS.md` "Tokens" conflicts.
 
-**Data flow:**
-- ViewModel queries `ReadinessRepository`, `WorkoutRepository`, `NutritionRepository`, etc.
-- State: `data class TodayUiState(readiness, week, nutrition, steps, weight, dueItems, connectionStatus)`
-- Collect as state: `collectAsStateWithLifecycle()`
+Deliver in `:ui`:
+1. `OhColors`, `OhType`, `OhSpace`, `OhRadius`, `OhMotion` and `OhTheme` per Appendix B; dark canonical, light sibling, nine accent presets, `fat` and recovery tokens; `Color(0xFF…)` literals only; no `MaterialTheme.colorScheme` defaults, no dynamic colour, no ripple.
+2. The typeface and the 11 type roles per §3 (check the font licence; bundle only a freely licensed face and record it in `NOTICE.md`).
+3. The 19 components of §5 including the global top bar (§4.4), the five-tab bar with the raised Train disc (§5.15), sheet, dialog, toast and undo, timer bar, rows and inset groups, with every state in §6.
+4. The core icon set (§10) drawn as vector paths (no emoji, none copied from openGym).
+5. A debug-only component gallery screen in `:app-android` showing every component and state in dark, light and 200% font.
+6. Roborazzi screenshot tests for each component and state in dark, light, 200% font and RTL; a unit test that computes every contrast pair in `DESIGN.md` §12.5 from the token values and fails below the stated ratio.
 
-**Exit test (review gate §WIREFRAMES.md §end):**
-- [ ] Every colour from DESIGN.md §2 (no hardcodes)
-- [ ] Every size from DESIGN.md §3–4 (no arbitrary padding)
-- [ ] One primary action (**Start** button)
-- [ ] Every row is single a11y node (except secondary controls)
-- [ ] 44 dp min touch targets (verified at 1.3× font scale)
-- [ ] Light + dark themes verified, high contrast OK, reduced motion OK
-- [ ] Colour-blind simulation: no information lost
-- [ ] Every number is tappable (provenance placeholder for now)
-- [ ] Empty state shown when no workouts / no nutrition logged
-- [ ] No wording "risk", "warn", "screen" (§pr.md §12.1)
-- [ ] Weight-neutral mode checked (can hide weight values, adjective wording OK)
-- [ ] RTL checked (use `start`/`end`, not `left`/`right`)
-- [ ] Reason to exist clear in 3 seconds
+Exit: gallery renders; screenshot and contrast tests pass; a Detekt or unit check fails if a `Color(` literal or a raw `.dp` literal appears outside `ui/theme`.
+Hands on: `OhTheme`, components, icons.
 
-**Effort:** 40 hours (1 dev × 1 week)
+## B2 — Core and data
 
----
+**Goal:** the five-layer model and every formula, pure Kotlin, heavily tested, before any feature screen.
+**Read:** `pr.md` §2.2, §6.3–6.5 (formulas), §6.27–6.29, §7 (all), §12.1; `Tech-Stack.md` §3, §5–6.
 
-### Train Screen
+Deliver:
+1. `:core`: ids, `kotlinx-datetime` time (`happened_at`, `recorded_at`, local date, timezone), UCUM unit conversion with canonical storage units, provenance type, observation types (`pr.md` §7.2), source registry and priority (§7.6), merge-policy interface (§7.7), validators.
+2. Formulas with tests: Mifflin-St Jeor BMR, US Navy body fat (male and female), BMI, FFMI, TDEE from activity level, MET-based exercise energy (Compendium values bundled with citation), estimated 1RM, session volume, trend smoothing (exponentially weighted weight trend), goal-rate and ETA window (`pr.md` §6.4), muscle recovery steps (`pr.md` §6.5), readiness v1 (`pr.md` §6.10), sleep debt. Each returns a value, its inputs and a citation key for the explanation sheet.
+3. `:data`: SQLDelight 2.x schema for `raw_record`, `observation`, `daily_rollup`, domain tables (profile, exercise, routine, programme, session, set, food, meal, entry, measurement, vital, and the rest as later phases need them), `settings`, `tombstone`; migrations as files; WAL; integrity check on open; auto-backup before migration; every UI query indexed on `(local_date)` or `(type, happened_at)`.
+4. Rollup engine: rebuild affected days from observations on any backfill; never patches; source-priority dedup (one source wins a day).
+5. Trash: tombstones with session-length undo and 30-day purge (`pr.md` §6.29).
+6. Platform seams as interfaces in `:core`: clock, keystore, files, notifications, health bus, step sensor, BLE, camera, PDF. SQLCipher driver and Keystore key in `:app-android` behind the seam.
+7. Export and restore: versioned JSON export of every layer including raw records, passphrase-encrypted (Argon2id), round-trip tested on fixtures; CSV export of observations.
+8. `tools/fixtures`: a generator for a seeded five-year corpus (steps, weight, meals, sessions) and a benchmark that proves no query above 16 ms.
 
-**Wireframe:** See WIREFRAMES.md §2 and wireframes.html
+Exit: property tests show rollups are identical whether built incrementally or from scratch, dedup never sums two sources, export then restore reproduces the database, backfilling a past day does not change any `recorded_at`; the corpus benchmark passes.
+Hands on: repository interfaces, formulas, the seeded corpus.
+Ask the owner: nothing; if an exercise or MET source licence is unclear, see `prompts.md` "When to ask".
 
-**Components:**
-- Page header (34 sp "Training", week range, session count)
-- Week strip (7 bubbles, session count trailing)
-- Today's plan card (mini body map, plan name, time, chevron)
-- Active programmes card (inset list, week X of Y, chevron)
-- Recent sessions card (50 dp thumbnail, name, time, set count)
-- This month stats card (2×2 grid: sessions, volume, duration, effort)
+## B3 — Shell and onboarding
 
-**Data flow:**
-- ViewModel queries `WorkoutRepository.getWeekSummary()`, `.getActiveProgrammes()`, `.getRecentSessions()`
-- State: `data class TrainUiState(weekSummary, todaysPlan, programmes, recentSessions, monthStats)`
+**Goal:** first launch to Today, with navigation and settings in place and nothing hollow.
+**Read:** `pr.md` §5, §6.1, §6.2, §6.21–6.23, §6.25, §6.27, §6.29; `DESIGN.md` §4, §5.15, §14.2 (Today, Settings, onboarding, quick add, timeline), §14.5.
 
-**Exit test:**
-- [ ] All review gate items (same as Today screen)
-- [ ] Session rows swipe-left to delete (undo toast)
-- [ ] Tap **Start** button: navigate to Live Session screen (Phase 2)
-- [ ] Programme count matches data
+Deliver:
+1. Android 12 SplashScreen API splash, correct on API 28–35, no network wait; first launch routes to onboarding, every later launch to Today.
+2. Onboarding with the three tiers of `pr.md` §6.1, one question per screen, skip always visible, units pre-detected, under-16 blocking, weight-neutral offer, module preset, demo-data row. Every tier-3 field stored with provenance and asked once later where used.
+3. Five-tab shell with raised Train, global top bar (app name, date, quick add, settings), predictive back, sheet layer.
+4. Settings (top-bar gear): profile, modules (13 toggles that hide surfaces and keep data), devices placeholder, data (export, restore, Trash), appearance (theme, accent preset), privacy (app lock with `BiometricPrompt`), about; destructive group with tombstone semantics.
+5. Quick-add sheet shell with the six tiles routing to sheets that later phases fill; timeline (every stored event, filterable); demo mode with realistic sample data from `tools/fixtures`; weight-neutral switch that removes the numbers app-wide through one policy object.
+6. Today skeleton in the §14.2 order with real empty states.
 
-**Effort:** 30 hours (1 dev × 1 week)
+Exit (Maestro flows): fresh install to first logged note in under three minutes; relaunch shows splash then Today; turning a module off hides it and re-enabling restores its data; weight-neutral hides every weight, calorie and body-fat value present so far; export then restore from Settings round-trips.
+Hands on: navigation, settings store, quick-add contract, profile repository.
+Ask the owner: nothing (all onboarding content is specified).
 
----
+## B4 — Body model and exercise data
 
-### Nutrition Screen
+**Goal:** the signature visual and the data it depends on.
+**Read:** `DESIGN.md` §9, §11.3, §12.5, Appendix C; `pr.md` §6.5, §6.8; `references/openGym/frontend/src/lib/body-paths.js` and `body-geometry.js` (geometry only) and `references/openGym/NOTICE.md`.
 
-**Wireframe:** See WIREFRAMES.md §3 and wireframes.html
+Deliver:
+1. Port the MuscleMap path geometry (MIT) for male and female, front and back, into a resource; keep the notice. Write our own renderer (`OhBodyMap`) as Compose `Path`s per Appendix B: base, 2.5 dp surface stroke, selection, mini variant, one accessibility node per muscle, never mirrored in RTL.
+2. Layers: adipose layer (outside muscle shapes only, thickness from body fat % then tape measurements, clamped, `DESIGN.md` §9.1.1), recovery colouring (red, orange, green with hatch on Recovering), plan colouring (accent ramp).
+3. Muscle taxonomy of whole muscles and the exercise library: at least 150 exercises with primary and secondary muscles, equipment, body-part tags, text instructions, alternatives, from a source whose licence the agent read and recorded in `NOTICE.md`; custom exercises.
+4. The recovery engine wired to the `:core` formula, with a table alternative and one-sentence description for every map.
+5. A debug harness to scrub body fat %, waist and hours-since-load and see the figure update.
 
-**Components:**
-- Page header (34 sp "Nutrition", current date, scan button in header)
-- Date strip (7 bubbles, tap to jump to other days)
-- Energy card (120 dp ring, 4 macro bars: protein, carbs, fat, fibre)
-- Meal sections (Breakfast, Lunch, Dinner, Snacks)
-  - Each section: inset list of meal rows (44 dp image, name, time, calories)
-  - Swipe-left to delete (undo toast)
-- Water row (13 sp label, value, secondary button)
-- **Add meal** button (primary)
+Exit: screenshot tests for four views × dark/light × each map type; TalkBack announces "Forearms" once; fat layer never overlaps a recovery-coloured shape; a unit test proves recovery steps at 0, 23, 25, 47, 49, 73 hours for default thresholds.
+Hands on: `OhBodyMap`, exercise repository, muscle taxonomy.
+Ask the owner: only if no exercise data source with a clear licence can be found.
 
-**Data flow:**
-- ViewModel queries `NutritionRepository.getMealsForDate(date)`
-- State: `data class FoodUiState(date, energy, macros, meals, waterIntake, selectedDay)`
+## B5 — Gym training
 
-**Exit test:**
-- [ ] All review gate items
-- [ ] Date strip tap changes displayed date
-- [ ] Meal rows swipe-left to delete (undo)
-- [ ] Scan button in header (placeholder for now, Phase 2)
-- [ ] Energy ring shows % of daily target
+**Goal:** the best strength log: a set in under 2 seconds.
+**Read:** `pr.md` §6.5 (MVP), §6.26, §6.29; `DESIGN.md` §14.2 (Train, Live session), §5.19; study `references/openGym`, `Liftosaur`, `FastNFitness` for ideas only (AGPL: reimplement).
 
-**Effort:** 30 hours (1 dev × 1 week)
+Deliver:
+1. Routines (weekday and A/B/C), folders, favourites; programmes (multi-week) if the scope allows, else cut as `pr.md` §6.5 says; each routine shows its muscle map and each programme its coverage map with sets per week.
+2. Session flow: start today's plan, freestyle, log a past workout; the live session surface with set table, warm-ups, work, back-off, drop, failure, tempo; supersets and circuits; plate math; one equipment profile; bodyweight handling; notes.
+3. Rest timer as an ongoing foreground-service notification with actions, sound and vibration; survives process death; a session persists through kill and resume.
+4. Progression policies: the interface plus linear, double progression and off; deloads, stall detection, PR detection, estimated 1RM, per-exercise history.
+5. Session summary with the loaded-muscles mini map; edit, move date, delete with undo and Trash.
+6. Train root: week strip, today's plan with Start, Recovery/Plan segmented body map, history; recovery map live from logged sets.
 
----
+Exit (Maestro plus timing): a set is logged in under 2 s with one hand (weight and reps prefilled); kill the app mid-session and resume without loss; a leg session turns quads red, the next simulated day orange, the third green; moving a past workout recomputes rollups without changing `recorded_at`.
+Hands on: workout repository, set model, rest-timer service.
+Ask the owner: nothing.
 
-### Vitals Screen
+## B6 — Nutrition
 
-**Wireframe:** See WIREFRAMES.md §4 and wireframes.html
+**Goal:** a food log that takes under 5 seconds from barcode to logged.
+**Read:** `pr.md` §6.3 (MVP), §6.4, §12.2; `DESIGN.md` §14.2 (Nutrition); study `OpenNutriTracker`, `Waistline`, `FoodYou`, `OpenFoodFactsServer` (reimplement).
 
-**Components:**
-- Page header (34 sp "Body", subtitle)
-- Weight card (large value, trend sentence, 90-day line chart with goal)
-- Silhouette + measurements (silhouette glyph, 7 inset rows: neck, waist, hip, etc.)
-- Composition tile grid (2×2: body fat %, lean mass, etc.)
-- Photos section (3-across grid of 120 dp thumbnails, date labels)
-- Vitals section (grouped list: HR, BP, temperature; tap for detail)
-- Sleep section (if module enabled: duration, quality, bedtime)
-- Cycle section (if logged: phase, days until next event)
+Deliver:
+1. Generic foods: build `tools/foodindex` that converts USDA FoodData Central (CC0) into a compact bundled SQLite table with macros and micronutrients; record source, version and licence in `NOTICE.md`.
+2. Diary by meal, serving and portion math, custom foods, copy meal, recent and frequent, micronutrient totals against cited reference intakes, macro targets, water with container presets, edit and delete with undo.
+3. Barcode: CameraX with the bundled ML Kit barcode model (no Play Services), Open Food Facts lookup on explicit action with a disclosure of what leaves the phone, local cache, ODbL attribution screen; manual entry when offline.
+4. Recipes (create, scale, log a portion); meal templates; fasting window timer.
+5. Energy card inputs exposed to B9: intake per day with provenance.
 
-**Data flow:**
-- ViewModel queries `BodyRepository.getWeight()`, `.getMeasurements()`, `.getComposition()`, `.getPhotos()`, etc.
-- State: `data class BodyUiState(weight, trend, measurements, composition, photos, vitals, sleep?, cycle?)`
+Exit: barcode to logged under 5 s on the warm path (timed E2E); a day's totals equal the sum of its entries exactly; the diary works in airplane mode; weight-neutral hides calories and energy; micronutrients show a cited reference.
+Hands on: nutrition repository and food index.
+Ask the owner: nothing.
 
-**Exit test:**
-- [ ] All review gate items
-- [ ] Weight card sparkline is 30-day rolling window
-- [ ] Measurements tied to date (or use `recorded_at`)
-- [ ] Photos grid 3-across, images load from local DB
-- [ ] Weight-neutral mode: can hide all weight values, adjust language
-- [ ] Vitals section appears only if module enabled
+## B7 — Body and vitals
 
-**Effort:** 35 hours (1 dev × 1 week)
+**Goal:** the Vitals tab, with the dynamic body model driven by the owner's real data.
+**Read:** `pr.md` §6.8 (MVP), §6.9 (MVP), §6.25, §12.1; `DESIGN.md` §7.5, §9.1.1–9.4, §14.2 (Vitals, Vitals detail).
 
----
+Deliver:
+1. Weight check-ins with the one-value-per-day rule, trend, weekly rate, goal line; body fat, lean mass, water, BMI, FFMI; Navy estimate from tape measurements tagged as an estimate; all ten tape sites plus wrist and ankle; custom measurements; method tags.
+2. The dynamic body model on Vitals with measurement anchors, before/after scrub, "Fat layer" chip; hidden in weight-neutral mode.
+3. Progress photos in app-private encrypted storage with the before/after slider.
+4. Vitals MVP of `pr.md` §6.9: resting heart rate, blood pressure with the home-measurement protocol, temperature, SpO2, glucose manual entry, each shown against a **cited** range (record each citation in code and in `NOTICE.md`), orange at most, red never; vital detail with table alternative.
+5. CSV import and export for weight and measurements.
 
-### Stats Screen
+Exit: changing waist or body fat visibly changes the figure and a before/after scrub works; a BP reading shows range and citation with no alarming wording; every number opens the provenance sheet; a wording test fails on "risk", "warning", "diagnos" and "abnormal" used as a verdict.
+Hands on: body repository, vitals repository.
+Ask the owner: nothing.
 
-**Wireframe:** See WIREFRAMES.md §5 and wireframes.html
+## B8 — Activity sources
 
-**Components:**
-- Page header (34 sp "Stats", week range)
-- Segmented control (5 tabs: Overview, Training, Sleep, Body, Nutrition)
-- KPI band (3 tiles: volume, effort, sessions)
-- Chart cards (1 per metric)
-  - Volume trend (line chart placeholder)
-  - Consistency heatmap (11 dp cells, 2 dp gap)
-  - Muscle balance (body map placeholder)
-  - Top lifts (bar chart)
-  - Footer: "how this is calculated" link
+**Goal:** steps and wearable data from the owner's Garmin and phone, deduplicated.
+**Read:** `pr.md` §6.6 (MVP), §6.18 (MVP and the Garmin paths), §7.6; `Tech-Stack.md` §8; study `Stride`, `FitWren`, `Stepsy`, `Gadgetbridge`, `OpenScale` (ideas only).
 
-**Data flow:**
-- ViewModel queries `InsightRepository.getTrends(segment, timeRange)`
-- State: `data class InsightUiState(selectedSegment, kpiValues, charts, calculationNote)`
+Deliver:
+1. Step sensor service (`TYPE_STEP_COUNTER`, reboot-safe, foreground service of the right type) with `ACTIVITY_RECOGNITION` requested at first use, battery-aware.
+2. Health Connect reader through the health-bus seam: steps, heart rate, sleep, exercise sessions, weight, as granted; permission rationale screen; history backfill.
+3. Garmin FIT file import (parser in `:integrations`, pure Kotlin, golden fixtures from `tools/fixtures`; check the FIT SDK terms and record them) producing activities, heart rate and steps with provenance family `garmin`.
+4. Dedup: one source wins a day per type by the configured priority list; a source screen in Settings → Devices to reorder; never summed.
+5. BLE: heart-rate strap (0x180D), weight scale (0x181D), BP cuff (0x1810) via the BLE seam with reconnect; a mid-workout disconnect loses nothing.
+6. Devices screen: connected sources, last sync, what each provides, manual fallback.
 
-**Exit test:**
-- [ ] All review gate items
-- [ ] Segmented tab selection animates (140–220 ms)
-- [ ] Charts render with placeholder data (real data in Phase 4)
-- [ ] "How this is calculated" link is tappable (opens sheet in Phase 3)
+Exit: the same day of steps from phone and Garmin yields one winner and the loser stays in raw; changing the priority list rebuilds rollups; a FIT file from `tools/fixtures` imports to the expected records; HR strap disconnect mid-session keeps all sets; passive step tracking is measured against the 2 % per day budget over 24 h on a device (report honestly if only an emulator is available).
+Hands on: ingestion pipeline, devices repository.
+Ask the owner: which scale and BP cuff models they own, if any (only changes test fixtures); whether a physical device is available for the battery test.
 
-**Effort:** 30 hours (1 dev × 1 week)
+## B9 — Today and Stats
 
----
+**Goal:** the daily dashboard and the statistics, every number interrogable.
+**Read:** `pr.md` §6.2, §6.4, §6.10 (readiness, recovery), §6.16 (MVP); `DESIGN.md` §7, §8, §14.2 (Today, Stats).
 
-### Settings Screen
+Deliver:
+1. Today in the §14.2 order: body card with recovery colours and the fat layer chip, readiness (v1 formula, explanation sheet), week strip and plan, energy card (in, out, net as ranges, ring, macros, water, goal-ETA line and what-if sheet), steps with source line, weight, due items.
+2. Goal ETA per `pr.md` §6.4: window not date, 14-day minimum, what-if, floors, hidden in weight-neutral mode.
+3. Stats: Overview, Body, Training, Sleep, Nutrition segments; hand-built Compose charts (line, bar, heatmap, sparkline, stat bars, macro ring) honouring `DESIGN.md` §8; each with a table alternative, a one-sentence description and a "how this is calculated" sheet with formula, inputs and citation; body and workout statistics (volume, per-muscle weekly sets, PRs, consistency, body-composition change).
+4. Performance pass: warm Today under 300 ms from cache over the five-year corpus.
 
-**Wireframe:** See WIREFRAMES.md §6 and wireframes.html
+Exit: Macrobenchmark shows warm Today under 300 ms and cold start under 1.5 s (report the emulator number and flag it as not the reference device class); every chart has table, description and formula sheet (a test over the chart registry); ETA shows "not enough data yet" on day 13 and a window on day 14.
+Hands on: dashboards, chart kit.
+Ask the owner: nothing.
 
-**Components:**
-- Profile row (56 dp avatar, name, goal, chevron)
-- Modules group (Training ✓, Nutrition ✓, Vitals ✓, Sleep ○, Cycle ○, Recovery ○)
-- Devices group (connected devices, last sync time, chevron)
-- Data group (backups row, data review row)
-- Appearance group (accent colour chip + name, theme toggle)
-- Privacy & security group (passphrase, policy links)
-- About group (version, feedback, open source)
-- Destructive group (22 dp spacer above, "Delete all data", red-ink)
+## B10 — Hardening and MVP release
 
-**Data flow:**
-- ViewModel queries `SettingsRepository`, `DeviceRepository`, `AppStatusRepository`
-- State: `data class MoreUiState(profile, modules, devices, appearance, appStatus)`
+**Goal:** the MVP is trustworthy enough to run the owner's whole day.
+**Read:** `DESIGN.md` §11, §12, §14.5; `pr.md` §6.22, §6.23, §6.26, §6.28, §12.3–12.4; `Tech-Stack.md` §10–12.
 
-**Exit test:**
-- [ ] All review gate items
-- [ ] Module toggles appear (no logic yet; Phase 2)
-- [ ] Device list shows connected devices (or placeholder "No devices")
-- [ ] Accent colour chip is current theme accent
-- [ ] Theme row shows "Dark" (light theme in Phase 6)
-- [ ] Delete button is red-ink, separate group, 22 dp spacer
+Deliver:
+1. Accessibility sweep: TalkBack on every screen, 200 % text, 44 dp targets, contrast, colour-blind check on the recovery map, reduced motion and transparency, high contrast, keyboard focus, RTL pass (logical start/end only, body map unmirrored).
+2. Light theme verified on every screen; screenshot suite complete.
+3. Performance budgets of `Tech-Stack.md` §12 on the five-year corpus; baseline profiles; R8.
+4. Data safety: backup before migration, migration tests from every released schema version, encrypted export and restore verified end to end, corrupted-database recovery, duplicate review inbox (`pr.md` §6.28), Trash browser.
+5. Security: SQLCipher verified, `allowBackup=false`, no cleartext traffic, network use limited to the explicit Open Food Facts action, permission audit against declared features, no analytics SDKs (dependency-list test).
+6. Release: signed AAB and APK build with a keystore the owner creates, a Play-Services-free flavour for F-Droid, `fastlane` metadata, privacy policy text, store listing text avoiding any medical claim (`pr.md` §12.1, §12.3), reproducible-build notes.
 
-**Effort:** 25 hours (1 dev × 1 week)
+Exit: the full Maestro suite and all budgets pass; a signed APK installs on the owner's phone; `docs/build-log.md` lists open issues honestly.
+Ask the owner: create the signing keystore and keep its password themselves (never in the repo); whether to publish to Play, F-Droid or sideload only; privacy-policy hosting.
 
----
+## B11 — Yoga, cardio, GPS
 
-## Phase 1 Exit Gate
+**Read:** `pr.md` §6.7, §6.11 (MVP and named V1 items), §6.18; `DESIGN.md` §8, §9; study `InnerBreeze`, `Feeel`, `OpenTracks`, `Tempo`, `GoldenCheetah`, `StatisticsForStrava`, `FitTrackee`.
 
-Before moving to Phase 2:
+Deliver: yoga pose and flow library (own text, own diagrams on the body map, no scraped media) with a flow player, timers and breathing; manual cardio logging; GPS recording in a `location` foreground service with pause and recovery; GPX/TCX/FIT import and GPX export; Strava bulk-export archive import (no live Strava API); MapLibre with PMTiles and offline packs; activity detail with splits and heart-rate zones; training load (fitness, fatigue, form) in Stats; muscle loading for yoga where a pose names muscles.
+Exit: a recorded 30-minute GPS activity survives process death and exports valid GPX; a Strava archive imports with correct totals and one winner per day; yoga sessions feed recovery and the energy card.
+Ask the owner: which tile source to bundle or download for maps (record the licence), and whether to allow a one-time map-pack download.
 
-- [ ] All 5 root screens render without crashes
-- [ ] Tab navigation works (bottom nav switches between screens)
-- [ ] All 5 root screens pass review gate (WIREFRAMES.md §end)
-- [ ] No hardcoded hexes or sizes (all from tokens.kt)
-- [ ] Light + dark themes verified on all screens
-- [ ] Font scale 1.3× verified (no overflow, touch targets ≥ 44 dp)
-- [ ] Colour-blind simulation passed (deuteranopia, protanopia)
-- [ ] No wording violates pr.md §12.1 (medical device rules)
-- [ ] Empty states shown (e.g., no workouts, no meals)
-- [ ] Pull-to-refresh wired to data refresh (shows "Loading…")
+## B12 — Sleep, clinical, reports
 
-**Effort:** 190 hours (4–5 devs × 2 weeks, or 1 dev × 5 weeks)
+**Read:** `pr.md` §6.9, §6.10, §6.16, §6.17, §6.25, §12.1; `DESIGN.md` §7.5, §8.7; study `HealthLog`, `AortaLink`, `UBPM`, `FastenHealth`, `OpenmHealthSchemas` (ideas; code-system licence notes in `pr.md` §12.2).
 
----
+Deliver: sleep views and consistency, sleep debt, stage charts where a source provides them; medications and reminders, symptoms, labs with units and cited ranges; weekly review; light-only reports with source, citation and disclaimer; doctor PDF generated on device in under 30 s offline; FHIR R4 export with LOINC codes for the vitals the app records; Open mHealth export where it fits.
+Exit: a report renders offline in under 30 s; the FHIR bundle validates against the R4 schema in a test; medication reminders fire locally with no push server.
+Ask the owner: the report fields they want a clinician to see, if any.
 
-## Phase 2: Logging & Detail (Weeks 8–10)
+## B13 — Sync and server (start only when the owner asks)
 
-**Goal:** Logging loop MVP (set, food, weight, water), quick-add sheet, provenance sheets, live session.
+**Read:** `pr.md` §6.24, §7.7–7.9; `Tech-Stack.md` §6–7.
+Deliver: `:sync` change log with idempotency keys and hybrid logical clock; per-entity merge policies; conflict surface; Ktor 3 server compiling the same core, PostgreSQL 16, Flyway, MinIO, Caddy, `docker compose up`; passkey sign-in; scoped tokens; property tests that random interleavings converge.
+Exit: two emulators converge after offline edits; killing the connection mid-push loses nothing.
+Ask the owner: where it will be hosted, the domain, who else may sign in.
 
-**Deliverables:**
+## B14 — Wear OS and Connect IQ (start only when the owner asks)
 
-1. **Quick-add sheet** (MVP, Phase 2)
-   - 3×2 grid of 84 dp tiles (Food, Water, Weight, Set, Vitals, Note)
-   - Tap tile: opens item-specific sheet or logs immediately
-   - Recent list: last 5 items, tap to log (undo toast)
-   - Backdate row: tap to open date/time picker
+Deliver a Wear OS companion (workout, sets, rest timer, heart rate) sharing `:core`, and a Connect IQ app for the owner's vívoactive 5 and other Garmin models with a per-device compatibility table. Needs B13 or a direct phone link.
+Ask the owner: a Connect IQ developer setup and a physical watch for testing.
 
-2. **Provenance sheet** (generic, reusable)
-   - Value + unit + date + time
-   - Source (device, method)
-   - `recorded_at`, `happened_at` (if different), timezone
-   - Edit + delete buttons
-   - Cite button (links to range/formula)
+## B15 — AI Coach and MCP (start only when the owner asks)
 
-3. **Live session screen** (full-screen, no tab bar)
-   - Close chevron + plan name + elapsed timer, **Finish** button
-   - Exercise blocks (image, name, tags, plan, last time, progression)
-   - Set table (Set | Weight | Reps | RIR | Done columns)
-   - Rest timer (dock at bottom)
-   - Chip row (set bubbles, mini body map)
-
-4. **Minor detail sheets**
-   - Readiness detail (score breakdown: sleep %, HRV, RHR, explanation)
-   - Session summary (KPI band, PR list, "how it felt", notes)
-   - Effort picker (1–10 scale, glyph + word)
-
-**Data models:**
-- Extend with logging: `insertWorkoutSet()`, `insertMeal()`, `updateWeight()`, `insertVital()`
-- Provenance complete: every logged value has source, method, `recorded_at`, `happened_at`, device, timezone
-
-**Exit test:**
-- [ ] Log a set in <2 s (weight/reps pre-filled, one tap per set, rest timer auto)
-- [ ] Log food in <5 s (search/scan → portion sheet → save)
-- [ ] Log weight in 3 taps, <5 s (card → stepper → save)
-- [ ] Log water in 1 tap (quick-add chip re-uses last container)
-- [ ] Every logged value: tap opens provenance sheet (source, method, timestamp, device)
-- [ ] Delete any logged value: undo toast (3–5 s)
-- [ ] Live session: close, resume, finish, save (data persists)
-
-**Effort:** 120 hours (2–3 devs × 2.5 weeks, or 1 dev × 3 weeks)
+**Read:** `pr.md` §6.15; `Tech-Stack.md` §9. Deliver the provider adapter, per-category consent, diff-card proposals validated by the same `:core` validators, snapshot and undo, and the scoped MCP server.
+Ask the owner: provider and key handling.
 
 ---
 
-## Phase 3: Detail Sheets & Calculations (Weeks 11–12)
+## 3. Risks
 
-**Goal:** All major detail sheets, correct calculations, provenance complete.
-
-**Deliverables:**
-
-1. **Detail sheets** (open from taps):
-   - Readiness detail (inputs: sleep, HRV, RHR; calculated score)
-   - Workout session summary (duration, volume, sets, PRs, effort, notes)
-   - Vital detail (trend chart, range, readings list, citation)
-   - Measurement detail (trend, date anchors, edit, delete)
-   - Food detail (macros, ingredients, portion size, barcode)
-
-2. **Calculation engine**
-   - Readiness: `(sleep % × 0.4) + (HRV % × 0.3) + (RHR % × 0.3)` (or pr.md §6 formula)
-   - Volume: `∑(weight × reps)` per session
-   - Macros: `∑(protein, carbs, fat)` per day
-   - Trends: 7-day, 30-day rolling average or linear regression
-   - Sparklines: 30-day data point per day
-
-3. **Explanation sheets** (V1, MVP minimal)
-   - Formula (equation)
-   - Inputs (which data points)
-   - Recalculation frequency ("daily at midnight")
-   - Cited range (if applicable; DOI link)
-
-4. **Empty states**
-   - "No workouts yet — tap **Start** to begin" (button)
-   - "No meals logged — tap **Add meal** to start" (button)
-   - "No measurements — add one to track progress" (button)
-
-**Exit test:**
-- [ ] Readiness score calculation correct (manual verification)
-- [ ] Volume calculation correct (manual verification)
-- [ ] Trends recalculate nightly (testable with fake date)
-- [ ] Sparkline x-axis is 30 days (or 90 days for weight), gap shown for missing days
-- [ ] Every trend chart has table alternative (details sheet)
-- [ ] Cited range shown for vitals (e.g., "Normal BP: <120/80 mmHg (AHA 2015)")
-- [ ] No hardcoded formulas in UI (all in `CalculationRepository`)
-
-**Effort:** 100 hours (2–3 devs × 2 weeks, or 1 dev × 2.5 weeks)
-
----
-
-## Phase 4: Charts & Visuals (Weeks 13–15)
-
-**Goal:** All charts render, body map renderer, heatmap, line charts, bars.
-
-**Deliverables:**
-
-1. **Chart library**
-   - Line chart (custom canvas or Vico)
-   - Bar chart (custom or Material baseline)
-   - Heatmap (11 dp cells, 2 dp gap, 5-step accent ramp)
-   - Sparkline (30 dp height, inline in cards)
-
-2. **Body map renderer**
-   - SVG-to-Compose renderer (use openGym geometry, MIT licence, with notice)
-   - 4 views: male/female × front/back (defer animated rotation to V2)
-   - 90 muscles, 5-step accent ramp (more loaded = darker accent)
-   - Tap muscle: detail sheet (volume, sets, exercises)
-
-3. **Chart cards**
-   - Volume trend (line, 12 weeks)
-   - Consistency heatmap (cells per day, grey if no session, accent if trained)
-   - Muscle balance (body map with accent shading)
-   - Top lifts (bars, name + max weight)
-   - Stat bars (e.g., macro distribution: protein %, carbs %, fat %)
-
-**Exit test:**
-- [ ] Line chart renders 12-week data, x-axis labels, y-axis grid
-- [ ] Heatmap cells 11 dp, gap 2 dp, 5-step ramp matches accent
-- [ ] Body map renders both themes (accent changes)
-- [ ] Tap muscle: detail sheet shows exercises, volumes
-- [ ] Every chart has 1-sentence text description (a11y)
-- [ ] Every chart has table alternative (data download or details sheet)
-- [ ] Charts responsive to screen width (no horizontal scroll, reflow instead)
-
-**Effort:** 150 hours (3 devs × 2.5 weeks, or 1 dev × 3.75 weeks)
-
----
-
-## Phase 5: Sync Engine & Server (Weeks 16–18)
-
-**Goal:** Local-first works offline, optional cloud sync, device pairing (Oura, Watch, etc.).
-
-**Deliverables:**
-
-1. **Local database** (Room)
-   - Five layers: `RawObservation`, `CanonicalObservation`, `DailyRollup`, `DomainObject`, `UserSetting`
-   - Deduplication: priority per source, one source wins per day
-   - Backfill: rebuilds rollups from observations, never patches
-
-2. **Sync engine**
-   - Local write-first: all actions complete offline
-   - Background sync: periodic upload (1 min, 5 min, 1 hr user-configurable)
-   - Conflict resolution: last-write-wins + source priority
-   - Device sync: pull from Oura, Galaxy Watch, Health Kit (Android 12+)
-
-3. **Server integration** (optional, opt-in)
-   - API: RESTful or GraphQL (Tech-Stack.md §8.2)
-   - Auth: local token, no account required
-   - Backup: encrypted, user-deletable
-   - Self-hosting: Ktor server available on GitHub
-
-4. **Device pairing**
-   - Oura Ring OAuth flow (Phase 5 or later, V1+)
-   - Galaxy Watch: Wear OS companion app + BLE sync
-   - Health Kit: permission request, continuous read
-   - Fitbit, Garmin: defer to V2 (license terms)
-
-**Exit test:**
-- [ ] All actions work offline (no network required)
-- [ ] Sync banner shows status ("Syncing", "Paused", "5 items pending")
-- [ ] Pull-to-refresh triggers sync immediately
-- [ ] Data merges correctly (no duplicates, correct priorities)
-- [ ] Rollups rebuild nightly (testable with fake date)
-- [ ] Device pairing works (fake device for testing)
-
-**Effort:** 200 hours (3 devs × 3 weeks, or 1 dev × 5 weeks)
-
----
-
-## Phase 6: Accessibility & Themes (Weeks 19–20)
-
-**Goal:** WCAG 2.1 AA on all screens, RTL, light theme, reduced motion.
-
-**Deliverables:**
-
-1. **Accessibility audit**
-   - WCAG 2.1 AA: all text ≥ 4.5:1 on actual backgrounds
-   - Touch targets: all ≥ 44 dp (measured at 1.3× font scale)
-   - Colour-blind: no information lost in deuteranopia, protanopia, tritanopia
-   - Keyboard navigation: all actions reachable without touch
-   - Screen reader: all images have descriptions, single a11y node per row
-
-2. **Light theme**
-   - Dark tokens → light tokens (Surface: white, Label: black, Separators: light grey)
-   - Verify 4.5:1 on light bg for all text
-   - Verify accent reads in both themes (all 9 presets)
-   - Toggle instantly (Theme row in Settings)
-
-3. **Reduced motion**
-   - Remove animations: scale, opacity, slide transitions
-   - Instant state changes (no animation)
-   - Haptics remain (or toggle separately)
-
-4. **RTL (Arabic, Hebrew)**
-   - Remove hardcoded `left`/`right`, use `start`/`end`
-   - Reverse leading/trailing edges
-   - Test with RTL emulator
-
-5. **Font scale (1.3×)**
-   - Layout reflows: no overflow, cards stack
-   - Touch targets: ≥ 44 dp even at 1.3× scale
-   - Text truncation: handled gracefully
-
-**Exit test:**
-- [ ] WCAG AA contrast checker: all text ✓
-- [ ] Font scale 1.3×: no overflow, all targets ≥ 44 dp
-- [ ] Colour-blind (deuteranopia): no chart info lost, icons + patterns
-- [ ] Keyboard navigation: all screens navigable without touch
-- [ ] Screen reader: all images have `contentDescription`
-- [ ] Light theme: all screens verified
-- [ ] RTL: layout mirrors correctly, no hardcoded directions
-- [ ] Reduced motion: all transitions instant
-
-**Effort:** 100 hours (2 devs × 2.5 weeks, or 1 dev × 2.5 weeks)
-
----
-
-## Beta & Launch (Weeks 21+)
-
-**Goal:** Bug fixes, performance, play store submission.
-
-**Deliverables:**
-
-1. **Bug triage & fixes**
-   - Internal testing: 10–15 testers
-   - Crash reporting (Crashlytics)
-   - Performance profiling (Android Studio Profiler)
-
-2. **Performance tuning**
-   - List scroll: 60 fps (measure with Compose Performance)
-   - Sync: <2 s for small updates
-   - Charts: render in <1 s
-   - Database: queries <100 ms
-
-3. **Play Store**
-   - Signed release APK
-   - Metadata: description, screenshots, privacy policy, permissions
-   - Play Integrity token
-   - Target API 34+ (Android 14)
-
-4. **Marketing assets**
-   - Screenshots (6–8 screens, with captions)
-   - 30-second video walkthrough
-   - Privacy policy + data processing agreement
-
-**Effort:** 100+ hours (varies by bug count + compliance review)
-
----
-
-## Risk Register & Mitigations
-
-| Risk | Impact | Probability | Mitigation |
-|------|--------|-------------|-----------|
-| Body map rendering too slow | Charts unusable | Medium | Custom canvas (not SVG), render once per 24 h |
-| Sync conflicts corrupt data | Data loss | Low | Last-write-wins + tests for merge edge cases |
-| Device pairing fails (Oura OAuth) | Features blocked | Medium | Defer device pairing to V1.1, offer manual entry |
-| Accessibility audit failures | Store rejection | Low | QA on 100% of screens before submission |
-| Font scale reflow breaks layout | Bad UX at 1.3× | Medium | Reflow all cards to vertical stack layout |
-| Light theme contrast fails | Store rejection | Low | Measure every colour pair upfront (Phase 0) |
-
----
-
-## Success Metrics (Phase 0 → Beta)
-
-- **Velocity:** 190 h Phase 1 / 5 weeks = 38 h/week (1 dev) or 76 h/week (2 devs) ✓
-- **Quality:** 0 crashes in Phase 1 exit gate, <5 bugs in Phase 2
-- **Accessibility:** WCAG AA on all 5 root screens + 3 major sheets
-- **Performance:** 60 fps scroll on all lists, <2 s sync for typical data
-- **Data integrity:** 100% provenance (every value has source + timestamp)
-- **User trust:** no data loss, all actions undoable within 5 s
-
----
-
-## Implementation Order (1 Dev, 20 Weeks)
-
-Weeks 1–3: **Phase 0** (tokens, components, nav)
-Weeks 4–8: **Phase 1** (5 root screens + Settings)
-Weeks 9–10: **Phase 2** (logging, quick-add, live session)
-Weeks 11–12: **Phase 3** (detail sheets, calculations)
-Weeks 13–15: **Phase 4** (charts, body map)
-Weeks 16–18: **Phase 5** (sync, server, devices)
-Weeks 19–20: **Phase 6** (accessibility, light theme, RTL)
-Weeks 21+: **Beta** (testing, fixes, launch)
-
----
-
-## Blockers & Dependencies
-
-- **Phase 0 → Phase 1:** Tokens frozen (§DESIGN.md §0.2)
-- **Phase 1 → Phase 2:** ViewModel state management working (Hilt + Flow)
-- **Phase 2 → Phase 3:** Database schema finalized (5 layers: pr.md §7)
-- **Phase 4:** Chart library decision (custom canvas vs Vico vs Compose)
-- **Phase 5:** Backend API design (pr.md §6.17, §8.2)
-- **Phase 6:** Accessibility tools configured (Accessibility Scanner, font scale emulator)
-
----
-
-## Next Step
-
-**Start Phase 0, Week 1:** Create Gradle project, initialize `design/tokens.kt` from DESIGN.md §Appendix A.
-
+| Risk | Mitigation |
+|---|---|
+| Body map is slow or ugly | Pre-flattened paths drawn once to a cached picture; fat and colour layers recomposed only on change; screenshot tests per view |
+| Exercise or food data has an unclear licence | Only CC0 or public-domain sources; record each in `NOTICE.md`; ask the owner if none found |
+| Health Connect lacks a data type from Garmin | FIT import is the reliable path; the Devices screen states what each source provides |
+| Rollup bugs corrupt trends | Rollups always rebuildable; property tests compare incremental and full rebuild |
+| Scope creep | Cut list closed; `pr.md` tags are the schedule; nutrition is in, so the MVP is long (ADR 0002) |
+| Medical wording | Wording test in B7; no "medical grade" anywhere |
