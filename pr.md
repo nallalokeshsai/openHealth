@@ -425,6 +425,22 @@ when you want it.
 - Safety floors and a warning when the target is too aggressive.
 - “Eaten vs burned” shown as a range, not a false single number.
 - Weekly average and trend, not just today.
+- **Net energy and goal ETA (2026-11-22).**
+  - Today shows in, out and net: in is the food log; out is BMR plus
+    non-exercise activity from steps plus logged and imported workouts, with
+    one source per day for steps and workouts (7.6, never summed). Net is shown
+    as a range from the uncertainty of the burn estimate.
+  - The ETA divides the remaining weight by the recent weekly rate of the
+    smoothed weight trend (at least 14 days of data), with a 7,700 kcal per kg
+    rule as the cross-check. It is always a window ("between 14 Feb and 3 Mar at
+    this pace"), never one date, and it says "not enough data yet" before day 14.
+  - A "what if" control re-plots the window for a different daily target; it
+    changes nothing until the person saves it.
+  - The goal rate is clamped to the safety floors; a faster request shows a
+    neutral note and a cited range, not a refusal.
+  - Hidden entirely in weight-neutral mode.
+  - Every figure opens its provenance sheet and the formula sheet ("how this is
+    calculated"); the model is labelled an estimate throughout.
 
 **V1**
 
@@ -484,6 +500,21 @@ five-year history.
 - Edit any saved workout; move it to another date; delete with undo.
 - Bodyweight and assisted exercises; band and chain support.
 - Notes per exercise, per set, and per session.
+- **Muscle recovery map (2026-11-22).** Every logged set loads the muscles its
+  exercise names (primary full, secondary half). A muscle's step comes from the
+  hours since its last load: under 24 h Recovering (red), 24–48 h Easing
+  (orange), 48–72 h Ready (green), then untrained base. A hard session (volume or
+  effort above that muscle's own 4-week median) holds a muscle one step longer. It
+  is a neutral display of the user's own training, not a claim about soreness or
+  injury; a self-reported soreness log may override a step. Computed from sets,
+  never stored, rebuilt on backfill (7.3). Thresholds are settings, defaults above.
+- **Routine and programme muscle maps (2026-11-22).** Each routine shows a mini
+  body map of the muscles it trains, shaded by the share of its working sets. Each
+  programme shows one combined map of weekly sets per muscle across all its
+  routines, with a per-muscle sets-per-week figure and a table alternative. The
+  Train root shows the live recovery map, so "what is trained by the plan" and
+  "what is recovering now" sit side by side and are never the same colours: plan
+  maps use the accent ramp, recovery uses red, orange, green.
 
 **V1**
 
@@ -1034,11 +1065,24 @@ not a chatbot that guesses.
 
 - Wear OS: workout, sets, rest timer, heart rate, tiles, complications.
 - Apple Watch: the same, after the iOS gate (0.1).
-- Garmin (the owner's primary watch, 2026-11-22): FIT import first, then
-  Health Connect for whatever Garmin Connect writes to it (verify data types and
-  latency before promising any), then a Connect IQ app. Garmin's Health API is
-  partner-only and is not assumed. Gadgetbridge's Garmin support is GPL: study
-  only, never bundled.
+- Garmin, **any model** (the owner's watch is a vívoactive 5, 2026-11-22). Three
+  paths, in order of reliability:
+  1. **FIT import** (files from the watch over USB or exported from Garmin
+     Connect). Model-independent; ships with the file importers.
+  2. **Health Connect.** Garmin Connect writes to Health Connect one way, phone
+     to the platform bus (steps, heart rate, sleep and workouts are in its
+     published list; some running metrics are not). openHealth reads whatever the
+     person has allowed. No Garmin account is needed in openHealth, but Garmin
+     Connect must be installed and linked. Check the Health Connect permission
+     screen and Garmin's current list before promising a data type.
+  3. **Connect IQ app** (V1): live heart rate and set logging on the wrist. The
+     vívoactive 5 is supported by the Connect IQ SDK; other models by their own
+     device entry. Needs a per-device compatibility table, not an assumption.
+
+  Garmin's Health API is partner-only and is not assumed. Gadgetbridge's Garmin
+  support is GPL: study only, never bundled. Source priority for dedup (7.6)
+  treats Garmin-via-Health-Connect and Garmin FIT as one `garmin` source family
+  so a day is never double counted.
 - Zepp OS: relay through the server.
 - CGM: Dexcom, Libre, Nightscout.
 - Pulse oximeters and thermometers where standard GATT profiles exist.
@@ -1940,8 +1984,8 @@ These need a decision before the schema is frozen:
 6. **Medical scope:** wellness only, or a regulated clinical product later.
 7. **AI:** provider strategy, BYOK, local models, and data retention.
 8. **First devices:** which watches, scales, cuffs and CGMs are supported at
-   launch. Partly answered 2026-11-22: the watch is a Garmin (6.18); the model,
-   scale, cuff and CGM are still open.
+   launch. Partly answered 2026-11-22: any Garmin, with the vívoactive 5 as the
+   reference device (6.18); scale, cuff and CGM are still open.
 9. **First languages:** launch set and translation workflow.
 10. **Brand and domain:** openHealth naming, logo, and store presence.
 11. **Offline food index:** which foods ship in the bundle, how large it may

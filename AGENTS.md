@@ -38,6 +38,9 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 |---|---|---|
 | Client | Native Android, Kotlin + Jetpack Compose; Material 3 only as behaviour primitives | `Tech-Stack` §2, §4 |
 | Navigation | Five tabs — Today, Vitals, Train (raised centre), Nutrition, Stats — plus a global top bar with quick add and Settings; no More tab | `DESIGN.md` §4.4, §5.15, §13.1; `Tech-Stack.md` §4 |
+| Watch | Any Garmin; vívoactive 5 is the reference device. FIT import, Health Connect (one-way from Garmin Connect), then Connect IQ (V1). Garmin Health API not assumed | `pr.md` §6.18, §13.8 |
+| Body visuals | Recovery map red → orange → green (Recovering / Easing / Ready, 24/48/72 h defaults); `fat` layer `#EBD27A` dark / `#9A6F00` light, outside muscle shapes only; 2D schematic, no photo-derived shape | `DESIGN.md` §9.1, §9.1.1, §12.5; `pr.md` §6.5, §6.8 |
+| Energy | Net = in − (BMR + steps + workouts), one source per day; goal ETA is a window, not a date, needs 14 days of data, hidden in weight-neutral mode | `pr.md` §6.4 |
 | Core | Platform-neutral Kotlin modules, KMP-ready; no `android.*`/`androidx.*` | §3 |
 | Storage | SQLite + SQLDelight 2.x + SQLCipher; five physical layers | §5 |
 | DI | **Koin**, not Hilt | §3 |
@@ -93,7 +96,7 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 ### `BUILD-ROADMAP.md` is stale outside its sequence
 
 - Stack: Hilt/Room/Material 3 setup (above), and an `:app`/`:core`/`:data`/`:feature:*`/`:design` layout where `Tech-Stack.md` §13 defines `core/`, `data/`, `sync/`, `integrations/`, `ui/`, `app-android/`, `app-wear/`, `server/` and `tools/`.
-- Navigation: the body still says six tabs, a More screen and 6 destinations (the 2026-11-22 banner at the top corrects this); the contract is five tabs with Train raised and Settings in the top bar (`DESIGN.md` §4.4, §5.15).
+- Navigation: the body now uses five roots and a 5-tab bar, but its banner still refers to six tabs/More and its Settings screen is defined as a root rather than top-bar gear; the contract is five tabs with Train raised and Settings in the top bar (`DESIGN.md` §4.4, §5.15).
 - A11y: "WCAG 2.1 AA" and "1.3× font scale" throughout; the contract is WCAG 2.2 AA at 200% (`pr.md` §6.22; `DESIGN.md` §11). A11y is a per-screen gate from Phase 1 (`DESIGN.md` §14.5), not a Phase 6 retrofit.
 - Themes: light theme deferred to Phase 6; `DESIGN.md` ships dark canonical and light as an equal from 1.0 (§12.1–12.2).
 - Telemetry and distribution: Crashlytics and a Play Integrity token in Beta; the contract is no telemetry and a Play-Services-free F-Droid build (`pr.md` §6.31; `Tech-Stack.md` §4, §12).
@@ -109,6 +112,10 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 ### `pr.md`'s own stale spots
 
 `pr.md` §13.1 is marked decided, but §13.2 (local DB), §13.3 (server) and §13.5 (licence) still read as open and list options `Tech-Stack.md` has rejected. `pr.md` §8.3 still says "Node/TypeScript or Go" even though §8's introduction says 8.1–8.4 are superseded. `Tech-Stack.md` wins; do not reopen settled questions. If the task is to update the contract, fix these and record the change rather than routing around them.
+
+### `DESIGN.md`'s five-tab leftovers
+
+`DESIGN.md` §4.5 still says a tab is `1/6 width`; §14.4 still says "No 5-tab bar; no raised Start" and "No muscle-recovery red map on Today". The newer §5.15, §13.1, §13.9 and §14.1 say five tabs with a raised Train and a recovery map allowed on Today, Train and Stats. Follow the newer sections.
 
 ### Reference library count
 

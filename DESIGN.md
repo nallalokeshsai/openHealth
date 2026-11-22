@@ -171,7 +171,7 @@ device unless the person overrides it.
 
 ### 1.11 The thumb owns the bottom
 
-Primary actions live in the bottom third: the tab bar, the quick-add disc, a
+Primary actions live in the bottom third: the tab bar, the raised Train disc, a
 sheet's main button. Destructive actions never sit under the thumb's resting
 position.
 
@@ -255,7 +255,7 @@ borrow the values because they are calibrated, not because we want an iOS clone.
 | `red` | `#FF453A` | `#FF3B30` | Destructive, error, user-set clinical alert, and the "Recovering" step of the muscle recovery map (§9.1). **Nothing else.** |
 | `orange` | `#FF9F0A` | `#FF9500` | Attention: over target, missed, offline, in-progress. |
 | `yellow` | `#FFD60A` | `#FFCC00` | Records, PRs, favourites, goal lines. |
-| `fat` | `#E8B84A` | `#C99A1E` | **Added 2026-11-22.** Adipose layer of the dynamic body model (§9.1.1) and body-fat series. Data only, never status, never an accent. Contrast to be verified in §12.5 before first use. |
+| `fat` | `#EBD27A` | `#9A6F00` | **Added 2026-11-22.** Adipose layer of the dynamic body model (§9.1.1) and body-fat series. Data only, never status, never an accent. Measured: 11.4:1 on dark `surface`; 4.5:1 on light `surface`, 4.1:1 on light `bg` (§12.5). |
 | `teal` | `#40C8E0` | `#30B0C7` | Location, gym, fibre in the macro set. |
 | `indigo` | `#5E5CE6` | `#5856D6` | Life events and notes drawn as bands on charts. |
 | `pink` | `#FF375F` | `#FF2D55` | Mood and cycle accents; never status. |
@@ -488,7 +488,7 @@ spacing token. The 44 dp touch target is a **size**, not `space`.
 | `r-card` | 14 | Cards, list rows, grouped-list container. |
 | `r-lg` | 16 | Media tiles, dialogs, photo cards. |
 | `r-xl` | 22 | Sheet top corners, toast. |
-| `r-full` | 999 | Chips, avatars, switches, the quick-add disc, pills. |
+| `r-full` | 999 | Chips, avatars, switches, the raised Train disc, pills. |
 
 ### 4.3 Density, insets and platform mapping
 
@@ -590,7 +590,7 @@ Sizes below are Compose values.
 
 ### 5.2 Card header
 
-The one header used everywhere (Today, Insights, Body):
+The one header used everywhere (Today, Stats, Vitals):
 
 ```
 [ 29 dp glyph ]  EYEBROW (13, label-2)          [one trailing control]
@@ -652,7 +652,7 @@ For exercises, foods, routines, activities, articles:
 
 ### 5.6 KPI band
 
-For a row of headline figures (Insights overview, session summary): one
+For a row of headline figures (Stats overview, session summary): one
 `surface` card divided by vertical hairlines, three figures across, 12/16 dp
 padding. Figures are **type, not tiles**: 28/600 with a 13 `label-2` label. The
 lifetime total may sit underneath at full width. No boxes inside the card.
@@ -863,7 +863,7 @@ control still explains itself in its subtitle if the reason is not obvious.
 - Deliberate local-only mode is **not** an error: one quiet 11 sp line, no fill.
 - A sync problem is orange, never red; a rejected write is red and names the
   record.
-- The banner is dismissible; the status stays reachable in More → Data and as a
+- The banner is dismissible; the status stays reachable in Settings → Data and as a
   dot on Today.
 
 ### 6.6 Errors
@@ -974,7 +974,7 @@ Rules:
   steps." Two values side by side, the configured priority marked "wins", and
   `Keep 8 412` / `Use 9 103` / `Review`. Never auto-resolve silently.
 - A value outside a plausible range gets an orange inline note, not a modal.
-- The review inbox lives in More → Data, with a count badge, and is surfaced on
+- The review inbox lives in Settings → Data, with a count badge, and is surfaced on
   Today only when it blocks a trend the person is looking at.
 
 ### 7.5 Reference ranges
@@ -997,7 +997,7 @@ across the app.
 - Hidden cards are **removed**, not blurred, dashed or filled with `—`.
 - Training, steps, sleep, vitals, habits and insights that do not depend on
   those values keep working unchanged.
-- No upsell, no "turn it back on" banner, no missing-feature ghost. More →
+- No upsell, no "turn it back on" banner, no missing-feature ghost. Settings →
   Appearance holds the only control, with a plain sentence about what is hidden.
 - If every card on a module's root would be hidden, the module shows its
   remaining content or a calm explanation, never an empty shell.
@@ -1006,7 +1006,7 @@ across the app.
 
 Local-only, syncing, synced, offline and error are five distinct states with
 five distinct sentences. The person can always answer "what is not on the
-server yet?" from one screen in More → Data (`pr.md` §6.24, §6.29).
+server yet?" from one screen in Settings → Data (`pr.md` §6.24, §6.29).
 
 ---
 
@@ -1202,7 +1202,10 @@ The body map is also a model of the person.
 - **Dynamic:** it re-renders from the latest accepted observation. As body fat or
   waist falls, the layer thins; a before/after scrub shows the change over time.
 - **Colour:** `fat` at 55 % over the base, separated by the same 2.5 dp surface
-  stroke. Fat is never drawn red or orange.
+  stroke. Fat is never drawn red or orange. The layer is drawn **only outside the
+  muscle shapes**, never under a recovery colour, so a pale fat edge cannot be
+  read as a recovery step. A "Fat layer" chip under the figure toggles it, and the
+  legend names it (§12.5 records why colour alone cannot separate fat from orange).
 - **Provenance:** every region is tied to its measurement. The tap sheet names the
   source and method (BIA, DEXA, Navy, tape) per §9.2 and says when a figure is an
   estimate. Weight-neutral mode hides the adipose layer entirely and draws the
@@ -1495,6 +1498,14 @@ The review gate (§14.5) checks, in both themes:
 - `on-acc` ≥ 4.5 on every preset's `acc` (all nine carry dark ink). `acc-2` is
   a graphic shade and needs 3:1, never text.
 - The focus ring ≥ 3 against its surrounding fill.
+- `fat` (2026-11-22) as a graphic ≥ 3 on `bg`, `surface` and `surface-2`. Measured:
+  dark `#EBD27A` 14.0 on `bg`, 11.4 on `surface`, 9.3 on `surface-2`; light
+  `#9A6F00` 4.5 on `surface`, 4.1 on `bg`, 3.8 on `surface-2`.
+  The first light value `#C99A1E` measured 2.6 and was rejected.
+- `fat` is close in hue to `orange` and `yellow`, so luminance cannot separate
+  them (1.1 to 1.5). The separation is structural, not chromatic: the adipose
+  layer is drawn only outside the muscle shapes, behind the 2.5 dp surface stroke
+  (§9.1.1), and the legend names it.
 
 No token ships before its measurement is in the PR.
 
@@ -1512,7 +1523,8 @@ Recorded so they cannot be mistaken for drift.
 1. **Five tabs, raised centre Train (revised 2026-11-22).** The earlier six-tab
    flat bar is superseded. The five destinations are Today, Vitals, Train,
    Nutrition and Stats, and Train is openGym's raised disc. Settings moves to a
-   global top-bar gear and quick add to a top-bar plus (§4.4).
+   global top-bar gear and quick add to a top-bar plus (§4.4). Decided, not
+   provisional: a second floating disc would compete with the raised Train disc.
 
 2. **Macro hues are the one multi-colour surface.** openGym spends colour only
    on the accent and status. A food diary needs protein/carbs/fat/fibre to be
@@ -1581,49 +1593,72 @@ the §4.4 skeleton; each detail is a sheet or a pushed page.
 
 **Today (MVP, fixed order).**
 
-1. Header: "Good morning" 34/700, `Saturday 21 November · 08:14` 15 `label-2`,
-   one status line. Trailing: settings 36 dp.
+The global top bar (§4.4) already carries the app name, the date, quick add and
+settings, so the header no longer repeats the date or a settings button.
+
+1. Header: "Good morning" 34/700 and one 15 `label-2` status line.
 2. Connection banner, if any.
-3. Readiness card: card header (moon glyph, "Readiness", score 28/600), three
+3. Body card (the hero): the dynamic body model (§9.1.1), front and back, at the
+   §9.1 size, coloured by the recovery map; a chip row under it (Recovery · Fat
+   layer); a 13 sp line naming the most recently trained muscle and its step. Tap
+   a muscle for its sheet.
+4. Readiness card: card header (moon glyph, "Readiness", score 28/600), three
    chips (sleep, HRV, resting HR), a 13 sp explanation line.
-4. Week strip card: "This week", seven days, today in an accent disc, session
-   count left; today's plan row with a 46 dp mini body map, plan name, and a
-   **Start** primary button.
-5. Nutrition card: one calorie ring (120 dp) with the remaining number in the
-   centre, four macro bars with figures, water as a fifth row. One accent ring.
-6. Steps card: one ring (96 dp) + active minutes and distance as a 13 sp line.
-7. Weight card: `display` value, signed weekly delta in a status ink, 30-day
+5. Week strip card: "This week", seven days, today in an accent disc, session
+   count left; today's plan row with a 46 dp mini body map of the muscles the plan
+   trains, plan name, and a **Start** primary button.
+6. Energy card (`pr.md` §6.4): three figures in a KPI band (In, Out, Net, each a
+   range where uncertain), one calorie ring (120 dp) with remaining kcal in the
+   centre, four macro bars, water as a fifth row. Under it one 13 sp line: "At
+   this pace: 14 Feb to 3 Mar" in `label-2`, opening the goal-ETA sheet with the
+   what-if control. Absent in weight-neutral mode and before day 14 ("not enough
+   data yet").
+7. Steps card: one ring (96 dp) + active minutes and distance as a 13 sp line; a
+   source line names the Garmin or phone source that won the day.
+8. Weight card: `display` value, signed weekly delta in a status ink, 30-day
    sparkline, goal line.
-8. Due items: inset list, 46 dp rows, one accent action.
-9. Quick actions: a chips row (food, water, weight, set, vitals, note) that opens
-   the quick-add sheet.
+9. Due items: inset list, 46 dp rows, one accent action.
 
-**Train.** Week strip, today's plan card, programme/routine rows with mini body
-maps and a start chevron, then history rows with a 50 dp thumbnail. A finished
-session opens a summary: KPI band (duration, volume, sets), PR list, a 13 sp
-"how it felt", and a note field.
+One accent per screen still holds: the accent is **Start**, the ring is the only
+other accent use, and the body card's colours are data hues, not accents.
 
-**Food.** A date strip (seven days, not a calendar), an energy card (ring +
+**Train.** Week strip and today's plan card with **Start**. Then a segmented
+control (Recovery / Plan) over one full-size body map pair: Recovery shows the
+red, orange, green map (§9.1); Plan shows the programme coverage map in the accent
+ramp with a sets-per-week figure per muscle. A routine row carries a 46 dp mini
+body map of its trained muscles (accent ramp, shaded by share of working sets);
+a programme row carries the combined map. The Train root also lists gym, yoga,
+cardio and imported activities as one history with a type chip, rows with a 50 dp
+thumbnail. A routine's detail repeats its map at full size above the exercise
+list, each exercise tagged with the muscles it loads. A finished session opens a
+summary: KPI band (duration, volume, sets), PR list, the muscles it loaded as a
+mini map, a 13 sp "how it felt", and a note field. Every map has a table
+alternative (muscle, sets, hours since load, step).
+
+**Nutrition.** A date strip (seven days, not a calendar), an energy card (ring +
 macros), then four meal sections. A meal row is a media row with kcal at the
 end; a swipe offers delete with undo. The scan action is a 44 dp button in the
 header, never a floating camera over the list.
 
-**Body.** A lead card: current weight `display`, trend sentence, 90-day line,
-goal line. Under it, the silhouette card (seven anchors) and a 2-column tile
+**Vitals.** A lead card: current weight `display`, trend sentence, 90-day line,
+goal line. Under it, the dynamic body model with measurement anchors (the
+measurement silhouette of §9.3 drawn on the §9.1.1 figure; ten anchors: neck,
+shoulders, chest, waist, hips, upper arm, forearm, thigh, calf, plus the
+wrist/ankle frame sizes in the list only) and a 2-column tile
 grid (body fat, lean mass, waist, resting HR) with source lines. Then photos
 (3-across) and vitals as a grouped list. Sleep and cycle are sections when the
 modules are on.
 
-**Insights.** Segmented control (Overview / Body / Training / Sleep / Food), a
+**Stats.** Segmented control (Overview / Body / Training / Sleep / Nutrition), a
 KPI band, then one card per chart. Every card has a "how this is calculated"
 row at the bottom, 13 sp `label-2`, opening an explanation sheet with the
 formula and its inputs (`pr.md` §6.4).
 
-**More.** Profile row (avatar, name, goal), then groups: Modules, Devices and
+**Settings** (opened by the top-bar gear; formerly More). Profile row (avatar, name, goal), then groups: Modules, Devices and
 integrations, Data and backups, Appearance, Privacy and security, About. A
 destructive action is its own group at the bottom, 22 dp away, in `red-ink`.
 
-**Global: quick add.** Opens from the accent disc. A 3 × 2 grid of 84 dp tiles
+**Global: quick add.** Opens from the top-bar plus (§4.4). A 3 × 2 grid of 84 dp tiles
 (`surface`, radius 14, 21 dp accent glyph over a 13/500 label), then "Recent" as
 46 dp rows with the source line, and a "Backdate" row at the bottom. A recent
 item logs in one tap and leaves an undo toast; everything else opens its own
@@ -1641,7 +1676,12 @@ full-width inset rows as answers, a quiet "Skip" always visible, and a 3 dp
 accent progress line under the header (no dots, no percentages). Units and
 locale are pre-detected and shown as the default answer. "Try with sample data"
 is a row, not a modal. The whole flow must survive being completed in under
-three minutes with one hand.
+three minutes with one hand. The tiers are `pr.md` §6.1's: tier 1 (about a
+minute) is required, tier 2 recommended, tier 3 (body fat %, tape measurements,
+resting heart rate, blood pressure, injuries and the rest) is skippable and
+asked once, later, where it is used. A "Fill in later" row ends each tier. After
+onboarding every launch shows the system splash (one centred mark on `bg`, no
+animation under Reduce Motion) and then Today.
 
 **Live session.** A focused surface with no tab bar: close chevron + plan name +
 elapsed on the left, **Finish** primary on the right. A chip row of sets with a
@@ -1761,7 +1801,7 @@ acc-ink       #A3E635
 acc-soft      acc 16%
 acc-line      acc 38%
 
-fat           #E8B84A   (added 2026-11-22; body model + body-fat series only)
+fat           #EBD27A   (added 2026-11-22; body model + body-fat series only)
 rec-ready     = green   #30D158
 rec-easing    = orange  #FF9F0A
 rec-active    = red     #FF453A   (label "Recovering")
@@ -1792,7 +1832,7 @@ acc-2         #65A30D
 on-acc        #0C0E12
 acc-ink       #4A7A0E
 
-fat           #C99A1E   (added 2026-11-22)
+fat           #9A6F00   (added 2026-11-22)
 rec-ready     = green   #34C759
 rec-easing    = orange  #FF9500
 rec-active    = red     #FF3B30

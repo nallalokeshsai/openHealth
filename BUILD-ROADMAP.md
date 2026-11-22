@@ -15,7 +15,7 @@ This document lays out the phase-gated build sequence for the first usable Andro
 | Phase | Duration | Scope | Gates |
 |-------|----------|-------|-------|
 | **0** | Weeks 1–3 | Gradle project, theme, 6 reusable components, bottom nav | Tokens frozen, components testable in isolation |
-| **1** | Weeks 4–7 | Six root screens (MVP), no detail sheets | Each screen passes review gate (§WIREFRAMES.md §end) |
+| **1** | Weeks 4–7 | Five root screens (MVP), no detail sheets | Each screen passes review gate (§WIREFRAMES.md §end) |
 | **2** | Weeks 8–10 | Quick-add sheet, provenance sheets, live session | Logging loop under 2–5 s per action |
 | **3** | Weeks 11–12 | Detail sheets (readiness, session summary, vital detail) | All numbers provenance-linked, all destructive undo-able |
 | **4** | Weeks 13–15 | Charts (trends, heatmap, body map renderer) | Charts have table alternative + 1-sentence text |
@@ -62,15 +62,15 @@ This document lays out the phase-gated build sequence for the first usable Andro
    - `OHProgressRing` (canvas-drawn ring, centre text overlay, 96–120 dp)
    - `OHChip` (selected/unselected states)
    - `WeekStrip` (7 × 32×40 dp bubbles, today accent)
-   - `OHBottomNavigation` (6-tab, accent on active only)
+   - `OHBottomNavigation` (5-tab, accent on active only)
    - `OHBottomSheet` (Material 3, dismissible, header + content)
    - **Exit test:** Each component renders in Compose Preview, light + dark themes verified
 
 5. **Navigation skeleton** (`navigation/`)
-   - `NavGraph` with 6 root destinations (Today, Train, Food, Body, Insights, More)
+   - `NavGraph` with 5 root destinations (Today, Vitals, Train, Nutrition, Stats) plus a top bar
    - Bottom nav routing to each screen
    - Sheet composable for modal detail (provenance, quick-add, etc.)
-   - **Exit test:** 6 tabs selectable, navigate between tabs, no crashes
+   - **Exit test:** 5 tabs selectable, navigate between tabs, no crashes
 
 6. **Data models** (`core/model/`)
    - `ReadinessData`, `WorkoutSession`, `Meal`, `Measurement`, `Vital`, `InsightMetric`
@@ -79,7 +79,7 @@ This document lays out the phase-gated build sequence for the first usable Andro
    - **Exit test:** Models map to room DB, no serialization errors
 
 **Success Criteria:**
-- [ ] App launches, 6 tabs visible, can navigate between tabs
+- [ ] App launches, 5 tabs visible, can navigate between tabs
 - [ ] Every colour, size, shape from tokens (no hardcodes)
 - [ ] All 10 components render in Preview
 - [ ] Light + dark themes switch instantly
@@ -87,9 +87,9 @@ This document lays out the phase-gated build sequence for the first usable Andro
 
 ---
 
-## Phase 1: Root Screens (Weeks 4–7)
+## Phase 1: Root Screens (five roots + Settings) (Weeks 4–7)
 
-**Goal:** Six root screens, MVP scope, no detail sheets yet. Each screen is scrollable, card-based, shows real data model.
+**Goal:** Five root screens, MVP scope, no detail sheets yet. Each screen is scrollable, card-based, shows real data model.
 
 **Deliverables:**
 
@@ -107,7 +107,7 @@ This document lays out the phase-gated build sequence for the first usable Andro
 - Weight card (large value, signed delta, 30-day sparkline with goal)
 - Due items card (inset list of 46 dp rows, editable state)
 - Quick actions card (3×2 grid of 84 dp tiles)
-- Tab bar (6 tabs, Today active)
+- Tab bar (5 tabs, Today active, Train raised)
 
 **Data flow:**
 - ViewModel queries `ReadinessRepository`, `WorkoutRepository`, `NutritionRepository`, etc.
@@ -159,7 +159,7 @@ This document lays out the phase-gated build sequence for the first usable Andro
 
 ---
 
-### Food Screen
+### Nutrition Screen
 
 **Wireframe:** See WIREFRAMES.md §3 and wireframes.html
 
@@ -188,7 +188,7 @@ This document lays out the phase-gated build sequence for the first usable Andro
 
 ---
 
-### Body Screen
+### Vitals Screen
 
 **Wireframe:** See WIREFRAMES.md §4 and wireframes.html
 
@@ -218,13 +218,13 @@ This document lays out the phase-gated build sequence for the first usable Andro
 
 ---
 
-### Insights Screen
+### Stats Screen
 
 **Wireframe:** See WIREFRAMES.md §5 and wireframes.html
 
 **Components:**
-- Page header (34 sp "Insights", week range)
-- Segmented control (5 tabs: Overview, Training, Sleep, Body, Food)
+- Page header (34 sp "Stats", week range)
+- Segmented control (5 tabs: Overview, Training, Sleep, Body, Nutrition)
 - KPI band (3 tiles: volume, effort, sessions)
 - Chart cards (1 per metric)
   - Volume trend (line chart placeholder)
@@ -247,7 +247,7 @@ This document lays out the phase-gated build sequence for the first usable Andro
 
 ---
 
-### More Screen
+### Settings Screen
 
 **Wireframe:** See WIREFRAMES.md §6 and wireframes.html
 
@@ -281,9 +281,9 @@ This document lays out the phase-gated build sequence for the first usable Andro
 
 Before moving to Phase 2:
 
-- [ ] All 6 screens render without crashes
+- [ ] All 5 root screens render without crashes
 - [ ] Tab navigation works (bottom nav switches between screens)
-- [ ] All 6 screens pass review gate (WIREFRAMES.md §end)
+- [ ] All 5 root screens pass review gate (WIREFRAMES.md §end)
 - [ ] No hardcoded hexes or sizes (all from tokens.kt)
 - [ ] Light + dark themes verified on all screens
 - [ ] Font scale 1.3× verified (no overflow, touch targets ≥ 44 dp)
@@ -484,7 +484,7 @@ Before moving to Phase 2:
    - Dark tokens → light tokens (Surface: white, Label: black, Separators: light grey)
    - Verify 4.5:1 on light bg for all text
    - Verify accent reads in both themes (all 9 presets)
-   - Toggle instantly (Theme row in More screen)
+   - Toggle instantly (Theme row in Settings)
 
 3. **Reduced motion**
    - Remove animations: scale, opacity, slide transitions
@@ -564,7 +564,7 @@ Before moving to Phase 2:
 
 - **Velocity:** 190 h Phase 1 / 5 weeks = 38 h/week (1 dev) or 76 h/week (2 devs) ✓
 - **Quality:** 0 crashes in Phase 1 exit gate, <5 bugs in Phase 2
-- **Accessibility:** WCAG AA on all 6 root screens + 3 major sheets
+- **Accessibility:** WCAG AA on all 5 root screens + 3 major sheets
 - **Performance:** 60 fps scroll on all lists, <2 s sync for typical data
 - **Data integrity:** 100% provenance (every value has source + timestamp)
 - **User trust:** no data loss, all actions undoable within 5 s
@@ -574,7 +574,7 @@ Before moving to Phase 2:
 ## Implementation Order (1 Dev, 20 Weeks)
 
 Weeks 1–3: **Phase 0** (tokens, components, nav)
-Weeks 4–8: **Phase 1** (6 root screens)
+Weeks 4–8: **Phase 1** (5 root screens + Settings)
 Weeks 9–10: **Phase 2** (logging, quick-add, live session)
 Weeks 11–12: **Phase 3** (detail sheets, calculations)
 Weeks 13–15: **Phase 4** (charts, body map)
