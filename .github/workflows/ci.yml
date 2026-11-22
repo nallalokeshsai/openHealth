@@ -1,8 +1,12 @@
-# Build and verify openHealth. Written in B0; the first run is the owner's (see docs/build-log.md).
+# Build and verify openHealth. Written in B0; the first runs are recorded in docs/build-log.md.
 #
 # The SDK package ids below are taken from the installed SDK's own package.xml
 # (platforms/android-37.2/package.xml, build-tools/37.0.0/package.xml), not guessed, and match
 # compileSdk 37 minor 2 in docs/adr/0003-pinned-versions.md.
+#
+# No third-party Android action: android-actions/setup-android@v3 rejects the cmdline-tools the
+# ubuntu-latest image now ships (cmdline-tools/20.0) and fails the job before Gradle runs. The
+# runner already has a working sdkmanager; this drives it directly.
 name: build
 
 on:
@@ -17,6 +21,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -25,12 +30,20 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install the pinned SDK platform and build tools
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-37.2" "build-tools;37.0.0"
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          sdkmanager="$(ls -1 "$sdk"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$sdkmanager" ]; then
+            echo "No sdkmanager found under $sdk/cmdline-tools"
+            ls -la "$sdk" || true
+            exit 1
+          fi
+          echo "Using $sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" --install "platforms;android-37.2" "build-tools;37.0.0"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
 
       - uses: gradle/actions/setup-gradle@v4
 
