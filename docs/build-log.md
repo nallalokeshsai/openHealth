@@ -91,8 +91,8 @@ built in B13. `.gitignore` no longer ignores `data/` (it is a module now; local 
 `local-data/`) and ignores `.gradle/`, `local.properties`, keystores and `*.jks`.
 `.github/workflows/ci.yml` accepts the SDK licences, installs `platforms;android-37.2` and
 `build-tools;37.0.0` (ids read from the installed SDK's `package.xml`), then runs `check` and
-`assembleDebug`; it has never run because nothing is pushed, and the owner's Actions quota is
-spent until the next billing period (see Open issues).
+`assembleDebug`. It ran for the first time after the branch was pushed and the PR opened; see the
+owner follow-up below for the two failures and the fix that made it green.
 
 ### Reviewer pass
 
@@ -130,7 +130,7 @@ that follows:
 | `app-android/src/main/res/values/themes.xml` inherits a platform theme | B1 |
 | `core/src/test/.../ToolchainTest.kt` proves test wiring and the 17 bytecode target | B2 replaces it with domain tests |
 | `:data`, `:sync`, `:integrations` and `:ui` are empty modules | B2, B13, B8 and B1 |
-| CI workflow written, never run | the owner's first manual dispatch, once the Actions quota resets |
+| CI workflow written and proven | — (green on `a41a548`, both the push and PR runs) |
 
 ### Open issues
 
@@ -152,12 +152,13 @@ that follows:
   handle on it (0 items inside); a OneDrive restart or reboot clears it.
 - **`targetSdk` 37 is untested against real behaviour changes**: the only device here runs API 36.
   B10's device pass is where that gets checked.
-- **The GitHub Actions quota is spent until the next billing period**, so the workflow cannot be
-  proven this month. It is not a gate for B0: `./gradlew check` and `:app-android:assembleDebug`
-  ran locally from a clean tree instead. Pushing a `build/**` branch will show a queue-time
-  failure until the quota resets; start the workflow by hand (`workflow_dispatch`) after that.
-- **`gh` is not installed on this workstation**, so no session can read run results; the GitHub
-  web UI is the place to look.
+- **The repo is public and `main` is now protected** (2026-11-22): pull request required, the
+  `build / check` status required, force pushes and branch deletion blocked, conversations must be
+  resolved, admins may bypass. Dependabot alerts and security updates were enabled too; secret
+  scanning and push protection were already on. Anyone can still read the code and logs — going
+  private would need a paid plan for branch protection.
+- **`gh` is not installed on this workstation**, so sessions read run results through the GitHub
+  REST API with the stored credential; the web UI is the fallback.
 - **The Gradle daemon ran out of metaspace once** during the B0 runs (with eight JVM projects and
   Detekt/ktlint per module). The cap was raised to 1.5 GB in `gradle.properties`; if the warning
   returns, raise it again before assuming a build problem.
@@ -169,16 +170,19 @@ Recorded because it changes the operating rules, not because it changes the buil
 - **The stale OneDrive tree was deleted** at the owner's instruction, after verifying that
   `C:\dev\openHealth` contains every commit of it. Contents are gone; the empty folder entry stays
   until OneDrive releases its handle.
-- **The GitHub Actions quota ($12) is spent until the next billing period**, so the CI workflow
-  cannot be proven this month. The earlier caveat was closed instead of guessed: the SDK package
-  ids now come from the installed SDK's own `package.xml`, the licences are accepted before the
-  install, `workflow_dispatch` lets the owner start it by hand later, and the YAML was parsed with
-  a YAML parser as a syntax check. CI remains unchecked behaviour, not a passed gate.
+- **CI was proven, and its first failure was a real one.** The first two runs (push and PR on
+  `7bdd520`) died in step 4: `android-actions/setup-android@v3` rejects the cmdline-tools the
+  `ubuntu-latest` image now ships (`cmdline-tools/20.0`), so every later step was skipped. The fix
+  (commit `a41a548`) drops that action and drives the runner's own `sdkmanager`, using the highest
+  version under `cmdline-tools/*`; the discovery logic was exercised locally in Git Bash against a
+  stubbed SDK tree first. Both runs on `a41a548` then passed every step, including `Check` and
+  `Assemble the debug app`. The owner's Actions quota turned out not to block runs.
 - **The owner authorised pushes from agent sessions permanently.** `opencode.json` now allows
   `git push`; `prompts.md` is at 1.1 with its Standing rule changed from "never push" to "push
   only when the owner asks for it in that session, and never force-push"; the `AGENTS.md` policy
   row and the prompts version row were updated to match. Pushing still requires an explicit ask
   from the owner in each session.
-- **`build/b0-foundation` was pushed to origin** (`github.com/nallalokeshsai/openHealth`) at the
-  owner's request. `main` is untouched; merging the branch is the owner's call, and the first
-  Actions run will fail at queue time until the quota resets.
+- **`build/b0-foundation` was pushed to origin** (`github.com/nallalokeshsai/openHealth`) and
+  opened as PR #1 against `main`; the branch is green in CI and ready to merge. `main` itself was
+  not moved by any session: merging is the owner's action, and `main` is protected from direct
+  pushes as of 2026-11-22.
