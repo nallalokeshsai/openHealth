@@ -24,7 +24,7 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 | `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
 | `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
 | `docs/adr/` | 0002 · 2026-11-22 | Dated closed decisions. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 pinned versions is written in B0 | **Decision record.** |
-| `.opencode/commands/build-phase.md`, `opencode.json` | 2026-11-22 | The `/build-phase n or next` OpenCode command that runs a phase from `prompts.md`, and the permission policy (no push, no blind `git add -A`) | **Launcher.** Never overrides `prompts.md`. |
+| `.opencode/commands/build-phase.md`, `opencode.json` | 2026-11-23 | The `/build-phase n or next` OpenCode command that runs a phase from `prompts.md`, verifies the whole build, fixes what it finds, then pushes the phase branch, opens its pull request, drives CI green and merges it; and the permission policy (no blind `git add -A`, no force-push, no direct push to `main`, no protection bypass) | **Launcher.** Overrides `prompts.md` only on the authorised ship at the phase exit, which `prompts.md` now records too. |
 | `docs/build-log.md` | created in B0 | What each phase did, ran and left open | **Memory between sessions.** |
 | `COMPOSE-GUIDE.md` | 0.1 · 2026-11-21 | Compose snippets, a token-file sketch, one screen template, a file tree | **Patterns only.** Not authoritative on values or structure; see conflicts. |
 

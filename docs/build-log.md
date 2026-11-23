@@ -108,6 +108,12 @@ status under the name branch protection requires:
   `check` (contexts: `check`), which is what the PR showed as waiting. The job is now
   named `check`.
 
+After those two fixes the hosted job passed every step (SDK install, `./gradlew check`,
+`assembleDebug`) in 3 min 11 s, and the PR reported `check` green. The only remaining
+CI noise was deprecation: `checkout@v4` and `setup-java@v4` run on Node 20, and
+`setup-java` v4 is retired, so the workflow moved to `checkout@v7` and
+`setup-java@v6`.
+
 ### Exit tests
 
 | Exit test (`BUILD-ROADMAP.md` §B0) | Evidence | Result |
