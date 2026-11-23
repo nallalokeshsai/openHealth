@@ -471,13 +471,13 @@ any feature screen (`BUILD-ROADMAP.md` §B2).
    engine that rebuilds a day from observations and a full rebuild that runs the same
    code; `TrashService` as the only delete path; the Argon2id/AES-GCM export with a
    versioned bundle of every table and a CSV export; and the seeded five-year corpus.
-3. **Android seams and fixture tool**.
+3. **Android seams and fixture tool** — in commit `bc3ab88`.
    `app-android`: `AndroidSecretVault` (Keystore AES-256-GCM wrapping the database
    passphrase), `AndroidDatabaseFactory` (SQLCipher behind the `:data` seam, native
    library loaded explicitly, WAL, integrity check) and `AndroidMigrationBackup`;
    a device test that proves persistence, encryption and reopen. `tools/fixtures` is a
    runnable generator plus the query benchmark.
-4. **Verification and documentation** — commit `61a4927`. Two fresh review passes,
+4. **Verification and documentation** — commits `61a4927` and `9455cb1`. Two fresh review passes,
    every confirmed finding fixed, the clean rebuild and device run re-run over the
    fixes, this log, ADR 0005, the NOTICE additions, and the "Current state" update in
    `AGENTS.md`.
