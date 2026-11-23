@@ -39,6 +39,15 @@ data class OhGeometry(
     val cardHeaderGlyph: Dp = 29.dp,
     val cardHeaderTrailing: Dp = 44.dp,
 
+    // §10 icons
+    val iconBox: Dp = 24.dp,
+    val iconStroke: Dp = 1.7.dp,
+    val iconStrokeTab: Dp = 1.65.dp,
+    val iconStrokeTabActive: Dp = 2.0.dp,
+    val iconStrokeChevron: Dp = 2.4.dp,
+    val iconInText: Dp = 14.dp,
+    val iconPadding: Dp = 1.5.dp,
+
     // §5.3 inset group list and row
     val rowMinHeight: Dp = 46.dp,
     val rowVerticalPadding: Dp = 12.dp,
@@ -48,6 +57,8 @@ data class OhGeometry(
     val rowIconRadius: Dp = 8.dp,
     val rowChevron: Dp = 15.dp,
     val destructiveGroupGap: Dp = 22.dp,
+    /** �6.3: a disabled row is 45 % opaque, a disabled control 32 % (buttonDisabledAlpha). */
+    val rowDisabledAlpha: Float = 0.45f,
 
     // §5.4 media row
     val mediaMinHeight: Dp = 60.dp,
@@ -104,6 +115,7 @@ data class OhGeometry(
     // §5.13 slider
     val sliderTrack: Dp = 4.dp,
     val sliderKnob: Dp = 24.dp,
+    val sliderRing: Dp = 2.dp,
 
     // §5.14 text and search field
     val fieldHeight: Dp = 46.dp,
@@ -117,6 +129,7 @@ data class OhGeometry(
     // §5.15 tab bar
     val tabBarHeight: Dp = 56.dp,
     val tabBarPaddingVertical: Dp = 6.dp,
+    val tabBarAlpha: Float = 0.94f,
     val tabIcon: Dp = 25.dp,
     val tabLabelGap: Dp = 2.dp,
     val trainDisc: Dp = 56.dp,
@@ -152,6 +165,8 @@ data class OhGeometry(
     // §5.19 timer bar
     val timerBarLift: Dp = 22.dp,
     val timerBarPadding: Dp = 12.dp,
+    val timerBarAlpha: Float = 0.97f,
+    val timerPausedAlpha: Float = 0.50f,
     val timerProgress: Dp = 3.dp,
     val timerControl: Dp = 44.dp,
     val timerSkipGap: Dp = 6.dp
