@@ -32,7 +32,11 @@ FROM vital
 UNION ALL
 SELECT
     'meal', id, local_date, created_at, created_at, 'manual', kind, 0
-FROM meal;
+FROM meal
+UNION ALL
+SELECT
+    'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM note;
 
 timelineForDay:
 SELECT * FROM timeline WHERE local_date = :localDate ORDER BY happened_at DESC, entity_id;

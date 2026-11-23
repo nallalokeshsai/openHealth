@@ -2,11 +2,14 @@ package app.openhealth.data
 
 import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.MeasurementId
+import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.SetId
 import app.openhealth.core.seam.FixedClock
 import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Measurement
+import app.openhealth.data.db.Note
 import app.openhealth.data.db.Work_set
+import app.openhealth.data.repo.NoteRepository
 import app.openhealth.data.repo.NutritionRepository
 import app.openhealth.data.repo.TrashService
 import kotlin.test.Test
@@ -14,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 
@@ -61,6 +65,99 @@ class TrashServiceTest {
             store.db.bodyQueries.measurementById("m-1").executeAsOneOrNull()!!.value_,
         )
         assertTrue(trash.active().isEmpty())
+        store.close()
+    }
+
+    @Test
+    fun aDeletedNoteKeepsItsTextInTheTombstoneAndUndoBringsItBack() {
+        val store = inMemoryStore()
+        val clock = FixedClock(now)
+        val trash = TrashService(store.db, clock)
+        NoteRepository(store.db).insert(
+            Note(
+                id = "note-trash-1",
+                body = "Left knee felt fine",
+                local_date = date.toString(),
+                zone_id = TEST_ZONE.id,
+                happened_at = now.toEpochMilliseconds(),
+                recorded_at = now.toEpochMilliseconds(),
+                edited_at = null,
+                source_id = "manual",
+                raw_record_id = null,
+                idempotency_key = "trash-note-1",
+                device = "manual",
+                app_version = "test",
+                revision = 1L,
+            ),
+        )
+        val tombstone = trash.deleteNote(NoteId("note-trash-1"))!!
+        assertNull(store.db.noteQueries.noteById("note-trash-1").executeAsOneOrNull())
+        assertTrue(trash.byId(tombstone)!!.payload!!.contains("Left knee felt fine"))
+        assertTrue(trash.undo(tombstone))
+        assertEquals(
+            "Left knee felt fine",
+            store.db.noteQueries.noteById("note-trash-1").executeAsOneOrNull()!!.body,
+        )
+        store.close()
+    }
+
+    @Test
+    fun aDeletedObservationKeepsItsProvenanceAndUndoRestoresIt() {
+        val store = inMemoryStore()
+        val clock = FixedClock(now)
+        val trash = TrashService(store.db, clock)
+        val observation = testObservation(
+            id = "obs-trash-1",
+            type = app.openhealth.core.observation.ObservationType.WATER,
+            value = 330.0,
+            unit = app.openhealth.core.units.UcumUnit.MILLILITRE,
+            start = now,
+            end = now,
+        )
+        app.openhealth.data.repo.ObservationRepository(store.db).record(observation)
+        val tombstone = trash.deleteObservation(
+            app.openhealth.core.ids.ObservationId("obs-trash-1"),
+        )!!
+        assertNull(store.db.observationQueries.observationById("obs-trash-1").executeAsOneOrNull())
+        assertTrue(trash.undo(tombstone))
+        val restored = store.db.observationQueries.observationById(
+            "obs-trash-1",
+        ).executeAsOneOrNull()
+        assertEquals(330.0, restored!!.value_)
+        assertEquals("garmin", restored.source_id)
+        assertEquals((now + 1.hours).toEpochMilliseconds(), restored.recorded_at)
+        store.close()
+    }
+
+    @Test
+    fun anExplicitPurgeClearsThePayloadButKeepsTheMarker() {
+        val store = inMemoryStore()
+        val clock = FixedClock(now)
+        val trash = TrashService(store.db, clock)
+        NoteRepository(store.db).insert(
+            Note(
+                id = "note-purge-1",
+                body = "Gone for good",
+                local_date = date.toString(),
+                zone_id = TEST_ZONE.id,
+                happened_at = now.toEpochMilliseconds(),
+                recorded_at = now.toEpochMilliseconds(),
+                edited_at = null,
+                source_id = "manual",
+                raw_record_id = null,
+                idempotency_key = "purge-note-1",
+                device = "manual",
+                app_version = "test",
+                revision = 1L,
+            ),
+        )
+        val tombstone = trash.deleteNote(NoteId("note-purge-1"))!!
+        assertTrue(trash.purge(tombstone))
+        assertNull(trash.byId(tombstone)!!.payload)
+        assertTrue(trash.active().isEmpty())
+        assertTrue(
+            store.db.tombstoneQueries.tombstoneById(tombstone.value).executeAsOneOrNull() != null,
+        )
         store.close()
     }
 

@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- App lock uses the platform BiometricPrompt on API 28+ (pr.md §6.23). The
+         permission is declared; it is only exercised when the person turns the lock on. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
     <application
+        android:name="app.openhealth.android.OpenHealthApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:label="@string/app_name"
-        android:theme="@style/Theme.OpenHealth"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OpenHealth">
 
         <activity
             android:name="app.openhealth.android.MainActivity"
-            android:exported="true">
+            android:enableOnBackInvokedCallback="true"
+            android:exported="true"
+            android:theme="@style/Theme.OpenHealth.Starting"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

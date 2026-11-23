@@ -16,10 +16,15 @@ android {
 }
 
 dependencies {
+    // Screens ask the pure policies in :core (modules, weight-neutral, age). Storage and
+    // Android stay out of its API surface.
+    api(project(":core"))
     api(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.kotlinx.datetime)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)

@@ -129,6 +129,9 @@ class ObservationRepository(
         )
     }
 
+    fun byId(id: ObservationId): Observation? =
+        db.observationQueries.observationById(id.value).executeAsOneOrNull()?.toDomain()
+
     fun forDay(date: LocalDate): List<Observation> =
         db.observationQueries.observationsForDay(date.toString()).executeAsList().map {
             it.toDomain()

@@ -6,11 +6,13 @@ import app.openhealth.core.source.SourceRegistry
 import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.corpus.CorpusGenerator
 import app.openhealth.data.corpus.CorpusRequest
+import app.openhealth.data.db.Note
 import app.openhealth.data.export.Argon2ExportCipher
 import app.openhealth.data.export.CsvExport
 import app.openhealth.data.export.ExportBundle
 import app.openhealth.data.export.ExportService
 import app.openhealth.data.export.ExportTables
+import app.openhealth.data.repo.NoteRepository
 import app.openhealth.data.repo.ObservationRepository
 import app.openhealth.data.repo.RollupRepository
 import app.openhealth.data.repo.SourceRepository
@@ -35,6 +37,23 @@ class ExportRoundTripTest {
             CorpusRequest(days = 60, seed = 7L, endDate = endDate),
         )
         app.openhealth.data.repo.SettingsRepository(store.db).put("units", "metric")
+        NoteRepository(store.db).insert(
+            Note(
+                id = "note-fixture",
+                body = "A note that must survive the export",
+                local_date = endDate.toString(),
+                zone_id = TEST_ZONE.id,
+                happened_at = now.toEpochMilliseconds(),
+                recorded_at = now.toEpochMilliseconds(),
+                edited_at = null,
+                source_id = "manual",
+                raw_record_id = null,
+                idempotency_key = "export-note-fixture",
+                device = "manual",
+                app_version = "test",
+                revision = 1L,
+            ),
+        )
         store.db.tombstoneQueries.insertTombstone(
             id = "tombstone-fixture",
             entityTable = "measurement",

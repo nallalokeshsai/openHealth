@@ -72,3 +72,17 @@ that matches the Kotlin line and record it here.
   would otherwise keep its bundled 2.2.10.
 - Compose BOM and `compileSdk` minor version move together; the AAR metadata check
   enforces it.
+
+## B3 additions (2026-11-23)
+
+| Library | Version | Verified | Why |
+|---|---|---|---|
+| `androidx.core:core-splashscreen` | 1.2.0 | 1.2.0 stable read from Google Maven metadata on 2026-11-23 (artifact last updated 2025-11-05) | Android 12 splash API, with the compat path for API 28–31. |
+| `androidx.navigation:navigation-compose` | 2.10.2 | pinned in B0; first used in B3 | Type-safe routes, five peers and pushed pages. |
+| `androidx.lifecycle:lifecycle-viewmodel-compose` | 2.11.1 | same line as the pinned lifecycle | One `AppViewModel` over the shell. |
+| `io.insert-koin:koin-core` / `koin-android` | 4.2.2 | pinned in B0; first used in B3 | The composition root `OpenHealthApp` starts. It pulls `co.touchlab:stately-*` (Apache-2.0), now recorded in `gradle/licences/allowed.tsv`. |
+| `androidx.compose.ui:ui-test-junit4` / `ui-test-manifest` | Compose BOM 2026.11.01 | B1 already used them in `:ui`; B3 adds them to `:app-android` | The four instrumented exit scenarios. |
+
+**Not added:** `androidx.biometric:biometric`. App lock uses the platform
+`BiometricPrompt` (API 28+, `minSdk` 28), so no fragment or biometric dependency
+enters the client (ADR 0007).

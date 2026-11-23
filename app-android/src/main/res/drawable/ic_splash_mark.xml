@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The geometric splash mark of DESIGN.md §10.5: a ring and a dot on the 24 dp grid,
+     in the accent on bg, no gradient, no gloss, no shadow. The mark is not a logo; the
+     product mark is undecided (pr.md §13.10). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,18 A36,36 0 1,0 54,90 A36,36 0 1,0 54,18"
+        android:strokeColor="@color/oh_splash_mark"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M54,54 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0"
+        android:fillColor="@color/oh_splash_mark" />
+</vector>

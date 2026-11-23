@@ -24,8 +24,9 @@ data class TimelineItem(
  * and a 50-item merge stay far under the 16 ms budget.
  */
 class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDriver) {
-    fun page(limit: Long): List<TimelineItem> {
-        val perTable = limit.coerceAtLeast(1)
+    fun page(limit: Long, offset: Long = 0): List<TimelineItem> {
+        val perTable = (limit + offset).coerceAtLeast(1)
+        val skipped = offset.coerceAtLeast(0)
         return (
             newest(
                 "SELECT 'observation', id, local_date, happened_at, recorded_at, source_id, " +
@@ -56,9 +57,16 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                     "SELECT 'meal', id, local_date, created_at, created_at, 'manual', " +
                         "kind, 0 FROM meal ORDER BY created_at DESC LIMIT ?",
                     perTable,
+                ) +
+                newest(
+                    "SELECT 'note', id, local_date, happened_at, recorded_at, " +
+                        "COALESCE(source_id, ''), NULL, 0 FROM note " +
+                        "ORDER BY happened_at DESC LIMIT ?",
+                    perTable,
                 )
             )
             .sortedByDescending { it.happenedAt }
+            .drop(skipped.toInt())
             .take(limit.toInt())
     }
 
@@ -70,7 +78,7 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                 localDate = LocalDate.parse(row.local_date),
                 happenedAt = row.happened_at,
                 recordedAt = row.recorded_at,
-                sourceId = row.source_id,
+                sourceId = row.source_id.orEmpty(),
                 detail = row.detail,
                 edited = row.edited,
             )

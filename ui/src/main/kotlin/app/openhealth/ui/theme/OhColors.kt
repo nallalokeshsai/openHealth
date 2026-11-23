@@ -109,6 +109,10 @@ enum class OhAccent(
     Gold("gold", 0xFFFFD60A, 0xFFFFCC00, 0xFF8F5E00, 0xFF000000),
     ;
 
+    companion object {
+        fun fromKey(key: String?): OhAccent? = entries.firstOrNull { it.key == key }
+    }
+
     internal val darkAcc: Color get() = Color(darkFill)
     internal val lightAcc: Color get() = Color(lightFill)
     internal val lightAccInk: Color get() = Color(lightInk)

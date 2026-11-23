@@ -54,6 +54,7 @@ fun OhTopBar(
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     settingsDot: Boolean = false,
+    onDateClick: (() -> Unit)? = null,
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
@@ -76,7 +77,16 @@ fun OhTopBar(
                 .padding(horizontal = OhTheme.space.s6),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            val leadingInteraction = rememberInteraction()
+            var leading = Modifier.weight(1f)
+            if (onDateClick != null) {
+                leading = leading.ohClickable(
+                    leadingInteraction,
+                    role = Role.Button,
+                    onClick = onDateClick,
+                )
+            }
+            Column(modifier = leading) {
                 // The wordmark: "openHealth" in the UI font at 17/600 (§10.5).
                 Text(
                     text = appName,

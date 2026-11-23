@@ -181,6 +181,16 @@ object OhObjectIcons {
         }
     }
 
+    /** A logged drink. Added 2026-11-23: quick add needs a water glyph (DESIGN.md §10.2). */
+    val water: ImageVector = ohIcon("water") {
+        stroke {
+            moveTo(12f, 3.5f)
+            quadTo(5.5f, 10.6f, 5.5f, 14.4f)
+            arcTo(6.5f, 6.5f, 0f, false, false, 18.5f, 14.4f)
+            quadTo(18.5f, 10.6f, 12f, 3.5f)
+        }
+    }
+
     val cuff: ImageVector = ohIcon("cuff") {
         stroke {
             moveTo(6.5f, 6f)

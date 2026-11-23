@@ -1,0 +1,66 @@
+-- Migration 3 -> 4 (2026-11-23, B3). Adds notes: free text the person writes from quick
+-- add, the timeline and Today. A note is a layer-4 row with full provenance
+-- (pr.md §6.27, §7.4) and references source and raw_record, so the two existing foreign
+-- key rules apply unchanged: SET NULL on an optional provenance link.
+
+CREATE TABLE note (
+    id TEXT NOT NULL PRIMARY KEY,
+    body TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    edited_at INTEGER,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX note_local_date ON note(local_date);
+CREATE INDEX note_happened_at ON note(happened_at);
+
+-- The timeline's meal branch sorts by created_at; without this index a five-year
+-- corpus sorts every meal on each page.
+CREATE INDEX IF NOT EXISTS meal_created ON meal(created_at);
+
+-- The view is part of the schema, not a query: a migration that creates a new table the
+-- timeline unions must recreate it, or upgraded devices silently hide the new rows.
+DROP VIEW timeline;
+CREATE VIEW timeline AS
+SELECT
+    'observation' AS kind,
+    id AS entity_id,
+    local_date AS local_date,
+    happened_at AS happened_at,
+    recorded_at AS recorded_at,
+    source_id AS source_id,
+    type AS detail,
+    user_edited AS edited
+FROM observation
+UNION ALL
+SELECT
+    'session', id, local_date, happened_at, recorded_at, source_id, routine_id, 0
+FROM session
+UNION ALL
+SELECT
+    'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
+FROM entry
+UNION ALL
+SELECT
+    'measurement', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM measurement
+UNION ALL
+SELECT
+    'vital', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM vital
+UNION ALL
+SELECT
+    'meal', id, local_date, created_at, created_at, 'manual', kind, 0
+FROM meal
+UNION ALL
+SELECT
+    'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM note;

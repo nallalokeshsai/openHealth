@@ -19,7 +19,7 @@ class DatabaseTest {
     fun aNewDatabaseIsCreatedAtTheCurrentSchemaVersion() {
         val store = inMemoryStore()
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
-        assertEquals(3L, store.schemaVersion)
+        assertEquals(4L, store.schemaVersion)
         assertEquals(0L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(0L, store.db.trainingQueries.countWorkSets().executeAsOne())
         store.close()
@@ -46,6 +46,8 @@ class DatabaseTest {
         // 1.sqm adds, so dropping them reproduces the pre-migration state faithfully.
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        // The note table arrives in v4; this fixture must really be older than it.
+        first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
         first.execute(null, "PRAGMA user_version = 1", 0)
         first.close()
@@ -58,9 +60,9 @@ class DatabaseTest {
         val store = DatabaseOpener(backup).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals("v1-to-v3", backupLabel)
-        assertEquals(3L, store.schemaVersion)
-        assertEquals(3L, userVersion(store.driver))
+        assertEquals("v1-to-v4", backupLabel)
+        assertEquals(4L, store.schemaVersion)
+        assertEquals(4L, userVersion(store.driver))
         V2_INDEXES.forEach { assertEquals(1L, indexCount(store.driver, it), "index $it") }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
@@ -123,6 +125,8 @@ class DatabaseTest {
         val path = directory.resolve("v1.db").toString()
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        // The note table arrives in v4; this fixture must really be older than it.
+        first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
         first.execute(null, "PRAGMA user_version = 1", 0)
         first.close()
@@ -139,6 +143,8 @@ class DatabaseTest {
         val path = directory.resolve("v1.db").toString()
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        // The note table arrives in v4; this fixture must really be older than it.
+        first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
         first.execute(null, "PRAGMA user_version = 1", 0)
         first.close()
@@ -146,6 +152,44 @@ class DatabaseTest {
             DatabaseOpener(MigrationBackup { _, _ -> null })
                 .open(jdbcFactory("jdbc:sqlite:$path"))
         }
+        Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(directory)
+    }
+
+    @Test
+    fun aV3DatabaseRecreatesTheTimelineViewWithNotes() {
+        val directory = Files.createTempDirectory("openhealth-v3-view")
+        val path = directory.resolve("v3.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        // The v3 schema has the note-less view and no note table.
+        first.execute(null, "DROP TABLE note", 0)
+        first.execute(null, "DROP VIEW timeline", 0)
+        first.execute(
+            null,
+            "CREATE VIEW timeline AS SELECT 'observation' AS kind, id AS entity_id, " +
+                "local_date, happened_at, recorded_at, source_id, type AS detail, " +
+                "user_edited AS edited FROM observation",
+            0,
+        )
+        first.execute(null, "PRAGMA user_version = 3", 0)
+        first.close()
+
+        val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
+            jdbcFactory("jdbc:sqlite:$path"),
+        )
+        assertEquals(4L, store.schemaVersion)
+        val view = store.driver.executeQuery(
+            null,
+            "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
+            { cursor ->
+                cursor.next()
+                QueryResult.Value(cursor.getString(0).orEmpty())
+            },
+            0,
+        ).value
+        assertTrue(view.contains("FROM note"), "the migrated view must include notes")
+        store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
         Files.deleteIfExists(directory)
     }
@@ -189,6 +233,8 @@ class DatabaseTest {
         // DDL and rebuild. The fixture therefore tracks the schema instead of drifting.
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        // The note table arrives in v4; this fixture must really be older than it.
+        first.execute(null, "DROP TABLE note", 0)
         val ddl = tableDdl(first)
         first.execute(null, "PRAGMA foreign_keys = OFF", 0)
         ddl.forEach { (table, sql) ->
@@ -223,7 +269,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(3L, store.schemaVersion)
+        assertEquals(4L, store.schemaVersion)
         assertEquals(1L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(3, store.db.sourceQueries.allSources().executeAsList().size)
 
@@ -270,7 +316,7 @@ class DatabaseTest {
             "raw_record", "observation", "daily_rollup", "profile", "source", "settings",
             "tombstone", "exercise", "routine", "routine_exercise", "programme",
             "programme_routine", "session", "session_exercise", "work_set", "food",
-            "meal", "entry", "measurement", "vital",
+            "meal", "entry", "measurement", "vital", "note",
         ).forEach { assertTrue(it in tables, "missing table $it") }
         val views = store.db.transactionWithResult {
             store.driver.executeQuery(

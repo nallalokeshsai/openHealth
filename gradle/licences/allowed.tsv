@@ -25,6 +25,7 @@ org.apiguardian:*	Apache-2.0	Test-only, JUnit 5 annotations
 org.robolectric:*	Apache-2.0	Test-only, JVM Android runtime
 io.github.takahirom.roborazzi:*	Apache-2.0	Screenshot tests
 io.insert-koin:*	Apache-2.0	Koin DI (Tech-Stack.md §3)
+co.touchlab:*	Apache-2.0	Stately concurrency utilities, pulled in by Koin
 app.cash.sqldelight:*	Apache-2.0	SQLDelight storage (Tech-Stack.md §5)
 io.ktor:*	Apache-2.0	Ktor client and server (Tech-Stack.md §6-7)
 com.squareup.okio:*	Apache-2.0	Ktor/Coil IO dependency

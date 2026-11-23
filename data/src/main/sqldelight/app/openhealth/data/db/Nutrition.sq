@@ -36,6 +36,7 @@ CREATE TABLE meal (
 );
 
 CREATE INDEX meal_local_date ON meal(local_date);
+CREATE INDEX meal_created ON meal(created_at);
 
 CREATE TABLE entry (
     id TEXT NOT NULL PRIMARY KEY,
