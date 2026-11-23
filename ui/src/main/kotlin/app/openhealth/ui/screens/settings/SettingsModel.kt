@@ -41,6 +41,8 @@ data class SettingsState(
     val profileHeight: String,
     val profileWeight: String,
     val profileUnits: UnitSystem,
+    val profileMayLoseWeight: Boolean,
+    val hasRestoreSnapshot: Boolean,
     val modules: Set<HealthModule>,
     val preset: ModulePreset,
     val weightNeutral: Boolean,

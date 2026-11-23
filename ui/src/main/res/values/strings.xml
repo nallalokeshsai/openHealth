@@ -70,6 +70,7 @@
     <string name="preset_training_body">Training and body</string>
     <string name="preset_training_body_body_copy">Training, food, steps, body, vitals, sleep and activities</string>
     <string name="preset_everything">Everything</string>
+    <string name="preset_custom">Custom</string>
     <string name="preset_everything_body_copy">All thirteen modules</string>
     <string name="accent_brand">Brand</string>
     <string name="accent_lime">Lime</string>
@@ -116,7 +117,7 @@
     <string name="onb_birth_under_sixteen">openHealth is for people aged 16 and over.</string>
     <string name="onb_birth_note">Under 16 is not supported. 16 and 17 can track but do not get a weight-loss goal.</string>
     <string name="onb_sex_title">Sex at birth</string>
-    <string name="onb_sex_body">Used only by the body-composition and energy estimates. You can leave it out.</string>
+    <string name="onb_sex_body">Used only by the body-composition and energy estimates. Choose prefer not to say if you would rather not.</string>
     <string name="onb_sex_female">Female</string>
     <string name="onb_sex_male">Male</string>
     <string name="onb_sex_not_saying">Prefer not to say</string>
@@ -136,7 +137,7 @@
     <string name="onb_weight_neutral_title">A mode that hides weight and calories</string>
     <string name="onb_weight_neutral_body">Weight-neutral mode hides weight, calories, body fat and progress photos across the app. Training, steps, sleep and vitals keep working. Nothing is deleted.</string>
     <string name="onb_weight_neutral_switch">Turn on weight-neutral mode</string>
-    <string name="onb_weight_neutral_note">You can change this any time in Settings, Privacy.</string>
+    <string name="onb_weight_neutral_note">You can change this any time in Settings, Appearance.</string>
     <string name="onb_tier_two_title">A little more about you</string>
     <string name="onb_tier_two_body">Recommended, about a minute. These make the first week useful.</string>
     <string name="onb_tier_three_title">The details that make it precise</string>
@@ -160,6 +161,12 @@
     <string name="onb_modules_note">Turning a module off hides its screens and keeps its data.</string>
     <string name="onb_body_fat_title">Body fat percentage</string>
     <string name="onb_body_fat_body">Optional. A scale, calipers or a scan all work.</string>
+    <string name="onb_composition_source">How was it measured?</string>
+    <string name="composition_scale">Scale</string>
+    <string name="composition_calipers">Calipers</string>
+    <string name="composition_bia">BIA</string>
+    <string name="composition_dexa">DEXA</string>
+    <string name="composition_other">Other</string>
     <string name="onb_rhr_title">Resting heart rate</string>
     <string name="onb_rhr_body">Optional. Your watch or a morning count.</string>
     <string name="onb_bp_title">Blood pressure</string>
@@ -169,9 +176,16 @@
     <string name="onb_tape_title">Tape measurements</string>
     <string name="onb_tape_body">Optional. Around the body at the widest point.</string>
     <string name="onb_tape_neck">Neck</string>
+    <string name="onb_tape_shoulders">Shoulders</string>
     <string name="onb_tape_chest">Chest</string>
     <string name="onb_tape_waist">Waist</string>
     <string name="onb_tape_hips">Hips</string>
+    <string name="onb_tape_upper_arm">Upper arm</string>
+    <string name="onb_tape_forearm">Forearm</string>
+    <string name="onb_tape_thigh">Thigh</string>
+    <string name="onb_tape_calf">Calf</string>
+    <string name="onb_tape_wrist">Wrist</string>
+    <string name="onb_tape_ankle">Ankle</string>
     <string name="onb_injuries_title">Injuries or limitations</string>
     <string name="onb_injuries_body">Anything training should work around.</string>
     <string name="onb_medications_title">Medications</string>
@@ -254,6 +268,8 @@
     <string name="quick_backdate">Backdate an entry</string>
     <string name="quick_backdate_body">Choose a past date and time. The recorded time never moves.</string>
     <string name="quick_water_amount">Amount</string>
+    <string name="quick_weight_value">Weight</string>
+    <string name="quick_weight_invalid">That weight is outside the range this app accepts.</string>
     <string name="quick_water_ml">%1$d ml</string>
     <string name="quick_food_later_title">Food logging is not here yet</string>
     <string name="quick_food_later_body">The food database arrives with nutrition. A note records what you ate in the meantime.</string>
@@ -269,19 +285,30 @@
 
     <!-- Timeline -->
     <string name="timeline_title">Timeline</string>
-    <string name="timeline_empty_title">Nothing here yet</string>
+    <string name="timeline_empty_title">Nothing logged yet</string>
+    <string name="timeline_empty_action">Log a note</string>
+    <string name="timeline_show_older">Show older</string>
     <string name="timeline_empty_body">Everything you log appears here, newest first.</string>
     <string name="timeline_filter_all">All</string>
     <string name="timeline_filter_notes">Notes</string>
     <string name="timeline_filter_body">Body</string>
     <string name="timeline_filter_nutrition">Nutrition</string>
+    <string name="timeline_filter_manual">Manual</string>
+    <string name="timeline_filter_imported">Imported</string>
     <string name="timeline_provenance_title">Where this came from</string>
     <string name="timeline_close">Close</string>
+    <string name="timeline_value">Value</string>
     <string name="timeline_source">Source</string>
     <string name="timeline_happened">Happened</string>
     <string name="timeline_recorded">Recorded</string>
     <string name="timeline_method">Method</string>
     <string name="timeline_device">Device</string>
+    <string name="timeline_local_day">Local day</string>
+    <string name="timeline_quality">Quality</string>
+    <string name="timeline_raw">Raw record</string>
+    <string name="timeline_raw_kept">Kept</string>
+    <string name="timeline_raw_none">Compacted or entered by hand</string>
+    <string name="timeline_exclude">Exclude from trends</string>
     <string name="timeline_edited">Edited</string>
     <string name="timeline_yes">Yes</string>
     <string name="timeline_no">No</string>
@@ -306,14 +333,14 @@
     <string name="settings_data_detail">Export, restore, Trash</string>
     <string name="settings_data_timeline_body">Every stored event, newest first.</string>
     <string name="settings_trash">Trash</string>
-    <string name="settings_trash_count">%1$d items</string>
+    
     <string name="settings_export">Export data</string>
     <string name="settings_export_body">An encrypted file you choose the password for.</string>
     <string name="settings_restore">Restore data</string>
     <string name="settings_restore_body">Replace everything on this phone from an export.</string>
     <string name="settings_add_demo">Add sample data</string>
     <string name="settings_add_demo_body">Fill this empty profile with 90 days of realistic sample data.</string>
-    <string name="settings_counts">%1$d notes · %2$d observations · %3$d measurements</string>
+    <string name="settings_counts">Notes %1$d · Readings %2$d · Measurements %3$d</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_system">System</string>
@@ -337,12 +364,18 @@
     <string name="settings_delete_notes">Delete all notes</string>
     <string name="settings_delete_notes_title">Delete every note?</string>
     <string name="settings_delete_notes_message">Each note goes to Trash for 30 days. Nothing is erased straight away.</string>
-    <string name="settings_empty_trash">Empty Trash</string>
+    <string name="settings_restore_confirm_title">Replace everything on this phone?</string>
+    <string name="settings_restore_confirm_message">This file replaces your profile, every logged value and every setting. A local snapshot is kept so you can undo it.</string>
+    <string name="settings_restore_confirm_action">Replace and restore</string>
+    <string name="settings_empty_trash">Empty trash</string>
     <string name="settings_empty_trash_title">Delete everything in Trash?</string>
-    <string name="settings_empty_trash_message">Deleted items stop being restorable. Their tombstone markers stay.</string>
+    <string name="settings_empty_trash_message">Deleted items stop being restorable. The deletion marker stays.</string>
     <string name="settings_cancel">Cancel</string>
     <string name="settings_save">Save</string>
     <string name="settings_close">Close</string>
+    <string name="settings_appearance_detail">%1$s · %2$s</string>
+    <string name="settings_undo_restore">Undo last restore</string>
+    <string name="settings_undo_restore_body">Put back what was on this phone before the last restore.</string>
     <string name="settings_export_saved">Export saved. Keep the password; it cannot be recovered.</string>
     <string name="settings_export_failed">The export could not be written.</string>
     <string name="settings_restore_done">Restore finished. Everything on this phone was replaced.</string>
@@ -365,6 +398,8 @@
     <!-- Trash -->
     <string name="trash_empty_title">Trash is empty</string>
     <string name="trash_empty_body">Deleted items stay here for 30 days.</string>
+    <string name="trash_empty_action">Back</string>
+    <string name="trash_row_subtitle">%1$s · %2$s</string>
     <string name="trash_restore">Restore</string>
     <string name="trash_purge_title">Delete permanently</string>
     <string name="trash_purge_body">Items past 30 days are cleared automatically.</string>
@@ -402,4 +437,20 @@
     <string name="root_stats_empty_title">No trends yet</string>
     <string name="root_stats_empty_body">Trends, weekly reviews and reports appear once there is something to compare.</string>
     <string name="root_stats_action">Add a note</string>
+    <plurals name="provenance_minutes_later">
+        <item quantity="one">%d minute later</item>
+        <item quantity="other">%d minutes later</item>
+    </plurals>
+    <plurals name="provenance_hours_later">
+        <item quantity="one">%d hour later</item>
+        <item quantity="other">%d hours later</item>
+    </plurals>
+    <plurals name="provenance_days_later">
+        <item quantity="one">%d day later</item>
+        <item quantity="other">%d days later</item>
+    </plurals>
+    <plurals name="trash_items">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
 </resources>

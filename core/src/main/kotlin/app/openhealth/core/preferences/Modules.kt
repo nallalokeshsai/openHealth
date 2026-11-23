@@ -51,6 +51,9 @@ enum class ModulePreset(val key: String, val enabled: Set<HealthModule>) {
         ),
     ),
     EVERYTHING("everything", HealthModule.entries.toSet()),
+
+    /** Not a preset the person picks: the state after they change one switch. */
+    CUSTOM("custom", emptySet()),
     ;
 
     companion object {

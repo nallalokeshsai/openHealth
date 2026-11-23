@@ -17,13 +17,16 @@ class ModulesTest {
     @Test
     fun everythingIsTheFullSetAndTheOtherPresetsAreSubsets() {
         assertEquals(HealthModule.entries.toSet(), ModulePreset.EVERYTHING.enabled)
-        ModulePreset.entries.filterNot { it == ModulePreset.EVERYTHING }.forEach { preset ->
-            assertTrue(
-                preset.enabled.all { it in ModulePreset.EVERYTHING.enabled },
-                "${preset.key} contains a module outside the closed set",
-            )
-            assertTrue(preset.enabled.isNotEmpty())
-        }
+        ModulePreset.entries
+            .filterNot { it == ModulePreset.EVERYTHING || it == ModulePreset.CUSTOM }
+            .forEach { preset ->
+                assertTrue(
+                    preset.enabled.all { it in ModulePreset.EVERYTHING.enabled },
+                    "${preset.key} contains a module outside the closed set",
+                )
+                assertTrue(preset.enabled.isNotEmpty())
+            }
+        assertEquals(emptySet(), ModulePreset.CUSTOM.enabled)
     }
 
     @Test

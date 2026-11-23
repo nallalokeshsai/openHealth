@@ -153,6 +153,7 @@ fun OhRow(
     value: String? = null,
     unit: String? = null,
     leadingIcon: ImageVector? = null,
+    leading: (@Composable () -> Unit)? = null,
     leadingTint: Color = OhTheme.colors.acc,
     destructive: Boolean = false,
     showChevron: Boolean = false,
@@ -192,7 +193,10 @@ fun OhRow(
             .padding(horizontal = dims.rowPadH, vertical = dims.rowPadV),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (leadingIcon != null) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(dims.rowGap))
+        } else if (leadingIcon != null) {
             Box(
                 modifier = Modifier
                     .size(dims.iconTile)

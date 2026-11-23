@@ -106,6 +106,33 @@ class AppContainer(
         return stats.observations
     }
 
+    /** True when the last restore left an automatic local snapshot behind. */
+    fun hasPreRestoreSnapshot(): Boolean = snapshotFile().exists()
+
+    /**
+     * `pr.md` §6.29: a bulk import takes a local snapshot first. It is encrypted with a
+     * passphrase held by the Keystore, so it is restorable without asking the person for
+     * anything and never sits in clear on disk.
+     */
+    fun writePreRestoreSnapshot(): Boolean = runCatching {
+        val bytes = export.export(snapshotPassphrase())
+        snapshotFile().writeBytes(bytes)
+        true
+    }.getOrDefault(false)
+
+    fun restorePreRestoreSnapshot(): Boolean = runCatching {
+        val bytes = snapshotFile().readBytes()
+        export.restore(bytes, snapshotPassphrase())
+        true
+    }.getOrDefault(false)
+
+    private fun snapshotFile() = java.io.File(appContext.filesDir, PRE_RESTORE)
+
+    private fun snapshotPassphrase(): CharArray = android.util.Base64.encodeToString(
+        vault.getOrCreate(AndroidDatabaseFactory.DATABASE_PASSPHRASE),
+        android.util.Base64.NO_WRAP,
+    ).toCharArray()
+
     fun close() {
         if (storeLazy.isInitialized()) store.close()
     }
@@ -113,5 +140,6 @@ class AppContainer(
     companion object {
         const val DEMO_DAYS = 90
         val MANUAL_SOURCE = app.openhealth.core.ids.SourceId("manual")
+        private const val PRE_RESTORE = "pre-restore.ohe"
     }
 }

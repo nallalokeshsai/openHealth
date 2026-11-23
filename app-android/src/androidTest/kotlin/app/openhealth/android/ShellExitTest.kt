@@ -31,6 +31,7 @@ import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.db.Profile
 import app.openhealth.ui.screens.onboarding.OnboardingStep
+import app.openhealth.ui.screens.today.QuickAction
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -120,6 +121,52 @@ class ShellExitTest {
         val elapsed = (System.nanoTime() - started).toDouble()
         val minutes = elapsed / 1_000_000_000.0 / 60.0
         assertTrue(minutes < 3.0, "first note took %.2f minutes".format(minutes))
+    }
+
+    @Test
+    fun underSixteenIsBlockedBeforeAnythingIsSaved() {
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        compose.onNodeWithText("Start").performClick()
+        typeAndContinue("Sam")
+        typeAndContinue("2015-01-01")
+        waitFor("blocked") { viewModel.state.value.onboarding.ageBlocked }
+        compose.onNodeWithText("openHealth is for people aged 16 and over").assertExists()
+        assertEquals(0L, container.store.profile.all().size.toLong())
+    }
+
+    @Test
+    fun quickAddWeightReplacesTheDaysWeight() {
+        seedProfile()
+        viewModel.refresh()
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        waitFor("profile") { viewModel.state.value.onboardingComplete }
+        viewModel.openQuickAdd(QuickAction.WEIGHT)
+        waitFor("weight form") {
+            viewModel.state.value.quickAdd.mode ==
+                app.openhealth.ui.screens.quickadd.QuickAddMode.WEIGHT
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("81")
+        closeKeyboard()
+        compose.onNodeWithText("Save").performClick()
+        waitFor("weight 81") {
+            container.store.rollups.forDayAndType(container.today, ObservationType.WEIGHT)
+                ?.value?.value == 81.0
+        }
+        waitFor("sheet closed") { !viewModel.state.value.quickAdd.visible }
+        viewModel.openQuickAdd(QuickAction.WEIGHT)
+        waitFor("weight form again") {
+            viewModel.state.value.quickAdd.mode ==
+                app.openhealth.ui.screens.quickadd.QuickAddMode.WEIGHT
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("82")
+        closeKeyboard()
+        compose.onNodeWithText("Save").performClick()
+        waitFor("weight 82") {
+            container.store.rollups.forDayAndType(container.today, ObservationType.WEIGHT)
+                ?.value?.value == 82.0
+        }
     }
 
     @Test
@@ -244,6 +291,7 @@ class ShellExitTest {
                 ),
             )
         }
+        assertTrue(container.writePreRestoreSnapshot())
         container.export.restore(
             container.documents.read(Uri.EMPTY),
             "correct horse battery staple".toCharArray(),
@@ -254,6 +302,11 @@ class ShellExitTest {
             container.store.notes.byId(app.openhealth.core.ids.NoteId("note-before-export"))?.body,
         )
         assertTrue(container.store.profile.active() != null)
+
+        // The restore took a local snapshot first; the same seam restores it.
+        assertTrue(container.hasPreRestoreSnapshot())
+        assertTrue(container.restorePreRestoreSnapshot())
+        assertEquals(2L, container.store.notes.count())
     }
 
     private fun seedProfile() {

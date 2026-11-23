@@ -7,9 +7,9 @@ import org.koin.core.context.startKoin
 import org.koin.dsl.module
 
 /**
- * The application object. It starts Koin and opens the encrypted store before the first
- * screen; a failure (for example a lost Keystore key) is shown as a plain startup error
- * rather than a crash loop.
+ * The application object. It starts Koin; the encrypted store opens on the first IO
+ * access from the state holder, never in composition. A failure (for example a lost
+ * Keystore key) is shown as a plain startup error rather than a crash loop.
  */
 class OpenHealthApp : Application() {
     lateinit var container: AppContainer

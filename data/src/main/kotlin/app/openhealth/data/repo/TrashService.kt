@@ -313,6 +313,35 @@ class TrashService(
         return due.size
     }
 
+    /** A short, human summary of a tombstoned row for the Trash list. */
+    fun preview(row: app.openhealth.data.db.ActiveTombstones): String = runCatching {
+        val payload = row.payload ?: return ""
+        when (row.entity_table) {
+            TrashEntity.NOTE.table -> json.decodeFromString(NotePayload.serializer(), payload).body
+            TrashEntity.OBSERVATION.table -> {
+                val o = json.decodeFromString(ObservationPayload.serializer(), payload)
+                "${o.type.lowercase()} ${o.value} ${o.unit}"
+            }
+            TrashEntity.MEASUREMENT.table -> {
+                val m = json.decodeFromString(MeasurementPayload.serializer(), payload)
+                "${m.type.lowercase()} ${m.value} ${m.unit}"
+            }
+            TrashEntity.VITAL.table -> {
+                val v = json.decodeFromString(VitalPayload.serializer(), payload)
+                "${v.type.lowercase()} ${v.value} ${v.unit}"
+            }
+            TrashEntity.ENTRY.table -> {
+                val e = json.decodeFromString(EntryPayload.serializer(), payload)
+                e.foodId ?: "diary entry"
+            }
+            TrashEntity.WORK_SET.table -> {
+                val w = json.decodeFromString(WorkSetPayload.serializer(), payload)
+                "${w.weightKg} kg × ${w.reps}"
+            }
+            else -> row.entity_id
+        }
+    }.getOrElse { row.entity_id.take(TRASH_PREVIEW_FALLBACK) }
+
     fun byId(id: TombstoneId): Tombstone? =
         db.tombstoneQueries.tombstoneById(id.value).executeAsOneOrNull()
 
@@ -588,5 +617,6 @@ class TrashService(
 
     companion object {
         const val DEFAULT_RETENTION_DAYS = 30L
+        private const val TRASH_PREVIEW_FALLBACK = 18
     }
 }

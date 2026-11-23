@@ -129,6 +129,8 @@ class ScreenScreenshotTest {
         profileHeight = "170",
         profileWeight = "80",
         profileUnits = UnitSystem.METRIC,
+        profileMayLoseWeight = true,
+        hasRestoreSnapshot = false,
         modules = HealthModule.entries.toSet(),
         preset = ModulePreset.EVERYTHING,
         weightNeutral = false,
@@ -160,7 +162,7 @@ class ScreenScreenshotTest {
         onOpenTrash = {},
         onDeleteAllNotes = {},
         onEmptyTrash = {},
-        onAddDemo = {},
+        onUndoRestore = {},
     )
 
     @Test
@@ -170,7 +172,6 @@ class ScreenScreenshotTest {
                 model = today,
                 displayPolicy = DisplayPolicy.Standard,
                 onQuickAdd = {},
-                onOpenTimeline = {},
                 onOpenTrain = {},
                 onOpenNutrition = {},
             )
@@ -184,7 +185,6 @@ class ScreenScreenshotTest {
                 model = today.copy(status = TodayStatus.WEIGHT_NEUTRAL),
                 displayPolicy = DisplayPolicy.WeightNeutral,
                 onQuickAdd = {},
-                onOpenTimeline = {},
                 onOpenTrain = {},
                 onOpenNutrition = {},
             )
@@ -249,6 +249,9 @@ class ScreenScreenshotTest {
                 onBack = {},
                 onFilter = {},
                 onDelete = {},
+                onExclude = {},
+                onLogNote = {},
+                onLoadMore = {},
             )
         }
     }

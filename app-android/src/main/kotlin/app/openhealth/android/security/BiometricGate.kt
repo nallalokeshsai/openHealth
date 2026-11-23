@@ -23,7 +23,10 @@ data class LockPrompt(val title: String, val subtitle: String, val cancel: Strin
  * so a phone with a PIN and no fingerprint can still lock the app.
  */
 class BiometricGate {
-    fun available(context: Context): Boolean = hasDeviceCredential(context)
+    fun available(context: Context): Boolean =
+        // Device credential is only exposed by the framework prompt from API 29; on 28
+        // the button would be offered and could never succeed.
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasDeviceCredential(context)
 
     fun authenticate(
         activity: Activity,

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.screens.common.OhEmptyState
 import app.openhealth.ui.screens.common.OhScreen
 import app.openhealth.ui.theme.OhTheme
@@ -20,8 +21,8 @@ fun RootStubScreen(
     title: String,
     emptyTitle: String,
     emptyBody: String,
-    actionLabel: String,
-    onAction: () -> Unit,
+    actionLabel: String?,
+    onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     OhScreen(modifier = modifier) {
@@ -32,11 +33,14 @@ fun RootStubScreen(
             modifier = Modifier.padding(top = OhTheme.space.s6),
         )
         Spacer(Modifier.height(OhTheme.space.s7))
-        OhEmptyState(
-            title = emptyTitle,
-            body = emptyBody,
-            actionLabel = actionLabel,
-            onAction = onAction,
-        )
+        OhCard {
+            OhEmptyState(
+                title = emptyTitle,
+                body = emptyBody,
+                glyph = app.openhealth.ui.icons.OhIcons.info,
+                actionLabel = actionLabel,
+                onAction = onAction,
+            )
+        }
     }
 }

@@ -49,12 +49,14 @@ choices.
    keeps the cold start near the B0 number instead of adding the database to the
    launch path.
 
-6. **App lock uses the platform `BiometricPrompt` (API 28+), not the AndroidX
-   biometric library.** `minSdk` is 28, so the framework class exists on every
-   supported device; it needs no fragment dependency and no new library. Device
-   credential is allowed (`setDeviceCredentialAllowed` on 29, `Authenticators` on 30+)
-   so a PIN-only phone can lock the app. Availability is the platform's
-   `KeyguardManager.isDeviceSecure`; the app never sees the biometric.
+6. **App lock uses the platform `BiometricPrompt`, not the AndroidX biometric
+   library.** `minSdk` is 28, so the framework class exists on every supported device;
+   it needs no fragment dependency and no new library. Device credential is allowed
+   (`setDeviceCredentialAllowed` on 29, `Authenticators` on 30+). On API 28 the
+   framework prompt has no device-credential path, so the lock is unavailable there
+   rather than offering a switch that could never succeed. From API 29 availability is
+   `KeyguardManager.isDeviceSecure`; the app never sees the biometric. It re-arms on
+   `ON_STOP`, not only on the first load.
 
 7. **The splash is the Android 12 SplashScreen API.** `core-splashscreen` 1.2.0 adds
    the compat call for 28–31; API 31+ draws the system splash from the starting theme,
@@ -62,17 +64,18 @@ choices.
    flashes. The activity theme posts to `Theme.OpenHealth`. Nothing waits on the
    network.
 
-8. **Demo mode runs the seeded corpus against the existing profile.** "Try with sample
-   data" writes 90 days through `CorpusGenerator` with `writeProfile = true` and a
-   dedicated demo profile id, so onboarding is skipped and the sample data is labelled
-   on Today. "Add sample data" in Settings uses `writeProfile = false` and is only
-   offered while the database is empty; it never overwrites a real name, goal or units.
+8. **Demo mode uses a dedicated demo profile.** "Try with sample data" writes 90 days
+   through `CorpusGenerator` with `writeProfile = true` and a dedicated demo profile
+   id, so onboarding is skipped and the sample data is labelled on Today. It never
+   mixes fabricated device provenance into a real profile; there is no "add sample
+   data" action in Settings.
 
-9. **Quick-add writes choose the honest storage shape.** A water drink is an
-   observation with an empty interval, so the day's `SUM` adds glasses instead of a
-   daily total replacing the previous one. A weight is a layer-4 `measurement` whose
-   type names an observation type, which the rollup engine already turns into the
-   day's latest weight. A note is the note table.
+9. **Quick-add writes choose the honest storage shape.** `WATER` is declared a
+   `DAILY_TOTAL`, so a glass reads the day's current manual total, adds to it and
+   writes the new total: `last total wins` keeps every drink and undo reverts one.
+   A weight is a `WEIGHT` observation (`LAST` wins), not a layer-4 measurement, so a
+   second weigh-in replaces the day instead of being skipped by the rollup. A body-fat
+   entry is the same observation shape. A note is the note table.
 
 10. **Onboarding marks progress, not a score.** `intake_tier` is the highest tier the
     person reached, each skipped field is simply absent, and Skip is visible on every
@@ -97,6 +100,23 @@ choices.
     lives in Settings, the Argon2id/AES-GCM container is B2's, and the instrumented
     round-trip drives the same `ExportService` through an in-memory store. The system
     picker itself is exercised by hand, not by a test.
+
+14. **Settings is a pushed page, not a root with the bars.** The inventory calls it a
+    root, but `DESIGN.md` §4.4 lets a screen skip parts; the recipe gives it a profile
+    row and six groups, and a pushed page with its own back header keeps the tab bar
+    for the five data roots. The top bar's date block opens the timeline, so the
+    timeline needs no invented glyph and Today keeps at most one trailing control.
+
+15. **Restore takes an encrypted local snapshot first.** `pr.md` §6.29 treats a
+    restore as a bulk import. The app exports the current store to
+    `files/pre-restore.ohe` with a Keystore-held passphrase before it replaces
+    anything, and Settings offers Undo last restore. The system picker is the only
+    part that is manual.
+
+16. **Detekt is scoped to the shell state holder and the screen files.** `LargeClass`
+    and `TooManyFunctions` are excluded for `ui/AppViewModel.kt` and `screens/**`;
+    every other rule stays on. This is recorded as the structural debt it is, not a
+    precedent for other files.
 
 ## Consequences
 

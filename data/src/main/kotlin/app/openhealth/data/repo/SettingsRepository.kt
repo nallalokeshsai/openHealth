@@ -70,6 +70,7 @@ object SettingKeys {
     const val MEDICATIONS = "profile.medications"
     const val CYCLE_TRACKING = "profile.cycle_tracking"
     const val EQUIPMENT = "profile.equipment"
+    const val COMPOSITION_SOURCE = "profile.composition_source"
     const val DIETARY_PATTERN = "profile.dietary_pattern"
     const val ALLERGIES = "profile.allergies"
     const val SLEEP_WINDOW = "profile.sleep_window"

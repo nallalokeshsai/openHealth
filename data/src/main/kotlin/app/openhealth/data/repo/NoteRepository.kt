@@ -39,5 +39,7 @@ class NoteRepository(private val db: OpenHealthDb) {
 
     fun latest(limit: Long): List<Note> = db.noteQueries.latestNotes(limit).executeAsList()
 
+    fun all(): List<Note> = db.noteQueries.allNotes().executeAsList()
+
     fun count(): Long = db.noteQueries.countNotes().executeAsOne()
 }

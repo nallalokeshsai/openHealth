@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.openhealth.ui.components.OhTabBar
 import app.openhealth.ui.components.OhTabItem
@@ -34,28 +36,39 @@ fun OhRootShell(
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     settingsDot: Boolean = false,
+    onDateClick: (() -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(OhTheme.colors.bg)
-            .windowInsetsPadding(WindowInsets.statusBars),
+            .background(OhTheme.colors.bg),
     ) {
-        OhTopBar(
-            appName = appName,
-            dateLabel = dateLabel,
-            quickAddLabel = quickAddLabel,
-            settingsLabel = settingsLabel,
-            onQuickAdd = onQuickAdd,
-            onSettings = onSettings,
-            settingsDot = settingsDot,
-        )
-        Box(modifier = Modifier.weight(1f)) {
-            content(PaddingValues())
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars),
+        ) {
+            OhTopBar(
+                appName = appName,
+                dateLabel = dateLabel,
+                quickAddLabel = quickAddLabel,
+                settingsLabel = settingsLabel,
+                onQuickAdd = onQuickAdd,
+                onSettings = onSettings,
+                settingsDot = settingsDot,
+                onDateClick = onDateClick,
+            )
+            // The content scrolls under the translucent tab bar; every screen reserves
+            // the documented 88 dp at its bottom (§4.3), so nothing hides behind it.
+            Box(modifier = Modifier.weight(1f)) {
+                content(PaddingValues())
+            }
         }
         Box(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
                 .background(OhTheme.colors.barFill)
                 .windowInsetsPadding(WindowInsets.navigationBars),
         ) {

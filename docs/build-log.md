@@ -725,3 +725,211 @@ it.**
 - **`RESTRICT`, not `CASCADE`, is deliberate.** B3/B5 cannot delete a session, routine or
   programme that has children until they write the children's tombstones first. That is
   the point, but it is work those phases must now plan for.
+
+---
+
+## B3 — Shell and onboarding
+
+**Status:** Completed · **Date:** 2026-11-23 · **Branch:** `build/b3-shell-and-onboarding`
+**Goal:** first launch to Today, with navigation and settings in place and nothing
+hollow (`BUILD-ROADMAP.md` §B3).
+
+### Environment and decisions taken at the start
+
+- Workstation unchanged: Linux, JDK 21, the wrapper. Test target: the owner's
+  **physical phone**, attached and authorised before the device step.
+- **Questions asked (one batched dialog, recommended option first):** attach the
+  phone (owner did); merge the still-open B2 follow-up PR #7 into `main` first (merged
+  as `4aa5b49`, so B3 starts on schema v3 and the foreign-key fixes); use Compose UI
+  instrumented tests instead of Maestro, which is not installed (owner agreed).
+  Nothing about product content was asked: `pr.md` §6.1 and `DESIGN.md` §14.2 answer
+  it.
+- `docs/adr/0007-shell-and-onboarding.md` records thirteen implementation decisions:
+  screens in `:ui` with the state holder in the app, one shell state holder, the note
+  table and schema v4, observation tombstones, Koin plus a lazy store, the platform
+  `BiometricPrompt`, the splash API, demo mode, the water/weight storage shapes,
+  onboarding progress, the backdate strip, the water glyph and the SAF export seam.
+
+### Milestones
+
+1. **Policies, notes and schema v4** — commit `8bcd807`.
+   `:core` gained the closed 13-module set and its three presets, the one
+   `DisplayPolicy` object (weight, calories, body fat, progress photos), the profile
+   options of `pr.md` §6.1 and `AgeRules` (under-16 blocked, 16–17 no weight-loss
+   goal). `:data` gained the `note` table with full provenance, `3.sqm`, the timeline
+   union and repository, note and observation tombstones, an explicit
+   `TrashService.purge`, the export-registry row and repository reads by id. The
+   database is now schema **v4**, 21 tables and three migrations.
+2. **Splash, shell, Today, quick add** — commit `4de9e31`.
+   The Android 12 splash API and the 28–30 starting window, a Koin-started
+   `OpenHealthApp` and an `AppContainer` that opens SQLCipher lazily on IO, the
+   type-safe navigation graph, the global top bar and five-tab shell with the raised
+   Train, Today in the §14.2 order with honest empty states, the 3 × 2 quick-add sheet
+   (note, water and weight really write; food, set and vitals say what they wait for),
+   the timeline grouped by local day with provenance sheets and delete-with-undo, and
+   the first logged note path.
+3. **Onboarding** — in commit `4de9e31`. The three tiers, one question per screen,
+   Skip on every question (a required one explains itself instead of advancing), units
+   detected from the locale and converted on change, under-16 blocking, 16–17 goal
+   filtering, the weight-neutral offer, the module preset, values written with
+   provenance (weight and vitals as observations, body fat and tape as measurements,
+   the rest as settings), and demo mode through the seeded corpus.
+4. **Settings and privacy** — in commit `4de9e31`. Profile, modules (13 switches that
+   hide surfaces and keep data), devices placeholder, data (timeline, Trash,
+   encrypted export/restore through SAF, sample data, counts), appearance (system/dark/
+   light and nine accents, applied live), privacy (app lock through the platform
+   prompt, weight-neutral, the local-only statement), About (version, not a medical
+   device, Apache-2.0, SQLCipher BSD attribution) and a destructive group backed by
+   tombstones.
+5. **Exit tests, goldens and the decisions** — commit `68b50d6`. Six instrumented
+   `ShellExitTest` scenarios through the real screens, state holder and encrypted
+   database (the four exits, the under-16 block and the weight replacement); eight
+   screen goldens in dark, light, 200 % text and RTL (32 images);
+   data tests for observation undo and explicit purge; the lazy store; ADR 0007; the
+   dated `DESIGN.md` water-glyph correction; the Detekt scope for the shell state
+   holder and screen files.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL** from a cleaned tree: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint, 195 JVM tests (78 `:core`, 61 `:data`, 55 `:ui`, 1 benchmark) and the debug APK. |
+| `./gradlew :core:test :data:test :ui:testDebugUnitTest :tools:fixtures:test --rerun-tasks` | **BUILD SUCCESSFUL**, 195 tests, no failures. `:ui` verifies 136 goldens (104 B1 + 32 B3). |
+| `./gradlew :app-android:connectedDebugAndroidTest` on the physical phone | **BUILD SUCCESSFUL**: 7 tests, 6 B3 scenarios (the four exits plus the under-16 block and the quick-add weight replacement) and B2's `EncryptedDatabaseTest` (persistence, encryption, reopen, and the foreign-key assertion B2 could not run). |
+| `./gradlew :app-android:installDebug` and cold launch | `Status: ok`, `LaunchState: COLD`, onboarding renders; no `AndroidRuntime` entry from this build. |
+| `adb shell am start -W` after `force-stop`, three runs | `TotalTime` **1008–1043 ms** in the **debug** build, inside the 1.5 s budget. The store opens lazily on IO after the first frame, so the launch path is Compose + Koin only. |
+| Demo mode on the phone ("Try with sample data") | 90 days from the corpus; Today shows the sample-data line, readiness/steps/energy empty states and the demo profile; no crash. |
+| Settings walk-through on the phone | Profile, 13 modules, devices, data, appearance, privacy, About and the destructive group render; back returns to Today. |
+| `:tools:fixtures:test` (inside `check`) | Five-year corpus and the 16 ms benchmark still pass; no B2 regression. |
+
+No device identity (serial, model, build) is recorded in this repository.
+
+### Exit tests (`BUILD-ROADMAP.md` §B3)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| Fresh install to first logged note in under three minutes | `ShellExitTest.freshInstallReachesTheFirstNoteInUnderThreeMinutes`: the real onboarding (tier 1 answered, tiers 2–3 filled later), the shell, the quick-add note sheet and a row in `note`; the assertion is `< 3 min`; measured **7.0 s** on the phone, including Compose setup and the encrypted store. | **pass** |
+| Relaunch shows splash then Today | Manual on the phone: `force-stop`, `am start -W` reports `LaunchState: COLD`, then the Today screen with the sample-data line; no network wait. | **pass** |
+| Turning a module off hides it and re-enabling restores its data | `ShellExitTest.turningAModuleOffHidesItAndReenablingRestoresItsData`: logs water, turns Nutrition off in Settings, asserts no Water tile, turns it on, asserts the tile returns and the observation count is still 1. | **pass** |
+| Weight-neutral hides every weight, calorie and body-fat value present so far | `ShellExitTest.weightNeutralHidesWeightAndCaloriesAcrossToday`: seeds a weight, enables the mode, asserts the Today weight card (`Trend`, `Log weight`) is absent, then disables it and asserts the card returns. The `DisplayPolicy` unit tests cover all four hidden categories. | **pass** |
+| Export then restore from Settings round-trips | `ShellExitTest.exportThenRestoreFromSettingsRoundTripsEveryTable`: a note, the encrypted container through the Settings `DocumentStore` seam, a second note, restore, and the first note is back while the second is gone; the profile is present. The SAF picker itself is manual (see placeholders). | **pass** |
+
+### Regression over earlier phases
+
+- **B0 clean build and launch** — the clean `check`/`assembleDebug` and the phone
+  install/launch above.
+- **B0 portability and licence guards** — unchanged and run in `check`; the new
+  `:ui -> :core` edge is a pure Kotlin dependency and no `android.*` reached a pure
+  module.
+- **B1 design system** — all 104 goldens verify; the new water glyph is the only icon
+  change. The 200 %/RTL passes are part of the same run.
+- **B2 rollups, dedup, export and the encrypted device test** — the 61 `:data` tests
+  run in `check`; B2's instrumented foreign-key assertion **was run on the phone** in
+  the connected suite and passes. The benchmark still passes.
+
+### Independent review and the fixes it produced
+
+Three fresh reviewers saw only the B3 diff and the contract (correctness and tests;
+`AGENTS.md` invariants and licences; `DESIGN.md` conformance). Every finding below was
+confirmed in the code or a golden, then fixed in this phase and re-verified.
+
+| Finding | Fix |
+|---|---|
+| Quick-add weight wrote a layer-4 measurement, which the rollup skips when the day already has a weight observation, so a second weigh-in was silently ignored | Weight is written as a `WEIGHT` observation (LAST wins). The new `quickAddWeightReplacesTheDaysWeight` test proves 81 then 82 replace the day's value |
+| Water was a zero-length interval while `WATER` is declared `DAILY_TOTAL`; a later source with a total would drop every glass | A glass adds to the day's manual total and writes that total, so `last total wins` keeps every drink and undo reverts one |
+| Tapping a recent weight row converted canonical kg through the imperial converter again, storing 36.3 kg for 80 kg | The recent value is parsed as canonical kg; the weight form labels the profile's unit |
+| The encrypted store opened during composition on the main thread, and a Keystore failure crashed out of `viewModel` | `AppViewModel` no longer touches the store in its constructor; the store opens on IO in `rebuild`, failures set `fatal` and show the startup screen. Cold start is now 1008–1043 ms |
+| 16–17 could select Lose fat in Settings and could set a goal weight/target date | Settings filters the goal and rejects it in the save; `visibleSteps` hides GoalWeight while under 18 |
+| Schema v3→v4 created the note table but not the `timeline` view, so upgraded devices would hide notes in the view path | `3.sqm` drops and recreates the view; `aV3DatabaseRecreatesTheTimelineViewWithNotes` asserts it |
+| Weight-neutral leaked weight through the timeline, profile sheet, quick-add tile/recent rows, Vitals action and nutrition values | A `sensitive` row flag filters weight/body-fat/nutrition rows; the tile, recent rows, profile field and Vitals action are policy-gated |
+| Restore replaced the whole record with no confirmation and no snapshot | The Settings restore now confirms by name, takes an encrypted local snapshot first (Keystore-held passphrase) and offers Undo last restore |
+| App lock only engaged on the first load of a process | `ON_STOP` re-arms it; API 28 no longer offers a lock that could never authenticate |
+| Trash's permanent delete purged `items.first()`, an unselected row | Each row has its own permanent-delete action and confirmation |
+| Timeline truncated at 200 rows and dropped diary entries | Older pages load on request; entries are mapped; the view migration covers notes |
+| Timeline rows were 46 dp and had no long-press delete | A 60 dp event row with long-press delete and undo; the provenance sheet gained value, local day + zone, quality, raw record and the recording delay in words at 46 dp |
+| Quick-add tiles rippled and announced their label twice; empty states lacked the §6.7 glyph/17-600 line | `ohClickable` + press scale, text-only label; `OhEmptyState` now has the glyph and weight, with actions on Timeline/Trash/roots |
+| Today's cards touched, the week strip drew seven discs, Today kept a months-old profile weight and had no unit | 12 dp between cards, only today's disc, weight comes from today's observation only and converts to the profile's unit |
+| Settings mixed unit systems, showed a 17-year-old Lose fat, said "1 items", used accent for errors and had no avatar | Display and placeholders follow the profile's units; the goal list is age-filtered; plurals; red-ink + icon; initials avatar |
+| Selection used a trailing check, which is not one of §6.2's treatments | A 2 dp accent inset line on the selected row |
+| Dates and times were English/24-hour and the app name was a literal | `mediumDate`, `shortDate`, `timeOf`, `hourOf` and `recordingDelay` use the observed locale; `app_name` is a resource |
+
+**Deliberately not changed, and why:** the bars still use the 94 % fill without a real
+backdrop blur (a platform-mode feature with Reduce Transparency, B10); app lock does not
+immediately re-prompt when switched on (it re-arms on the next background); the timeline
+has no source filter or Edit/Exclude on measurements (B6/B8 add the sources and the
+edit affordance); session rows keep a plain "Workout session" title; and the demo
+corpus still has no bulk-remove action.
+
+### Invariant audit (`AGENTS.md`)
+
+| Invariant | This phase |
+|---|---|
+| Provenance on every value | Onboarding weight, RHR and BP are observations; body fat and tape are measurements; notes, water and weight writes all carry source, device, method, `happened_at`, `recorded_at`, local date, zone and idempotency key. The profile keeps its source and revision. **Holds.** |
+| `happened_at` ≠ `recorded_at` | Quick add backdates `happened_at` and never moves `recorded_at`; the clamp refuses a future time. **Holds.** |
+| Five layers, rebuildable rollups | The new writes go through `LocalStore`/repositories and rebuild their day; notes have no rollup. **Holds.** |
+| One source wins a day | Manual water is a SUM of one source; weight is LAST; no screen sums two sources. **Holds.** |
+| Local-first | No network permission, client or sync. Export is a person-chosen file. **Holds.** |
+| Not a medical device | Onboarding, About and Today copy stay neutral; no readiness score is invented; the age rule is a plain support boundary. **Holds.** |
+| No telemetry | No analytics or third-party SDK; the only new dependency set is AndroidX/Koin (Apache-2.0). **Holds.** |
+| Portability | `:core` gained pure policy objects; `checkPortability` passes in every pure module; `:ui` depends on `:core`, not `:data`. **Holds.** |
+| Licence split | Apache-2.0 client; Koin/Stately and AndroidX recorded; SQLCipher attribution is in About and `NOTICE.md`; no GPL-family dependency. **Holds.** |
+| Tombstone undo, not a timer | Notes, observations, measurements and vitals delete through `TrashService`; the toast is the shortcut; Trash keeps 30 days. **Holds.** |
+| Modules hide, never delete | Thirteen switches change surfaces only; the module-off test proves the stored observation survives. **Holds.** |
+| Weight-neutral first-class | One `DisplayPolicy` object; no screen reads the switch; Today omits the weight and energy cards; the test proves both states. **Holds.** |
+| Chart has a table and a sentence | No chart is rendered in B3. **N/A.** |
+| Closed design tokens | Every new value comes from `OhTheme`; `checkDesignTokens` passes in `:ui` and `:app-android`; the only DESIGN edit is the dated water glyph. **Holds.** |
+| Closed cut list | Nothing from `pr.md` §14.5 was built. **Holds.** |
+| Quality bars | Cold start **1008–1043 ms debug**, inside 1.5 s; Today is an empty skeleton, so the 300 ms warm target is not yet exercised. The release number is B14's. |
+
+iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
+
+### Placeholders and deferred work
+
+- **Food, set and vitals quick-add sheets** are honest shells; the real forms arrive
+  with B6, B5 and B7. They say so and offer a note instead.
+- **Today's hero body card** is an empty state; the body model and its recovery map are
+  B4.
+- **Vitals, Train, Nutrition and Stats roots** are empty states with one working action
+  each; their content is B5–B9.
+- **Backdating** is a seven-day strip plus an hour stepper; the full calendar picker
+  belongs with the logging screens (B5–B7).
+- **Baseline photo** (tier 3) waits for the photo work in B7; the step is not shown.
+- **Server privacy choice and passkey** (`pr.md` §6.1) wait for the optional server
+  (B13); onboarding states local-only honestly.
+- **Devices and integrations** is an empty state; Health Connect, Garmin and BLE are
+  B8.
+- **App lock**: the platform prompt and the lock screen are implemented and the lock
+  screen is goldened; the owner's biometric or PIN was not exercised by an automated
+  test (that would need their credential). The switch is disabled when the phone has no
+  screen lock.
+- **Export/restore SAF picker** is manual; the encrypted round-trip behind it is
+  automated.
+- **Demo data** has no bulk-remove action; it is only offered on an empty database or
+  at first launch, and the label says it is sample data.
+- **Deep module surfaces** (Coach, Family, Mental health, Cycle) only affect what B3
+  renders.
+
+### Open issues
+
+- **Cold start** is now 1008–1043 ms in the debug build. The release figure still
+  belongs to B14's macrobenchmark; a baseline profile is B10/B14 work.
+- **`AppViewModel` is large** (80 helpers). Detekt's `LargeClass` and
+  `TooManyFunctions` are scoped to it and to `screen/**`; splitting into per-screen
+  holders is the next structural step. Do not widen the scope.
+- **The timezone is captured at container creation.** A timezone change while the app
+  is running is not applied until the next process start; the rollups use the zone on
+  each value, so the dates stay correct, but the displayed "today" can lag.
+- **The profile sheet duplicates the unit conversion** with the onboarding converter;
+  a shared helper should replace both when the profile gains more units.
+- **The backdate strip is not a calendar**; a past date older than seven days needs the
+  logging screens' picker.
+- **The Today week strip** shows no session dots yet (training is B5); its day cells are
+  dates only.
+- **Backdrop blur on the top and tab bars is still not implemented.** B1 deferred it
+  to the shell; B3 draws the documented 94 % `bg-el` fill and the hairline, and the
+  content behind is faintly visible instead of blurred. A real backdrop blur and the
+  Reduce Transparency switch are one platform-mode feature and remain B10's, as B1's
+  placeholder said. The screen reserve keeps every control clear of the bar.
+- **The `Skip` key on a required question** explains itself rather than advancing; this
+  is the resolution of the "Skip always visible" recipe with "tier 1 required" and is
+  recorded in ADR 0007.

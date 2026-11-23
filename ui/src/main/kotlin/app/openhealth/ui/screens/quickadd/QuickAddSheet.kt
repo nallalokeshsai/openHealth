@@ -31,7 +31,8 @@ import app.openhealth.ui.components.OhStepper
 import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.screens.common.OhQuickTile
-import app.openhealth.ui.screens.common.observedLocale
+import app.openhealth.ui.screens.common.hourOf
+import app.openhealth.ui.screens.common.shortDate
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
@@ -56,6 +57,7 @@ fun QuickAddSheet(
     visible: Boolean,
     mode: QuickAddMode,
     modules: Set<HealthModule>,
+    allowWeight: Boolean,
     recent: List<QuickAddRecent>,
     note: String,
     waterMl: Int,
@@ -63,6 +65,9 @@ fun QuickAddSheet(
     whenDate: LocalDate,
     whenHour: Int,
     saving: Boolean,
+    canSave: Boolean,
+    invalid: Boolean,
+    weightUnit: String,
     onDismiss: () -> Unit,
     onSelect: (QuickAction) -> Unit,
     onBack: () -> Unit,
@@ -91,7 +96,7 @@ fun QuickAddSheet(
             QuickAddMode.FOOD, QuickAddMode.SET, QuickAddMode.VITALS -> null
             else -> stringResource(R.string.quick_save)
         },
-        primaryEnabled = !saving,
+        primaryEnabled = canSave && !saving,
         onPrimary = onSave,
         cancelLabel = if (mode == QuickAddMode.TILES) {
             stringResource(R.string.quick_close)
@@ -103,6 +108,7 @@ fun QuickAddSheet(
         when (mode) {
             QuickAddMode.TILES -> Tiles(
                 modules = modules,
+                allowWeight = allowWeight,
                 recent = recent,
                 onSelect = onSelect,
                 onRepeat = onRepeat,
@@ -130,6 +136,8 @@ fun QuickAddSheet(
                 whenHour,
                 onWhenDate,
                 onWhenHour,
+                invalid,
+                weightUnit,
             )
             QuickAddMode.FOOD -> LaterForm(
                 title = stringResource(R.string.quick_food_later_title),
@@ -156,6 +164,7 @@ fun QuickAddSheet(
 @Composable
 private fun Tiles(
     modules: Set<HealthModule>,
+    allowWeight: Boolean,
     recent: List<QuickAddRecent>,
     onSelect: (QuickAction) -> Unit,
     onRepeat: (QuickAddRecent) -> Unit,
@@ -167,7 +176,7 @@ private fun Tiles(
             add(QuickAction.FOOD)
         }
         if (HealthModule.TRAINING in modules) add(QuickAction.SET)
-        if (HealthModule.BODY in modules) add(QuickAction.WEIGHT)
+        if (HealthModule.BODY in modules && allowWeight) add(QuickAction.WEIGHT)
         if (HealthModule.VITALS in modules) add(QuickAction.VITALS)
     }
     Column(verticalArrangement = Arrangement.spacedBy(OhTheme.space.s4)) {
@@ -274,14 +283,17 @@ private fun WeightForm(
     whenHour: Int,
     onWhenDate: (LocalDate) -> Unit,
     onWhenHour: (Int) -> Unit,
+    invalid: Boolean,
+    weightUnit: String,
 ) {
     OhTextField(
         value = weight,
         onValueChange = onWeightChange,
-        placeholder = stringResource(R.string.unit_kg),
+        placeholder = stringResource(R.string.quick_weight_value),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        error = if (invalid) stringResource(R.string.quick_weight_invalid) else null,
         trailing = {
-            Text(text = stringResource(R.string.unit_kg), style = OhTheme.type.footnote)
+            Text(text = weightUnit, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
         },
     )
     Spacer(Modifier.height(OhTheme.space.s5))
@@ -347,7 +359,7 @@ private fun WhenSection(
                 modifier = Modifier.weight(1f),
             )
             OhStepper(
-                value = HOUR_FORMAT.format(observedLocale(), hour),
+                value = hourOf(hour),
                 onDecrement = { onHour(previousHour(hour)) },
                 onIncrement = { onHour(nextHour(hour)) },
             )
@@ -368,12 +380,9 @@ private fun whenLabel(date: LocalDate, hour: Int): String {
     return stringResource(
         R.string.quick_when_value,
         day,
-        HOUR_FORMAT.format(observedLocale(), hour),
+        hourOf(hour),
     )
 }
-
-private fun shortDate(date: LocalDate): String =
-    "${date.dayOfMonth} ${date.month.name.lowercase().take(MONTH_ABBREVIATION)}"
 
 private fun LocalDate.minusDays(days: Int): LocalDate =
     this + kotlinx.datetime.DatePeriod(days = -days)
@@ -386,8 +395,6 @@ private val WATER_AMOUNTS = listOf(GLASS_SMALL, GLASS_CUP, GLASS_BOTTLE, GLASS_L
 private const val WHEN_DAYS = 7
 private const val QUICK_COLUMNS = 3
 private const val HOURS_PER_DAY = 24
-private const val MONTH_ABBREVIATION = 3
-private const val HOUR_FORMAT = "%02d:00"
 private const val GLASS_SMALL = 250
 private const val GLASS_CUP = 330
 private const val GLASS_BOTTLE = 500

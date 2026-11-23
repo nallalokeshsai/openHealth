@@ -212,28 +212,25 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B2 Core and data** (2026-11-23), plus a review follow-up on
-  the same day (`docs/adr/0006-referential-integrity.md`); next is **B3 Shell and
-  onboarding**.
+- Last completed phase: **B3 Shell and onboarding** (2026-11-23); next is **B4 Body
+  model and exercise data**.
 - Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `fix/b2-review-followups`; 171 JVM tests pass. The instrumented test was last run on
-  the phone at the B2 exit; its new foreign key assertion has **not** been run on
-  hardware yet and B3 must do so. Seven modules exist (`:core :data :sync :integrations :ui
-  :app-android :tools:fixtures`) with ktlint, Detekt, `checkPortability`,
-  `checkLicences` and `checkDesignTokens` wired into `check`. `:ui` holds the B1 design
-  system (closed tokens, 19 components, five-tab bar, top bar, icons, 104 goldens and a
-  contrast audit). `:core` holds ids, time, UCUM units, provenance, observations, the
-  source registry, dedup and merge policies, validators, twelve cited formulas, raw
-  record and rollup types and the platform seams. `:data` holds the SQLDelight schema
-  (20 tables, five layers, schema **v3** with 36 foreign keys and two migrations),
-  repositories, the rebuild-only rollup engine, Trash, an Argon2id/AES-GCM export and restore, CSV export and the
-  seeded five-year corpus; `tools/fixtures` runs the corpus and the 16 ms query
-  benchmark. `app-android` implements the Keystore secret vault and the SQLCipher driver
-  behind the seam. Versions are pinned in `docs/adr/0003-pinned-versions.md`; B1's
-  design choices are `docs/adr/0004-design-system.md`, B2's are
-  `docs/adr/0005-core-and-data.md` and the referential-integrity follow-up is
-  `docs/adr/0006-referential-integrity.md`. `DatabaseOpener` takes a
-  `DatabaseDriverFactory`, not a driver: foreign keys can only be enabled when a
-  connection is created, never by a later `PRAGMA`. R8 is **off** in release; turning it
-  on is B10's. No feature screen has been written.
+  `build/b3-shell-and-onboarding`; **195 JVM tests** (78 `:core`, 61 `:data`, 55 `:ui`,
+  1 benchmark) and **7 instrumented tests** pass on the owner's physical phone,
+  including B2's foreign-key assertion. `:ui` holds the B1 design system plus the B3
+  screens and **136 goldens** (104 component, 32 screen) in dark, light, 200 % text and
+  RTL. `:core` adds the closed 13-module set and presets, the one `DisplayPolicy`, the
+  profile options and `AgeRules` (under-16 blocked, 16–17 no weight-loss goal). `:data`
+  is schema **v4**: 21 tables, five layers, three migrations, a `note` table,
+  observation and note tombstones, the rebuild-only rollup engine, Trash, the
+  Argon2id/AES-GCM export and the five-year corpus. `app-android` now has the Android 12
+  splash, Koin's container, the five-tab shell with the raised Train, onboarding, Today,
+  Settings, the timeline, quick add, demo mode and app lock through the platform
+  `BiometricPrompt`; the store opens lazily on IO. Versions are in
+  `docs/adr/0003-pinned-versions.md`; B1's decisions are `0004-design-system.md`, B2's
+  are `0005-core-and-data.md` and `0006-referential-integrity.md`, and B3's are
+  `0007-shell-and-onboarding.md`. `DatabaseOpener` takes a `DatabaseDriverFactory`, not
+  a driver. R8 is **off** in release; turning it on is B10's. Cold start in the debug
+  build is **1008–1043 ms**, inside the 1.5 s budget; the release number is B14's
+  measurement, not this one.
 - Open issues: see `docs/build-log.md`.

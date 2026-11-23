@@ -1,10 +1,12 @@
 package app.openhealth.ui.screens.onboarding
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,7 +48,7 @@ import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.screens.common.OhProgressLine
-import app.openhealth.ui.screens.common.observedLocale
+import app.openhealth.ui.screens.common.hourOf
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
 
@@ -168,14 +170,7 @@ fun OnboardingScreen(
                     title = stringResource(R.string.onb_tier_three_title),
                     body = stringResource(R.string.onb_tier_three_body),
                 )
-                OnboardingStep.BodyFat -> MeasureStep(
-                    title = stringResource(R.string.onb_body_fat_title),
-                    subtitle = stringResource(R.string.onb_body_fat_body),
-                    value = answers.bodyFat,
-                    unit = stringResource(R.string.unit_percent),
-                    onChange = { onChange(answers.copy(bodyFat = it)) },
-                    issue = issue,
-                )
+                OnboardingStep.BodyFat -> BodyFatStep(answers, onChange, issue)
                 OnboardingStep.RestingHeartRate -> MeasureStep(
                     title = stringResource(R.string.onb_rhr_title),
                     subtitle = stringResource(R.string.onb_rhr_body),
@@ -206,11 +201,20 @@ fun OnboardingScreen(
             }
             if (issue == OnboardingIssue.REQUIRED) {
                 Spacer(Modifier.height(OhTheme.space.s5))
-                Text(
-                    text = stringResource(R.string.onb_required),
-                    style = OhTheme.type.footnote,
-                    color = OhTheme.colors.orangeInk,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OhIcon(
+                        icon = OhIcons.warning,
+                        contentDescription = null,
+                        size = OhTheme.dims.glyphInline,
+                        tint = OhTheme.colors.redInk,
+                    )
+                    Spacer(Modifier.width(OhTheme.space.s1))
+                    Text(
+                        text = stringResource(R.string.onb_required),
+                        style = OhTheme.type.footnote,
+                        color = OhTheme.colors.redInk,
+                    )
+                }
             }
             Spacer(Modifier.height(OhTheme.space.s8))
         }
@@ -314,7 +318,6 @@ private fun BirthDateStep(
         value = answers.birthDate,
         onValueChange = { onChange(answers.copy(birthDate = it)) },
         placeholder = stringResource(R.string.onb_birth_placeholder),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         error = when (issue) {
             OnboardingIssue.DATE_INVALID -> stringResource(R.string.onb_birth_invalid)
             OnboardingIssue.DATE_UNDER_SIXTEEN -> stringResource(R.string.onb_birth_under_sixteen)
@@ -582,6 +585,49 @@ private fun ModulesStep(answers: OnboardingAnswers, onChange: (OnboardingAnswers
 }
 
 @Composable
+private fun BodyFatStep(
+    answers: OnboardingAnswers,
+    onChange: (OnboardingAnswers) -> Unit,
+    issue: OnboardingIssue?,
+) {
+    MeasureStep(
+        title = stringResource(R.string.onb_body_fat_title),
+        subtitle = stringResource(R.string.onb_body_fat_body),
+        value = answers.bodyFat,
+        unit = stringResource(R.string.unit_percent),
+        onChange = { onChange(answers.copy(bodyFat = it)) },
+        issue = issue,
+    )
+    Spacer(Modifier.height(OhTheme.space.s5))
+    Text(
+        text = stringResource(R.string.onb_composition_source),
+        style = OhTheme.type.footnote,
+        color = OhTheme.colors.label2,
+    )
+    Spacer(Modifier.height(OhTheme.space.s1))
+    OhChipStrip {
+        CompositionSource.entries.forEach { source ->
+            OhChip(
+                text = source.label(),
+                selected = answers.compositionSource == source,
+                onClick = { onChange(answers.copy(compositionSource = source)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompositionSource.label(): String = stringResource(
+    when (this) {
+        CompositionSource.SCALE -> R.string.composition_scale
+        CompositionSource.CALIPERS -> R.string.composition_calipers
+        CompositionSource.BIA -> R.string.composition_bia
+        CompositionSource.DEXA -> R.string.composition_dexa
+        CompositionSource.OTHER -> R.string.composition_other
+    },
+)
+
+@Composable
 private fun BloodPressureStep(
     answers: OnboardingAnswers,
     onChange: (OnboardingAnswers) -> Unit,
@@ -631,6 +677,9 @@ private fun MeasurementsStep(
         Triple(stringResource(R.string.onb_tape_neck), answers.neck) { v: String ->
             onChange(answers.copy(neck = v))
         },
+        Triple(stringResource(R.string.onb_tape_shoulders), answers.shoulders) { v: String ->
+            onChange(answers.copy(shoulders = v))
+        },
         Triple(stringResource(R.string.onb_tape_chest), answers.chest) { v: String ->
             onChange(answers.copy(chest = v))
         },
@@ -639,6 +688,24 @@ private fun MeasurementsStep(
         },
         Triple(stringResource(R.string.onb_tape_hips), answers.hips) { v: String ->
             onChange(answers.copy(hips = v))
+        },
+        Triple(stringResource(R.string.onb_tape_upper_arm), answers.upperArm) { v: String ->
+            onChange(answers.copy(upperArm = v))
+        },
+        Triple(stringResource(R.string.onb_tape_forearm), answers.forearm) { v: String ->
+            onChange(answers.copy(forearm = v))
+        },
+        Triple(stringResource(R.string.onb_tape_thigh), answers.thigh) { v: String ->
+            onChange(answers.copy(thigh = v))
+        },
+        Triple(stringResource(R.string.onb_tape_calf), answers.calf) { v: String ->
+            onChange(answers.copy(calf = v))
+        },
+        Triple(stringResource(R.string.onb_tape_wrist), answers.wrist) { v: String ->
+            onChange(answers.copy(wrist = v))
+        },
+        Triple(stringResource(R.string.onb_tape_ankle), answers.ankle) { v: String ->
+            onChange(answers.copy(ankle = v))
         },
     ).forEachIndexed { index, (label, value, setter) ->
         if (index > 0) Spacer(Modifier.height(OhTheme.space.s5))
@@ -708,7 +775,6 @@ private fun GoalWeightStep(
         value = answers.goalDate,
         onValueChange = { onChange(answers.copy(goalDate = it)) },
         placeholder = stringResource(R.string.onb_goal_date_placeholder),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         error = if (issue == OnboardingIssue.DATE_INVALID) {
             stringResource(R.string.onb_birth_invalid)
         } else {
@@ -781,24 +847,29 @@ private data class Choice(val key: String, val label: String, val body: String?)
 private fun ChoiceGroup(choices: List<Choice>, selectedKey: String?, onSelect: (String) -> Unit) {
     OhInsetGroup {
         choices.forEachIndexed { index, choice ->
-            OhRow(
-                title = choice.label,
-                subtitle = choice.body,
-                showDivider = index > 0,
-                onClick = { onSelect(choice.key) },
-                trailing = if (choice.key == selectedKey) {
-                    {
-                        OhIcon(
-                            icon = OhIcons.check,
-                            contentDescription = null,
-                            size = OhTheme.dims.glyphInline,
-                            tint = OhTheme.colors.accInk,
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OhRow(
+                    title = choice.label,
+                    subtitle = choice.body,
+                    showDivider = index > 0,
+                    onClick = { onSelect(choice.key) },
+                )
+                if (choice.key == selectedKey) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(horizontal = OhTheme.space.none),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(OhTheme.space.s0)
+                                .fillMaxHeight()
+                                .background(OhTheme.colors.acc),
                         )
                     }
-                } else {
-                    null
-                },
-            )
+                }
+            }
         }
     }
 }
@@ -854,7 +925,7 @@ private fun TextStep(
 @Composable
 private fun HourStepper(hour: Int, onChange: (Int) -> Unit) {
     OhStepper(
-        value = HOUR_FORMAT.format(observedLocale(), hour),
+        value = hourOf(hour),
         onDecrement = { onChange(previousHour(hour)) },
         onIncrement = { onChange(nextHour(hour)) },
     )
@@ -930,6 +1001,7 @@ private fun ModulePreset.label(): String = stringResource(
         ModulePreset.JUST_TRAINING -> R.string.preset_training
         ModulePreset.TRAINING_AND_BODY -> R.string.preset_training_body
         ModulePreset.EVERYTHING -> R.string.preset_everything
+        ModulePreset.CUSTOM -> R.string.preset_custom
     },
 )
 
@@ -939,6 +1011,7 @@ private fun ModulePreset.body(): String = stringResource(
         ModulePreset.JUST_TRAINING -> R.string.preset_training_body_copy
         ModulePreset.TRAINING_AND_BODY -> R.string.preset_training_body_body_copy
         ModulePreset.EVERYTHING -> R.string.preset_everything_body_copy
+        ModulePreset.CUSTOM -> R.string.preset_everything_body_copy
     },
 )
 
@@ -947,4 +1020,3 @@ private fun previousHour(hour: Int): Int = (hour + HOURS_PER_DAY - 1) % HOURS_PE
 private fun nextHour(hour: Int): Int = (hour + 1) % HOURS_PER_DAY
 
 private const val HOURS_PER_DAY = 24
-private const val HOUR_FORMAT = "%02d:00"

@@ -1898,6 +1898,7 @@ pad     16 screen, 16 card, 12/16 row
 motion  fast 140 / med 220 / push 380 / pop 340 / sheet 340 / dialog 280
 ease    cubic-bezier(.32,.72,0,1)
 press   .97 / .92 small / .985 card
+quick   84 tile / 21 glyph   (§14.2, B3; no new token, quoted here for the guard)
 ```
 
 ---

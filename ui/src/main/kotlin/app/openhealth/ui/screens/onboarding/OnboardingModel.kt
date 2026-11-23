@@ -46,6 +46,20 @@ enum class OnboardingStep(val required: Boolean = false, val tier: Int = 1) {
     Finish(tier = 3),
 }
 
+/** How a body-fat percentage was obtained (`pr.md` §6.1 tier 3). */
+enum class CompositionSource(val key: String) {
+    SCALE("scale"),
+    CALIPERS("calipers"),
+    BIA("bia"),
+    DEXA("dexa"),
+    OTHER("other"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): CompositionSource? = entries.firstOrNull { it.key == key }
+    }
+}
+
 /** A validation message the screen renders under the field, never a toast. */
 enum class OnboardingIssue {
     NAME_REQUIRED,
@@ -84,9 +98,17 @@ data class OnboardingAnswers(
     val systolic: String = "",
     val diastolic: String = "",
     val neck: String = "",
+    val shoulders: String = "",
     val chest: String = "",
     val waist: String = "",
     val hips: String = "",
+    val upperArm: String = "",
+    val forearm: String = "",
+    val thigh: String = "",
+    val calf: String = "",
+    val wrist: String = "",
+    val ankle: String = "",
+    val compositionSource: CompositionSource? = null,
     val injuries: String = "",
     val medications: String = "",
     val cycleTracking: Boolean = false,

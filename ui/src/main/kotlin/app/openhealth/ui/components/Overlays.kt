@@ -229,6 +229,7 @@ fun OhDialogCard(
     onPrimary: (() -> Unit)? = null,
     cancelLabel: String? = null,
     onCancel: (() -> Unit)? = null,
+    destructive: Boolean = false,
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
@@ -292,6 +293,11 @@ fun OhDialogCard(
                     text = primaryLabel,
                     onClick = { onPrimary?.invoke() },
                     enabled = primaryEnabled,
+                    variant = if (destructive) {
+                        OhButtonVariant.Danger
+                    } else {
+                        OhButtonVariant.Primary
+                    },
                     modifier = if (stacked) Modifier.fillMaxWidth() else Modifier.weight(1f),
                 )
             }
@@ -318,6 +324,7 @@ fun OhDialog(
     onPrimary: (() -> Unit)? = null,
     cancelLabel: String? = null,
     onCancel: (() -> Unit)? = null,
+    destructive: Boolean = false,
 ) {
     if (!visible) return
     Dialog(
@@ -340,6 +347,7 @@ fun OhDialog(
                 onPrimary = onPrimary,
                 cancelLabel = cancelLabel,
                 onCancel = onCancel,
+                destructive = destructive,
             )
         }
     }

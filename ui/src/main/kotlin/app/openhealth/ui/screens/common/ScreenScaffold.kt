@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -29,6 +32,7 @@ import app.openhealth.ui.R
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhIconButton
+import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
@@ -39,17 +43,24 @@ import app.openhealth.ui.theme.OhWeight
  */
 @Composable
 fun OhScreen(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = OhTheme.space.s6)
-            .padding(top = OhTheme.space.s3, bottom = OhTheme.dims.screenBottomReserve),
-        content = content,
-    )
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = OhTheme.dims.contentMax)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = OhTheme.space.s6)
+                .padding(top = OhTheme.space.s3)
+                .navigationBarsPadding()
+                .padding(bottom = OhTheme.dims.screenBottomReserve),
+            content = content,
+        )
+    }
 }
 
-/** A pushed page: back control, large title, then the body. The tab bar is hidden. */
 @Composable
 fun OhPageHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     Row(
@@ -96,6 +107,7 @@ fun OhEmptyState(
     title: String,
     body: String,
     modifier: Modifier = Modifier,
+    glyph: ImageVector? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
@@ -105,9 +117,18 @@ fun OhEmptyState(
             .padding(vertical = OhTheme.space.s5),
         horizontalAlignment = Alignment.Start,
     ) {
+        if (glyph != null) {
+            OhIcon(
+                icon = glyph,
+                contentDescription = null,
+                size = OhTheme.dims.glyph,
+                tint = OhTheme.colors.label2,
+            )
+            Spacer(Modifier.height(OhTheme.space.s3))
+        }
         Text(
             text = title,
-            style = OhTheme.type.body.copy(fontWeight = OhWeight.medium),
+            style = OhTheme.type.body.copy(fontWeight = OhWeight.semibold),
             color = OhTheme.colors.label,
         )
         Spacer(Modifier.height(OhTheme.space.s0))

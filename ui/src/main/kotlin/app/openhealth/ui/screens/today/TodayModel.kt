@@ -25,6 +25,8 @@ data class TodayModel(
     val steps: Int?,
     val energyKcal: Double?,
     val weightKg: Double?,
+    val unitSystem: app.openhealth.core.preferences.UnitSystem =
+        app.openhealth.core.preferences.UnitSystem.METRIC,
     val readinessScore: Int?,
     val modules: Set<HealthModule>,
     val demo: Boolean,

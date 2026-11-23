@@ -13,17 +13,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.SensitiveMetric
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhCardHeader
-import app.openhealth.ui.components.OhIconButton
 import app.openhealth.ui.components.OhStatTile
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
@@ -51,29 +52,51 @@ fun TodayScreen(
     model: TodayModel,
     displayPolicy: app.openhealth.core.preferences.DisplayPolicy,
     onQuickAdd: (QuickAction) -> Unit,
-    onOpenTimeline: () -> Unit,
     onOpenTrain: () -> Unit,
     onOpenNutrition: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     OhScreen(modifier = modifier) {
-        TodayHeader(model = model, onOpenTimeline = onOpenTimeline)
+        TodayHeader(model = model)
         if (model.demo) {
             DemoLabel()
         }
-        BodyCard(onOpenTrain = onOpenTrain)
-        ReadinessCard(model.readinessScore)
-        WeekStrip(today = model.today, onStart = onOpenTrain)
-        if (displayPolicy.shows(SensitiveMetric.CALORIES)) {
-            EnergyCard(model.energyKcal, onOpenNutrition)
+        if (HealthModule.TRAINING in model.modules) {
+            BodyCard(onOpenTrain = onOpenTrain)
+            Spacer(Modifier.height(OhTheme.space.s5))
         }
-        StepsCard(model.steps)
-        if (displayPolicy.shows(SensitiveMetric.WEIGHT)) {
-            WeightCard(model.weightKg, onLogWeight = { onQuickAdd(QuickAction.WEIGHT) })
+        if (HealthModule.SLEEP in model.modules || HealthModule.VITALS in model.modules) {
+            ReadinessCard(model.readinessScore)
+            Spacer(Modifier.height(OhTheme.space.s5))
+        }
+        if (HealthModule.TRAINING in model.modules) {
+            WeekStrip(today = model.today, onStart = onOpenTrain)
+            Spacer(Modifier.height(OhTheme.space.s5))
+        }
+        if (HealthModule.NUTRITION in model.modules &&
+            displayPolicy.shows(SensitiveMetric.CALORIES)
+        ) {
+            EnergyCard(model.energyKcal, onOpenNutrition)
+            Spacer(Modifier.height(OhTheme.space.s5))
+        }
+        if (HealthModule.STEPS in model.modules) {
+            StepsCard(model.steps)
+            Spacer(Modifier.height(OhTheme.space.s5))
+        }
+        if (HealthModule.BODY in model.modules &&
+            displayPolicy.shows(SensitiveMetric.WEIGHT)
+        ) {
+            WeightCard(
+                weightKg = model.weightKg,
+                unitSystem = model.unitSystem,
+                onLogWeight = { onQuickAdd(QuickAction.WEIGHT) },
+            )
+            Spacer(Modifier.height(OhTheme.space.s5))
         }
         DueCard()
         QuickActions(
             modules = model.modules,
+            allowWeight = displayPolicy.shows(SensitiveMetric.WEIGHT),
             onQuickAdd = onQuickAdd,
         )
         Spacer(Modifier.height(OhTheme.space.s7))
@@ -81,7 +104,7 @@ fun TodayScreen(
 }
 
 @Composable
-private fun TodayHeader(model: TodayModel, onOpenTimeline: () -> Unit) {
+private fun TodayHeader(model: TodayModel) {
     val type = OhTheme.type
     val colors = OhTheme.colors
     Row(
@@ -115,11 +138,6 @@ private fun TodayHeader(model: TodayModel, onOpenTimeline: () -> Unit) {
                 color = colors.label2,
             )
         }
-        OhIconButton(
-            icon = OhIcons.timer,
-            contentDescription = stringResource(R.string.today_timeline),
-            onClick = onOpenTimeline,
-        )
     }
     Spacer(Modifier.height(OhTheme.space.s6))
 }
@@ -185,10 +203,15 @@ private fun WeekStrip(today: LocalDate, onStart: () -> Unit) {
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         val monday = today - kotlinx.datetime.DatePeriod(days = today.dayOfWeek.isoDayNumber - 1)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            repeat(DAYS_IN_WEEK) { index ->
-                val day = monday.plusDays(index)
-                WeekDay(day = day, isToday = day == today)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                repeat(DAYS_IN_WEEK) { index ->
+                    val day = monday.plusDays(index)
+                    WeekDay(day = day, isToday = day == today)
+                }
             }
         }
         Spacer(Modifier.height(OhTheme.space.s5))
@@ -214,14 +237,21 @@ private fun WeekDay(day: LocalDate, isToday: Boolean) {
         Box(
             modifier = Modifier
                 .size(OhTheme.dims.touchTarget)
-                .clip(CircleShape)
-                .background(if (isToday) colors.acc else colors.surface2),
+                .then(
+                    if (isToday) {
+                        Modifier.clip(CircleShape).background(colors.acc)
+                    } else {
+                        Modifier
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = day.dayOfMonth.toString(),
-                style = OhTheme.type.footnote.copy(fontWeight = OhWeight.semibold),
-                color = if (isToday) colors.onAcc else colors.label,
+                style = OhTheme.type.footnote.copy(
+                    fontWeight = if (isToday) OhWeight.semibold else OhWeight.regular,
+                ),
+                color = if (isToday) colors.onAcc else colors.label2,
             )
         }
     }
@@ -278,7 +308,11 @@ private fun StepsCard(steps: Int?) {
 }
 
 @Composable
-private fun WeightCard(weightKg: Double?, onLogWeight: () -> Unit) {
+private fun WeightCard(
+    weightKg: Double?,
+    unitSystem: app.openhealth.core.preferences.UnitSystem,
+    onLogWeight: () -> Unit,
+) {
     OhCard {
         OhCardHeader(
             eyebrow = stringResource(R.string.today_weight_eyebrow),
@@ -294,8 +328,19 @@ private fun WeightCard(weightKg: Double?, onLogWeight: () -> Unit) {
             )
         } else {
             Spacer(Modifier.height(OhTheme.space.s5))
+            val imperial = unitSystem == app.openhealth.core.preferences.UnitSystem.IMPERIAL
+            val shown = if (imperial) {
+                app.openhealth.core.units.Measure(
+                    weightKg,
+                    app.openhealth.core.units.UcumUnit.KILOGRAM,
+                ).convertTo(app.openhealth.core.units.UcumUnit.POUND).value
+            } else {
+                weightKg
+            }
             Text(
-                text = weightKg.oneDecimal(),
+                text = shown.oneDecimal() + " " + stringResource(
+                    if (imperial) R.string.unit_pounds else R.string.unit_kg,
+                ),
                 style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold),
                 color = OhTheme.colors.label,
             )
@@ -319,7 +364,11 @@ private fun DueCard() {
 }
 
 @Composable
-private fun QuickActions(modules: Set<HealthModule>, onQuickAdd: (QuickAction) -> Unit) {
+private fun QuickActions(
+    modules: Set<HealthModule>,
+    allowWeight: Boolean,
+    onQuickAdd: (QuickAction) -> Unit,
+) {
     val actions = buildList {
         add(QuickAction.NOTE)
         if (HealthModule.NUTRITION in modules) {
@@ -327,7 +376,7 @@ private fun QuickActions(modules: Set<HealthModule>, onQuickAdd: (QuickAction) -
             add(QuickAction.FOOD)
         }
         if (HealthModule.TRAINING in modules) add(QuickAction.SET)
-        if (HealthModule.BODY in modules) add(QuickAction.WEIGHT)
+        if (HealthModule.BODY in modules && allowWeight) add(QuickAction.WEIGHT)
         if (HealthModule.VITALS in modules) add(QuickAction.VITALS)
     }
     if (actions.isEmpty()) return

@@ -157,6 +157,44 @@ class DatabaseTest {
     }
 
     @Test
+    fun aV3DatabaseRecreatesTheTimelineViewWithNotes() {
+        val directory = Files.createTempDirectory("openhealth-v3-view")
+        val path = directory.resolve("v3.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        // The v3 schema has the note-less view and no note table.
+        first.execute(null, "DROP TABLE note", 0)
+        first.execute(null, "DROP VIEW timeline", 0)
+        first.execute(
+            null,
+            "CREATE VIEW timeline AS SELECT 'observation' AS kind, id AS entity_id, " +
+                "local_date, happened_at, recorded_at, source_id, type AS detail, " +
+                "user_edited AS edited FROM observation",
+            0,
+        )
+        first.execute(null, "PRAGMA user_version = 3", 0)
+        first.close()
+
+        val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
+            jdbcFactory("jdbc:sqlite:$path"),
+        )
+        assertEquals(4L, store.schemaVersion)
+        val view = store.driver.executeQuery(
+            null,
+            "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
+            { cursor ->
+                cursor.next()
+                QueryResult.Value(cursor.getString(0).orEmpty())
+            },
+            0,
+        ).value
+        assertTrue(view.contains("FROM note"), "the migrated view must include notes")
+        store.close()
+        Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(directory)
+    }
+
+    @Test
     fun aNewerDatabaseIsRefused() {
         val directory = Files.createTempDirectory("openhealth-newer")
         val path = directory.resolve("newer.db").toString()
@@ -278,7 +316,7 @@ class DatabaseTest {
             "raw_record", "observation", "daily_rollup", "profile", "source", "settings",
             "tombstone", "exercise", "routine", "routine_exercise", "programme",
             "programme_routine", "session", "session_exercise", "work_set", "food",
-            "meal", "entry", "measurement", "vital",
+            "meal", "entry", "measurement", "vital", "note",
         ).forEach { assertTrue(it in tables, "missing table $it") }
         val views = store.db.transactionWithResult {
             store.driver.executeQuery(

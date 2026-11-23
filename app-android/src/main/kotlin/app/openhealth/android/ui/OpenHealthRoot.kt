@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -20,6 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -29,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import app.openhealth.R
 import app.openhealth.android.AppContainer
 import app.openhealth.android.preferences.ThemeMode
+import app.openhealth.core.preferences.HealthModule
 import app.openhealth.ui.R as UiR
 import app.openhealth.ui.components.OhTabItem
 import app.openhealth.ui.components.OhToast
@@ -48,7 +53,6 @@ import app.openhealth.ui.screens.timeline.TimelineScreen
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayScreen
 import app.openhealth.ui.theme.OhTheme
-import java.util.Locale
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -61,6 +65,14 @@ import kotlinx.datetime.toLocalDateTime
 fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
     val viewModel: AppViewModel = injected ?: viewModel(factory = AppViewModelFactory(container))
     val state by viewModel.state.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) viewModel.onAppBackgrounded()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val dark = when (state.preferences.theme) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.DARK -> true
@@ -70,6 +82,7 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
         SystemBars(dark = dark)
         Box(modifier = Modifier.fillMaxSize().background(OhTheme.colors.bg)) {
             when {
+                state.fatal -> StartupErrorScreen()
                 !state.loaded -> Loading()
                 state.locked -> {
                     val activity = LocalContext.current.findActivity()
@@ -91,6 +104,22 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
                     onTryDemo = viewModel::tryDemo,
                 )
                 else -> AppShell(state, viewModel)
+            }
+            state.sessionUndo?.let { undo ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(bottom = OhTheme.dims.screenBottomReserve),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    OhToast(
+                        message = stringResource(undo.messageRes),
+                        actionLabel = stringResource(UiR.string.action_undo),
+                        onAction = viewModel::undoLast,
+                        onDismiss = viewModel::dismissSessionUndo,
+                    )
+                }
             }
             state.toast?.let { toast ->
                 Box(
@@ -136,6 +165,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
                 onSettings = { nav.navigate(SettingsRoute) },
+                onDateClick = { nav.navigate(TimelineRoute) },
             ) {
                 val today = state.today
                 if (today == null) {
@@ -145,7 +175,6 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         model = today,
                         displayPolicy = state.preferences.displayPolicy,
                         onQuickAdd = viewModel::openQuickAdd,
-                        onOpenTimeline = { nav.navigate(TimelineRoute) },
                         onOpenTrain = { goTab(2) },
                         onOpenNutrition = { viewModel.openQuickAdd(QuickAction.FOOD) },
                     )
@@ -160,7 +189,17 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                VitalsRoot(onLogWeight = { viewModel.openQuickAdd(QuickAction.WEIGHT) })
+                VitalsRoot(
+                    onLogWeight = if (
+                        state.preferences.displayPolicy.shows(
+                            app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+                        )
+                    ) {
+                        { viewModel.openQuickAdd(QuickAction.WEIGHT) }
+                    } else {
+                        null
+                    },
+                )
             }
         }
         composable<TrainRoute> {
@@ -182,7 +221,13 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                NutritionRoot(onLogWater = { viewModel.openQuickAdd(QuickAction.WATER) })
+                NutritionRoot(
+                    onLogWater = if (HealthModule.NUTRITION in state.preferences.modules) {
+                        { viewModel.openQuickAdd(QuickAction.WATER) }
+                    } else {
+                        null
+                    },
+                )
             }
         }
         composable<StatsRoute> {
@@ -215,7 +260,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onOpenTrash = { nav.navigate(TrashRoute) },
                     onDeleteAllNotes = viewModel::deleteAllNotes,
                     onEmptyTrash = viewModel::emptyTrash,
-                    onAddDemo = viewModel::addSampleData,
+                    onUndoRestore = viewModel::undoLastRestore,
                 )
             }
         }
@@ -227,6 +272,9 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onBack = { nav.popBackStack() },
                     onFilter = viewModel::setTimelineFilter,
                     onDelete = viewModel::deleteTimelineRow,
+                    onExclude = viewModel::excludeFromTrends,
+                    onLogNote = { viewModel.openQuickAdd(QuickAction.NOTE) },
+                    onLoadMore = viewModel::loadMoreTimeline,
                 )
             }
         }
@@ -243,13 +291,25 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
         visible = state.quickAdd.visible,
         mode = state.quickAdd.mode,
         modules = state.preferences.modules,
+        allowWeight = state.preferences.displayPolicy.shows(
+            app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+        ),
         recent = recentItems(state),
         note = state.quickAdd.note,
         waterMl = state.quickAdd.waterMl,
         weight = state.quickAdd.weight,
         whenDate = state.quickAdd.whenDate,
         whenHour = state.quickAdd.whenHour,
-        saving = false,
+        saving = state.quickAdd.saving,
+        canSave = state.quickAdd.canSave,
+        invalid = state.quickAdd.invalid,
+        weightUnit = stringResource(
+            if (state.profile?.units == "imperial") {
+                UiR.string.unit_pounds
+            } else {
+                UiR.string.unit_kg
+            },
+        ),
         onDismiss = viewModel::closeQuickAdd,
         onSelect = viewModel::openQuickAdd,
         onBack = viewModel::quickAddBack,
@@ -266,10 +326,13 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
 @Composable
 private fun recentItems(state: AppState): List<QuickAddRecent> {
     val rows = state.timeline?.days?.flatMap { it.rows }.orEmpty()
+    val showWeight = state.preferences.displayPolicy.shows(
+        app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+    )
     return rows
         .filter {
             it.kind == app.openhealth.ui.screens.timeline.TimelineKind.WATER ||
-                it.kind == app.openhealth.ui.screens.timeline.TimelineKind.WEIGHT
+                (showWeight && it.kind == app.openhealth.ui.screens.timeline.TimelineKind.WEIGHT)
         }
         .take(RECENT_LIMIT)
         .map { row ->
@@ -293,11 +356,12 @@ private fun RootFrame(
     onSelectTab: (Int) -> Unit,
     onQuickAdd: () -> Unit,
     onSettings: () -> Unit = { nav.navigate(SettingsRoute) },
+    onDateClick: () -> Unit = { nav.navigate(TimelineRoute) },
     content: @Composable () -> Unit,
 ) {
     OhRootShell(
-        appName = "openHealth",
-        dateLabel = dateLabel(date),
+        appName = stringResource(R.string.app_name),
+        dateLabel = app.openhealth.ui.screens.common.mediumDate(date),
         quickAddLabel = stringResource(UiR.string.quick_title),
         settingsLabel = stringResource(UiR.string.settings_title),
         tabs = tabs(),
@@ -305,6 +369,7 @@ private fun RootFrame(
         onSelect = onSelectTab,
         onQuickAdd = onQuickAdd,
         onSettings = onSettings,
+        onDateClick = onDateClick,
     ) {
         content()
     }
@@ -318,10 +383,6 @@ private fun tabs(): List<OhTabItem> = listOf(
     OhTabItem(stringResource(UiR.string.nav_nutrition), OhIcons.nutrition),
     OhTabItem(stringResource(UiR.string.nav_stats), OhIcons.stats),
 )
-
-private fun dateLabel(date: LocalDate): String =
-    java.time.LocalDate.of(date.year, date.month.ordinal + MONTH_OFFSET, date.dayOfMonth)
-        .format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", Locale.getDefault()))
 
 @Composable
 private fun Loading() {
@@ -376,7 +437,6 @@ private fun Context.findActivity(): Activity? {
     return null
 }
 
-private const val MONTH_OFFSET = 1
 private const val RECENT_LIMIT = 3
 
 private val TAB_ROUTES = listOf(

@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,9 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -24,8 +28,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import app.openhealth.core.preferences.HealthModule
@@ -45,9 +55,9 @@ import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
 import app.openhealth.ui.screens.common.OhPageHeader
-import app.openhealth.ui.screens.common.OhSectionTitle
 import app.openhealth.ui.theme.OhAccent
 import app.openhealth.ui.theme.OhTheme
+import app.openhealth.ui.theme.OhWeight
 
 private enum class SettingsSheet {
     NONE,
@@ -84,12 +94,13 @@ fun SettingsScreen(
     onOpenTrash: () -> Unit,
     onDeleteAllNotes: () -> Unit,
     onEmptyTrash: () -> Unit,
-    onAddDemo: () -> Unit,
+    onUndoRestore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var sheet by remember { mutableStateOf(SettingsSheet.NONE) }
     var confirm by remember { mutableStateOf(Confirm.NONE) }
     var passphrase by remember { mutableStateOf(Passphrase.NONE) }
+    var confirmRestore by remember { mutableStateOf<CharArray?>(null) }
     var exportUri by remember { mutableStateOf<Uri?>(null) }
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
     val createDocument = rememberLauncherForActivityResult(
@@ -120,7 +131,6 @@ fun SettingsScreen(
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             state.message?.let { MessageLine(it) }
             OhCardProfile(state = state, onClick = { sheet = SettingsSheet.PROFILE })
-            OhSectionTitle(stringResource(R.string.settings_group_app))
             OhInsetGroup {
                 GroupRow(
                     title = stringResource(R.string.settings_modules),
@@ -146,11 +156,14 @@ fun SettingsScreen(
                     onClick = { sheet = SettingsSheet.DATA },
                 )
             }
-            OhSectionTitle(stringResource(R.string.settings_group_preferences))
             OhInsetGroup {
                 GroupRow(
                     title = stringResource(R.string.settings_appearance),
-                    detail = themeLabel(state.theme) + " · " + state.accent.label(),
+                    detail = stringResource(
+                        R.string.settings_appearance_detail,
+                        themeLabel(state.theme),
+                        state.accent.label(),
+                    ),
                     icon = OhIcons.info,
                     onClick = { sheet = SettingsSheet.APPEARANCE },
                 )
@@ -228,7 +241,7 @@ fun SettingsScreen(
             sheet = SettingsSheet.NONE
             openDocument.launch(arrayOf("application/octet-stream", "*/*"))
         },
-        onAddDemo = onAddDemo,
+        onUndoRestore = onUndoRestore,
     )
     AppearanceSheet(
         visible = sheet == SettingsSheet.APPEARANCE,
@@ -236,12 +249,12 @@ fun SettingsScreen(
         onDismiss = { sheet = SettingsSheet.NONE },
         onTheme = onTheme,
         onAccent = onAccent,
+        onWeightNeutral = onWeightNeutral,
     )
     PrivacySheet(
         visible = sheet == SettingsSheet.PRIVACY,
         state = state,
         onDismiss = { sheet = SettingsSheet.NONE },
-        onWeightNeutral = onWeightNeutral,
         onAppLock = onAppLock,
     )
     AboutSheet(
@@ -255,12 +268,30 @@ fun SettingsScreen(
         onSubmit = { secret ->
             when (passphrase) {
                 Passphrase.EXPORT -> exportUri?.let { onExport(it, secret) }
-                Passphrase.RESTORE -> restoreUri?.let { onRestore(it, secret) }
+                Passphrase.RESTORE -> if (restoreUri != null) confirmRestore = secret
                 Passphrase.NONE -> Unit
             }
-            exportUri = null
-            restoreUri = null
+            if (passphrase == Passphrase.EXPORT) exportUri = null
             passphrase = Passphrase.NONE
+        },
+    )
+    OhDialog(
+        visible = confirmRestore != null,
+        onDismiss = { confirmRestore = null },
+        title = stringResource(R.string.settings_restore_confirm_title),
+        message = stringResource(R.string.settings_restore_confirm_message),
+        primaryLabel = stringResource(R.string.settings_restore_confirm_action),
+        destructive = false,
+        onPrimary = {
+            val secret = confirmRestore
+            confirmRestore = null
+            restoreUri?.let { uri -> secret?.let { onRestore(uri, it) } }
+            restoreUri = null
+        },
+        cancelLabel = stringResource(R.string.settings_cancel),
+        onCancel = {
+            confirmRestore = null
+            restoreUri = null
         },
     )
     OhDialog(
@@ -269,6 +300,7 @@ fun SettingsScreen(
         title = stringResource(R.string.settings_delete_notes_title),
         message = stringResource(R.string.settings_delete_notes_message),
         primaryLabel = stringResource(R.string.settings_delete_notes),
+        destructive = true,
         onPrimary = {
             confirm = Confirm.NONE
             onDeleteAllNotes()
@@ -282,6 +314,7 @@ fun SettingsScreen(
         title = stringResource(R.string.settings_empty_trash_title),
         message = stringResource(R.string.settings_empty_trash_message),
         primaryLabel = stringResource(R.string.settings_empty_trash),
+        destructive = true,
         onPrimary = {
             confirm = Confirm.NONE
             onEmptyTrash()
@@ -293,29 +326,54 @@ fun SettingsScreen(
 
 @Composable
 private fun MessageLine(message: SettingsMessage) {
-    Text(
-        text = stringResource(
-            when (message) {
-                SettingsMessage.EXPORT_SAVED -> R.string.settings_export_saved
-                SettingsMessage.EXPORT_FAILED -> R.string.settings_export_failed
-                SettingsMessage.RESTORE_DONE -> R.string.settings_restore_done
-                SettingsMessage.RESTORE_FAILED -> R.string.settings_restore_failed
-                SettingsMessage.WRONG_PASSPHRASE -> R.string.settings_wrong_passphrase
-                SettingsMessage.PASSWORDS_DIFFER -> R.string.settings_passwords_differ
-                SettingsMessage.LOCK_UNAVAILABLE -> R.string.settings_lock_unavailable
-                SettingsMessage.DEMO_ADDED -> R.string.settings_demo_added
-                SettingsMessage.DEMO_FAILED -> R.string.settings_demo_failed
-                SettingsMessage.NOTES_DELETED -> R.string.settings_notes_deleted
-                SettingsMessage.TRASH_EMPTIED -> R.string.settings_trash_emptied
-                SettingsMessage.PROFILE_SAVED -> R.string.settings_profile_saved
-                SettingsMessage.PROFILE_INVALID -> R.string.settings_profile_invalid
-            },
-        ),
-        style = OhTheme.type.footnote,
-        color = OhTheme.colors.accInk,
+    val error = message in ERROR_MESSAGES
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = OhTheme.space.s3),
-    )
+    ) {
+        if (error) {
+            app.openhealth.ui.icons.OhIcon(
+                icon = app.openhealth.ui.icons.OhIcons.warning,
+                contentDescription = null,
+                size = OhTheme.dims.glyphInline,
+                tint = OhTheme.colors.redInk,
+            )
+            Spacer(Modifier.width(OhTheme.space.s1))
+        }
+        Text(
+            text = stringResource(
+                when (message) {
+                    SettingsMessage.EXPORT_SAVED -> R.string.settings_export_saved
+                    SettingsMessage.EXPORT_FAILED -> R.string.settings_export_failed
+                    SettingsMessage.RESTORE_DONE -> R.string.settings_restore_done
+                    SettingsMessage.RESTORE_FAILED -> R.string.settings_restore_failed
+                    SettingsMessage.WRONG_PASSPHRASE -> R.string.settings_wrong_passphrase
+                    SettingsMessage.PASSWORDS_DIFFER -> R.string.settings_passwords_differ
+                    SettingsMessage.LOCK_UNAVAILABLE -> R.string.settings_lock_unavailable
+                    SettingsMessage.DEMO_ADDED -> R.string.settings_demo_added
+                    SettingsMessage.DEMO_FAILED -> R.string.settings_demo_failed
+                    SettingsMessage.NOTES_DELETED -> R.string.settings_notes_deleted
+                    SettingsMessage.TRASH_EMPTIED -> R.string.settings_trash_emptied
+                    SettingsMessage.PROFILE_SAVED -> R.string.settings_profile_saved
+                    SettingsMessage.PROFILE_INVALID -> R.string.settings_profile_invalid
+                },
+            ),
+            style = OhTheme.type.footnote,
+            color = if (error) OhTheme.colors.redInk else OhTheme.colors.accInk,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+    }
 }
+
+private val ERROR_MESSAGES = setOf(
+    SettingsMessage.EXPORT_FAILED,
+    SettingsMessage.RESTORE_FAILED,
+    SettingsMessage.WRONG_PASSPHRASE,
+    SettingsMessage.PASSWORDS_DIFFER,
+    SettingsMessage.LOCK_UNAVAILABLE,
+    SettingsMessage.DEMO_FAILED,
+    SettingsMessage.PROFILE_INVALID,
+)
 
 @Composable
 private fun OhCardProfile(state: SettingsState, onClick: () -> Unit) {
@@ -323,12 +381,33 @@ private fun OhCardProfile(state: SettingsState, onClick: () -> Unit) {
         OhRow(
             title = state.profileName,
             subtitle = state.profileSubtitle,
-            leadingIcon = OhModuleIcons.family,
+            leading = { ProfileAvatar(state.profileName) },
             showChevron = true,
             onClick = onClick,
         )
     }
     Spacer(Modifier.height(OhTheme.space.s7))
+}
+
+@Composable
+private fun ProfileAvatar(name: String) {
+    val initials = name.trim().split(' ').filter { it.isNotBlank() }
+        .take(2)
+        .joinToString("") { it.first().uppercase() }
+        .ifBlank { "?" }
+    Box(
+        modifier = Modifier
+            .size(OhTheme.dims.iconButton)
+            .clip(CircleShape)
+            .background(OhTheme.colors.surface2),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = initials,
+            style = OhTheme.type.body.copy(fontWeight = OhWeight.semibold),
+            color = OhTheme.colors.label,
+        )
+    }
 }
 
 @Composable
@@ -398,7 +477,6 @@ private fun ProfileSheet(
             value = birthDate,
             onValueChange = { birthDate = it },
             placeholder = stringResource(R.string.onb_birth_placeholder),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
@@ -407,30 +485,46 @@ private fun ProfileSheet(
             color = OhTheme.colors.label2,
         )
         OhChipStrip {
-            ProfileGoal.entries.forEach { option ->
-                OhChip(
-                    text = option.label(),
-                    selected = goal == option,
-                    onClick = { goal = option },
-                )
-            }
+            ProfileGoal.entries
+                .filter { it != ProfileGoal.LOSE_FAT || state.profileMayLoseWeight }
+                .forEach { option ->
+                    OhChip(
+                        text = option.label(),
+                        selected = goal == option,
+                        onClick = { goal = option },
+                    )
+                }
         }
         Spacer(Modifier.height(OhTheme.space.s5))
         Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3)) {
             OhTextField(
                 value = height,
                 onValueChange = { height = it },
-                placeholder = stringResource(R.string.unit_cm),
+                placeholder = stringResource(
+                    if (state.profileUnits == UnitSystem.IMPERIAL) {
+                        R.string.unit_inches
+                    } else {
+                        R.string.unit_cm
+                    },
+                ),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.weight(1f),
             )
-            OhTextField(
-                value = weight,
-                onValueChange = { weight = it },
-                placeholder = stringResource(R.string.unit_kg),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.weight(1f),
-            )
+            if (!state.weightNeutral) {
+                OhTextField(
+                    value = weight,
+                    onValueChange = { weight = it },
+                    placeholder = stringResource(
+                        if (state.profileUnits == UnitSystem.IMPERIAL) {
+                            R.string.unit_pounds
+                        } else {
+                            R.string.unit_kg
+                        },
+                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
         Spacer(Modifier.height(OhTheme.space.s5))
         OhSegmentedControl(
@@ -474,13 +568,15 @@ private fun ModulesSheet(
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         OhChipStrip {
-            ModulePreset.entries.forEach { preset ->
-                OhChip(
-                    text = preset.label(),
-                    selected = state.preset == preset,
-                    onClick = { onPreset(preset) },
-                )
-            }
+            ModulePreset.entries
+                .filterNot { it == ModulePreset.CUSTOM }
+                .forEach { preset ->
+                    OhChip(
+                        text = preset.label(),
+                        selected = state.preset == preset,
+                        onClick = { onPreset(preset) },
+                    )
+                }
         }
         Spacer(Modifier.height(OhTheme.space.s5))
         OhInsetGroup {
@@ -534,7 +630,7 @@ private fun DataSheet(
     onOpenTrash: () -> Unit,
     onExport: () -> Unit,
     onRestore: () -> Unit,
-    onAddDemo: () -> Unit,
+    onUndoRestore: () -> Unit,
 ) {
     if (!visible) return
     OhModalSheet(
@@ -554,7 +650,11 @@ private fun DataSheet(
             )
             OhRow(
                 title = stringResource(R.string.settings_trash),
-                subtitle = stringResource(R.string.settings_trash_count, state.counts.trash),
+                subtitle = pluralStringResource(
+                    R.plurals.trash_items,
+                    state.counts.trash.toInt(),
+                    state.counts.trash.toInt(),
+                ),
                 leadingIcon = OhIcons.delete,
                 showDivider = true,
                 showChevron = true,
@@ -579,15 +679,15 @@ private fun DataSheet(
                 onClick = onRestore,
             )
         }
-        if (state.counts.observations == 0L && state.counts.notes == 0L) {
+        if (state.hasRestoreSnapshot) {
             Spacer(Modifier.height(OhTheme.space.s5))
             OhInsetGroup {
                 OhRow(
-                    title = stringResource(R.string.settings_add_demo),
-                    subtitle = stringResource(R.string.settings_add_demo_body),
-                    leadingIcon = OhIcons.add,
+                    title = stringResource(R.string.settings_undo_restore),
+                    subtitle = stringResource(R.string.settings_undo_restore_body),
+                    leadingIcon = OhIcons.undo,
                     showChevron = true,
-                    onClick = onAddDemo,
+                    onClick = onUndoRestore,
                 )
             }
         }
@@ -612,6 +712,7 @@ private fun AppearanceSheet(
     onDismiss: () -> Unit,
     onTheme: (ThemeChoice) -> Unit,
     onAccent: (OhAccent) -> Unit,
+    onWeightNeutral: (Boolean) -> Unit,
 ) {
     if (!visible) return
     OhModalSheet(
@@ -664,6 +765,20 @@ private fun AppearanceSheet(
                 )
             }
         }
+        Spacer(Modifier.height(OhTheme.space.s7))
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.settings_weight_neutral),
+                subtitle = stringResource(R.string.settings_weight_neutral_body),
+                trailing = {
+                    OhSwitch(
+                        checked = state.weightNeutral,
+                        onCheckedChange = onWeightNeutral,
+                        contentDescription = stringResource(R.string.settings_weight_neutral),
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -672,7 +787,6 @@ private fun PrivacySheet(
     visible: Boolean,
     state: SettingsState,
     onDismiss: () -> Unit,
-    onWeightNeutral: (Boolean) -> Unit,
     onAppLock: (Boolean) -> Unit,
 ) {
     if (!visible) return
@@ -698,18 +812,6 @@ private fun PrivacySheet(
                         enabled = state.appLockAvailable,
                         onCheckedChange = onAppLock,
                         contentDescription = stringResource(R.string.settings_app_lock),
-                    )
-                },
-            )
-            OhRow(
-                title = stringResource(R.string.settings_weight_neutral),
-                subtitle = stringResource(R.string.settings_weight_neutral_body),
-                showDivider = true,
-                trailing = {
-                    OhSwitch(
-                        checked = state.weightNeutral,
-                        onCheckedChange = onWeightNeutral,
-                        contentDescription = stringResource(R.string.settings_weight_neutral),
                     )
                 },
             )
@@ -877,6 +979,7 @@ private fun ModulePreset.label(): String = stringResource(
         ModulePreset.JUST_TRAINING -> R.string.preset_training
         ModulePreset.TRAINING_AND_BODY -> R.string.preset_training_body
         ModulePreset.EVERYTHING -> R.string.preset_everything
+        ModulePreset.CUSTOM -> R.string.preset_custom
     },
 )
 

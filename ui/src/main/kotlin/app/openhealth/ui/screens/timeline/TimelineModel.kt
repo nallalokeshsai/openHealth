@@ -12,6 +12,7 @@ enum class TimelineKind {
     VITAL,
     MEAL,
     NUTRITION,
+    ENTRY,
     SESSION,
     OBSERVATION,
     OTHER,
@@ -25,6 +26,10 @@ data class RowProvenance(
     val method: String?,
     val device: String?,
     val edited: Boolean,
+    val localDay: String = "",
+    val zoneId: String = "",
+    val quality: String? = null,
+    val rawRecord: Boolean = false,
 )
 
 data class TimelineRowModel(
@@ -35,14 +40,18 @@ data class TimelineRowModel(
     val valueText: String?,
     val provenance: RowProvenance,
     val deletable: Boolean,
+    val sensitive: Boolean = false,
+    val excludable: Boolean = false,
+    val imported: Boolean = false,
 )
 
 data class TimelineDayModel(val date: LocalDate, val rows: List<TimelineRowModel>)
 
-enum class TimelineFilter { ALL, NOTES, BODY, NUTRITION }
+enum class TimelineFilter { ALL, NOTES, BODY, NUTRITION, MANUAL, IMPORTED }
 
 data class TimelineModel(
     val days: List<TimelineDayModel>,
     val filter: TimelineFilter,
     val total: Int,
+    val hasMore: Boolean = false,
 )

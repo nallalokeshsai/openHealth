@@ -23,7 +23,9 @@ import app.openhealth.ui.R
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonSize
 import app.openhealth.ui.components.OhButtonVariant
+import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhDialog
+import app.openhealth.ui.components.OhIconButton
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.icons.OhIcons
@@ -56,16 +58,25 @@ fun TrashScreen(
         OhPageHeader(title = stringResource(R.string.settings_trash), onBack = onBack)
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             if (items.isEmpty()) {
-                OhEmptyState(
-                    title = stringResource(R.string.trash_empty_title),
-                    body = stringResource(R.string.trash_empty_body),
-                )
+                OhCard {
+                    OhEmptyState(
+                        title = stringResource(R.string.trash_empty_title),
+                        body = stringResource(R.string.trash_empty_body),
+                        glyph = OhIcons.delete,
+                        actionLabel = stringResource(R.string.trash_empty_action),
+                        onAction = onBack,
+                    )
+                }
             } else {
                 OhInsetGroup {
                     items.forEachIndexed { index, item ->
                         OhRow(
                             title = stringResource(item.kind.labelRes()),
-                            subtitle = item.detail + " · " + item.deletedLabel,
+                            subtitle = stringResource(
+                                R.string.trash_row_subtitle,
+                                item.detail,
+                                item.deletedLabel,
+                            ),
                             showDivider = index > 0,
                             trailing = {
                                 OhButton(
@@ -74,20 +85,15 @@ fun TrashScreen(
                                     variant = OhButtonVariant.Ghost,
                                     size = OhButtonSize.ExtraSmall,
                                 )
+                                OhIconButton(
+                                    icon = OhIcons.delete,
+                                    contentDescription = stringResource(R.string.trash_purge_title),
+                                    onClick = { purging = item },
+                                    tint = OhTheme.colors.redInk,
+                                )
                             },
                         )
                     }
-                }
-                Spacer(Modifier.height(OhTheme.space.s5))
-                OhInsetGroup {
-                    OhRow(
-                        title = stringResource(R.string.trash_purge_title),
-                        subtitle = stringResource(R.string.trash_purge_body),
-                        leadingIcon = OhIcons.delete,
-                        destructive = true,
-                        showChevron = true,
-                        onClick = { purging = items.first() },
-                    )
                 }
             }
             Spacer(Modifier.height(OhTheme.space.s8))
@@ -99,6 +105,7 @@ fun TrashScreen(
         title = stringResource(R.string.trash_purge_title),
         message = stringResource(R.string.trash_purge_message),
         primaryLabel = stringResource(R.string.trash_purge_action),
+        destructive = true,
         onPrimary = {
             purging?.let(onPurge)
             purging = null

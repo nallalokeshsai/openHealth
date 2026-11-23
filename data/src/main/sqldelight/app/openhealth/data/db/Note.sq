@@ -39,6 +39,9 @@ SELECT * FROM note WHERE local_date = :localDate ORDER BY happened_at DESC, id;
 latestNotes:
 SELECT * FROM note ORDER BY happened_at DESC, id LIMIT :limit;
 
+allNotes:
+SELECT * FROM note ORDER BY happened_at DESC, id;
+
 countNotes:
 SELECT count(*) FROM note;
 

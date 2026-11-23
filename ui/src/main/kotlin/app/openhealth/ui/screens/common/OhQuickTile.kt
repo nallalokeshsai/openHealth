@@ -1,7 +1,6 @@
 package app.openhealth.ui.screens.common
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -17,10 +16,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import app.openhealth.ui.R
+import app.openhealth.ui.components.ohClickable
+import app.openhealth.ui.components.ohPressScale
+import app.openhealth.ui.components.rememberInteraction
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
@@ -38,14 +38,15 @@ import app.openhealth.ui.theme.OhWeight
 fun OhQuickTile(action: QuickAction, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = OhTheme.colors
     val label = stringResource(quickLabelRes(action))
+    val interaction = rememberInteraction()
     Column(
         modifier = modifier
             .heightIn(min = OhTheme.dims.quickTile)
             .clip(RoundedCornerShape(OhTheme.radius.card))
             .background(colors.surface)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(OhTheme.space.s5)
-            .semantics { contentDescription = label },
+            .ohPressScale(interaction, OhTheme.motion.pressScale)
+            .ohClickable(interaction, role = Role.Button, onClick = onClick)
+            .padding(OhTheme.space.s5),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
