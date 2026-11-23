@@ -57,6 +57,7 @@ import java.util.Locale
 import kotlin.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -159,6 +160,11 @@ class AppViewModel(
 
     fun refresh() {
         viewModelScope.launch { rebuild() }
+    }
+
+    /** Stops the state holder's coroutines; tests call this before closing the store. */
+    fun stop() {
+        viewModelScope.cancel()
     }
 
     private suspend fun rebuild() = withContext(Dispatchers.IO) {
@@ -282,6 +288,7 @@ class AppViewModel(
         }
         val next = when (current.step) {
             OnboardingStep.TierTwoIntro -> OnboardingStep.TierThreeIntro
+            OnboardingStep.TierThreeIntro -> OnboardingStep.Finish
             else -> nextStep(current.step, current.answers)
         }
         _state.update {

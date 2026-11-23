@@ -2,7 +2,10 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-23 (second edit) — `fat` re-valued from the anatomical
+**Last revision:** 2026-11-23 (third edit) — the object set gains a water droplet
+(§10.2), the only glyph quick add needed and the core set did not name; it is a
+geometric icon on the same 24 dp grid, no colour or size token changed.
+Previous: 2026-11-23 (second edit) — `fat` re-valued from the anatomical
 reference to `#F2C230` in dark and its brightest 3:1 sibling `#A87C00` in light (§2.5,
 §12.5, Appendix A).
 Previous: 2026-11-23 — B1 corrections, no new token: the chip's text is the
@@ -1343,7 +1346,9 @@ Actions: add, check, close, chevron-left/right/down, search, filter, scan
 export, lock, cloud-off, refresh, info, warning, external-link.
 
 Objects: barbell, dumbbell, kettlebell, plate, machine, band, mat, shoe, bike,
-route, scale, cuff, glucose drop, pill, lab flask, file, watch, phone.
+route, scale, cuff, glucose drop, water drop, pill, lab flask, file, watch, phone.
+The water drop was added 2026-11-23 for the global quick add (B3); it is a geometric
+droplet on the same grid and carries the same stroke rule as the rest of the set.
 
 ### 10.3 Glyph keys for routines
 

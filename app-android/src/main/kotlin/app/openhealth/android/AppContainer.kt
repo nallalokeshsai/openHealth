@@ -29,18 +29,33 @@ import kotlinx.datetime.toLocalDateTime
  *
  * Constructed by Koin in [OpenHealthApp]; nothing here performs network I/O.
  */
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+    documentStore: app.openhealth.android.documents.DocumentStore? = null,
+) {
     val context: Context = context.applicationContext
     private val appContext = this.context
     private val vault = AndroidSecretVault(appContext)
-    private val opened = AndroidDatabaseFactory(appContext, vault).open()
+    private val opened = lazy { AndroidDatabaseFactory(appContext, vault).open() }
 
-    val store: LocalStore = LocalStore(opened.driver, opened.db)
+    /**
+     * Opening SQLCipher and running the integrity check is local work, but it is not
+     * free: it happens on the first access, on an IO thread, after the first frame, so
+     * the splash and the cold-start budget are not held hostage by the database.
+     */
+    private val storeLazy = lazy {
+        val local = LocalStore(opened.value.driver, opened.value.db)
+        ensureManualSource(local)
+        local
+    }
+    val store: LocalStore get() = storeLazy.value
     val clock: ClockSeam = SystemClock
     val ids: IdGenerator = RandomIdGenerator()
-    val preferences = PreferencesStore(store.settings, store.profile)
-    val export = ExportService(store.driver, store.db, Argon2ExportCipher(), clock)
-    val documents = AndroidDocumentStore(appContext)
+    val preferences: PreferencesStore by lazy { PreferencesStore(store.settings, store.profile) }
+    val export: ExportService by lazy {
+        ExportService(store.driver, store.db, Argon2ExportCipher(), clock)
+    }
+    val documents = documentStore ?: AndroidDocumentStore(appContext)
     val zone: TimeZone = TimeZone.currentSystemDefault()
     val today: LocalDate get() = kotlin.time.Clock.System.now()
         .toLocalDateTime(zone).date
@@ -49,17 +64,13 @@ class AppContainer(context: Context) {
         appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName
     }.getOrNull().orEmpty()
 
-    init {
-        ensureManualSource()
-    }
-
     /**
      * The one source a manual entry names. It is written only when absent: re-upserting
      * it on every launch would rebuild every rollup through the source invalidator.
      */
-    private fun ensureManualSource() {
-        if (store.sources.byId(MANUAL_SOURCE) != null) return
-        store.sources.upsert(
+    private fun ensureManualSource(local: LocalStore) {
+        if (local.sources.byId(MANUAL_SOURCE) != null) return
+        local.sources.upsert(
             Source(
                 id = MANUAL_SOURCE,
                 kind = SourceKind.MANUAL,
@@ -96,7 +107,7 @@ class AppContainer(context: Context) {
     }
 
     fun close() {
-        store.close()
+        if (storeLazy.isInitialized()) store.close()
     }
 
     companion object {

@@ -58,8 +58,8 @@ import kotlinx.datetime.toLocalDateTime
  * only place that knows about both the state holder and the navigation graph.
  */
 @Composable
-fun OpenHealthRoot(container: AppContainer) {
-    val viewModel: AppViewModel = viewModel(factory = AppViewModelFactory(container))
+fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
+    val viewModel: AppViewModel = injected ?: viewModel(factory = AppViewModelFactory(container))
     val state by viewModel.state.collectAsState()
     val dark = when (state.preferences.theme) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
