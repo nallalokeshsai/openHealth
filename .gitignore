@@ -10,11 +10,26 @@ coverage/
 .next/
 out/
 
-# Local health data and secrets: never commit these
-data/
+# Gradle and Android local state
+.gradle/
+.kotlin/
+captures/
+*.iml
+
+# Signing material never enters the repository (created by the owner in B10)
+*.jks
+*.keystore
+keystore.properties
+
+# Local health data, machine paths and secrets: never commit these.
+# The `data/` directory is the storage module (Tech-Stack.md §13) and is tracked;
+# local exports and generated corpora live under exports/ or build/ instead.
+exports/
+local-data/
 .env
 .env.*
 !.env.example
+local.properties
 *.log
 
 # Local agent tooling (OpenCode command and permissions)

@@ -24,7 +24,7 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 | `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
 | `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
 | `docs/adr/` | 0002 · 2026-11-22 | Dated closed decisions. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 pinned versions is written in B0 | **Decision record.** |
-| `.opencode/commands/build-phase.md`, `opencode.json` | 2026-11-22 | The `/build-phase n or next` OpenCode command that runs a phase from `prompts.md`, and the permission policy (no push, no blind `git add -A`) | **Launcher.** Never overrides `prompts.md`. |
+| `.opencode/commands/build-phase.md`, `opencode.json` | 2026-11-23 | The `/build-phase n or next` OpenCode command that runs a phase from `prompts.md`, verifies the whole build, fixes what it finds, then pushes the phase branch, opens its pull request, drives CI green and merges it; and the permission policy (no blind `git add -A`, no force-push, no direct push to `main`, no protection bypass) | **Launcher.** Overrides `prompts.md` only on the authorised ship at the phase exit, which `prompts.md` now records too. |
 | `docs/build-log.md` | created in B0 | What each phase did, ran and left open | **Memory between sessions.** |
 | `COMPOSE-GUIDE.md` | 0.1 · 2026-11-21 | Compose snippets, a token-file sketch, one screen template, a file tree | **Patterns only.** Not authoritative on values or structure; see conflicts. |
 
@@ -162,6 +162,20 @@ Get-ChildItem references -Directory | Select-Object -ExpandProperty Name
 Select-String -Path *.md -Pattern 'WIREFRAMES|BUILD-PLAN'
 ```
 
+### Test device
+
+The owner tests on a physical phone over USB debugging, not an emulator, and its identity — serial, model, OS build, anything `adb` prints — must not enter this public repository. The machine-local values live in `.env.local` at the repository root, which the existing `.env.*` rule in `.gitignore` keeps ignored; source it before any `adb` or Gradle call so both target the phone:
+
+```sh
+set -a; . ./.env.local; set +a   # ANDROID_SERIAL for this machine only
+adb devices -l
+./gradlew :app-android:installDebug
+adb -s "$ANDROID_SERIAL" shell monkey -p app.openhealth -c android.intent.category.LAUNCHER 1
+adb -s "$ANDROID_SERIAL" logcat -s AndroidRuntime:E
+```
+
+When `adb devices -l` lists the phone as `device`, install and test on it instead of starting an emulator. This answers B0's "emulator or my physical phone" question: record "physical phone" in `docs/build-log.md` and do not ask again. If it is `unauthorized` or absent, ask the owner to unlock and accept the prompt; do not silently fall back to an emulator. Never write device output into the tree — no serial, model, IMEI, `adb devices` dump, raw `logcat` or screenshot carrying a status bar or notification — and never commit `.env.local`. Two exits need more than the phone: B12's sync test needs a second target (the phone plus one emulator is fine), and B14's macrobenchmark numbers come from the phone and are reported as real-hardware; an emulator run is the fallback and is flagged as not the reference device class.
+
 `references/` is ~5 GB and gitignored except `README.md` and `MANIFEST.md`. **Never `git add -A` from the repo root without checking `git status` first**, and never commit anything under `references/`. The working tree may hold deliberate deletions of superseded docs; do not restore them with `git checkout .`.
 
 ## Reference library
@@ -196,6 +210,10 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: none (no code yet; next is B0).
-- Build: not started.
+- Last completed phase: **B0 Foundation** (2026-11-23); next is **B1 Design system**.
+- Build: green. `./gradlew check` and `./gradlew :app-android:assembleDebug` pass on
+  `build/b0-foundation`; the debug app installs and launches on the owner's physical
+  phone. Six modules exist (`:core :data :sync :integrations :ui :app-android`) with
+  ktlint, Detekt, `checkPortability` and `checkLicences` wired into `check`. Versions
+  are pinned in `docs/adr/0003-pinned-versions.md`; no feature code has been written.
 - Open issues: see `docs/build-log.md`.
