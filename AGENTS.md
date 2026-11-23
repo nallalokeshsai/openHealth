@@ -210,6 +210,10 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: none (no code yet; next is B0).
-- Build: not started.
+- Last completed phase: **B0 Foundation** (2026-11-23); next is **B1 Design system**.
+- Build: green. `./gradlew check` and `./gradlew :app-android:assembleDebug` pass on
+  `build/b0-foundation`; the debug app installs and launches on the owner's physical
+  phone. Six modules exist (`:core :data :sync :integrations :ui :app-android`) with
+  ktlint, Detekt, `checkPortability` and `checkLicences` wired into `check`. Versions
+  are pinned in `docs/adr/0003-pinned-versions.md`; no feature code has been written.
 - Open issues: see `docs/build-log.md`.

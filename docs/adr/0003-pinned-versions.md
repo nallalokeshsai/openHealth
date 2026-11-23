@@ -18,6 +18,7 @@ live in `gradle/libs.versions.toml`; this file explains them.
 | Compose compiler plugin | 2.4.21 | ships with Kotlin | Must equal KGP. |
 | Android SDK | `compileSdk` 37 (minor 2), `targetSdk` 37, `minSdk` 28 | platform `android-37.2` installed; build-tools 36.0.0 | `minSdk 28` is set by Health Connect (`Tech-Stack.md` §8); 37.2 is the installed stable platform and the one the owner's phone runs. |
 | SQLDelight | 2.4.1 | 2.4.1 (Maven Central) | Latest 2.x. |
+| AndroidX core / activity / lifecycle / navigation | 1.19.1 / 1.13.0 / 2.11.1 / 2.10.2 | the same, verified on Google Maven on 2026-11-23 | Latest stable of each; only activity + core are used by B0, the rest are pinned for B1/B3 to save a later bump. |
 | Koin | 4.2.2 | 4.2.2 stable (4.3.0-Beta1 excluded) | Latest stable 4.x. |
 | Ktor | 3.6.1 | 3.6.1 (Maven Central) | Latest 3.x; used from B13. |
 | kotlinx-coroutines | 1.11.0 | 1.11.0 | Latest stable. |
@@ -45,7 +46,11 @@ that matches the Kotlin line and record it here.
   module builds. The plugin is wired into `:data` in B2 with the real schema.
 - **Guards.** `checkPortability` fails on `import android.os.Bundle` in `:core`;
   `checkLicences` fails when the LGPL-2.1 `org.hibernate.orm:hibernate-core` is added
-  to a client module. Both were proved green after removal in B0.
+  to a client module, whether as an `implementation` dependency of an Android library
+  or a `compileOnly` dependency of the app. Both were proved green after removal in B0.
+- **Licence gate scope.** `checkLicences` inspects every `*RuntimeClasspath` and
+  `*CompileClasspath` of a client module, including test configurations, and fails if
+  it finds no configuration at all, so it cannot pass by seeing nothing.
 - **Known warning.** Gradle 9.9.2 reports that AGP and the ktlint plugin use deprecated
   Gradle features that will break on Gradle 10. Recorded as an open issue in
   `docs/build-log.md`; do not upgrade Gradle to 10 before AGP supports it.

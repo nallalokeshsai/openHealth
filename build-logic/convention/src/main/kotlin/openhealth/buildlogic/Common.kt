@@ -40,12 +40,21 @@ internal fun Project.registerLicenceCheck() {
         .filter { it.isNotEmpty() && !it.startsWith("#") }
         .map { it.substringBefore('\t').substringBefore(' ') }
 
-    val runtimeConfigurations = configurations.filter {
-        it.name.endsWith("RuntimeClasspath") && !it.name.contains("Test")
+    // `matching` is a live view: Android modules create their runtime and compile
+    // configurations after this convention plugin is applied, so an eager filter would
+    // see none. Compile classpaths are included so a compileOnly GPL-family artifact
+    // cannot hide from the gate (Tech-Stack.md §11, §16).
+    val licenceConfigurations = configurations.matching {
+        it.name.endsWith("RuntimeClasspath") || it.name.endsWith("CompileClasspath")
     }
 
     val coordinates: Provider<List<String>> = provider {
-        runtimeConfigurations
+        val matched = licenceConfigurations.toList()
+        check(matched.isNotEmpty()) {
+            "checkLicences found no runtime classpath in ${path}: the licence gate would " +
+                "pass without inspecting anything. Add the module's runtime configuration."
+        }
+        matched
             .flatMap { configuration ->
                 configuration.incoming.resolutionResult.allComponents.mapNotNull { component ->
                     (component.id as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" }

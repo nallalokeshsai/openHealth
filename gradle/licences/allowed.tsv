@@ -30,3 +30,4 @@ io.ktor:*	Apache-2.0	Ktor client and server (Tech-Stack.md §6-7)
 com.squareup.okio:*	Apache-2.0	Ktor/Coil IO dependency
 com.squareup.okhttp3:*	Apache-2.0	Coil/network dependency
 org.jetbrains.kotlinx:atomicfu*	Apache-2.0	Coroutines dependency
+org.jspecify:*	Apache-2.0	Nullness annotations pulled in by AndroidX
