@@ -194,15 +194,17 @@ cannot drift (`BUILD-ROADMAP.md` §B1).
 3. **Gallery, screenshots, contrast** — in the same commit.
    A debug-only `GalleryActivity` (dark/light and 100 %/200 % switches) in
    `app-android/src/debug`; 26 Roborazzi tests each rendered in dark, light, 200 % text
-   and RTL (104 committed goldens); `OhContrastTest` (11 tests) computes every pair of
-   `DESIGN.md` §12.5 from the token values, compositing alpha over the surface it is read
-   on.
+   and RTL (104 committed goldens); `ComponentSemanticsTest` (8 tests) asserts the §14.5
+   accessibility items that can be measured — one node per row, a named 44 dp icon
+   button, five selectable tabs, checked state, no double-fired tap; `OhContrastTest`
+   (11 tests) computes every pair of `DESIGN.md` §12.5 from the token values, compositing
+   alpha over the surface it is read on.
 
 ### What was run, and its result
 
 | Command | Result |
 |---|---|
-| `./gradlew check` | **BUILD SUCCESSFUL**; 37 tests (26 screenshot × 4 variants, 11 contrast), lint, ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
+| `./gradlew check` | **BUILD SUCCESSFUL**; 45 tests (26 screenshot × 4 variants, 8 accessibility-semantics, 11 contrast), lint, ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
 | `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; debug APK. |
 | `./gradlew :ui:testDebugUnitTest` (verify mode, the default in `check`) | **BUILD SUCCESSFUL**; 104 goldens compared, none missing, none changed. |
 | `./gradlew :ui:testDebugUnitTest -Proborazzi.record` | **BUILD SUCCESSFUL**; recordings are byte-identical between runs (compared by re-running the verify pass). |
@@ -223,6 +225,7 @@ No device identity (serial, model, build) is recorded in this repository.
 | Screenshot tests pass | 26 Roborazzi tests × 4 variants = 104 goldens under `ui/src/test/screenshots/{dark,light,text200,rtl}`, verified by plain `check` (record mode off) | **pass** |
 | Contrast test passes | `OhContrastTest`, 11 tests over both themes and all nine presets: label-2, label-dim, every `acc-ink`, `on-acc`, `acc-2 ≥ 3`, the six text inks, streak/frost ≥ 3, the focus ring, `fat` on `bg`/`surface`/`surface-2`, and the recovery steps against Appendix A | **pass** |
 | A `Color(` literal or a raw `.dp` literal outside `ui/theme` fails a check | Guard proof 1 above, then green after removal | **pass** |
+| §14.5 items a component can carry | `ComponentSemanticsTest`, 8 tests: one node per row, a non-actionable row is not a button, named 44 dp icon button, a chip's 44 dp target, five selectable tabs with the active one selected, switch on/off state, one click per tap | **pass** |
 
 ### Regression over earlier phases
 

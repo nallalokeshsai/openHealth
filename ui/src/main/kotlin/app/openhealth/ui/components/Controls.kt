@@ -498,7 +498,7 @@ fun OhTextField(
                     color = if (error != null) colors.red else Color.Transparent,
                     shape = shape,
                 )
-                .padding(horizontal = dims.fieldPadH, vertical = OhTheme.space.s2)
+                .padding(horizontal = dims.fieldPadH)
                 .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled)
                 .semantics {
                     if (contentDescription != null) this.contentDescription = contentDescription

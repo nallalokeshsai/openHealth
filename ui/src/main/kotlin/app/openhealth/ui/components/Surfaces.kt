@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -19,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -26,6 +29,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import app.openhealth.ui.icons.OhIcon
+import app.openhealth.ui.theme.OhAlpha
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
 import app.openhealth.ui.theme.ltrFigures
@@ -162,10 +166,15 @@ fun OhRow(
     // A value in words moves under the title; a number with a short unit stays trailing (§5.3).
     val wordsValue = value != null && narrow && value.count { it.isLetter() } > SHORT_UNIT_LETTERS
     var row = modifier.fillMaxWidth()
+    if (!enabled) {
+        row = row.alpha(OhAlpha.disabledRow)
+    }
+    // The hairline sits between rows: above this one, never above the first.
     if (showDivider) {
         row = row.ohHairline(
             color = colors.sep,
             insetStart = if (leadingIcon != null) dims.rowIconInset else dims.rowHairInset,
+            atBottom = false,
         )
     }
     if (onClick != null) {
@@ -349,13 +358,16 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
             .background(colors.surface)
             .padding(horizontal = OhTheme.dims.cardPad, vertical = OhTheme.space.s5),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             figures.forEachIndexed { index, figure ->
                 if (index > 0) {
                     Box(
                         modifier = Modifier
+                            .fillMaxHeight()
                             .width(OhTheme.dims.hairline)
-                            .heightIn(min = OhTheme.space.s8)
                             .background(colors.sep),
                     )
                 }
