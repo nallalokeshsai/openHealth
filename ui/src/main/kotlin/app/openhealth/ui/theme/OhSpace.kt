@@ -101,6 +101,8 @@ data class OhDims(
     val cardGap: Dp = 12.dp,
     /** §5.2: the card header's glyph sits in a 29 dp optical box. */
     val glyph: Dp = 29.dp,
+    /** §10.1: the optical size of a glyph inside 13 sp text. */
+    val glyphInline: Dp = 14.dp,
 
     // §5.2, §5.8, §4.4
     val iconButton: Dp = 36.dp,
@@ -205,3 +207,13 @@ data class OhDims(
 
 /** Spacing and radius are single instances; geometry is one immutable record. */
 val ohDims: OhDims = OhDims()
+
+/**
+ * §5.16: a sheet is at most 90 % of the viewport minus the status inset. The arithmetic
+ * lives here so no component writes a raw `Dp(...)`.
+ */
+fun sheetMaxHeight(screenHeightDp: Int, statusInsetDp: Float, fraction: Float): Dp =
+    ((screenHeightDp - statusInsetDp) * fraction).dp
+
+/** §5.18: a toast is at most 88 % of the window width. */
+fun toastMaxWidth(screenWidthDp: Int, fraction: Float): Dp = (screenWidthDp * fraction).dp

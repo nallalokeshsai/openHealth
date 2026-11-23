@@ -2,10 +2,14 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-23 — B1 build clarifications, no new token: the chip's
-text is the `subhead` role (§5.9, the stated 14 sp is not one of the 11 roles in
-§3.2), `acc-2` is resolved for the eight non-brand presets (§2.6), and Appendix A's
-row padding is aligned with §5.3 (12/16, not 11/14).
+**Last revision:** 2026-11-23 — B1 corrections, no new token: the chip's text is the
+`subhead` role (§5.9, the stated 14 sp is not one of the 11 roles in §3.2); `acc-2` is
+resolved for the eight non-brand presets (§2.6); Appendix A's row padding matches §5.3
+(12/16, not 11/14); the `headline` of §4.4 is the §10.5 wordmark (`body` 17/600); the
+Danger and Tinted button labels use `label` ink because their tints measured below
+4.5:1 with `red-ink`/`acc-ink` (§5.7, §12.5); toast actions are 44 dp targets (§5.18,
+§4.5); and the timer bar's clock is 28/600 while the full-screen clock is 700 (§3.3,
+§5.19).
 Previous: 2026-11-22 — five-tab bar with a raised centre Train (§5.15,
 §13.1), global top bar (§4.4), `fat` and `recovery` data hues (§2.5, App. A),
 recovery ramp green → orange → red (§9.1), dynamic body model (§9.1.1).
@@ -438,7 +442,7 @@ Rules:
 | 400 | Body, subtitles, values in rows, most everything. |
 | 500 | Chips, small emphasis, a chosen filter. |
 | 600 | Titles, card headers, buttons, the display number. |
-| 700 | Page title, timer, the single strongest figure on a celebration card. |
+| 700 | Page title, the full-screen session timer, the single strongest figure on a celebration card. |
 
 No 800/900. No italic except the one line of a "why this number" explanation
 and the caption of a shared image. No uppercase labels; sentence case always
@@ -540,7 +544,7 @@ This is the section that makes the Compose build match the specification.
 Every root screen is composed from the same five parts, in this order:
 
 0. **Top bar (global, added 2026-11-22)** — pinned on every root: app name
-   (`headline`) and the current date (`caption`, `label-2`) at the leading end;
+   (`body` 17/600, the §10.5 wordmark) and the current date (`caption`, `label-2`) at the leading end;
    quick add (`+`) and settings (gear) as two 36 dp icon buttons at the trailing
    end. Settings opens the former More surface (profile, modules, devices, data,
    appearance, privacy). Hidden in a live session. `bg-el`, same blur and
@@ -673,11 +677,16 @@ lifetime total may sit underneath at full width. No boxes inside the card.
 |---|---|---|---|
 | Primary | `acc` | `on-acc` 17/600 | The one next action. |
 | Secondary | `surface-2` | `label` | Cancel, alternative. |
-| Tinted | `acc-soft` | `acc-ink` | A secondary action that belongs to the accent. |
-| Danger | `red` at 15 % | `red-ink` | Delete, discard. |
+| Tinted | `acc-soft` | `label` | A secondary action that belongs to the accent. |
+| Danger | `red` at 15 % | `label` | Delete, discard. |
 | Ghost / plain | none | `acc-ink` | "Choose another", "See all". |
 | Quiet | none | `label-2` | Cancel under a primary; never accent. |
 
+- **2026-11-23:** the Tinted and Danger fills keep their stated tints, but their
+  labels use `label` ink. Measured composited over `bg` and `surface`, `acc-ink` on
+  `acc-soft` is 4.19:1 for the default accent and `red-ink` on the 15 % Danger fill is
+  4.23:1 (dark) / 4.40:1 (light), all below the 4.5 of §11.1; `label` passes on both
+  and the fill carries the accent or the danger.
 - Height 50 dp, padding 12/16, radius 12 dp, full width unless `.sm`
   (35 dp, 8/12, radius 8) or `.xs` (28 dp).
 - Pressed: scale `.97` and 90 % opacity, on the same fill. The fill never
@@ -806,7 +815,8 @@ For one decision or one small result:
 
 - Floating 22 dp-radius pill, `surface-2` at 88 % with a 20 dp blur, 12/22
   padding, 15/500, max 88 % width, 96 dp above the bottom inset.
-- With an action (Undo): message + accent action + optional ×, 36 dp targets.
+- With an action (Undo): message + accent action + optional ×, 44 dp targets
+  (2026-11-23: the earlier 36 dp contradicted §4.5 and §11.1).
 - One toast at a time; a new message replaces the old. Visible 4 s for a plain
   message, 6 s with Undo. Announced to screen readers.
 - **The toast is not the undo.** A destructive action also leaves a tombstone
@@ -1508,6 +1518,9 @@ The review gate (§14.5) checks, in both themes:
 - `on-acc` ≥ 4.5 on every preset's `acc` (all nine carry dark ink). `acc-2` is
   a graphic shade and needs 3:1, never text.
 - The focus ring ≥ 3 against its surrounding fill.
+- Text on a tinted fill is measured with the fill composited over an opaque base:
+  `label` on `acc-soft`, on the 15 % Danger fill, on the toast and on the timer bar;
+  `acc-ink` on the work timer bar; `label-2` on the bar (2026-11-23).
 - `fat` (2026-11-22) as a graphic ≥ 3 on `bg`, `surface` and `surface-2`. Measured:
   dark `#EBD27A` 14.0 on `bg`, 11.4 on `surface`, 9.3 on `surface-2`; light
   `#9A6F00` 4.5 on `surface`, 4.1 on `bg`, 3.8 on `surface-2`.

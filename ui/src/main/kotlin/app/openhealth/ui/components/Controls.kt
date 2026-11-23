@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -33,9 +34,12 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,14 +49,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -63,8 +72,11 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
+import app.openhealth.ui.R
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.theme.OhAlpha
@@ -95,52 +107,94 @@ fun OhSegmentedControl(
     }
     // At the largest text sizes the segments scroll instead of clipping a label.
     val scrollable = LocalDensity.current.fontScale >= dims.largeFontScale
-    Row(
+    Box(
         modifier = modifier
-            .clip(shape)
-            .background(colors.surface3)
-            .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
-            .padding(dims.segmentPad)
-            .selectableGroup(),
-        verticalAlignment = Alignment.CenterVertically,
+            .defaultMinSize(minHeight = dims.touchTarget)
+            .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+        contentAlignment = Alignment.Center,
     ) {
-        options.forEachIndexed { index, option ->
-            val selected = index == selectedIndex
-            val thumbShape = RoundedCornerShape(OhTheme.radius.sm)
-            Box(
-                modifier = Modifier
-                    .then(
-                        if (scrollable) Modifier.width(IntrinsicSize.Max) else Modifier.weight(1f),
-                    )
-                    .heightIn(min = dims.segmentHeight)
-                    .clip(thumbShape)
-                    .then(
-                        if (selected) {
-                            Modifier
-                                .background(colors.segmentThumb)
-                                .border(dims.hairline, colors.sep, thumbShape)
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .padding(horizontal = OhTheme.space.s2)
-                    .selectable(
-                        selected = selected,
-                        interactionSource = rememberInteraction(),
-                        indication = null,
-                        role = Role.Button,
-                        onClick = { onSelect(index) },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = option,
-                    style = type.subhead.copy(
-                        fontWeight = if (selected) OhWeight.semibold else OhWeight.regular,
-                    ),
-                    color = if (selected) colors.label else colors.label2,
-                    maxLines = 1,
-                )
+        // The painted track is 36 dp (32 + 2 dp padding); each segment's target is 44.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(dims.segmentHeight + dims.segmentPad * 2f)
+                .clip(shape)
+                .background(colors.surface3)
+                .align(Alignment.Center),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(dims.touchTarget)
+                .padding(horizontal = dims.segmentPad)
+                .selectableGroup(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            options.forEachIndexed { index, option ->
+                val selected = index == selectedIndex
+                val thumbShape = RoundedCornerShape(OhTheme.radius.sm)
+                Box(
+                    modifier = Modifier
+                        .then(
+                            if (scrollable) {
+                                Modifier.width(
+                                    IntrinsicSize.Max,
+                                )
+                            } else {
+                                Modifier.weight(1f)
+                            },
+                        )
+                        .height(dims.touchTarget)
+                        .selectable(
+                            selected = selected,
+                            interactionSource = rememberInteraction(),
+                            indication = null,
+                            role = Role.Button,
+                            onClick = { onSelect(index) },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .height(dims.segmentHeight)
+                            .then(if (scrollable) Modifier else Modifier.fillMaxWidth())
+                            .clip(thumbShape)
+                            .then(
+                                if (selected) {
+                                    Modifier
+                                        .background(colors.segmentThumb)
+                                        .then(
+                                            if (colors.dark) {
+                                                Modifier
+                                            } else {
+                                                Modifier.border(
+                                                    dims.hairline,
+                                                    colors.sep,
+                                                    thumbShape,
+                                                )
+                                            },
+                                        )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(horizontal = OhTheme.space.s2),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = option,
+                            style = type.subhead.copy(
+                                fontWeight = if (selected) {
+                                    OhWeight.semibold
+                                } else {
+                                    OhWeight.regular
+                                },
+                            ),
+                            color = if (selected) colors.label else colors.label2,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
     }
@@ -168,7 +222,7 @@ fun OhSwitch(
         animationSpec = tween(motion.fastDuration(), easing = motion.ease),
         label = "switchTrack",
     )
-    val travel = dims.switchWidth - dims.switchKnob - OhTheme.space.s0 * 2f
+    val travel = dims.switchWidth - dims.switchKnob - OhTheme.space.s0
     val knobOffset by animateDpAsState(
         targetValue = if (checked) travel else OhTheme.space.s0,
         animationSpec = tween(motion.fastDuration(), easing = motion.ease),
@@ -180,7 +234,13 @@ fun OhSwitch(
         label = "switchStretch",
     )
     // The knob's hairline ring so it never vanishes on a very light accent (§2.6).
-    val ring = if (colors.dark) colors.knobRing else Color.Transparent
+    val ring = if (colors.acc.luminance() >
+        LIGHT_ACCENT_LUMINANCE
+    ) {
+        colors.knobRing
+    } else {
+        Color.Transparent
+    }
     Box(
         modifier = modifier
             .width(dims.switchWidth)
@@ -231,11 +291,17 @@ fun OhStepper(
     modifier: Modifier = Modifier,
     unit: String? = null,
     enabled: Boolean = true,
+    decreaseLabel: String = stringResource(R.string.oh_stepper_decrease),
+    increaseLabel: String = stringResource(R.string.oh_stepper_increase),
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
     val dims = OhTheme.dims
     val shape = RoundedCornerShape(OhTheme.radius.base)
+    var editing by remember { mutableStateOf(false) }
+    var draft by remember(value) { mutableStateOf(value) }
+    val focus = remember { FocusRequester() }
     Row(
         modifier = modifier
             .clip(shape)
@@ -245,30 +311,76 @@ fun OhStepper(
     ) {
         StepperCell(
             icon = OhIcons.remove,
-            description = "Decrease",
+            description = decreaseLabel,
             enabled = enabled,
             onStep = onDecrement,
         )
-        Row(
-            modifier = Modifier
-                .heightIn(min = dims.stepperHeight)
-                .padding(horizontal = OhTheme.space.s3),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = value,
-                style = type.body.copy(fontWeight = OhWeight.semibold).tabular().ltrFigures(),
-                color = colors.label,
-                maxLines = 1,
-            )
-            if (unit != null) {
-                Spacer(Modifier.width(OhTheme.space.s0))
-                Text(text = unit, style = type.footnote, color = colors.label2, maxLines = 1)
+        // The figure and its unit keep their order in every script (§3.4).
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier
+                    .heightIn(min = dims.stepperHeight)
+                    .padding(horizontal = OhTheme.space.s3)
+                    .then(
+                        if (onValueChange != null) {
+                            Modifier.ohClickable(rememberInteraction(), role = Role.Button) {
+                                if (enabled) {
+                                    draft = value
+                                    editing = true
+                                }
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (editing && onValueChange != null) {
+                    LaunchedEffect(Unit) { focus.requestFocus() }
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        textStyle = type.body.copy(
+                            fontWeight = OhWeight.semibold,
+                            color = colors.label,
+                        ).tabular(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                onValueChange(draft)
+                                editing = false
+                            },
+                        ),
+                        modifier = Modifier
+                            .width(dims.stepperHeight * 2)
+                            .focusRequester(focus),
+                    )
+                } else {
+                    Text(
+                        text = value,
+                        style = type.body
+                            .copy(fontWeight = OhWeight.semibold)
+                            .tabular()
+                            .ltrFigures(),
+                        color = colors.label,
+                        maxLines = 1,
+                    )
+                    if (unit != null) {
+                        Spacer(Modifier.width(OhTheme.space.s0))
+                        Text(
+                            text = unit,
+                            style = type.footnote,
+                            color = colors.label2,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
         StepperCell(
             icon = OhIcons.add,
-            description = "Increase",
+            description = increaseLabel,
             enabled = enabled,
             onStep = onIncrement,
         )
@@ -311,23 +423,26 @@ private fun StepperCell(
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    pressed = true
-                    currentStep()
-                    var interval = 400L
-                    while (true) {
-                        val released = withTimeoutOrNull(interval) {
-                            var event = awaitPointerEvent()
-                            while (event.changes.all { !it.pressed }) {
-                                return@withTimeoutOrNull true
-                            }
-                            false
-                        }
-                        if (released == true) break
+                    try {
+                        awaitFirstDown(requireUnconsumed = true)
+                        pressed = true
                         currentStep()
-                        interval = (interval * 3 / 4).coerceAtLeast(60L)
+                        var interval = 400L
+                        while (true) {
+                            val released = withTimeoutOrNull(interval) {
+                                var event = awaitPointerEvent()
+                                while (event.changes.all { !it.pressed }) {
+                                    return@withTimeoutOrNull true
+                                }
+                                false
+                            }
+                            if (released == true) break
+                            currentStep()
+                            interval = (interval * 3 / 4).coerceAtLeast(60L)
+                        }
+                    } finally {
+                        pressed = false
                     }
-                    pressed = false
                 }
             },
         contentAlignment = Alignment.Center,
@@ -358,8 +473,13 @@ fun OhSlider(
     val type = OhTheme.type
     val dims = OhTheme.dims
     var dragging by remember { mutableStateOf(false) }
+    require(valueRange.start < valueRange.endInclusive) {
+        "A slider needs a non-empty range (DESIGN.md §5.13)."
+    }
     val density = LocalDensity.current
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val knobPx = with(density) { dims.sliderKnob.toPx() }
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
     val fraction = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start))
         .coerceIn(0f, 1f)
     Column(modifier = modifier.fillMaxWidth()) {
@@ -373,11 +493,12 @@ fun OhSlider(
                     .pointerInput(enabled, valueRange) {
                         if (!enabled) return@pointerInput
                         val usable = (size.width - knobPx).coerceAtLeast(1f)
-                        val emit: (Float) -> Unit = { x ->
+                        val emit: (Float) -> Unit = { rawX ->
+                            val x = if (rtl) size.width - rawX else rawX
                             val f = ((x - knobPx / 2f) / usable).coerceIn(0f, 1f)
                             val raw =
                                 valueRange.start + f * (valueRange.endInclusive - valueRange.start)
-                            onValueChange(
+                            currentOnValueChange(
                                 if (valueRange.endInclusive <= 1f) {
                                     (raw * 100f).roundToInt() / 100f
                                 } else {
@@ -393,7 +514,10 @@ fun OhSlider(
                             while (pressed) {
                                 val change = awaitPointerEvent().changes.firstOrNull()
                                 pressed = change != null && change.pressed
-                                if (pressed) emit(change!!.position.x)
+                                if (pressed) {
+                                    emit(change!!.position.x)
+                                    change.consume()
+                                }
                             }
                             dragging = false
                         }
@@ -410,7 +534,12 @@ fun OhSlider(
                     },
             ) {
                 val trackY = size.height / 2f
-                val knobX = knobPx / 2f + (size.width - knobPx) * fraction
+                val filled = size.width * fraction
+                val knobX = if (layoutDirection == LayoutDirection.Rtl) {
+                    size.width - knobPx / 2f - (size.width - knobPx) * fraction
+                } else {
+                    knobPx / 2f + (size.width - knobPx) * fraction
+                }
                 drawLine(
                     color = colors.surface3,
                     start = Offset(0f, trackY),
@@ -419,8 +548,26 @@ fun OhSlider(
                 )
                 drawLine(
                     color = colors.acc,
-                    start = Offset(0f, trackY),
-                    end = Offset(size.width * fraction, trackY),
+                    start = Offset(
+                        if (layoutDirection ==
+                            LayoutDirection.Rtl
+                        ) {
+                            size.width
+                        } else {
+                            0f
+                        },
+                        trackY,
+                    ),
+                    end = Offset(
+                        if (layoutDirection ==
+                            LayoutDirection.Rtl
+                        ) {
+                            size.width - filled
+                        } else {
+                            filled
+                        },
+                        trackY,
+                    ),
                     strokeWidth = size.height,
                 )
                 drawCircle(
@@ -493,6 +640,7 @@ fun OhTextField(
                 .fillMaxWidth()
                 .ohFocusRing(focused, radius)
                 .heightIn(min = dims.fieldHeight)
+                .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled)
                 .clip(shape)
                 .background(colors.surface2)
                 .border(
@@ -500,8 +648,7 @@ fun OhTextField(
                     color = if (error != null) colors.red else Color.Transparent,
                     shape = shape,
                 )
-                .padding(horizontal = dims.fieldPadH)
-                .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled),
+                .padding(horizontal = dims.fieldPadH),
             contentAlignment = Alignment.CenterStart,
         ) {
             BasicTextField(
@@ -551,7 +698,7 @@ fun OhTextField(
                 OhIcon(
                     icon = OhIcons.warning,
                     contentDescription = null,
-                    size = OhTheme.space.s6,
+                    size = OhTheme.dims.glyphInline,
                     tint = colors.redInk,
                 )
                 Spacer(Modifier.width(OhTheme.space.s1))
@@ -575,9 +722,10 @@ fun OhSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search",
+    placeholder: String = stringResource(R.string.oh_search_placeholder),
     count: Int? = null,
     enabled: Boolean = true,
+    clearLabel: String = stringResource(R.string.oh_search_clear),
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
@@ -605,7 +753,7 @@ fun OhSearchField(
                     modifier = Modifier
                         .size(dims.touchTarget)
                         .ohClickable(clearInteraction, role = Role.Button) { onValueChange("") }
-                        .semantics { contentDescription = "Clear search" },
+                        .semantics { contentDescription = clearLabel },
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
@@ -636,3 +784,6 @@ fun OhSearchField(
         },
     )
 }
+
+/** Above this relative luminance the accent is light enough to need the knob ring. */
+private const val LIGHT_ACCENT_LUMINANCE = 0.5f

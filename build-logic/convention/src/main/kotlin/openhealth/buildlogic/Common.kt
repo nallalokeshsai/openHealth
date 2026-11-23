@@ -90,7 +90,15 @@ internal fun Project.registerDesignTokenCheck() {
         group = "verification"
         description = "Fails on a colour, .dp or .sp literal outside the theme package."
         sources.from(fileTree("src") { include("**/*.kt") })
-        allowedPrefixes.set(listOf("/ui/theme/"))
+        // The allowlist is module-relative, so a checkout path can never widen it.
+        modulePath.set(projectDir.invariantSeparatorsPath)
+        allowedPrefixes.set(
+            if (project.path == ":ui") {
+                listOf("src/main/kotlin/app/openhealth/ui/theme")
+            } else {
+                emptyList()
+            },
+        )
     }
     tasks.matching { it.name == "check" }.configureEach { dependsOn(checkDesignTokens) }
 }

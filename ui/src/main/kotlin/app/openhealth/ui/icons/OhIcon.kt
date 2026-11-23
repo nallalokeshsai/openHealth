@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.Dp
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.ohDims
+import app.openhealth.ui.theme.ohIconInk
 
 /**
  * One custom line set, drawn for openHealth (`DESIGN.md` §10).
@@ -26,14 +27,18 @@ import app.openhealth.ui.theme.ohDims
  * SF Symbols, nothing copied from openGym (`§10.1`, `§13.6`). Every icon is built
  * once and cached; it inherits the text role's colour through [OhIcon]'s tint.
  */
-internal fun ohIcon(name: String, block: ImageVector.Builder.() -> Unit): ImageVector =
-    ImageVector.Builder(
-        name = name,
-        defaultWidth = ohDims.iconBox,
-        defaultHeight = ohDims.iconBox,
-        viewportWidth = 24f,
-        viewportHeight = 24f,
-    ).apply(block).build()
+internal fun ohIcon(
+    name: String,
+    autoMirror: Boolean = false,
+    block: ImageVector.Builder.() -> Unit,
+): ImageVector = ImageVector.Builder(
+    name = name,
+    defaultWidth = ohDims.iconBox,
+    defaultHeight = ohDims.iconBox,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+    autoMirror = autoMirror,
+).apply(block).build()
 
 /** One stroked path in the 24 dp box. No icon in the set is filled. */
 internal fun ImageVector.Builder.stroke(
@@ -42,7 +47,7 @@ internal fun ImageVector.Builder.stroke(
 ) {
     path(
         fill = null,
-        stroke = SolidColor(Color.Black),
+        stroke = SolidColor(ohIconInk),
         strokeLineWidth = strokeWidth,
         strokeLineCap = StrokeCap.Round,
         strokeLineJoin = StrokeJoin.Round,
@@ -62,6 +67,7 @@ fun ImageVector.withStrokeWidth(width: Float): ImageVector {
         defaultHeight = defaultHeight,
         viewportWidth = viewportWidth,
         viewportHeight = viewportHeight,
+        autoMirror = autoMirror,
     )
 
     fun addNode(node: VectorNode) {

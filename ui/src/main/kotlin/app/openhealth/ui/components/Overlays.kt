@@ -2,6 +2,8 @@
 
 package app.openhealth.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -17,35 +19,47 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import app.openhealth.ui.R
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.theme.OhAlpha
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
 import app.openhealth.ui.theme.ltrFigures
+import app.openhealth.ui.theme.sheetMaxHeight
 import app.openhealth.ui.theme.tabular
+import app.openhealth.ui.theme.toastMaxWidth
 
 /**
  * §5.16 Sheet: `bg-el`, top radius 22, grabber 36 × 5 `label-4`, title 20/600, the
@@ -70,7 +84,10 @@ fun OhSheet(
     val type = OhTheme.type
     val dims = OhTheme.dims
     val screenHeight = LocalConfiguration.current.screenHeightDp
-    val maxHeight = Dp(screenHeight * dims.sheetMaxHeightFraction)
+    val statusTop = with(LocalDensity.current) {
+        WindowInsets.statusBars.getTop(this).toDp().value
+    }
+    val maxHeight = sheetMaxHeight(screenHeight, statusTop, dims.sheetMaxHeightFraction)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -81,7 +98,7 @@ fun OhSheet(
             .padding(
                 start = OhTheme.space.s6,
                 end = OhTheme.space.s6,
-                top = OhTheme.space.s3,
+                top = dims.grabberTop,
                 bottom = OhTheme.space.s7,
             )
             .semantics {
@@ -113,7 +130,14 @@ fun OhSheet(
             )
             Spacer(Modifier.height(OhTheme.space.s7))
         }
-        Column(modifier = Modifier.fillMaxWidth(), content = content)
+        // The body scrolls only downwards; the title and the actions stay put (§5.16).
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
+            content = content,
+        )
         if (primaryLabel != null) {
             Spacer(Modifier.height(OhTheme.space.s7))
             OhButton(
@@ -211,13 +235,35 @@ fun OhDialogCard(
     val dims = OhTheme.dims
     val shape = RoundedCornerShape(OhTheme.radius.lg)
     val elevation = if (colors.dark) dims.dialogElevation else dims.raisedElevation
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    val motion = OhTheme.motion
+    val pop by animateFloatAsState(
+        targetValue = if (appeared) OhAlpha.full else DIALOG_POP_FROM,
+        animationSpec = tween(motion.duration(motion.dialog), easing = motion.ease),
+        label = "dialogPop",
+    )
     Column(
         modifier = modifier
             .width(if (wide) dims.dialogWidthWide else dims.dialogWidth)
+            .graphicsLayer {
+                scaleX = pop
+                scaleY = pop
+            }
             .shadow(elevation, shape)
             .clip(shape)
             .background(colors.surfaceRaised)
-            .border(dims.hairline, colors.raisedLine, shape)
+            .then(
+                if (colors.dark) {
+                    Modifier.border(
+                        dims.hairline,
+                        colors.raisedLine,
+                        shape,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .padding(dims.dialogPad),
     ) {
         Text(
@@ -311,12 +357,13 @@ fun OhToast(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     onDismiss: (() -> Unit)? = null,
-    dismissLabel: String = "Dismiss",
+    dismissLabel: String = stringResource(R.string.oh_toast_dismiss),
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
     val dims = OhTheme.dims
-    val maxWidth = Dp(LocalConfiguration.current.screenWidthDp * dims.toastMaxWidthFraction)
+    val maxWidth =
+        toastMaxWidth(LocalConfiguration.current.screenWidthDp, dims.toastMaxWidthFraction)
     Row(
         modifier = modifier
             .widthIn(max = maxWidth)
@@ -399,11 +446,11 @@ fun OhTimerBar(
     onPlus: () -> Unit = {},
     onPauseToggle: () -> Unit = {},
     onSkip: () -> Unit = {},
-    minusLabel: String = "15 seconds less",
-    plusLabel: String = "15 seconds more",
-    pauseLabel: String = "Pause timer",
-    playLabel: String = "Resume timer",
-    skipLabel: String = "Skip rest",
+    minusLabel: String = stringResource(R.string.oh_timer_minus),
+    plusLabel: String = stringResource(R.string.oh_timer_plus),
+    pauseLabel: String = stringResource(R.string.oh_timer_pause),
+    playLabel: String = stringResource(R.string.oh_timer_resume),
+    skipLabel: String = stringResource(R.string.oh_timer_skip),
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
@@ -416,7 +463,7 @@ fun OhTimerBar(
             .shadow(dims.raisedElevation, shape)
             .clip(shape)
             .background(colors.timerBarFill)
-            .border(dims.hairline, colors.raisedLine, shape),
+            .border(dims.hairline, if (work) colors.acc else colors.raisedLine, shape),
     ) {
         Box(
             modifier = Modifier
@@ -442,12 +489,12 @@ fun OhTimerBar(
             )
             Spacer(Modifier.weight(1f))
             TimerControl(icon = OhIcons.remove, description = minusLabel, onClick = onMinus)
+            TimerControl(icon = OhIcons.add, description = plusLabel, onClick = onPlus)
             TimerControl(
                 icon = if (paused) OhIcons.play else OhIcons.pause,
                 description = if (paused) playLabel else pauseLabel,
                 onClick = onPauseToggle,
             )
-            TimerControl(icon = OhIcons.add, description = plusLabel, onClick = onPlus)
             TimerControl(icon = OhIcons.skip, description = skipLabel, onClick = onSkip)
         }
     }
@@ -480,3 +527,6 @@ private fun TimerControl(
         )
     }
 }
+
+/** The dialog pops from 94 % scale (DESIGN.md §5.17). */
+private const val DIALOG_POP_FROM = 0.94f

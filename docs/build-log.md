@@ -174,7 +174,9 @@ cannot drift (`BUILD-ROADMAP.md` §B1).
 
 ### Milestones
 
-1. **Tokens and theme** — commit `aa04f7c`.
+1. **Tokens and theme** — first code commit `aa04f7c` (the phase head, the commit this
+   entry ships with, is where `check` is green; the first commit needed ktlint formatting
+   that landed in the next one, and the documentation landed with it).
    `ui/…/theme/`: `OhColors` (surface ramp, text ramp, separators, the nine accent
    presets, the system palette, nine status inks, `fat`, the three recovery steps and
    the derived tokens the components state in words), `OhType` (the 9 text roles plus
@@ -194,22 +196,27 @@ cannot drift (`BUILD-ROADMAP.md` §B1).
 3. **Gallery, screenshots, contrast** — in the same commit.
    A debug-only `GalleryActivity` (dark/light and 100 %/200 % switches) in
    `app-android/src/debug`; 26 Roborazzi tests each rendered in dark, light, 200 % text
-   and RTL (104 committed goldens); `ComponentSemanticsTest` (8 tests) asserts the §14.5
-   accessibility items that can be measured — one node per row, a named 44 dp icon
-   button, five selectable tabs, checked state, no double-fired tap; `OhContrastTest`
-   (11 tests) computes every pair of `DESIGN.md` §12.5 from the token values, compositing
-   alpha over the surface it is read on.
+   and RTL (104 committed goldens); `ComponentSemanticsTest` (9 tests) asserts the §14.5
+   accessibility items that can be measured — one merged node per row, a named 44 dp icon
+   button, five selectable tabs, the Train disc's selected state, a chip's chosen state,
+   checked state, no double-fired tap; `OhContrastTest` (12 tests) computes every pair of
+   `DESIGN.md` §12.5 from the token values, including each ink over a translucent fill
+   (`acc-soft`, the Danger fill, the toast, the timer bar, the bars) composited over the
+   surface it is read on.
 
 ### What was run, and its result
 
 | Command | Result |
 |---|---|
-| `./gradlew check` | **BUILD SUCCESSFUL**; 45 tests (26 screenshot × 4 variants, 8 accessibility-semantics, 11 contrast), lint, ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
+| `./gradlew check` | **BUILD SUCCESSFUL**; 47 tests (26 screenshot × 4 variants, 9 accessibility-semantics, 12 contrast), lint, ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
 | `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; debug APK, with two launcher entries (the app and the gallery). |
 | `./gradlew :app-android:assembleRelease` | **BUILD SUCCESSFUL**; unsigned release APK. Its manifest has **one** activity and its dex/zip has no `Gallery` entry, so the debug-only gallery cannot ship (ries checked with `aapt2` and `unzip -l`). |
 | `./gradlew :ui:testDebugUnitTest` (verify mode, the default in `check`) | **BUILD SUCCESSFUL**; 104 goldens compared, none missing, none changed. |
 | `./gradlew :ui:testDebugUnitTest -Proborazzi.record` | **BUILD SUCCESSFUL**; recordings are byte-identical between runs (compared by re-running the verify pass). |
 | Guard proof 1 (`checkDesignTokens`): a file in `ui/…/components` with `Color(0xFF112233)` and `13.dp` | `:ui:checkDesignTokens` **failed** naming both lines; file removed, gate green. |
+| Guard proof 1b (tightened rules): `Color.White`, `12f.dp`, `Color(red = …, green = …, blue = …)`, `Dp(13f)` and a `MaterialTheme` import | All six lines **reported** (named constant, raw .dp, `Color(...)`, `Dp(...)`, MaterialTheme at the import and at the usage); file removed, gate green. |
+| Guard proof 2b (scoped Detekt rules): a seven-parameter **non-composable** function in `:ui` | `:ui:detekt` **failed** on `LongParameterList`, proving the `@Composable` scoping did not swallow the rule; removed, green. |
+| Golden proof: one pixel of `dark/card.png` changed | `ComponentScreenshotTest > card` **failed** ("is changed") because `src/test/screenshots` is an input of the test task; the original restored, verify green. |
 | Guard proof 2 (`checkLicences`): first `:ui:check` | **Failed** as designed, listing 13 test-only Robolectric/Roborazzi transitives missing from the allowlist. Each licence was read from its POM and recorded (see "Licences"); both gates then green. |
 | Regression, B0 portability guard: `import android.os.Bundle` in a `:core` file | `:core:checkPortability` **failed** naming the file and line; file removed, green. |
 | `./gradlew :app-android:installDebug` then launch the gallery cold | `LaunchState: COLD`, focused activity `…android.gallery.GalleryActivity`, `logcat -s AndroidRuntime:E` empty. |
@@ -239,6 +246,34 @@ No device identity (serial, model, build) is recorded in this repository.
 - B0's ktlint and Detekt probes were **not** repeated: the rules are unchanged for
   non-composable code, and the scoped change is recorded in ADR 0004.
 
+### Independent review and the fixes it produced
+
+Three fresh reviewers saw only the diff and the contract (correctness and tests;
+`AGENTS.md` invariants and licences; `DESIGN.md` conformance). Every finding below was
+confirmed in the code or the goldens, then fixed in this phase and re-verified:
+
+| Finding | Fix |
+|---|---|
+| A card's press scaled only its text, not the surface | `ohPressScale` moved before `clip`/`background`; the golden shows the card shrinking |
+| The slider's only drag surface was its 4 dp track | the gesture lives on the 44 dp box; the range is validated, the latest callback is read, changes are consumed |
+| A sheet could not scroll | the body is a `verticalScroll` column between the sticky title and the actions |
+| The Danger and Tinted labels measured 4.23/4.19:1 on their own fills, and the audit could not see translucent fills | both use `label` ink (recorded in §5.7); `OhContrastTest` gained a composited-ink test over every tinted fill |
+| Tab destinations lost their name at ≥150 % text | the name stays on the accessibility node and the label drops only at 175 % |
+| The committed goldens were not task inputs, so a golden-only change could pass `check` | `inputs.dir("src/test/screenshots")`; proved by changing one pixel and watching `card` fail |
+| A chip exposed no chosen state; the Train disc exposed no selection | `selectable` semantics and `selected` on the disc, both asserted in `ComponentSemanticsTest` |
+| RTL hairline insets and chevrons were physical | logical inset by `LocalLayoutDirection`; `autoMirror` on the chevrons and the directional icons |
+| The slider fill and the stepper unit ignored RTL | the fill starts at the logical end; the figure and its unit keep their order in every script |
+| Chips and four tab cells had no press response | press scale on both (§6.1) |
+| A disabled field's fill did not dim | the alpha wraps the fill |
+| The sync dot's ring was 1 dp; the icon-button dot and the tab dot used different oranges | 2 dp ring, one `orange` |
+| A destructive row had a tinted tile and no 22 dp separation | red-ink glyph on no tile, its own group 22 dp away |
+| The work timer had no accent ring; the dialog drew a hairline in light | accent hairline when working; hairline only in dark, plus the 280 ms 94 % pop |
+| Small buttons and segmented cells missed the 44 dp target | painted sizes kept, targets grown to 44 |
+| A tab list without a raised tab drew a duplicate disc | exactly one raised tab is required |
+| `checkDesignTokens`'s allowlist was an absolute-path substring and had false negatives | module-relative allowlist, a "scanned zero files" guard, and rules for named `Color` constants, factories, `Dp(...)`, `TextUnit(...)` and `MaterialTheme` |
+| `ui-test-manifest` merged into every debug build | test classpath only |
+| The icon golden covered 9 of 75 icons | every icon in the set is captured |
+
 ### Licences
 
 `gradle/licences/allowed.tsv` gained eleven test-only rows, each read from the artefact's
@@ -257,8 +292,20 @@ and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is u
 - Appendix A's row padding said "11/14" while §5.3 says 12/16 and the hairline inset
   depends on 16. Appendix A now says **12/16**, matching §5.3.
 - `acc-2` is specified for `brand` only. For the other eight presets it resolves to that
-  preset's own "Accent dark" (dark theme) or "Light ink" (light theme); no hex was
-  invented, both already clear 3:1 on `surface`, and §2.6 records it.
+  preset's own "Light fill" (dark theme) or "Light ink" (light theme), i.e. the same
+  hue one documented step away from the resting accent; no hex was invented and both
+  clear 3:1 on `surface` (§2.6).
+- **Danger and Tinted button labels use `label` ink.** Composited over `bg` and
+  `surface`, `red-ink` on the 15 % Danger fill measured **4.23:1** (dark) and **4.40:1**
+  (light), and `acc-ink` on `acc-soft` measured **4.19:1** for the default accent: all
+  below the 4.5 of §11.1. The fills keep their stated tints and the fills carry the
+  meaning; `label` passes. §5.7 and §12.5 record it and `OhContrastTest` now measures
+  every tinted fill composited.
+- §4.4's "`headline`" is not a role; the top-bar app name is the §10.5 wordmark,
+  `body` 17/600. §4.4 now says so.
+- §5.18's toast targets said 36 dp against §4.5/§11.1's 44; they are 44 dp now.
+- §3.3 gives the timer 700 while §5.19 gives the bar 28/600; the bar is 600 and the
+  full-screen clock is the 700 end of the same role. §3.3 now says so.
 - The revision line of `DESIGN.md` carries the 2026-11-23 note.
 
 ### Invariant audit (`AGENTS.md`)
@@ -298,12 +345,18 @@ and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is u
   behaviour only, with every colour, shape and inset passed from `OhTheme`.
 - The timer's spoken countdown (10 s, 3, 2, 1) is session behaviour, not a component
   property; the timer bar already exposes a live region hook for B5 to drive.
+- The screenshot matrix covers dark, light, 200 % text and RTL. **High contrast,
+  reduce-transparency and colour-blind simulation are not yet separate goldens**; the
+  tokens and the §12.5 audit cover the contrast part, and B10 owns the platform modes.
+- Reduce Transparency and the bars' backdrop blur are deferred with the blur itself
+  (they need the content behind the bar).
 
 ### Open issues
 
 - The screenshot goldens depend on Robolectric's native renderer. Record them on Linux
   with the pinned Robolectric 4.18.1; a future upgrade may legitimately rewrite all 104
-  images in one commit.
+  images in one commit. Robolectric downloads its own `android-all` jar on a cold cache
+  (Apache-2.0, test-only; not a Gradle dependency, so `checkLicences` does not see it).
 - Detekt's four rules are scoped to `@Composable` in `gradle/detekt.yml` and ktlint's
   function-naming rule ignores `@Composable`; both were verified to still fire on
   non-composable code. Re-check when either tool is upgraded.

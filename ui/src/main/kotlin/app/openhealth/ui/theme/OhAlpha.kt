@@ -16,7 +16,7 @@ object OhAlpha {
     /** §6.3: a disabled row. */
     const val disabledRow: Float = 0.45f
 
-    /** §5.7: the Danger button's fill is `red` at 15 %. */
+    /** §5.7: the Danger button's fill is `red` at 15 %. The label is `label` ink. */
     const val danger: Float = 0.15f
 
     /** §2.6: `acc-soft` is the accent at 16 %. */

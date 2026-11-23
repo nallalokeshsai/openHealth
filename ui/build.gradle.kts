@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.testing.Test
 
 plugins {
@@ -31,7 +32,6 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 
     debugImplementation(libs.compose.ui.tooling)
-    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 // Roborazzi without its Gradle plugin: `check` verifies the committed goldens and
@@ -41,5 +41,9 @@ tasks.withType<Test>().configureEach {
     systemProperty("roborazzi.test.record", recordScreenshots.toString())
     systemProperty("roborazzi.test.verify", (!recordScreenshots).toString())
     systemProperty("robolectric.graphicsMode", "NATIVE")
+    // A golden that changes must re-run the verification, not leave the task up to date.
+    inputs.dir(layout.projectDirectory.dir("src/test/screenshots"))
+        .withPropertyName("screenshotGoldens")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     maxHeapSize = "2g"
 }

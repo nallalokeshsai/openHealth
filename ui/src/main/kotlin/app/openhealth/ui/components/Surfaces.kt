@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.theme.OhAlpha
@@ -50,14 +51,15 @@ fun OhCard(
     val radius = OhTheme.radius.card
     val shape = RoundedCornerShape(radius)
     val interaction = rememberInteraction()
-    var surface = modifier
-        .fillMaxWidth()
+    var surface = modifier.fillMaxWidth()
+    if (onClick != null) {
+        surface = surface.ohPressScale(interaction, OhTheme.motion.pressScaleCard)
+    }
+    surface = surface
         .clip(shape)
         .background(colors.surface)
     if (onClick != null) {
-        surface = surface
-            .ohPressScale(interaction, OhTheme.motion.pressScaleCard)
-            .ohClickable(interaction, onClick = onClick)
+        surface = surface.ohClickable(interaction, onClick = onClick)
     }
     Column(modifier = surface.padding(OhTheme.dims.cardPad), content = content)
 }
@@ -149,6 +151,7 @@ fun OhRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     value: String? = null,
+    unit: String? = null,
     leadingIcon: ImageVector? = null,
     leadingTint: Color = OhTheme.colors.acc,
     destructive: Boolean = false,
@@ -165,20 +168,23 @@ fun OhRow(
     val narrow = LocalConfiguration.current.screenWidthDp <= OhTheme.dims.narrowValueRow
     // A value in words moves under the title; a number with a short unit stays trailing (§5.3).
     val wordsValue = value != null && narrow && value.count { it.isLetter() } > SHORT_UNIT_LETTERS
-    var row = modifier.fillMaxWidth()
+    var row = modifier
+        .fillMaxWidth()
+        .semantics(mergeDescendants = true) {}
     if (!enabled) {
         row = row.alpha(OhAlpha.disabledRow)
     }
-    // The hairline sits between rows: above this one, never above the first.
+    if (onClick != null) {
+        row = row.ohSurfacePressable(interaction, RectangleShape, enabled, onClick)
+    }
+    // The hairline sits between rows: above this one, never above the first, and it is
+    // drawn over the pressed fill rather than under it.
     if (showDivider) {
         row = row.ohHairline(
             color = colors.sep,
             insetStart = if (leadingIcon != null) dims.rowIconInset else dims.rowHairInset,
             atBottom = false,
         )
-    }
-    if (onClick != null) {
-        row = row.ohSurfacePressable(interaction, RectangleShape, enabled, onClick)
     }
     Row(
         modifier = row
@@ -191,7 +197,7 @@ fun OhRow(
                 modifier = Modifier
                     .size(dims.iconTile)
                     .clip(RoundedCornerShape(OhTheme.radius.sm))
-                    .background(if (destructive) colors.dangerFill else leadingTint),
+                    .background(if (destructive) Color.Transparent else leadingTint),
                 contentAlignment = Alignment.Center,
             ) {
                 OhIcon(
@@ -220,13 +226,23 @@ fun OhRow(
         }
         if (value != null && !wordsValue) {
             Spacer(Modifier.width(OhTheme.space.s3))
-            Text(
-                text = value,
-                style = type.body.tabular().ltrFigures(),
-                color = colors.label2,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = value,
+                    style = type.body.tabular().ltrFigures(),
+                    color = colors.label2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (unit != null) {
+                    Text(
+                        text = unit,
+                        style = type.caption.ltrFigures(),
+                        color = colors.label2,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
         if (trailing != null) {
             Spacer(Modifier.width(OhTheme.space.s3))
@@ -314,6 +330,7 @@ fun OhStatTile(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    unit: String? = null,
     delta: String? = null,
     deltaInk: Color = OhTheme.colors.greenInk,
 ) {
@@ -327,12 +344,23 @@ fun OhStatTile(
     ) {
         Text(text = label, style = type.footnote, color = colors.label2)
         Spacer(Modifier.height(OhTheme.space.s0))
-        Text(
-            text = value,
-            style = type.display.copy(fontWeight = OhWeight.semibold).tabular().ltrFigures(),
-            color = colors.label,
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = value,
+                style = type.display.copy(fontWeight = OhWeight.semibold).tabular().ltrFigures(),
+                color = colors.label,
+                maxLines = 1,
+            )
+            if (unit != null) {
+                Spacer(Modifier.width(OhTheme.space.s0))
+                Text(
+                    text = unit,
+                    style = type.subhead.ltrFigures(),
+                    color = colors.label2,
+                    maxLines = 1,
+                )
+            }
+        }
         if (delta != null) {
             Spacer(Modifier.height(OhTheme.space.s0))
             Text(text = delta, style = type.footnote.tabular(), color = deltaInk)
@@ -341,7 +369,12 @@ fun OhStatTile(
 }
 
 /** One figure in an [OhKpiBand]. */
-data class OhKpiFigure(val value: String, val label: String, val ink: Color? = null)
+data class OhKpiFigure(
+    val value: String,
+    val label: String,
+    val unit: String? = null,
+    val ink: Color? = null,
+)
 
 /**
  * §5.6 KPI band: one card divided by vertical hairlines, three figures across.
@@ -351,6 +384,7 @@ data class OhKpiFigure(val value: String, val label: String, val ink: Color? = n
 fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer: String? = null) {
     val colors = OhTheme.colors
     val type = OhTheme.type
+    require(figures.size == KPI_FIGURES) { "A KPI band shows three figures (DESIGN.md §5.6)." }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -376,14 +410,25 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text(
-                        text = figure.value,
-                        style = type.display.copy(fontWeight = OhWeight.semibold)
-                            .tabular()
-                            .ltrFigures(),
-                        color = figure.ink ?: colors.label,
-                        maxLines = 1,
-                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = figure.value,
+                            style = type.display.copy(fontWeight = OhWeight.semibold)
+                                .tabular()
+                                .ltrFigures(),
+                            color = figure.ink ?: colors.label,
+                            maxLines = 1,
+                        )
+                        if (figure.unit != null) {
+                            Spacer(Modifier.width(OhTheme.space.s0))
+                            Text(
+                                text = figure.unit,
+                                style = type.caption.ltrFigures(),
+                                color = colors.label2,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                     Text(text = figure.label, style = type.footnote, color = colors.label2)
                 }
             }
@@ -397,3 +442,6 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
 
 /** A value with more letters than a short unit is a sentence and moves under its title. */
 private const val SHORT_UNIT_LETTERS = 3
+
+/** A KPI band shows three figures (DESIGN.md §5.6). */
+private const val KPI_FIGURES = 3

@@ -29,15 +29,14 @@ class OhContrastTest {
         "light" to ohLightColors(),
     )
 
-    /** Alpha-composites [fg] over an opaque [bg], in sRGB, as a screen does. */
-    private fun over(fg: Color, bg: Color): Color {
+    /** The three sRGB channels of a colour, alpha dropped. */
+    private fun channels(c: Color): FloatArray = floatArrayOf(c.red, c.green, c.blue)
+
+    /** Alpha-composites [fg] over an opaque background, in sRGB, as a screen does. */
+    private fun overChannels(fg: Color, bg: FloatArray): FloatArray {
         val a = fg.alpha
-        return Color(
-            red = fg.red * a + bg.red * (1f - a),
-            green = fg.green * a + bg.green * (1f - a),
-            blue = fg.blue * a + bg.blue * (1f - a),
-            alpha = 1f,
-        )
+        val f = channels(fg)
+        return FloatArray(3) { i -> f[i] * a + bg[i] * (1f - a) }
     }
 
     private fun channel(c: Float): Double {
@@ -45,19 +44,37 @@ class OhContrastTest {
         return if (v <= 0.03928) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
     }
 
-    private fun luminance(c: Color): Double =
-        0.2126 * channel(c.red) + 0.7152 * channel(c.green) + 0.0722 * channel(c.blue)
+    private fun luminance(c: FloatArray): Double =
+        0.2126 * channel(c[0]) + 0.7152 * channel(c[1]) + 0.0722 * channel(c[2])
 
     private fun ratio(fg: Color, bg: Color): Double {
-        val a = luminance(over(fg, bg))
+        val background = channels(bg)
+        return ratioChannels(overChannels(fg, background), background)
+    }
+
+    private fun ratioChannels(fg: FloatArray, bg: FloatArray): Double {
+        val a = luminance(fg)
         val b = luminance(bg)
         val light = maxOf(a, b)
         val dark = minOf(a, b)
         return (light + 0.05) / (dark + 0.05)
     }
 
+    /** A translucent fill composited over an opaque base, ready for an ink to sit on. */
+    private fun tinted(tint: Color, base: Color): FloatArray = overChannels(tint, channels(base))
+
     private fun assertAtLeast(label: String, fg: Color, bg: Color, minimum: Double) {
         val measured = ratio(fg, bg)
+        assertRatios(label, measured, minimum)
+    }
+
+    /** Measures an ink over a translucent fill that was composited over an opaque base. */
+    private fun assertAtLeastOn(label: String, fg: Color, bg: FloatArray, minimum: Double) {
+        val measured = ratioChannels(overChannels(fg, bg), bg)
+        assertRatios(label, measured, minimum)
+    }
+
+    private fun assertRatios(label: String, measured: Double, minimum: Double) {
         assertTrue(
             measured >= minimum,
             "$label measured ${"%.2f".format(measured)}:1, below the $minimum:1 of DESIGN.md §12.5",
@@ -161,6 +178,54 @@ class OhContrastTest {
      * and a hatch, so the section does not claim 4.5:1 for them; what must hold is that
      * each theme uses its own documented values and that the three steps stay apart.
      */
+    @Test
+    fun textOnTintedFillsIsReadable() {
+        baseThemes().forEach { (theme, colors) ->
+            // §12.5 guarantees a text ink on `bg` and `surface`; a tinted fill is
+            // measured on those two, the surfaces a control is placed on.
+            listOf("bg" to colors.bg, "surface" to colors.surface).forEach { (surfaceName, base) ->
+                assertAtLeastOn(
+                    "$theme danger label on danger fill over $surfaceName",
+                    colors.label,
+                    tinted(colors.dangerFill, base),
+                    4.5,
+                )
+                assertAtLeastOn(
+                    "$theme tinted button label on acc-soft over $surfaceName",
+                    colors.label,
+                    tinted(colors.accSoft, base),
+                    4.5,
+                )
+            }
+            listOf("bg" to colors.bg, "surface" to colors.surface).forEach { (surfaceName, base) ->
+                assertAtLeastOn(
+                    "$theme toast message on toast fill over $surfaceName",
+                    colors.label,
+                    tinted(colors.toastFill, base),
+                    4.5,
+                )
+                assertAtLeastOn(
+                    "$theme timer clock on timer bar over $surfaceName",
+                    colors.label,
+                    tinted(colors.timerBarFill, base),
+                    4.5,
+                )
+                assertAtLeastOn(
+                    "$theme work clock on timer bar over $surfaceName",
+                    colors.accInk,
+                    tinted(colors.timerBarFill, base),
+                    4.5,
+                )
+                assertAtLeastOn(
+                    "$theme inactive tab label on the bar over $surfaceName",
+                    colors.label2,
+                    tinted(colors.barFill, base),
+                    4.5,
+                )
+            }
+        }
+    }
+
     @Test
     fun theRecoveryStepsAreTheDocumentedTokens() {
         baseThemes().forEach { (theme, colors) ->

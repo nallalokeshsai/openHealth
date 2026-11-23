@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
@@ -300,9 +299,8 @@ private fun CardAndHeader() {
 
 @Composable
 private fun InsetGroupAndRows() {
-    val colors = OhTheme.colors
     OhInsetGroup {
-        OhRow(title = "Weight", value = "82.4 kg", showDivider = false)
+        OhRow(title = "Weight", value = "82.4", unit = "kg", showDivider = false)
         OhRow(title = "Steps", value = "8 412", showDivider = true)
         OhRow(
             title = "Resting heart rate",
@@ -326,15 +324,16 @@ private fun InsetGroupAndRows() {
             enabled = false,
             showDivider = true,
         )
-        Row(modifier = Modifier.fillMaxWidth().padding(OhTheme.space.s6)) {
-            OhRow(
-                title = "Delete all data",
-                leadingIcon = OhIcons.delete,
-                destructive = true,
-                onClick = {},
-            )
-        }
-        Box(modifier = Modifier.height(OhTheme.space.s0).fillMaxWidth().background(colors.surface))
+    }
+    // A destructive row is its own group, 22 dp away from the rest (DESIGN.md §5.3).
+    Box(modifier = Modifier.height(OhTheme.space.s7).fillMaxWidth())
+    OhInsetGroup {
+        OhRow(
+            title = "Delete all data",
+            leadingIcon = OhIcons.delete,
+            destructive = true,
+            onClick = {},
+        )
     }
 }
 
@@ -369,22 +368,24 @@ private fun StatTiles() {
         Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s4)) {
             OhStatTile(
                 label = "Body fat",
-                value = "18.2 %",
+                value = "18.2",
+                unit = "%",
                 delta = "−0.4 in a month",
                 modifier = Modifier.weight(1f),
             )
             OhStatTile(
                 label = "Lean mass",
-                value = "64.1 kg",
+                value = "64.1",
+                unit = "kg",
                 delta = "+0.2 in a month",
                 modifier = Modifier.weight(1f),
             )
         }
         OhKpiBand(
             figures = listOf(
-                OhKpiFigure(value = "1 240", label = "In"),
-                OhKpiFigure(value = "2 310", label = "Out"),
-                OhKpiFigure(value = "−1 070", label = "Net"),
+                OhKpiFigure(value = "1 240", label = "In", unit = "kcal"),
+                OhKpiFigure(value = "2 310", label = "Out", unit = "kcal"),
+                OhKpiFigure(value = "−1 070", label = "Net", unit = "kcal"),
             ),
             footer = "At this pace: 14 Feb to 3 Mar",
         )

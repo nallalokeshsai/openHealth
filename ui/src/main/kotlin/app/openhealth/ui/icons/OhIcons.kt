@@ -142,7 +142,7 @@ object OhIcons {
         }
     }
 
-    val chevronLeft: ImageVector = ohIcon("chevronLeft") {
+    val chevronLeft: ImageVector = ohIcon("chevronLeft", autoMirror = true) {
         stroke(strokeWidth = ohDims.chevronStroke) {
             moveTo(14.5f, 5f)
             lineTo(7.5f, 12f)
@@ -150,7 +150,7 @@ object OhIcons {
         }
     }
 
-    val chevronRight: ImageVector = ohIcon("chevronRight") {
+    val chevronRight: ImageVector = ohIcon("chevronRight", autoMirror = true) {
         stroke(strokeWidth = ohDims.chevronStroke) {
             moveTo(9.5f, 5f)
             lineTo(16.5f, 12f)
@@ -158,7 +158,7 @@ object OhIcons {
         }
     }
 
-    val chevronDown: ImageVector = ohIcon("chevronDown") {
+    val chevronDown: ImageVector = ohIcon("chevronDown", autoMirror = true) {
         stroke(strokeWidth = ohDims.chevronStroke) {
             moveTo(5f, 9.5f)
             lineTo(12f, 16.5f)
@@ -307,7 +307,7 @@ object OhIcons {
         }
     }
 
-    val undo: ImageVector = ohIcon("undo") {
+    val undo: ImageVector = ohIcon("undo", autoMirror = true) {
         stroke {
             moveTo(6f, 10f)
             lineTo(10f, 6f)
@@ -320,7 +320,7 @@ object OhIcons {
         }
     }
 
-    val share: ImageVector = ohIcon("share") {
+    val share: ImageVector = ohIcon("share", autoMirror = true) {
         stroke {
             moveTo(8f, 10.5f)
             lineTo(5f, 10.5f)
@@ -336,7 +336,7 @@ object OhIcons {
         }
     }
 
-    val export: ImageVector = ohIcon("export") {
+    val export: ImageVector = ohIcon("export", autoMirror = true) {
         stroke {
             moveTo(3.5f, 14f)
             lineTo(3.5f, 20.5f)
@@ -423,7 +423,7 @@ object OhIcons {
         }
     }
 
-    val externalLink: ImageVector = ohIcon("externalLink") {
+    val externalLink: ImageVector = ohIcon("externalLink", autoMirror = true) {
         stroke {
             moveTo(11f, 4.5f)
             lineTo(4.5f, 4.5f)

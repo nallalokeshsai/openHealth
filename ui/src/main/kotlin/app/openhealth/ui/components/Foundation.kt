@@ -20,8 +20,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.ui.theme.OhTheme
 
 /**
@@ -83,12 +85,16 @@ fun Modifier.ohHairline(
     val hairlinePx = with(LocalDensity.current) { OhTheme.dims.hairline.toPx() }
     val startPx = with(LocalDensity.current) { insetStart.toPx() }
     val endPx = with(LocalDensity.current) { insetEnd.toPx() }
+    // start/end are logical: the inset is on the right in RTL (DESIGN.md §11.5).
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val left = if (rtl) endPx else startPx
+    val right = if (rtl) startPx else endPx
     return drawBehind {
         val y = if (atBottom) size.height - hairlinePx / 2f else hairlinePx / 2f
         drawLine(
             color = color,
-            start = Offset(startPx, y),
-            end = Offset(size.width - endPx, y),
+            start = Offset(left, y),
+            end = Offset(size.width - right, y),
             strokeWidth = hairlinePx,
         )
     }

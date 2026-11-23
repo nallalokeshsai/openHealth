@@ -1,11 +1,13 @@
 package app.openhealth.ui.screenshots
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
@@ -101,11 +103,16 @@ class ComponentSemanticsTest {
     @Test
     fun aChipHasAFortyFourTargetAndAChosenState() {
         setContent {
-            OhChip(text = "All", selected = true, onClick = {})
+            Column {
+                OhChip(text = "All", selected = true, onClick = {})
+                OhChip(text = "Manual", selected = false, onClick = {})
+            }
         }
         compose.onNodeWithText("All")
             .assertHeightIsAtLeast(ohDims.touchTarget)
             .assertHasClickAction()
+            .assertIsSelected()
+        compose.onNodeWithText("Manual").assertIsNotSelected()
     }
 
     @Test
@@ -124,8 +131,26 @@ class ComponentSemanticsTest {
             )
         }
         compose.onNodeWithText("Today").assertIsSelected()
-        compose.onNodeWithContentDescription("Train").assertHasClickAction()
+        compose.onNodeWithContentDescription("Train").assertHasClickAction().assertIsNotSelected()
         compose.onAllNodes(hasClickAction()).assertCountEquals(5)
+    }
+
+    @Test
+    fun theTrainDiscAnnouncesItsSelection() {
+        setContent {
+            OhTabBar(
+                tabs = listOf(
+                    OhTabItem(label = "Today", icon = OhIcons.today),
+                    OhTabItem(label = "Vitals", icon = OhIcons.vitals),
+                    OhTabItem(label = "Train", icon = OhIcons.train, raised = true),
+                    OhTabItem(label = "Nutrition", icon = OhIcons.nutrition),
+                    OhTabItem(label = "Stats", icon = OhIcons.stats),
+                ),
+                selectedIndex = 2,
+                onSelect = {},
+            )
+        }
+        compose.onNodeWithContentDescription("Train").assertIsSelected()
     }
 
     @Test

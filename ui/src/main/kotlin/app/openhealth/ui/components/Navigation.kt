@@ -23,9 +23,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.withStrokeWidth
@@ -114,7 +118,10 @@ fun OhTabBar(
     val colors = OhTheme.colors
     val dims = OhTheme.dims
     require(tabs.size == TAB_COUNT) { "The tab bar has five destinations (DESIGN.md §5.15)." }
-    val raisedIndex = tabs.indexOfFirst { it.raised }.coerceAtLeast(0)
+    require(tabs.count { it.raised } == 1) {
+        "Exactly one destination is the raised centre disc (DESIGN.md §5.15)."
+    }
+    val raisedIndex = tabs.indexOfFirst { it.raised }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -153,6 +160,7 @@ fun OhTabBar(
         }
         RaisedDisc(
             tab = tabs[raisedIndex],
+            selected = raisedIndex == selectedIndex,
             onClick = { onSelect(raisedIndex) },
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -178,23 +186,25 @@ private fun TabCell(
         return
     }
     val tint = if (selected) colors.accInk else colors.label2
-    // At the largest font scales the tab bar keeps its icons and drops its labels,
-    // but a hit target never shrinks (DESIGN.md §4.3, §11.1).
-    val showLabel = LocalDensity.current.fontScale < dims.largeFontScale
+    val interaction = rememberInteraction()
+    // At the very largest font scales the tab bar keeps its icons and drops its labels,
+    // but the name stays on the accessibility node and a target never shrinks (§4.3, §11.1).
+    val showLabel = LocalDensity.current.fontScale < LABEL_DROP_FONT_SCALE
     Column(
         modifier = modifier
             .height(dims.tabBarHeight)
             .selectable(
                 selected = selected,
-                interactionSource = rememberInteraction(),
+                interactionSource = interaction,
                 indication = null,
                 role = Role.Tab,
                 onClick = onClick,
-            ),
+            )
+            .semantics { contentDescription = tab.label },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box {
+        Box(modifier = Modifier.ohPressScale(interaction, OhTheme.motion.pressScaleTab)) {
             val glyph = remember(tab.icon, selected) {
                 tab.icon.withStrokeWidth(
                     if (selected) dims.tabStrokeActive else dims.tabStrokeRest,
@@ -210,7 +220,7 @@ private fun TabCell(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(dims.dot + dims.dotRing)
+                        .size(dims.dot + dims.dotRing * 2f)
                         .clip(CircleShape)
                         .background(colors.bgEl),
                     contentAlignment = Alignment.Center,
@@ -237,17 +247,33 @@ private fun TabCell(
 }
 
 @Composable
-private fun RaisedDisc(tab: OhTabItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun RaisedDisc(
+    tab: OhTabItem,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = OhTheme.colors
     val dims = OhTheme.dims
     val interaction = rememberInteraction()
     Box(
         modifier = modifier
             .size(dims.trainDisc)
+            // The only glow in the app: a soft shadow in the accent (§5.15).
+            .shadow(
+                elevation = dims.raisedElevation,
+                shape = CircleShape,
+                ambientColor = colors.acc,
+                spotColor = colors.acc,
+            )
             .ohPressScale(interaction, OhTheme.motion.pressScaleTab)
             .clip(CircleShape)
             .background(colors.acc)
-            .ohClickable(interaction, role = Role.Tab, onClick = onClick),
+            .ohClickable(interaction, role = Role.Tab, onClick = onClick)
+            .semantics {
+                contentDescription = tab.label
+                this.selected = selected
+            },
         contentAlignment = Alignment.Center,
     ) {
         OhIcon(
@@ -258,6 +284,9 @@ private fun RaisedDisc(tab: OhTabItem, onClick: () -> Unit, modifier: Modifier =
         )
     }
 }
+
+/** At this font scale the tab bar keeps icons and drops labels (§4.3). */
+private const val LABEL_DROP_FONT_SCALE = 1.75f
 
 /** The five destinations of DESIGN.md §5.15. */
 private const val TAB_COUNT = 5

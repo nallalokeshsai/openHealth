@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Every human-readable name in the design system is a resource, never a literal
+      (DESIGN.md Appendix B, §11.4). Components take these as defaults a screen can
+      override.
+    -->
+    <string name="oh_stepper_decrease">Decrease</string>
+    <string name="oh_stepper_increase">Increase</string>
+    <string name="oh_search_placeholder">Search</string>
+    <string name="oh_search_clear">Clear search</string>
+    <string name="oh_toast_dismiss">Dismiss</string>
+    <string name="oh_timer_minus">15 seconds less</string>
+    <string name="oh_timer_plus">15 seconds more</string>
+    <string name="oh_timer_pause">Pause timer</string>
+    <string name="oh_timer_resume">Resume timer</string>
+    <string name="oh_timer_skip">Skip rest</string>
+</resources>

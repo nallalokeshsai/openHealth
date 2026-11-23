@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -45,6 +46,7 @@ import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.components.OhTimerBar
 import app.openhealth.ui.components.OhToast
 import app.openhealth.ui.components.OhTopBar
+import app.openhealth.ui.icons.OhGlyphIcons
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
@@ -221,7 +223,7 @@ class ComponentScreenshotTest {
     @Test
     fun statTile() {
         shot("stat_tile") {
-            OhStatTile(label = "Body fat", value = "18.2 %", delta = "−0.4 in a month")
+            OhStatTile(label = "Body fat", value = "18.2", unit = "%", delta = "−0.4 in a month")
         }
     }
 
@@ -230,9 +232,9 @@ class ComponentScreenshotTest {
         shot("kpi_band") {
             OhKpiBand(
                 figures = listOf(
-                    OhKpiFigure(value = "1 240", label = "In"),
-                    OhKpiFigure(value = "2 310", label = "Out"),
-                    OhKpiFigure(value = "−1 070", label = "Net"),
+                    OhKpiFigure(value = "1 240", label = "In", unit = "kcal"),
+                    OhKpiFigure(value = "2 310", label = "Out", unit = "kcal"),
+                    OhKpiFigure(value = "−1 070", label = "Net", unit = "kcal"),
                 ),
                 footer = "At this pace: 14 Feb to 3 Mar",
             )
@@ -507,32 +509,63 @@ class ComponentScreenshotTest {
 
     @Test
     fun icons() {
+        // Every icon in the set, so a broken glyph cannot ship green.
+        val groups: List<List<ImageVector>> = listOf(
+            listOf(
+                OhIcons.today, OhIcons.vitals, OhIcons.train, OhIcons.nutrition,
+                OhIcons.stats, OhIcons.more, OhIcons.add, OhIcons.remove, OhIcons.check,
+                OhIcons.close, OhIcons.chevronLeft, OhIcons.chevronRight, OhIcons.chevronDown,
+                OhIcons.search, OhIcons.filter, OhIcons.scan, OhIcons.camera, OhIcons.play,
+                OhIcons.pause, OhIcons.skip, OhIcons.timer, OhIcons.edit, OhIcons.delete,
+                OhIcons.undo, OhIcons.share, OhIcons.export, OhIcons.lock, OhIcons.cloudOff,
+                OhIcons.refresh, OhIcons.info, OhIcons.warning, OhIcons.externalLink,
+                OhIcons.settings,
+            ),
+            listOf(
+                OhModuleIcons.workout, OhModuleIcons.yoga, OhModuleIcons.steps,
+                OhModuleIcons.weight, OhModuleIcons.heart, OhModuleIcons.sleep,
+                OhModuleIcons.activity, OhModuleIcons.mood, OhModuleIcons.cycle,
+                OhModuleIcons.family, OhModuleIcons.coach, OhModuleIcons.integrations,
+            ),
+            listOf(
+                OhObjectIcons.barbell, OhObjectIcons.dumbbell, OhObjectIcons.kettlebell,
+                OhObjectIcons.plate, OhObjectIcons.machine, OhObjectIcons.band,
+                OhObjectIcons.mat, OhObjectIcons.shoe, OhObjectIcons.bike,
+                OhObjectIcons.route, OhObjectIcons.scale, OhObjectIcons.cuff,
+                OhObjectIcons.glucose, OhObjectIcons.pill, OhObjectIcons.flask,
+                OhObjectIcons.file, OhObjectIcons.watch, OhObjectIcons.phone,
+            ),
+            listOf(
+                OhGlyphIcons.strength, OhGlyphIcons.arms, OhGlyphIcons.abs,
+                OhGlyphIcons.legs, OhGlyphIcons.pullUp, OhGlyphIcons.run,
+                OhGlyphIcons.swim, OhGlyphIcons.boxing, OhGlyphIcons.stretch,
+                OhGlyphIcons.moon, OhGlyphIcons.flame, OhGlyphIcons.bolt,
+            ),
+        )
         shot("icons") {
             Column {
-                listOf(
-                    OhIcons.today,
-                    OhIcons.vitals,
-                    OhIcons.train,
-                    OhIcons.nutrition,
-                    OhIcons.stats,
-                    OhIcons.more,
-                    OhIcons.add,
-                    OhIcons.check,
-                    OhIcons.close,
-                ).forEach { icon ->
-                    OhIcon(
-                        icon = icon,
-                        contentDescription = null,
-                        size = OhTheme.dims.tabIcon,
-                        tint = OhTheme.colors.label,
-                        modifier = Modifier.padding(OhTheme.space.s1),
+                groups.forEach { group ->
+                    group.chunked(ICONS_PER_ROW).forEach { row ->
+                        androidx.compose.foundation.layout.Row {
+                            row.forEach { icon ->
+                                OhIcon(
+                                    icon = icon,
+                                    contentDescription = null,
+                                    size = OhTheme.dims.tabIcon,
+                                    tint = OhTheme.colors.label,
+                                    modifier = Modifier.padding(OhTheme.space.s1),
+                                )
+                            }
+                        }
+                    }
+                    androidx.compose.foundation.layout.Spacer(
+                        Modifier.padding(top = OhTheme.space.s2),
                     )
                 }
             }
         }
     }
 
-    /** Captures a control while a finger is down on it (`DESIGN.md` §6.1). */
     private fun shotPressed(name: String, nodeText: String, content: @Composable () -> Unit) {
         val variant = mutableStateOf(Variant.Dark)
         compose.setContent {
@@ -592,7 +625,7 @@ class ComponentScreenshotTest {
     fun rowPressed() {
         shotPressed("row_pressed", "Weight") {
             OhInsetGroup {
-                OhRow(title = "Weight", value = "82.4 kg", onClick = {})
+                OhRow(title = "Weight", value = "82.4", unit = "kg", onClick = {})
                 OhRow(title = "Steps", value = "8 412", showDivider = true)
             }
         }
@@ -609,5 +642,6 @@ class ComponentScreenshotTest {
     private companion object {
         const val SHOT = "shot"
         const val PRESS_SETTLE_MS = 500L
+        const val ICONS_PER_ROW = 7
     }
 }

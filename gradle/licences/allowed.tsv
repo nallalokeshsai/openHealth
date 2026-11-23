@@ -39,8 +39,8 @@ com.ibm.icu:icu4j	Unicode-3.0	Test-only, Robolectric text layout
 com.squareup:javawriter	Apache-2.0	Test-only, annotation code generation
 javax.annotation:javax.annotation-api	CDDL-1.1	Test-only, Robolectric; the dual CDDL/GPLv2+CPE licence is taken as CDDL, so no GPL-family code is elected
 javax.inject:javax.inject	Apache-2.0	Test-only, Robolectric DI
-org.bouncycastle:bc-jdk18on-bom	MIT	Test-only, Bouncy Castle licence, Robolectric TLS
-org.bouncycastle:bcprov-jdk18on	MIT	Test-only, Bouncy Castle licence, Robolectric TLS
+org.bouncycastle:bc-jdk18on-bom	Bouncy-Castle	Test-only, Bouncy Castle licence, Robolectric TLS
+org.bouncycastle:bcprov-jdk18on	Bouncy-Castle	Test-only, Bouncy Castle licence, Robolectric TLS
 org.conscrypt:conscrypt-openjdk-uber	Apache-2.0	Test-only, Robolectric TLS provider
 org.ow2.asm:*	BSD-3-Clause	Test-only, bytecode inspection
 org.yaml:snakeyaml	Apache-2.0	Test-only, Robolectric configuration

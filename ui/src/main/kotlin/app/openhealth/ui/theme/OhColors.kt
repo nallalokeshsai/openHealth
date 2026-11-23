@@ -116,13 +116,14 @@ enum class OhAccent(
 
     /**
      * `acc-2`, the pressed graphic shade of `DESIGN.md` §2.6. Appendix A gives it for
-     * the default `brand` accent only, so for the other eight presets it resolves to a
-     * shade that already exists for that preset and needs no invented hex (§0.2): the
-     * accent itself in dark (every dark accent clears 3:1 on `surface`) and the preset's
-     * own light ink in light (the documented darker shade of the same hue). It is never
-     * text, and no component presses with it: buttons press by scale and opacity.
+     * the default `brand` accent only, so for the other eight presets it resolves to the
+     * same preset's documented one-step shade and needs no invented hex (§0.2): the
+     * "Light fill" value in dark (the same hue, one step off the resting accent) and the
+     * "Light ink" value in light (the documented darker shade of the hue). Both clear
+     * 3:1 on `surface`. It is never text, and no component presses with it: buttons press
+     * by scale and opacity.
      */
-    internal val darkAcc2: Color get() = if (this == Brand) Color(0xFF84CC16) else Color(darkFill)
+    internal val darkAcc2: Color get() = if (this == Brand) Color(0xFF84CC16) else Color(lightFill)
     internal val lightAcc2: Color get() = if (this == Brand) Color(0xFF65A30D) else Color(lightInk)
 }
 
@@ -147,8 +148,8 @@ fun ohDarkColors(accent: OhAccent = OhAccent.Brand): OhColors = OhColors(
     acc2 = accent.darkAcc2,
     onAcc = accent.onAccentColor,
     accInk = accent.darkAcc,
-    accSoft = accent.darkAcc.copy(alpha = 0.16f),
-    accLine = accent.darkAcc.copy(alpha = 0.38f),
+    accSoft = accent.darkAcc.copy(alpha = OhAlpha.soft),
+    accLine = accent.darkAcc.copy(alpha = OhAlpha.line),
     blue = Color(0xFF0A84FF),
     green = Color(0xFF30D158),
     red = Color(0xFFFF453A),
@@ -174,14 +175,14 @@ fun ohDarkColors(accent: OhAccent = OhAccent.Brand): OhColors = OhColors(
     recReady = Color(0xFF30D158),
     recEasing = Color(0xFFFF9F0A),
     recActive = Color(0xFFFF453A),
-    dangerFill = Color(0xFFFF453A).copy(alpha = 0.15f),
+    dangerFill = Color(0xFFFF453A).copy(alpha = OhAlpha.danger),
     segmentThumb = Color(0xFF636366),
     knob = Color(0xFFFFFFFF),
     knobRing = Color(0x47000000),
-    scrim = Color(0x66000000),
-    barFill = Color(0xF00E0E10),
-    toastFill = Color(0xE02C2C2E),
-    timerBarFill = Color(0xF72C2C2E),
+    scrim = Color(0xFF000000).copy(alpha = OhAlpha.scrim),
+    barFill = Color(0xFF0E0E10).copy(alpha = OhAlpha.bar),
+    toastFill = Color(0xFF2C2C2E).copy(alpha = OhAlpha.toast),
+    timerBarFill = Color(0xFF2C2C2E).copy(alpha = OhAlpha.timerBar),
     bodyBase = Color(0xFFFFFFFF).copy(alpha = 0.11f),
 )
 
@@ -206,8 +207,8 @@ fun ohLightColors(accent: OhAccent = OhAccent.Brand): OhColors = OhColors(
     acc2 = accent.lightAcc2,
     onAcc = accent.onAccentColor,
     accInk = accent.lightAccInk,
-    accSoft = accent.lightAcc.copy(alpha = 0.16f),
-    accLine = accent.lightAcc.copy(alpha = 0.38f),
+    accSoft = accent.lightAcc.copy(alpha = OhAlpha.soft),
+    accLine = accent.lightAcc.copy(alpha = OhAlpha.line),
     blue = Color(0xFF007AFF),
     green = Color(0xFF34C759),
     red = Color(0xFFFF3B30),
@@ -233,13 +234,13 @@ fun ohLightColors(accent: OhAccent = OhAccent.Brand): OhColors = OhColors(
     recReady = Color(0xFF34C759),
     recEasing = Color(0xFFFF9500),
     recActive = Color(0xFFFF3B30),
-    dangerFill = Color(0xFFFF3B30).copy(alpha = 0.15f),
+    dangerFill = Color(0xFFFF3B30).copy(alpha = OhAlpha.danger),
     segmentThumb = Color(0xFFFFFFFF),
     knob = Color(0xFFFFFFFF),
     knobRing = Color(0x00000000),
-    scrim = Color(0x66000000),
-    barFill = Color(0xF0F7F7FA),
-    toastFill = Color(0xE0ECECEF),
-    timerBarFill = Color(0xF7FFFFFF),
+    scrim = Color(0xFF000000).copy(alpha = OhAlpha.scrim),
+    barFill = Color(0xFFF7F7FA).copy(alpha = OhAlpha.bar),
+    toastFill = Color(0xFFECECEF).copy(alpha = OhAlpha.toast),
+    timerBarFill = Color(0xFFFFFFFF).copy(alpha = OhAlpha.timerBar),
     bodyBase = Color(0xFF000000).copy(alpha = 0.14f),
 )

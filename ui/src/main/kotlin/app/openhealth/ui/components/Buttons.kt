@@ -1,7 +1,9 @@
 package app.openhealth.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -12,10 +14,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -54,6 +58,16 @@ fun OhButton(
     val type = OhTheme.type
     val dims = OhTheme.dims
     val interaction = rememberInteraction()
+    val pressed by interaction.collectIsPressedAsState()
+    val motion = OhTheme.motion
+    val pressedOpacity by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) OhAlpha.pressed else OhAlpha.full,
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = motion.fastDuration(),
+            easing = motion.ease,
+        ),
+        label = "buttonOpacity",
+    )
     val fill = when (variant) {
         OhButtonVariant.Primary -> colors.acc
         OhButtonVariant.Secondary -> colors.surface2
@@ -64,8 +78,12 @@ fun OhButton(
     val ink = when (variant) {
         OhButtonVariant.Primary -> colors.onAcc
         OhButtonVariant.Secondary -> colors.label
-        OhButtonVariant.Tinted -> colors.accInk
-        OhButtonVariant.Danger -> colors.redInk
+        // acc-ink on the 16 % tint measured 4.19:1 for the default accent over `bg`;
+        // `label` passes, and the tint itself carries the accent (§5.7).
+        OhButtonVariant.Tinted -> colors.label
+        // red-ink on the 15 % fill measures 4.23:1 (dark) and 4.40:1 (light), below the
+        // 4.5 of §11.1; `label` passes and the fill carries the danger signal (§5.7).
+        OhButtonVariant.Danger -> colors.label
         OhButtonVariant.Ghost -> colors.accInk
         OhButtonVariant.Quiet -> colors.label2
     }
@@ -79,10 +97,12 @@ fun OhButton(
         OhButtonSize.Small -> dims.buttonSmallPadH
         OhButtonSize.ExtraSmall -> dims.buttonSmallPadH
     }
+    // The small sizes take less vertical padding so they keep their stated heights
+    // (35 dp and 28 dp) while still growing at 200 % text.
     val padV = when (size) {
         OhButtonSize.Default -> dims.buttonPadV
-        OhButtonSize.Small -> dims.buttonSmallPadV
-        OhButtonSize.ExtraSmall -> dims.buttonSmallPadV
+        OhButtonSize.Small -> OhTheme.space.s2
+        OhButtonSize.ExtraSmall -> OhTheme.space.s0
     }
     val radius = when (size) {
         OhButtonSize.Default -> OhTheme.radius.base
@@ -94,18 +114,15 @@ fun OhButton(
         OhButtonSize.ExtraSmall -> type.footnote.copy(fontWeight = OhWeight.semibold)
     }
     val shape = RoundedCornerShape(radius)
-    Row(
-        modifier = modifier
-            .heightIn(min = height)
-            .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled)
-            .ohPressScale(interaction, OhTheme.motion.pressScale)
-            .clip(shape)
-            .background(fill)
-            .ohClickable(interaction, enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = padH, vertical = padV),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
+    val painted = modifier
+        .heightIn(min = height)
+        .alpha(if (!enabled) OhAlpha.disabled else pressedOpacity)
+        .ohPressScale(interaction, OhTheme.motion.pressScale)
+        .clip(shape)
+        .background(fill)
+        .ohClickable(interaction, enabled = enabled, role = Role.Button, onClick = onClick)
+        .padding(horizontal = padH, vertical = padV)
+    val label: @Composable () -> Unit = {
         if (leadingIcon != null) {
             OhIcon(
                 icon = leadingIcon,
@@ -116,6 +133,30 @@ fun OhButton(
             Spacer(Modifier.size(OhTheme.space.s2))
         }
         Text(text = text, style = textStyle, color = ink, maxLines = 1)
+    }
+    if (size == OhButtonSize.Default) {
+        Row(
+            modifier = painted,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            label()
+        }
+    } else {
+        // A `.sm` or `.xs` button paints below 44 dp, so its target grows to the
+        // minimum while the painted height stays as specified (§4.5, §11.1).
+        Box(
+            modifier = modifier.defaultMinSize(minHeight = dims.touchTarget),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(
+                modifier = painted,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                label()
+            }
+        }
     }
 }
 
@@ -165,7 +206,7 @@ fun OhIconButton(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = OhTheme.space.s1, end = OhTheme.space.s3)
-                    .size(dims.dot + dims.dotRing)
+                    .size(dims.dot + dims.dotRing * 2f)
                     .clip(CircleShape)
                     .background(colors.bgEl),
                 contentAlignment = Alignment.Center,
@@ -174,7 +215,7 @@ fun OhIconButton(
                     modifier = Modifier
                         .size(dims.dot)
                         .clip(CircleShape)
-                        .background(colors.orangeInk),
+                        .background(colors.orange),
                 )
             }
         }
@@ -213,7 +254,15 @@ fun OhChip(
         modifier = modifier
             .defaultMinSize(minHeight = dims.touchTarget)
             .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled)
-            .ohClickable(interaction, enabled = enabled, role = Role.Button, onClick = onClick),
+            .ohPressScale(interaction, OhTheme.motion.pressScale)
+            .selectable(
+                selected = selected,
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Row(
