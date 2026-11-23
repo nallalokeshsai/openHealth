@@ -162,6 +162,20 @@ Get-ChildItem references -Directory | Select-Object -ExpandProperty Name
 Select-String -Path *.md -Pattern 'WIREFRAMES|BUILD-PLAN'
 ```
 
+### Test device
+
+The owner tests on a physical phone over USB debugging, not an emulator, and its identity — serial, model, OS build, anything `adb` prints — must not enter this public repository. The machine-local values live in `.env.local` at the repository root, which the existing `.env.*` rule in `.gitignore` keeps ignored; source it before any `adb` or Gradle call so both target the phone:
+
+```sh
+set -a; . ./.env.local; set +a   # ANDROID_SERIAL for this machine only
+adb devices -l
+./gradlew :app-android:installDebug
+adb -s "$ANDROID_SERIAL" shell monkey -p app.openhealth -c android.intent.category.LAUNCHER 1
+adb -s "$ANDROID_SERIAL" logcat -s AndroidRuntime:E
+```
+
+When `adb devices -l` lists the phone as `device`, install and test on it instead of starting an emulator. This answers B0's "emulator or my physical phone" question: record "physical phone" in `docs/build-log.md` and do not ask again. If it is `unauthorized` or absent, ask the owner to unlock and accept the prompt; do not silently fall back to an emulator. Never write device output into the tree — no serial, model, IMEI, `adb devices` dump, raw `logcat` or screenshot carrying a status bar or notification — and never commit `.env.local`. Two exits need more than the phone: B12's sync test needs a second target (the phone plus one emulator is fine), and B14's macrobenchmark numbers come from the phone and are reported as real-hardware; an emulator run is the fallback and is flagged as not the reference device class.
+
 `references/` is ~5 GB and gitignored except `README.md` and `MANIFEST.md`. **Never `git add -A` from the repo root without checking `git status` first**, and never commit anything under `references/`. The working tree may hold deliberate deletions of superseded docs; do not restore them with `git checkout .`.
 
 ## Reference library
