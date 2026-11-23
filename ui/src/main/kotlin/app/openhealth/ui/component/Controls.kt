@@ -35,11 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -50,7 +50,6 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import app.openhealth.ui.icon.OhIcon
 import app.openhealth.ui.icon.OhIconName
 import app.openhealth.ui.theme.OhTheme
@@ -351,19 +350,6 @@ fun OhSwitch(
         animationSpec = tween(motion.fast, easing = motion.ease),
         label = "switch-knob-width"
     )
-    val travel = geometry.switchWidth - geometry.switchKnob - OhTheme.space.space1
-    val rtl = LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
-    val targetOffset = when {
-        rtl && checked -> OhTheme.space.space1
-        rtl -> travel
-        checked -> travel
-        else -> OhTheme.space.space1
-    }
-    val offsetX by animateDpAsState(
-        targetValue = targetOffset,
-        animationSpec = tween(motion.fast, easing = motion.ease),
-        label = "switch-knob-offset"
-    )
     Box(
         modifier = modifier
             .width(geometry.switchWidth)
@@ -387,9 +373,11 @@ fun OhSwitch(
                 .clip(RoundedCornerShape(OhTheme.radius.full))
                 .background(track)
         ) {
+            // Alignment, not a physical offset, keeps the knob on the inline end in RTL.
             Box(
                 modifier = Modifier
-                    .offset(x = offsetX)
+                    .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
+                    .padding(horizontal = OhTheme.space.space1)
                     .width(knobWidth)
                     .height(geometry.switchKnob)
                     .clip(RoundedCornerShape(OhTheme.radius.full))
@@ -423,7 +411,8 @@ fun OhStepper(
         modifier = modifier
             .height(geometry.stepperHeight)
             .clip(RoundedCornerShape(OhTheme.radius.base))
-            .background(colors.surface2),
+            .background(colors.surface2)
+            .alpha(if (enabled) 1f else geometry.rowDisabledAlpha),
         verticalAlignment = Alignment.CenterVertically
     ) {
         StepButton(
@@ -561,7 +550,7 @@ fun OhSlider(
                 }
             }
     ) {
-        val usable = (maxWidth - geometry.sliderKnob).coerceAtLeast(0.dp)
+        val usable = (maxWidth - geometry.sliderKnob).coerceAtLeast(androidx.compose.ui.unit.Dp.Hairline)
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()

@@ -6,6 +6,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/** The 24 × 24 dp icon grid of DESIGN.md §10.1, shared by the vector builder and the tests. */
+val OhIconGrid: Dp = 24.dp
+
 /**
  * Component geometry from DESIGN.md §4.3–§4.5 and §5. These are not new design tokens: every
  * value is the size the component section states. They live here because the design contract
@@ -147,11 +150,14 @@ data class OhGeometry(
     val sheetMaxHeightFraction: Float = 0.90f,
     val sheetScrimAlpha: Float = 0.40f,
     val sheetScrimBlur: Dp = 2.dp,
+    val sheetTonalElevation: Dp = 0.dp,
 
     // §5.17 dialog
     val dialogWidth: Dp = 300.dp,
     val dialogWideWidth: Dp = 440.dp,
     val dialogPadding: Dp = 22.dp,
+    /** 12.3: `0 12px 34px -8px rgba(0,0,0,.55)` for a floating surface. */
+    val dialogShadow: Dp = 24.dp,
 
     // §5.18 toast and undo
     val toastMaxWidthFraction: Float = 0.88f,

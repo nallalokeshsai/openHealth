@@ -1,7 +1,7 @@
-// The two architecture guards of Tech-Stack.md §16. checkPortability scans the pure modules;
-// checkLicences lives in :app-android (see openhealth.android.app) because the guard has to
-// resolve the classpath the phone actually ships, and Gradle forbids resolving another
-// project's configurations during task execution.
+// The architecture and appearance guards: checkPortability (Tech-Stack.md §16), checkLicences
+// (in :app-android, where the shipped classpath can be resolved) and checkDesignTokens
+// (DESIGN.md §0.2, the closed token set).
+import app.openhealth.buildlogic.CheckDesignTokensTask
 import app.openhealth.buildlogic.CheckPortabilityTask
 
 apply(plugin = "base")
@@ -20,6 +20,22 @@ tasks.register<CheckPortabilityTask>("checkPortability") {
     )
 }
 
+tasks.register<CheckDesignTokensTask>("checkDesignTokens") {
+    group = "verification"
+    description = "Fails if a Color( literal or a raw .dp literal appears outside ui/theme"
+    sources.from(
+        fileTree("ui/src") {
+            include("**/*.kt")
+            exclude("**/build/**")
+            exclude("**/theme/**")
+        },
+        fileTree("app-android/src") {
+            include("**/main/**/*.kt")
+            exclude("**/build/**")
+        },
+    )
+}
+
 tasks.named("check") {
-    dependsOn("checkPortability")
+    dependsOn("checkPortability", "checkDesignTokens")
 }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The window frame before Compose draws. It is the dark theme's page colour (DESIGN.md
+      Appendix A.1, bg #000000); every other colour comes from OhTheme. B3 adds the Android 12
+      splash screen on top of this theme.
+    -->
+    <color name="openhealth_bg">#000000</color>
+</resources>

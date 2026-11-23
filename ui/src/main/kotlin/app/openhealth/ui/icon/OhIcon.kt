@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathNode
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import app.openhealth.ui.theme.OhIconGrid
 import app.openhealth.ui.theme.OhTheme
 
 /**
@@ -140,8 +140,8 @@ enum class OhIconName {
 
 internal fun iconVector(name: OhIconName, strokeWidth: Float): ImageVector = ImageVector.Builder(
     name = "OhIcon.${name.name}",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
+    defaultWidth = OhIconGrid,
+    defaultHeight = OhIconGrid,
     viewportWidth = 24f,
     viewportHeight = 24f
 ).addPath(
@@ -205,20 +205,23 @@ private class Glyph {
 
 @Suppress("CyclomaticComplexMethod", "LongMethod")
 private fun glyphOf(name: OhIconName): List<PathNode> = when (name) {
-    OhIconName.Today -> Glyph().circle(12f, 12f, 4.2f)
-        .line(12f, 2.5f, 12f, 4.5f).line(12f, 19.5f, 12f, 21.5f)
-        .line(2.5f, 12f, 4.5f, 12f).line(19.5f, 12f, 21.5f, 12f)
-        .line(5.3f, 5.3f, 6.7f, 6.7f).line(17.3f, 17.3f, 18.7f, 18.7f)
-        .line(5.3f, 18.7f, 6.7f, 17.3f).line(17.3f, 6.7f, 18.7f, 5.3f).build()
+    OhIconName.Today -> Glyph()
+        .polyline(3.5f, 10.5f, 12f, 3.5f, 20.5f, 10.5f)
+        .line(6f, 10.5f, 6f, 20.5f).line(18f, 10.5f, 18f, 20.5f)
+        .line(6f, 20.5f, 18f, 20.5f)
+        .line(10f, 20.5f, 10f, 14.5f).line(14f, 20.5f, 14f, 14.5f)
+        .line(10f, 14.5f, 14f, 14.5f).build()
 
     OhIconName.Train, OhIconName.Dumbbell, OhIconName.Strength -> Glyph()
         .line(3f, 9f, 3f, 15f).line(21f, 9f, 21f, 15f)
         .line(6f, 6.5f, 6f, 17.5f).line(18f, 6.5f, 18f, 17.5f)
         .line(6f, 12f, 18f, 12f).build()
 
-    OhIconName.Food -> Glyph().circle(12f, 12f, 8.5f)
-        .line(7f, 7f, 7f, 17f).line(17f, 7f, 17f, 17f)
-        .line(7f, 9.5f, 17f, 9.5f).build()
+    OhIconName.Food -> Glyph()
+        .line(7f, 3.5f, 7f, 20.5f)
+        .line(4.5f, 3.5f, 4.5f, 9f).line(9.5f, 3.5f, 9.5f, 9f).line(4.5f, 9f, 9.5f, 9f)
+        .line(16.5f, 3.5f, 16.5f, 20.5f)
+        .moveTo(16.5f, 3.5f).curveTo(19.5f, 6f, 19.5f, 10.5f, 16.5f, 11.5f).build()
 
     OhIconName.Body -> Glyph().circle(12f, 5.2f, 2.4f)
         .moveTo(8.6f, 21f).lineTo(8.6f, 12.5f).curveTo(8.6f, 10.8f, 9.9f, 9.6f, 12f, 9.6f)
@@ -233,10 +236,12 @@ private fun glyphOf(name: OhIconName): List<PathNode> = when (name) {
         .line(3f, 17f, 21f, 17f).circle(10.5f, 17f, 1.6f).build()
 
     OhIconName.Settings -> Glyph().circle(12f, 12f, 3.2f)
-        .line(12f, 2.8f, 12f, 5.2f).line(12f, 18.8f, 12f, 21.2f)
-        .line(2.8f, 12f, 5.2f, 12f).line(18.8f, 12f, 21.2f, 12f)
-        .line(5.6f, 5.6f, 7.3f, 7.3f).line(16.7f, 16.7f, 18.4f, 18.4f)
-        .line(5.6f, 18.4f, 7.3f, 16.7f).line(16.7f, 7.3f, 18.4f, 5.6f).build()
+        .polygon(
+            21.2f, 12f, 18.28f, 14.6f, 18.51f, 18.51f, 14.6f, 18.28f,
+            12f, 21.2f, 9.4f, 18.28f, 5.49f, 18.51f, 5.72f, 14.6f,
+            2.8f, 12f, 5.72f, 9.4f, 5.49f, 5.49f, 9.4f, 5.72f,
+            12f, 2.8f, 14.6f, 5.72f, 18.51f, 5.49f, 18.28f, 9.4f
+        ).build()
 
     OhIconName.Workout -> Glyph().line(2.5f, 12f, 21.5f, 12f)
         .roundRect(4f, 7.5f, 4f, 9f, 1f).roundRect(16f, 7.5f, 4f, 9f, 1f)
@@ -406,9 +411,12 @@ private fun glyphOf(name: OhIconName): List<PathNode> = when (name) {
     OhIconName.Plate -> Glyph().circle(12f, 12f, 8.5f).circle(12f, 12f, 4.5f)
         .line(12f, 3.5f, 12f, 5f).line(12f, 19f, 12f, 20.5f).build()
 
-    OhIconName.Machine -> Glyph().roundRect(3f, 8f, 4f, 12f, 1f)
-        .roundRect(17f, 8f, 4f, 12f, 1f).line(7f, 10f, 17f, 10f)
-        .line(7f, 16f, 17f, 16f).line(3f, 20f, 21f, 20f).build()
+    OhIconName.Machine -> Glyph().line(4f, 3f, 4f, 20.5f)
+        .circle(4f, 3.5f, 1.5f)
+        .line(4f, 5f, 4f, 13f).line(4f, 13f, 9f, 13f)
+        .line(9f, 13f, 15f, 13f).line(12f, 13f, 12f, 20.5f)
+        .line(6f, 20.5f, 12f, 20.5f).line(15f, 13f, 15f, 20.5f)
+        .circle(9f, 16f, 2f).build()
 
     OhIconName.Band -> Glyph()
         .moveTo(7f, 5f).curveTo(3.5f, 7f, 3.5f, 17f, 7f, 19f)
@@ -432,9 +440,10 @@ private fun glyphOf(name: OhIconName): List<PathNode> = when (name) {
         .moveTo(7f, 15f).curveTo(7f, 11f, 9f, 8.5f, 12f, 8.5f)
         .curveTo(15f, 8.5f, 17f, 11f, 17f, 15f).line(12f, 15f, 13.5f, 11.5f).build()
 
-    OhIconName.Cuff -> Glyph().roundRect(7f, 7f, 10f, 10f, 2.5f)
-        .moveTo(7f, 10f).quadTo(3f, 13f, 7f, 16f)
-        .moveTo(17f, 10f).quadTo(21f, 13f, 17f, 16f).build()
+    OhIconName.Cuff -> Glyph().roundRect(8f, 8f, 8f, 8f, 2.5f)
+        .circle(12f, 12f, 2f)
+        .moveTo(8f, 11f).quadTo(4f, 13f, 8f, 15f)
+        .moveTo(16f, 11f).quadTo(20f, 13f, 16f, 15f).build()
 
     OhIconName.Glucose -> Glyph()
         .moveTo(12f, 3f).curveTo(8f, 8f, 6f, 10.5f, 6f, 13.5f)
@@ -505,10 +514,11 @@ private fun glyphOf(name: OhIconName): List<PathNode> = when (name) {
         .moveTo(16f, 3f).lineTo(15f, 11f).lineTo(17.5f, 21f)
         .line(9f, 11f, 12f, 13f).line(15f, 11f, 12f, 13f).build()
 
-    OhIconName.PullUp -> Glyph().line(3f, 4f, 21f, 4f)
-        .line(7f, 4f, 7f, 9f).line(17f, 4f, 17f, 9f)
-        .line(7f, 9f, 12f, 13f).line(17f, 9f, 12f, 13f)
-        .line(12f, 13f, 12f, 17f).line(9f, 21f, 12f, 17f).line(15f, 21f, 12f, 17f).build()
+    OhIconName.PullUp -> Glyph().line(3f, 3f, 21f, 3f)
+        .line(7f, 3f, 7f, 7.5f).line(17f, 3f, 17f, 7.5f)
+        .line(7f, 7.5f, 10f, 10.5f).line(17f, 7.5f, 14f, 10.5f)
+        .circle(12f, 13f, 2.2f)
+        .line(12f, 15.2f, 12f, 20f).line(9f, 21f, 12f, 20f).line(15f, 21f, 12f, 20f).build()
 
     OhIconName.Run -> Glyph().circle(15f, 4.5f, 2.2f)
         .line(15f, 7f, 12f, 12f).line(12f, 12f, 15f, 16f).line(15f, 16f, 13f, 21f)

@@ -53,6 +53,15 @@ androidx.compose.ui:ui-unit = Apache-2.0
 androidx.compose.ui:ui-unit-android = Apache-2.0
 androidx.compose.ui:ui-util = Apache-2.0
 androidx.compose.ui:ui-util-android = Apache-2.0
+androidx.compose.material3:material3 = Apache-2.0
+androidx.compose.material3:material3-android = Apache-2.0
+androidx.compose.material3:material3-ripple = Apache-2.0
+androidx.compose.material3:material3-ripple-android = Apache-2.0
+androidx.compose.material:material-ripple = Apache-2.0
+androidx.compose.material:material-ripple-android = Apache-2.0
+# Debug-only: provides the ComponentActivity the Compose screenshot tests launch under Robolectric.
+# It is never on the release classpath.
+androidx.compose.ui:ui-test-manifest = Apache-2.0
 androidx.compose:compose-bom = Apache-2.0
 androidx.concurrent:concurrent-futures = Apache-2.0
 androidx.core:core = Apache-2.0
@@ -65,6 +74,7 @@ androidx.graphics:graphics-shapes = Apache-2.0
 androidx.graphics:graphics-shapes-android = Apache-2.0
 androidx.interpolator:interpolator = Apache-2.0
 androidx.lifecycle:lifecycle-common = Apache-2.0
+androidx.lifecycle:lifecycle-common-java8 = Apache-2.0
 androidx.lifecycle:lifecycle-common-jvm = Apache-2.0
 androidx.lifecycle:lifecycle-livedata-core = Apache-2.0
 androidx.lifecycle:lifecycle-process = Apache-2.0

@@ -42,7 +42,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.openhealth.ui.theme.OhTheme
@@ -76,7 +75,7 @@ fun OhSheet(
         containerColor = colors.bgEl,
         contentColor = colors.label,
         scrimColor = Color.Black.copy(alpha = geometry.sheetScrimAlpha),
-        tonalElevation = Dp(0f),
+        tonalElevation = geometry.sheetTonalElevation,
         shape = RoundedCornerShape(
             topStart = OhTheme.radius.xl,
             topEnd = OhTheme.radius.xl
@@ -220,7 +219,7 @@ fun OhDialogCard(
     Column(
         modifier = modifier
             .width(if (wide) geometry.dialogWideWidth else geometry.dialogWidth)
-            .shadow(Dp(24f), shape)
+            .shadow(geometry.dialogShadow, shape)
             .clip(shape)
             .background(colors.surfaceRaised)
             .border(OhTheme.space.hairline, colors.raisedLine, shape)

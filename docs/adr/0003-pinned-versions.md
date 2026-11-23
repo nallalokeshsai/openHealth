@@ -42,6 +42,24 @@ Checked on 2026-11-22 against the publishers' own metadata (Google Maven
 PostgreSQL 16+ is a server runtime (`Tech-Stack.md` §7), not a Gradle dependency; it is pinned in
 B13 with the server image.
 
+## Added in B1 (verified 2026-11-23)
+
+B1 applies the screenshot testing `Tech-Stack.md` §10 names. All of these are **test-only**: none is
+on a shipped classpath, and `checkLicences` still reviews only what ships.
+
+| Component | Pinned | Evidence and why this one |
+|---|---|---|
+| Roborazzi (plugin and libraries) | 1.79.0 | Latest stable on Maven Central (`maven-metadata.xml`, last updated 2026-11-12; 1.80 is not published). Apache-2.0. |
+| Robolectric | 4.18.1 | Latest stable on Maven Central (4.18.1, last updated 2026-11-18). Apache-2.0. Its native graphics mode renders Compose on the JVM. |
+| androidx.test.ext:junit | 1.3.0 | Latest stable on Google Maven (1.4.0-alpha04 is the newest alpha). Apache-2.0. |
+| JUnit 4 | 4.13.2 | The last JUnit 4 release; Robolectric and Compose UI rules run on it. EPL-1.0. |
+| JUnit Vintage engine | 6.1.3 | Matches the Jupiter pin, so JUnit 4 test classes run under the module's existing `useJUnitPlatform()`. EPL-2.0. |
+| Compose UI test, Material 3 | via the 2026.11.01 BOM | The UI test artefacts and `material3` come from the BOM already pinned; `material3` is behaviour only (sheet, text-style default), never its palette (DESIGN.md Appendix B). |
+
+The Roborazzi plugin is applied only to `:ui`; it creates the record/verify/compare tasks and passes
+the mode to the test JVM. Screenshot goldens are committed under `ui/src/test/screenshots` and are
+re-recorded only with `recordRoborazziDebug`.
+
 ## Decisions this pinning forced
 
 1. **Built-in Kotlin, not the `kotlin-android` plugin.** AGP 9 enables its own Kotlin compilation

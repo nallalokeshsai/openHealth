@@ -3,6 +3,7 @@
 package app.openhealth.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
@@ -179,12 +181,19 @@ fun OhSearchField(
                     Spacer(Modifier.width(OhTheme.space.space3))
                 }
                 if (value.isNotEmpty()) {
-                    OhIconButton(
-                        icon = OhIconName.Close,
-                        contentDescription = "Clear search",
-                        onClick = onClear,
-                        tint = colors.label2
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(OhTheme.space.touchTarget)
+                            .clickable(role = Role.Button, onClick = onClear),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        OhIcon(
+                            name = OhIconName.Close,
+                            contentDescription = "Clear search",
+                            size = geometry.searchClear,
+                            tint = colors.label2
+                        )
+                    }
                 }
             }
         }

@@ -8,6 +8,11 @@ android {
     defaultConfig {
         applicationId = "app.openhealth"
     }
+
+    buildFeatures {
+        // The debug-only component gallery checks BuildConfig.DEBUG; nothing else uses it.
+        buildConfig = true
+    }
 }
 
 dependencies {

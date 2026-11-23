@@ -1,6 +1,6 @@
 package app.openhealth.ui.icon
 
-import androidx.compose.ui.unit.dp
+import app.openhealth.ui.theme.OhIconGrid
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -15,8 +15,8 @@ class IconSetTest {
     fun everyGlyphBuildsOnTheTwentyFourDpGrid() {
         for (name in OhIconName.entries) {
             val vector = iconVector(name, strokeWidth = 1.7f)
-            assertEquals(24.dp, vector.defaultWidth, "$name: width")
-            assertEquals(24.dp, vector.defaultHeight, "$name: height")
+            assertEquals(OhIconGrid, vector.defaultWidth, "$name: width")
+            assertEquals(OhIconGrid, vector.defaultHeight, "$name: height")
             assertTrue(vector.viewportWidth == 24f, "$name: viewport width")
             assertTrue(vector.viewportHeight == 24f, "$name: viewport height")
             assertTrue(vector.root.size > 0, "$name: no path")
