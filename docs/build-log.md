@@ -853,7 +853,12 @@ confirmed in the code or a golden, then fixed in this phase and re-verified.
 | Selection used a trailing check, which is not one of §6.2's treatments | A 2 dp accent inset line on the selected row |
 | Dates and times were English/24-hour and the app name was a literal | `mediumDate`, `shortDate`, `timeOf`, `hourOf` and `recordingDelay` use the observed locale; `app_name` is a resource |
 
-**Deliberately not changed, and why:** the bars still use the 94 % fill without a real
+**Review fixes shipped in `2864314`.** The goldens were re-recorded after the fixes and
+verify in `check`; the instrumented suite was re-run on the phone (7/7).
+
+**Deliberately not changed, and why:** Today's demo numbers do not open a provenance
+sheet yet; the real cards replace them in B5–B9 and the timeline already exposes their
+provenance. The bars still use the 94 % fill without a real
 backdrop blur (a platform-mode feature with Reduce Transparency, B10); app lock does not
 immediately re-prompt when switched on (it re-arms on the next background); the timeline
 has no source filter or Edit/Exclude on measurements (B6/B8 add the sources and the
@@ -916,6 +921,10 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 - **`AppViewModel` is large** (80 helpers). Detekt's `LargeClass` and
   `TooManyFunctions` are scoped to it and to `screen/**`; splitting into per-screen
   holders is the next structural step. Do not widen the scope.
+- **Process death and rotation:** onboarding answers and the current step live in the
+  `AppViewModel`, not `SavedStateHandle`, so a process kill mid-onboarding restarts at
+  Welcome and an open Settings sheet closes on rotation. The quick-add text survives in
+  `AppState`; the rest is a later reliability pass.
 - **The timezone is captured at container creation.** A timezone change while the app
   is running is not applied until the next process start; the rollups use the zone on
   each value, so the dates stay correct, but the displayed "today" can lag.
