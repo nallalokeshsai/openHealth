@@ -1,0 +1,43 @@
+-- One timeline over every stored event (pr.md §6.27): nothing the app stores is
+-- invisible. The union keeps each source table's own (local_date) index usable; rows
+-- carry a kind, the referenced id and the one field that names the row.
+
+CREATE VIEW timeline AS
+SELECT
+    'observation' AS kind,
+    id AS entity_id,
+    local_date AS local_date,
+    happened_at AS happened_at,
+    recorded_at AS recorded_at,
+    source_id AS source_id,
+    type AS detail,
+    user_edited AS edited
+FROM observation
+UNION ALL
+SELECT
+    'session', id, local_date, happened_at, recorded_at, source_id, routine_id, 0
+FROM session
+UNION ALL
+SELECT
+    'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
+FROM entry
+UNION ALL
+SELECT
+    'measurement', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM measurement
+UNION ALL
+SELECT
+    'vital', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM vital;
+
+timelineForDay:
+SELECT * FROM timeline WHERE local_date = :localDate ORDER BY happened_at DESC, entity_id;
+
+timelinePage:
+SELECT * FROM timeline ORDER BY happened_at DESC, entity_id LIMIT :limit OFFSET :offset;
+
+timelineForKind:
+SELECT * FROM timeline WHERE kind = :kind ORDER BY happened_at DESC LIMIT :limit;
+
+countTimelineRows:
+SELECT count(*) FROM timeline;

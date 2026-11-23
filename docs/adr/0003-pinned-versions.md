@@ -26,6 +26,14 @@ live in `gradle/libs.versions.toml`; this file explains them.
 | kotlinx-serialization | 1.13.0 | 1.13.0 | Latest stable. |
 | Detekt | 1.23.8 | 1.23.8 (1.23.x is the current stable line) | Current stable. |
 | ktlint (Gradle plugin) | 14.2.0 | 14.2.0 | Current stable. |
+| Kotest | 6.2.7 | 6.2.7 (Maven Central, 2026-11-23) | Property and table tests, JVM only. |
+| Bouncy Castle | 1.87 | 1.87 (Maven Central, 2026-11-23) | Argon2id for the export passphrase; pure Java, Bouncy Castle (MIT-style) licence. |
+| SQLCipher for Android | 4.20.0 | 4.20.0 (Maven Central, 2026-11-23) | Community edition, BSD-3-Clause; encrypted database on device. |
+| AndroidX test | runner 1.7.0, ext:junit 1.3.0 | the same (Google Maven, 2026-11-23) | The instrumented encrypted-database test. |
+
+**SQLite JDBC** is not pinned in the catalogue: `app.cash.sqldelight:sqlite-driver`
+2.4.1 brings its own `org.xerial:sqlite-jdbc` for JVM tests and `tools/fixtures`. It
+never reaches the APK.
 
 **KSP is intentionally absent.** Nothing in the client uses annotation processing:
 Koin is runtime DI, Compose uses `org.jetbrains.kotlin.plugin.compose`, and SQLDelight
@@ -43,7 +51,9 @@ that matches the Kotlin line and record it here.
   resolves it. `targetSdk` stays 37.
 - **SQLDelight 2.x.** Verified in a throwaway JVM module on Gradle 9.9.2 / Kotlin
   2.4.21: the `app.cash.sqldelight` plugin applies, a `.sq` file generates, and the
-  module builds. The plugin is wired into `:data` in B2 with the real schema.
+  module builds. In B2 the plugin is wired into `:data` with the real schema, the JVM
+  driver runs the tests and `tools/fixtures`; the Android driver plus SQLCipher 4.20.0
+  is verified on the owner's phone by `EncryptedDatabaseTest`.
 - **Guards.** `checkPortability` fails on `import android.os.Bundle` in `:core`;
   `checkLicences` fails when the LGPL-2.1 `org.hibernate.orm:hibernate-core` is added
   to a client module, whether as an `implementation` dependency of an Android library

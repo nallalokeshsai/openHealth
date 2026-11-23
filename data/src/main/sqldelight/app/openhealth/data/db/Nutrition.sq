@@ -1,0 +1,133 @@
+-- Layer 4 nutrition objects (pr.md §6.3, §7.4). A day's totals are the sum of its
+-- entries exactly: the stored per-entry values are not rounded, and the rollup adds
+-- them without intermediate rounding.
+
+CREATE TABLE food (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    brand TEXT,
+    barcode TEXT,
+    source_kind TEXT NOT NULL,
+    source_ref TEXT,
+    energy_kcal_per_100g REAL,
+    protein_g_per_100g REAL,
+    carbs_g_per_100g REAL,
+    fat_g_per_100g REAL,
+    fibre_g_per_100g REAL,
+    serving_json TEXT,
+    verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX food_barcode ON food(barcode);
+CREATE INDEX food_name ON food(name);
+
+CREATE TABLE meal (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    notes TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX meal_local_date ON meal(local_date);
+
+CREATE TABLE entry (
+    id TEXT NOT NULL PRIMARY KEY,
+    meal_id TEXT,
+    food_id TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    quantity_g REAL,
+    energy_kcal REAL,
+    protein_g REAL,
+    carbs_g REAL,
+    fat_g REAL,
+    fibre_g REAL,
+    source_kind TEXT NOT NULL,
+    user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX entry_local_date ON entry(local_date);
+CREATE INDEX entry_happened ON entry(happened_at);
+CREATE INDEX entry_meal ON entry(meal_id);
+
+insertFood:
+INSERT OR REPLACE INTO food(
+    id, name, brand, barcode, source_kind, source_ref, energy_kcal_per_100g,
+    protein_g_per_100g, carbs_g_per_100g, fat_g_per_100g, fibre_g_per_100g,
+    serving_json, verified, created_at, updated_at, revision
+) VALUES (
+    :id, :name, :brand, :barcode, :sourceKind, :sourceRef, :energyKcalPer100g,
+    :proteinGPer100g, :carbsGPer100g, :fatGPer100g, :fibreGPer100g,
+    :servingJson, :verified, :createdAt, :updatedAt, :revision
+);
+
+foodById:
+SELECT * FROM food WHERE id = :id;
+
+foodByBarcode:
+SELECT * FROM food WHERE barcode = :barcode LIMIT 1;
+
+searchFoods:
+SELECT * FROM food WHERE name LIKE :prefix ORDER BY name LIMIT :limit;
+
+countFoods:
+SELECT count(*) FROM food;
+
+allFoods:
+SELECT * FROM food ORDER BY name;
+
+insertMeal:
+INSERT OR REPLACE INTO meal(
+    id, name, kind, local_date, notes, created_at, updated_at, revision
+) VALUES (
+    :id, :name, :kind, :localDate, :notes, :createdAt, :updatedAt, :revision
+);
+
+mealById:
+SELECT * FROM meal WHERE id = :id;
+
+mealsForDay:
+SELECT * FROM meal WHERE local_date = :localDate ORDER BY created_at;
+
+allMeals:
+SELECT * FROM meal ORDER BY created_at;
+
+insertEntry:
+INSERT OR REPLACE INTO entry(
+    id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g,
+    energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, user_verified,
+    user_edited, revision
+) VALUES (
+    :id, :mealId, :foodId, :localDate, :zoneId, :happenedAt, :recordedAt, :quantityG,
+    :energyKcal, :proteinG, :carbsG, :fatG, :fibreG, :sourceKind, :userVerified,
+    :userEdited, :revision
+);
+
+entryById:
+SELECT * FROM entry WHERE id = :id;
+
+entriesForDay:
+SELECT * FROM entry WHERE local_date = :localDate ORDER BY happened_at;
+
+entriesForMeal:
+SELECT * FROM entry WHERE meal_id = :mealId ORDER BY happened_at;
+
+countEntries:
+SELECT count(*) FROM entry;
+
+allEntries:
+SELECT * FROM entry ORDER BY happened_at;
+
+deleteEntry:
+DELETE FROM entry WHERE id = :id;

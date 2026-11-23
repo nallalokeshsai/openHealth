@@ -1,0 +1,62 @@
+-- Layer 1 of the five-layer model (pr.md §7.1): immutable ingestion records.
+-- A payload may be compacted after the retention window; its hash, source,
+-- timestamps and idempotency key stay forever so every derived value still explains
+-- itself. No UPDATE ever changes the payload except the one-way compaction.
+
+CREATE TABLE raw_record (
+    id TEXT NOT NULL PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    device TEXT,
+    app_version TEXT,
+    received_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    happened_at INTEGER,
+    payload_hash TEXT NOT NULL,
+    payload_ref TEXT,
+    payload TEXT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    schema_version INTEGER NOT NULL,
+    compacted_at INTEGER
+);
+
+CREATE INDEX raw_record_received ON raw_record(received_at);
+CREATE INDEX raw_record_hash ON raw_record(payload_hash);
+
+insertRawRecord:
+INSERT OR IGNORE INTO raw_record(
+    id, source_id, source_kind, device, app_version, received_at, recorded_at,
+    happened_at, payload_hash, payload_ref, payload, idempotency_key, schema_version,
+    compacted_at
+) VALUES (
+    :id, :sourceId, :sourceKind, :device, :appVersion, :receivedAt, :recordedAt,
+    :happenedAt, :payloadHash, :payloadRef, :payload, :idempotencyKey, :schemaVersion,
+    NULL
+);
+
+rawRecordById:
+SELECT * FROM raw_record WHERE id = :id;
+
+rawRecordByIdempotencyKey:
+SELECT * FROM raw_record WHERE idempotency_key = :key;
+
+rawRecordByHash:
+SELECT * FROM raw_record WHERE payload_hash = :hash LIMIT 1;
+
+rawRecordsReceivedBetween:
+SELECT * FROM raw_record WHERE received_at >= :from AND received_at < :to ORDER BY received_at;
+
+-- Compaction removes the payload and keeps the audit trail (pr.md §7.1).
+compactPayloadsBefore:
+UPDATE raw_record
+SET payload = NULL, payload_ref = NULL, compacted_at = :compactedAt
+WHERE recorded_at < :before AND compacted_at IS NULL;
+
+countRawRecords:
+SELECT count(*) FROM raw_record;
+
+countCompactedRecords:
+SELECT count(*) FROM raw_record WHERE compacted_at IS NOT NULL;
+
+allRawRecords:
+SELECT * FROM raw_record ORDER BY received_at, id;

@@ -1,0 +1,274 @@
+-- Layer 4 training objects: exercise, routine, programme, session and set
+-- (pr.md §7.4, §6.5). A set is append-only; a corrected set keeps its original in the
+-- change log rather than losing history. Muscle lists are comma-separated muscle keys.
+
+CREATE TABLE exercise (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    primary_muscles TEXT NOT NULL,
+    secondary_muscles TEXT NOT NULL,
+    equipment TEXT,
+    instructions TEXT,
+    met_activity TEXT,
+    is_custom INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    source_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX exercise_name ON exercise(name);
+
+CREATE TABLE routine (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    folder TEXT,
+    notes TEXT,
+    archived_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    source_id TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE routine_exercise (
+    id TEXT NOT NULL PRIMARY KEY,
+    routine_id TEXT NOT NULL,
+    exercise_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    target_sets INTEGER,
+    target_reps INTEGER,
+    target_weight_kg REAL,
+    notes TEXT
+);
+
+CREATE INDEX routine_exercise_routine ON routine_exercise(routine_id);
+
+CREATE TABLE programme (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    weeks INTEGER NOT NULL,
+    notes TEXT,
+    archived_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    source_id TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE programme_routine (
+    id TEXT NOT NULL PRIMARY KEY,
+    programme_id TEXT NOT NULL,
+    routine_id TEXT NOT NULL,
+    week INTEGER NOT NULL,
+    position INTEGER NOT NULL
+);
+
+CREATE INDEX programme_routine_programme ON programme_routine(programme_id);
+
+CREATE TABLE session (
+    id TEXT NOT NULL PRIMARY KEY,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    routine_id TEXT,
+    programme_id TEXT,
+    notes TEXT,
+    source_id TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX session_local_date ON session(local_date);
+CREATE INDEX session_happened ON session(happened_at);
+
+CREATE TABLE session_exercise (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    exercise_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    notes TEXT
+);
+
+CREATE INDEX session_exercise_session ON session_exercise(session_id);
+
+CREATE TABLE work_set (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    session_exercise_id TEXT,
+    exercise_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    weight_kg REAL NOT NULL,
+    reps INTEGER NOT NULL,
+    rir REAL,
+    rpe REAL,
+    is_warmup INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    is_backoff INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    is_failure INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    is_bodyweight INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    tempo TEXT,
+    rest_seconds INTEGER,
+    completed_at INTEGER NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX work_set_session ON work_set(session_id, position);
+CREATE INDEX work_set_exercise ON work_set(exercise_id, completed_at);
+
+insertExercise:
+INSERT OR REPLACE INTO exercise(
+    id, name, primary_muscles, secondary_muscles, equipment, instructions, met_activity,
+    is_custom, source_id, created_at, updated_at, revision
+) VALUES (
+    :id, :name, :primaryMuscles, :secondaryMuscles, :equipment, :instructions,
+    :metActivity, :isCustom, :sourceId, :createdAt, :updatedAt, :revision
+);
+
+exerciseById:
+SELECT * FROM exercise WHERE id = :id;
+
+allExercises:
+SELECT * FROM exercise ORDER BY name;
+
+countExercises:
+SELECT count(*) FROM exercise;
+
+insertRoutine:
+INSERT OR REPLACE INTO routine(
+    id, name, folder, notes, archived_at, created_at, updated_at, source_id, revision
+) VALUES (
+    :id, :name, :folder, :notes, :archivedAt, :createdAt, :updatedAt, :sourceId, :revision
+);
+
+routineById:
+SELECT * FROM routine WHERE id = :id;
+
+allRoutines:
+SELECT * FROM routine ORDER BY name;
+
+insertRoutineExercise:
+INSERT OR REPLACE INTO routine_exercise(
+    id, routine_id, exercise_id, position, target_sets, target_reps,
+    target_weight_kg, notes
+) VALUES (
+    :id, :routineId, :exerciseId, :position, :targetSets, :targetReps,
+    :targetWeightKg, :notes
+);
+
+allRoutineExercises:
+SELECT * FROM routine_exercise ORDER BY routine_id, position;
+
+exercisesInRoutine:
+SELECT exercise.* FROM routine_exercise
+JOIN exercise ON exercise.id = routine_exercise.exercise_id
+WHERE routine_exercise.routine_id = :routineId
+ORDER BY routine_exercise.position;
+
+insertProgramme:
+INSERT OR REPLACE INTO programme(
+    id, name, weeks, notes, archived_at, created_at, updated_at, source_id, revision
+) VALUES (
+    :id, :name, :weeks, :notes, :archivedAt, :createdAt, :updatedAt, :sourceId, :revision
+);
+
+programmeById:
+SELECT * FROM programme WHERE id = :id;
+
+allProgrammes:
+SELECT * FROM programme ORDER BY name;
+
+insertProgrammeRoutine:
+INSERT OR REPLACE INTO programme_routine(
+    id, programme_id, routine_id, week, position
+) VALUES (
+    :id, :programmeId, :routineId, :week, :position
+);
+
+allProgrammeRoutines:
+SELECT * FROM programme_routine ORDER BY programme_id, week, position;
+
+routinesInProgramme:
+SELECT routine.* FROM programme_routine
+JOIN routine ON routine.id = programme_routine.routine_id
+WHERE programme_routine.programme_id = :programmeId
+ORDER BY programme_routine.week, programme_routine.position;
+
+insertSession:
+INSERT OR REPLACE INTO session(
+    id, started_at, ended_at, local_date, zone_id, happened_at, recorded_at,
+    routine_id, programme_id, notes, source_id, revision, updated_at
+) VALUES (
+    :id, :startedAt, :endedAt, :localDate, :zoneId, :happenedAt, :recordedAt,
+    :routineId, :programmeId, :notes, :sourceId, :revision, :updatedAt
+);
+
+sessionById:
+SELECT * FROM session WHERE id = :id;
+
+sessionsForDay:
+SELECT * FROM session WHERE local_date = :localDate ORDER BY started_at;
+
+recentSessions:
+SELECT * FROM session ORDER BY started_at DESC LIMIT :limit;
+
+countSessions:
+SELECT count(*) FROM session;
+
+allSessions:
+SELECT * FROM session ORDER BY started_at;
+
+insertSessionExercise:
+INSERT OR REPLACE INTO session_exercise(
+    id, session_id, exercise_id, position, notes
+) VALUES (
+    :id, :sessionId, :exerciseId, :position, :notes
+);
+
+sessionExercises:
+SELECT * FROM session_exercise WHERE session_id = :sessionId ORDER BY position;
+
+allSessionExercises:
+SELECT * FROM session_exercise ORDER BY session_id, position;
+
+insertWorkSet:
+INSERT OR IGNORE INTO work_set(
+    id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps,
+    rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds,
+    completed_at, happened_at, recorded_at, source_id, revision
+) VALUES (
+    :id, :sessionId, :sessionExerciseId, :exerciseId, :position, :weightKg, :reps,
+    :rir, :rpe, :isWarmup, :isBackoff, :isFailure, :isBodyweight, :tempo, :restSeconds,
+    :completedAt, :happenedAt, :recordedAt, :sourceId, :revision
+);
+
+workSetById:
+SELECT * FROM work_set WHERE id = :id;
+
+setsForSession:
+SELECT * FROM work_set WHERE session_id = :sessionId ORDER BY position;
+
+setsForExerciseBetween:
+SELECT * FROM work_set
+WHERE exercise_id = :exerciseId AND completed_at >= :from AND completed_at < :to
+ORDER BY completed_at;
+
+setsForDay:
+SELECT * FROM work_set WHERE happened_at >= :from AND happened_at < :to ORDER BY position;
+
+countWorkSets:
+SELECT count(*) FROM work_set;
+
+allWorkSets:
+SELECT * FROM work_set ORDER BY session_id, position;
+
+deleteWorkSet:
+DELETE FROM work_set WHERE id = :id;
+
+deleteSession:
+DELETE FROM session WHERE id = :id;

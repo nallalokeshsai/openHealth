@@ -1,0 +1,678 @@
+package app.openhealth.data.corpus
+
+import app.openhealth.core.ids.IdGenerator
+import app.openhealth.core.ids.ObservationId
+import app.openhealth.core.ids.RandomIdGenerator
+import app.openhealth.core.ids.RawRecordId
+import app.openhealth.core.ids.SourceId
+import app.openhealth.core.ingestion.RawRecord
+import app.openhealth.core.observation.Observation
+import app.openhealth.core.observation.ObservationType
+import app.openhealth.core.observation.Provenance
+import app.openhealth.core.observation.SourceKind
+import app.openhealth.core.seam.ClockSeam
+import app.openhealth.core.seam.SystemClock
+import app.openhealth.core.source.Source
+import app.openhealth.core.source.SourcePermission
+import app.openhealth.core.time.Days
+import app.openhealth.core.time.TimeProvenance
+import app.openhealth.core.units.Measure
+import app.openhealth.core.units.UcumUnit
+import app.openhealth.data.db.Entry
+import app.openhealth.data.db.Exercise
+import app.openhealth.data.db.Food
+import app.openhealth.data.db.Meal
+import app.openhealth.data.db.Measurement
+import app.openhealth.data.db.OpenHealthDb
+import app.openhealth.data.db.Profile
+import app.openhealth.data.db.Programme
+import app.openhealth.data.db.Routine
+import app.openhealth.data.db.Routine_exercise
+import app.openhealth.data.db.Session
+import app.openhealth.data.db.Session_exercise
+import app.openhealth.data.db.Vital
+import app.openhealth.data.db.Work_set
+import app.openhealth.data.ingestion.PayloadHash
+import app.openhealth.data.mapping.enumValueOrNull
+import app.openhealth.data.repo.BodyRepository
+import app.openhealth.data.repo.NutritionRepository
+import app.openhealth.data.repo.ObservationRepository
+import app.openhealth.data.repo.ProfileRepository
+import app.openhealth.data.repo.SourceRepository
+import app.openhealth.data.repo.TrainingRepository
+import kotlin.random.Random
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
+
+data class CorpusRequest(
+    val days: Int = FIVE_YEARS_OF_DAYS,
+    val seed: Long = 42L,
+    val endDate: LocalDate,
+    val zone: TimeZone = TimeZone.of("Europe/Berlin"),
+    val profileId: String = "profile-demo",
+) {
+    companion object {
+        const val FIVE_YEARS_OF_DAYS = 365 * 5
+    }
+}
+
+data class CorpusStats(
+    val days: Int,
+    val observations: Int,
+    val rawRecords: Int,
+    val sessions: Int,
+    val sets: Int,
+    val meals: Int,
+    val entries: Int,
+    val measurements: Int,
+    val vitals: Int,
+    val exercises: Int,
+)
+
+private data class SourcePoint(
+    val sourceId: String,
+    val kind: SourceKind,
+    val recordedAt: Instant,
+    val method: String? = null,
+    val rawRecordId: String? = null,
+)
+
+private data class ExerciseSeed(
+    val name: String,
+    val muscle: String,
+    val met: String,
+    val baseWeightKg: Double,
+)
+
+private data class TrainingContext(
+    val zone: TimeZone,
+    val seeds: List<ExerciseSeed>,
+    val exerciseIds: List<String>,
+)
+
+/**
+ * The seeded five-year corpus (`BUILD-ROADMAP.md` §B2, `Tech-Stack.md` §10). It writes
+ * through the same repositories the app uses, so the benchmark measures real queries
+ * against realistic row counts: hourly steps, a daily weight, nightly sleep, three meals
+ * with entries, three weekly sessions with sets, weekly tape measurements and occasional
+ * vitals.
+ *
+ * Deterministic for a given seed and end date, so a benchmark failure is reproducible.
+ */
+class CorpusGenerator(
+    private val db: OpenHealthDb,
+    private val idGenerator: IdGenerator = RandomIdGenerator(),
+    private val clock: ClockSeam = SystemClock,
+) {
+    fun generate(request: CorpusRequest): CorpusStats {
+        val random = Random(request.seed)
+        val startDate = request.endDate.minus(DatePeriod(days = request.days - 1))
+        val days = Days.range(startDate, request.endDate)
+        val observations = mutableListOf<Observation>()
+        val rawRecords = mutableListOf<RawRecord>()
+
+        var sessions = 0
+        var sets = 0
+        var meals = 0
+        var entries = 0
+        var measurements = 0
+        var vitals = 0
+
+        val context: TrainingContext = db.transactionWithResult {
+            val sources = SourceRepository(db, clock)
+            seedSources(sources, request.endDate)
+            seedProfile(request)
+            val training = seedTraining(request)
+            days.forEachIndexed { dayIndex, date ->
+                val dayStart = LocalDateTime(date, LocalTime(0, 0)).toInstant(request.zone)
+                val dailyRandom = Random(random.nextLong())
+                val steps = 5_500 + dailyRandom.nextInt(0, 4_500) +
+                    if (date.dayOfWeek.name.startsWith("S")) 1_200 else 0
+                val rawRecord = if (dayIndex % 7 == 0) {
+                    rawStepsRecord(date, dayStart, steps).also { rawRecords += it }
+                } else {
+                    null
+                }
+                appendSteps(
+                    observations,
+                    dayStart,
+                    steps,
+                    dailyRandom,
+                    dayIndex,
+                    request.zone,
+                    rawRecord?.id?.value,
+                )
+                appendBodyAndSleep(observations, dayStart, dailyRandom, dayIndex, request.zone)
+                val nutrition = seedNutrition(date, dayStart, dailyRandom, request.zone)
+                meals += nutrition.meals
+                entries += nutrition.entries
+                if (dayIndex % 30 == 0) {
+                    measurements += seedMeasurement(date, dayStart, dailyRandom, request.zone)
+                }
+                if (dayIndex % 14 == 0) {
+                    vitals += seedVital(date, dayStart, dailyRandom, request.zone)
+                }
+                if (dayIndex % 2 == 0 && date.dayOfWeek.name in TRAINING_DAYS) {
+                    sets += seedSession(date, dayStart, training, dailyRandom)
+                    sessions += 1
+                }
+            }
+            training
+        }
+
+        val inserted = ObservationRepository(db).recordAll(observations, rawRecords)
+        check(inserted == observations.size) {
+            "The corpus repeated an idempotency key: inserted $inserted of ${observations.size}"
+        }
+        return CorpusStats(
+            days = days.size,
+            observations = observations.size,
+            rawRecords = rawRecords.size,
+            sessions = sessions,
+            sets = sets,
+            meals = meals,
+            entries = entries,
+            measurements = measurements,
+            vitals = vitals,
+            exercises = context.seeds.size,
+        )
+    }
+
+    private fun appendSteps(
+        sink: MutableList<Observation>,
+        dayStart: Instant,
+        steps: Int,
+        random: Random,
+        dayIndex: Int,
+        zone: TimeZone,
+        rawRecordId: String?,
+    ) {
+        var used = 0
+        repeat(HOURS_TRACKED) { hour ->
+            val hourValue = if (hour == HOURS_TRACKED - 1) {
+                steps - used
+            } else {
+                (steps / HOURS_TRACKED + random.nextInt(-250, 250)).coerceAtLeast(0)
+            }
+            used += hourValue
+            val at = dayStart.plus((hour + FIRST_TRACKED_HOUR).hours)
+            val secondSource = dayIndex % 21 == 0
+            sink += observation(
+                type = ObservationType.STEPS,
+                value = Measure(hourValue.toDouble(), UcumUnit.STEP),
+                start = at,
+                end = at.plus(1.hours),
+                point = SourcePoint(
+                    sourceId = if (secondSource) "fitbit" else "garmin",
+                    kind = if (secondSource) SourceKind.FITBIT else SourceKind.GARMIN,
+                    recordedAt = at.plus(2.hours),
+                    rawRecordId = rawRecordId,
+                ),
+                zone = zone,
+            )
+        }
+    }
+
+    private fun appendBodyAndSleep(
+        sink: MutableList<Observation>,
+        dayStart: Instant,
+        random: Random,
+        dayIndex: Int,
+        zone: TimeZone,
+    ) {
+        val weight = 85.0 - dayIndex * WEIGHT_TREND_PER_DAY + random.nextDouble(-0.35, 0.35)
+        sink += observation(
+            type = ObservationType.WEIGHT,
+            value = Measure(weight, UcumUnit.KILOGRAM),
+            start = dayStart.plus(7.hours),
+            end = null,
+            point = SourcePoint(
+                sourceId = if (dayIndex % 5 == 0) "manual" else "scale",
+                kind = if (dayIndex % 5 == 0) SourceKind.MANUAL else SourceKind.GARMIN,
+                recordedAt = dayStart.plus(7.hours),
+                method = if (dayIndex % 5 == 0) null else "SCALE",
+            ),
+            zone = zone,
+        )
+        val sleepMinutes = 390 + random.nextInt(0, 120)
+        sink += observation(
+            type = ObservationType.SLEEP_DURATION,
+            value = Measure(sleepMinutes * 60.0, UcumUnit.SECOND),
+            start = dayStart.minus(6.hours),
+            end = dayStart.plus((sleepMinutes - 360).toLong().hours),
+            point = SourcePoint("garmin", SourceKind.GARMIN, dayStart.plus(8.hours)),
+            zone = zone,
+        )
+        if (dayIndex % 7 == 0) {
+            sink += observation(
+                type = ObservationType.RESTING_HEART_RATE,
+                value = Measure(52.0 + random.nextInt(0, 10), UcumUnit.PER_MINUTE),
+                start = dayStart.plus(6.hours),
+                end = null,
+                point = SourcePoint("garmin", SourceKind.GARMIN, dayStart.plus(6.hours)),
+                zone = zone,
+            )
+            sink += observation(
+                type = ObservationType.HEART_RATE_VARIABILITY,
+                value = Measure(0.045 + random.nextDouble(0.0, 0.02), UcumUnit.SECOND),
+                start = dayStart.plus(6.hours),
+                end = null,
+                point = SourcePoint("garmin", SourceKind.GARMIN, dayStart.plus(6.hours)),
+                zone = zone,
+            )
+        }
+    }
+
+    private fun observation(
+        type: ObservationType,
+        value: Measure,
+        start: Instant,
+        end: Instant?,
+        point: SourcePoint,
+        zone: TimeZone,
+    ): Observation {
+        val id = idGenerator.newId()
+        return Observation(
+            id = ObservationId(id),
+            type = type,
+            value = value.convertTo(type.canonicalUnit),
+            start = start,
+            end = end,
+            provenance = Provenance(
+                sourceId = SourceId(point.sourceId),
+                time = TimeProvenance.of(start, point.recordedAt, zone),
+                idempotencyKey = "corpus-$id",
+                method = point.method?.let { enumValueOrNull(it) },
+                rawRecordId = point.rawRecordId?.let(::RawRecordId),
+            ),
+        )
+    }
+
+    private fun rawStepsRecord(date: LocalDate, dayStart: Instant, steps: Int): RawRecord {
+        val payload = """{"steps":$steps,"date":"$date"}"""
+        return RawRecord(
+            id = RawRecordId(idGenerator.newId()),
+            sourceId = SourceId("garmin"),
+            sourceKind = SourceKind.GARMIN,
+            receivedAt = dayStart.plus(3.hours),
+            recordedAt = dayStart.plus(3.hours),
+            happenedAt = dayStart,
+            payloadHash = PayloadHash.sha256(payload),
+            idempotencyKey = "raw-steps-$date",
+            schemaVersion = 2,
+            device = "watch",
+            payload = payload,
+        )
+    }
+
+    private fun seedSources(sources: SourceRepository, endDate: LocalDate) {
+        sources.upsertAll(
+            listOf(
+                Source(
+                    id = SourceId("garmin"),
+                    kind = SourceKind.GARMIN,
+                    label = "Garmin",
+                    device = "watch",
+                    permissions = setOf(SourcePermission.READ_STEPS, SourcePermission.READ_SLEEP),
+                ),
+                Source(
+                    id = SourceId("fitbit"),
+                    kind = SourceKind.FITBIT,
+                    label = "Fitbit",
+                    permissions = setOf(SourcePermission.READ_STEPS),
+                ),
+                Source(
+                    id = SourceId("manual"),
+                    kind = SourceKind.MANUAL,
+                    label = "Manual",
+                    permissions = SourcePermission.entries.toSet(),
+                ),
+                Source(
+                    id = SourceId("scale"),
+                    kind = SourceKind.GARMIN,
+                    label = "Scale",
+                    family = "garmin",
+                    permissions = setOf(SourcePermission.READ_WEIGHT),
+                ),
+            ),
+        )
+        sources.markSynced(SourceId("garmin"), endDate.atStartOfDayIn(TimeZone.UTC))
+    }
+
+    private fun seedProfile(request: CorpusRequest) {
+        val now = clock.now().toEpochMilliseconds()
+        ProfileRepository(db).upsert(
+            Profile(
+                id = request.profileId,
+                name = "Demo",
+                date_of_birth = "1990-04-12",
+                sex_at_birth = "MALE",
+                gender = null,
+                height_cm = 180.0,
+                weight_kg = 82.0,
+                units = "metric",
+                zone_id = request.zone.id,
+                language = "en",
+                goal = "LOSE",
+                activity_level = "MODERATELY_ACTIVE",
+                training_experience = "INTERMEDIATE",
+                weight_neutral = false,
+                intake_tier = 3L,
+                created_at = now,
+                updated_at = now,
+                source_id = "manual",
+                revision = 1L,
+            ),
+        )
+    }
+
+    private fun seedTraining(request: CorpusRequest): TrainingContext {
+        val now = clock.now().toEpochMilliseconds()
+        val training = TrainingRepository(db)
+        val seeds = listOf(
+            ExerciseSeed("Barbell squat", "quadriceps", "WEIGHT_LIFTING_MODERATE", 100.0),
+            ExerciseSeed("Bench press", "chest", "WEIGHT_LIFTING_MODERATE", 80.0),
+            ExerciseSeed("Deadlift", "hamstrings", "WEIGHT_LIFTING_MODERATE", 130.0),
+            ExerciseSeed("Barbell row", "back", "WEIGHT_LIFTING_MODERATE", 70.0),
+            ExerciseSeed("Overhead press", "shoulders", "WEIGHT_LIFTING_MODERATE", 50.0),
+        )
+        val exerciseIds = seeds.map { seed ->
+            val id = idGenerator.newId()
+            training.upsertExercise(
+                Exercise(
+                    id = id,
+                    name = seed.name,
+                    primary_muscles = seed.muscle,
+                    secondary_muscles = "",
+                    equipment = "barbell",
+                    instructions = null,
+                    met_activity = seed.met,
+                    is_custom = false,
+                    source_id = "manual",
+                    created_at = now,
+                    updated_at = now,
+                    revision = 1L,
+                ),
+            )
+            id
+        }
+        val routineId = idGenerator.newId()
+        training.upsertRoutine(
+            Routine(
+                id = routineId,
+                name = "Full body A",
+                folder = null,
+                notes = null,
+                archived_at = null,
+                created_at = now,
+                updated_at = now,
+                source_id = "manual",
+                revision = 1L,
+            ),
+        )
+        seeds.forEachIndexed { index, seed ->
+            training.upsertRoutineExercise(
+                Routine_exercise(
+                    id = idGenerator.newId(),
+                    routine_id = routineId,
+                    exercise_id = exerciseIds[index],
+                    position = index.toLong(),
+                    target_sets = 3L,
+                    target_reps = 5L,
+                    target_weight_kg = seed.baseWeightKg,
+                    notes = null,
+                ),
+            )
+        }
+        val programmeId = idGenerator.newId()
+        training.upsertProgramme(
+            Programme(
+                id = programmeId,
+                name = "Five-year block",
+                weeks = (request.days / 7).toLong(),
+                notes = null,
+                archived_at = null,
+                created_at = now,
+                updated_at = now,
+                source_id = "manual",
+                revision = 1L,
+            ),
+        )
+        training.upsertProgrammeRoutine(idGenerator.newId(), programmeId, routineId, 1L, 0L)
+        return TrainingContext(request.zone, seeds, exerciseIds)
+    }
+
+    private fun seedSession(
+        date: LocalDate,
+        dayStart: Instant,
+        context: TrainingContext,
+        random: Random,
+    ): Int {
+        val training = TrainingRepository(db)
+        val sessionId = idGenerator.newId()
+        val started = dayStart.plus(18.hours)
+        training.upsertSession(
+            Session(
+                id = sessionId,
+                started_at = started.toEpochMilliseconds(),
+                ended_at = started.plus(1.hours).toEpochMilliseconds(),
+                local_date = date.toString(),
+                zone_id = context.zone.id,
+                happened_at = started.toEpochMilliseconds(),
+                recorded_at = started.plus(1.hours).toEpochMilliseconds(),
+                routine_id = null,
+                programme_id = null,
+                notes = null,
+                source_id = "manual",
+                revision = 1L,
+                updated_at = started.plus(1.hours).toEpochMilliseconds(),
+            ),
+        )
+        var position = 0L
+        var sets = 0
+        context.seeds.forEachIndexed { exerciseIndex, seed ->
+            val sessionExerciseId = idGenerator.newId()
+            training.upsertSessionExercise(
+                Session_exercise(
+                    id = sessionExerciseId,
+                    session_id = sessionId,
+                    exercise_id = context.exerciseIds[exerciseIndex],
+                    position = exerciseIndex.toLong(),
+                    notes = null,
+                ),
+            )
+            repeat(3) { setIndex ->
+                val weight = seed.baseWeightKg + random.nextInt(-5, 6)
+                val completedAt = started.plus((exerciseIndex * 8 + setIndex * 2).minutes)
+                training.upsertSet(
+                    Work_set(
+                        id = idGenerator.newId(),
+                        session_id = sessionId,
+                        session_exercise_id = sessionExerciseId,
+                        exercise_id = context.exerciseIds[exerciseIndex],
+                        position = position++,
+                        weight_kg = weight,
+                        reps = 5L,
+                        rir = (3 - setIndex).toDouble(),
+                        rpe = null,
+                        is_warmup = false,
+                        is_backoff = false,
+                        is_failure = false,
+                        is_bodyweight = false,
+                        tempo = null,
+                        rest_seconds = 120L,
+                        completed_at = completedAt.toEpochMilliseconds(),
+                        happened_at = completedAt.toEpochMilliseconds(),
+                        recorded_at = completedAt.toEpochMilliseconds(),
+                        source_id = "manual",
+                        revision = 1L,
+                    ),
+                )
+                sets += 1
+            }
+        }
+        return sets
+    }
+
+    private data class NutritionCount(val meals: Int, val entries: Int)
+
+    private fun seedNutrition(
+        date: LocalDate,
+        dayStart: Instant,
+        random: Random,
+        zone: TimeZone,
+    ): NutritionCount {
+        val nutrition = NutritionRepository(db)
+        var entries = 0
+        listOf("breakfast" to 7, "lunch" to 12, "dinner" to 19).forEach { (kind, hour) ->
+            val mealId = idGenerator.newId()
+            val at = dayStart.plus(hour.toLong().hours)
+            nutrition.upsertMeal(
+                Meal(
+                    id = mealId,
+                    name = kind,
+                    kind = kind,
+                    local_date = date.toString(),
+                    notes = null,
+                    created_at = at.toEpochMilliseconds(),
+                    updated_at = at.toEpochMilliseconds(),
+                    revision = 1L,
+                ),
+            )
+            repeat(2 + random.nextInt(0, 3)) {
+                val food = foods[random.nextInt(foods.size)]
+                val quantity = 80 + random.nextInt(0, 220)
+                nutrition.upsertEntry(
+                    Entry(
+                        id = idGenerator.newId(),
+                        meal_id = mealId,
+                        food_id = food.id,
+                        local_date = date.toString(),
+                        zone_id = zone.id,
+                        happened_at = at.toEpochMilliseconds(),
+                        recorded_at = at.plus(5.minutes).toEpochMilliseconds(),
+                        quantity_g = quantity.toDouble(),
+                        energy_kcal = (food.energy_kcal_per_100g ?: 0.0) * quantity / 100.0,
+                        protein_g = (food.protein_g_per_100g ?: 0.0) * quantity / 100.0,
+                        carbs_g = (food.carbs_g_per_100g ?: 0.0) * quantity / 100.0,
+                        fat_g = (food.fat_g_per_100g ?: 0.0) * quantity / 100.0,
+                        fibre_g = (food.fibre_g_per_100g ?: 0.0) * quantity / 100.0,
+                        source_kind = "manual",
+                        user_verified = true,
+                        user_edited = false,
+                        revision = 1L,
+                    ),
+                )
+                entries += 1
+            }
+        }
+        return NutritionCount(meals = 3, entries = entries)
+    }
+
+    private val foods: List<Food> by lazy { createFoods() }
+
+    private fun createFoods(): List<Food> {
+        val now = clock.now().toEpochMilliseconds()
+        val nutrition = NutritionRepository(db)
+        val items = listOf(
+            Triple("Oats", 379.0, 13.0),
+            Triple("Milk", 42.0, 3.4),
+            Triple("Banana", 89.0, 1.1),
+            Triple("Chicken breast", 165.0, 31.0),
+            Triple("Rice", 130.0, 2.7),
+            Triple("Broccoli", 34.0, 2.8),
+            Triple("Salmon", 208.0, 20.0),
+            Triple("Potato", 77.0, 2.0),
+            Triple("Yoghurt", 59.0, 10.0),
+            Triple("Apple", 52.0, 0.3),
+        )
+        return items.map { (name, energy, protein) ->
+            Food(
+                id = "food-$name",
+                name = name,
+                brand = null,
+                barcode = null,
+                source_kind = "bundled",
+                source_ref = null,
+                energy_kcal_per_100g = energy,
+                protein_g_per_100g = protein,
+                carbs_g_per_100g = null,
+                fat_g_per_100g = null,
+                fibre_g_per_100g = null,
+                serving_json = null,
+                verified = true,
+                created_at = now,
+                updated_at = now,
+                revision = 1L,
+            )
+        }.onEach { nutrition.upsertFood(it) }
+    }
+
+    private fun seedMeasurement(
+        date: LocalDate,
+        dayStart: Instant,
+        random: Random,
+        zone: TimeZone,
+    ): Int {
+        BodyRepository(db).upsertMeasurement(
+            Measurement(
+                id = idGenerator.newId(),
+                type = "waist",
+                value_ = 84.0 + random.nextDouble(-2.0, 2.0),
+                unit = "cm",
+                local_date = date.toString(),
+                zone_id = zone.id,
+                happened_at = dayStart.plus(9.hours).toEpochMilliseconds(),
+                recorded_at = dayStart.plus(9.hours).toEpochMilliseconds(),
+                source_id = "manual",
+                method = "MANUAL_ENTRY",
+                notes = null,
+                revision = 1L,
+            ),
+        )
+        return 1
+    }
+
+    private fun seedVital(
+        date: LocalDate,
+        dayStart: Instant,
+        random: Random,
+        zone: TimeZone,
+    ): Int {
+        BodyRepository(db).upsertVital(
+            Vital(
+                id = idGenerator.newId(),
+                type = "BLOOD_PRESSURE_SYSTOLIC",
+                value_ = 118.0 + random.nextInt(0, 14),
+                unit = "mm[Hg]",
+                local_date = date.toString(),
+                zone_id = zone.id,
+                happened_at = dayStart.plus(10.hours).toEpochMilliseconds(),
+                recorded_at = dayStart.plus(10.hours).toEpochMilliseconds(),
+                source_id = "manual",
+                method = "CUFF",
+                context = "RESTING",
+                note = null,
+                revision = 1L,
+            ),
+        )
+        return 1
+    }
+
+    private companion object {
+        const val HOURS_TRACKED = 16
+        const val FIRST_TRACKED_HOUR = 7
+        const val WEIGHT_TREND_PER_DAY = 0.0025
+        val TRAINING_DAYS = setOf("MONDAY", "WEDNESDAY", "FRIDAY")
+    }
+}

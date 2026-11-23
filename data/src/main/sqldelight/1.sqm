@@ -1,0 +1,8 @@
+-- Migration 1 -> 2 (2026-11-23, B2). The timeline page reads each table newest-first,
+-- and the recovery map reads a type by day; both need an index the v1 schema lacked.
+CREATE INDEX observation_type_local_date ON observation(type, local_date);
+CREATE INDEX observation_happened ON observation(happened_at);
+CREATE INDEX session_happened ON session(happened_at);
+CREATE INDEX entry_happened ON entry(happened_at);
+CREATE INDEX measurement_happened ON measurement(happened_at);
+CREATE INDEX vital_happened ON vital(happened_at);

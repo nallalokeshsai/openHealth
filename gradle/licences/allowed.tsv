@@ -44,6 +44,8 @@ org.bouncycastle:bcprov-jdk18on	Bouncy-Castle	Test-only, Bouncy Castle licence, 
 org.conscrypt:conscrypt-openjdk-uber	Apache-2.0	Test-only, Robolectric TLS provider
 org.ow2.asm:*	BSD-3-Clause	Test-only, bytecode inspection
 org.yaml:snakeyaml	Apache-2.0	Test-only, Robolectric configuration
+net.zetetic:sqlcipher-android	BSD-3-Clause	SQLCipher Community Edition, database encryption (Tech-Stack.md §5); attribution in NOTICE.md and the About screen
+org.xerial:sqlite-jdbc	Apache-2.0	JVM SQLite driver for unit tests and tools/fixtures; never in the APK
 
 # B2 core and data tests (Kotest property tests and their transitives), all test-only.
 # Each licence was read from the artefact's POM or its repository's LICENSE on 2026-11-23.

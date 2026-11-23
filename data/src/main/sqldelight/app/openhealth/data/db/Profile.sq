@@ -1,0 +1,47 @@
+-- Layer 4: the profile. One active profile in the MVP (family profiles are Later);
+-- the table still keys by id so a later phase does not migrate the shape.
+
+CREATE TABLE profile (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    date_of_birth TEXT,
+    sex_at_birth TEXT,
+    gender TEXT,
+    height_cm REAL,
+    weight_kg REAL,
+    units TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    language TEXT NOT NULL,
+    goal TEXT,
+    activity_level TEXT,
+    training_experience TEXT,
+    weight_neutral INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    intake_tier INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    source_id TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+upsertProfile:
+INSERT OR REPLACE INTO profile(
+    id, name, date_of_birth, sex_at_birth, gender, height_cm, weight_kg, units,
+    zone_id, language, goal, activity_level, training_experience, weight_neutral,
+    intake_tier, created_at, updated_at, source_id, revision
+) VALUES (
+    :id, :name, :dateOfBirth, :sexAtBirth, :gender, :heightCm, :weightKg, :units,
+    :zoneId, :language, :goal, :activityLevel, :trainingExperience, :weightNeutral,
+    :intakeTier, :createdAt, :updatedAt, :sourceId, :revision
+);
+
+profileById:
+SELECT * FROM profile WHERE id = :id;
+
+activeProfile:
+SELECT * FROM profile ORDER BY created_at LIMIT 1;
+
+allProfiles:
+SELECT * FROM profile ORDER BY created_at;
+
+deleteProfile:
+DELETE FROM profile WHERE id = :id;

@@ -1,0 +1,43 @@
+-- The source registry (pr.md §7.6): priority per data type, expected cadence,
+-- reliability note, last sync and permissions. Lower priority numbers win a day.
+
+CREATE TABLE source (
+    id TEXT NOT NULL PRIMARY KEY,
+    kind TEXT NOT NULL,
+    label TEXT NOT NULL,
+    family TEXT NOT NULL,
+    device TEXT,
+    priorities TEXT,
+    expected_cadence_seconds INTEGER,
+    reliability_note TEXT,
+    last_sync INTEGER,
+    permissions TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX source_family ON source(family);
+
+upsertSource:
+INSERT OR REPLACE INTO source(
+    id, kind, label, family, device, priorities, expected_cadence_seconds,
+    reliability_note, last_sync, permissions, created_at, updated_at
+) VALUES (
+    :id, :kind, :label, :family, :device, :priorities, :expectedCadenceSeconds,
+    :reliabilityNote, :lastSync, :permissions, :createdAt, :updatedAt
+);
+
+sourceById:
+SELECT * FROM source WHERE id = :id;
+
+allSources:
+SELECT * FROM source ORDER BY label;
+
+sourcesInFamily:
+SELECT * FROM source WHERE family = :family;
+
+updateSourceLastSync:
+UPDATE source SET last_sync = :lastSync, updated_at = :updatedAt WHERE id = :id;
+
+deleteSource:
+DELETE FROM source WHERE id = :id;

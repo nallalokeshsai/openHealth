@@ -1,0 +1,49 @@
+-- Undo and trash (pr.md §6.29). A deletion writes a tombstone with the row it removed,
+-- so it can be restored for the length of the session and from Trash for 30 days. No
+-- code path removes an observation without one.
+
+CREATE TABLE tombstone (
+    id TEXT NOT NULL PRIMARY KEY,
+    entity_table TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    deleted_at INTEGER NOT NULL,
+    purge_after INTEGER NOT NULL,
+    payload TEXT,
+    restored_at INTEGER,
+    reason TEXT
+);
+
+CREATE INDEX tombstone_deleted_at ON tombstone(deleted_at);
+CREATE INDEX tombstone_entity ON tombstone(entity_table, entity_id);
+
+insertTombstone:
+INSERT OR REPLACE INTO tombstone(
+    id, entity_table, entity_id, deleted_at, purge_after, payload, restored_at, reason
+) VALUES (
+    :id, :entityTable, :entityId, :deletedAt, :purgeAfter, :payload, NULL, :reason
+);
+
+tombstoneById:
+SELECT * FROM tombstone WHERE id = :id;
+
+tombstoneForEntity:
+SELECT * FROM tombstone
+WHERE entity_table = :entityTable AND entity_id = :entityId AND restored_at IS NULL;
+
+activeTombstones:
+SELECT * FROM tombstone WHERE restored_at IS NULL ORDER BY deleted_at DESC;
+
+tombstonesDueForPurge:
+SELECT * FROM tombstone WHERE restored_at IS NULL AND purge_after <= :now;
+
+markRestored:
+UPDATE tombstone SET restored_at = :restoredAt WHERE id = :id;
+
+deleteTombstone:
+DELETE FROM tombstone WHERE id = :id;
+
+countActiveTombstones:
+SELECT count(*) FROM tombstone WHERE restored_at IS NULL;
+
+allTombstones:
+SELECT * FROM tombstone ORDER BY deleted_at;

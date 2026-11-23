@@ -1,0 +1,110 @@
+-- Layer 2 of the five-layer model (pr.md §7.2): canonical observations. Every row
+-- carries the full provenance block and is stored in the canonical unit of its type.
+-- No code path deletes one without a tombstone (pr.md §6.29).
+
+CREATE TABLE observation (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    start_at INTEGER NOT NULL,
+    end_at INTEGER,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL,
+    device TEXT,
+    app_version TEXT,
+    method TEXT,
+    context TEXT,
+    confidence REAL,
+    quality TEXT,
+    user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    original_value REAL,
+    original_unit TEXT,
+    edit_reason TEXT,
+    group_key TEXT,
+    excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    raw_record_id TEXT
+);
+
+-- The two indexes Tech-Stack.md §5 requires of every UI query.
+CREATE INDEX observation_local_date ON observation(local_date);
+CREATE INDEX observation_type_happened ON observation(type, happened_at);
+CREATE INDEX observation_type_local_date ON observation(type, local_date);
+CREATE INDEX observation_happened ON observation(happened_at);
+CREATE INDEX observation_source_date ON observation(source_id, local_date);
+
+insertObservation:
+INSERT OR IGNORE INTO observation(
+    id, type, value, unit, start_at, end_at, local_date, zone_id, happened_at,
+    recorded_at, source_id, device, app_version, method, context, confidence, quality,
+    user_verified, user_edited, original_value, original_unit, edit_reason, group_key,
+    excluded_from_trends, idempotency_key, raw_record_id
+) VALUES (
+    :id, :type, :value, :unit, :startAt, :endAt, :localDate, :zoneId, :happenedAt,
+    :recordedAt, :sourceId, :device, :appVersion, :method, :context, :confidence, :quality,
+    :userVerified, :userEdited, :originalValue, :originalUnit, :editReason, :groupKey,
+    :excludedFromTrends, :idempotencyKey, :rawRecordId
+);
+
+observationById:
+SELECT * FROM observation WHERE id = :id;
+
+observationByIdempotencyKey:
+SELECT * FROM observation WHERE idempotency_key = :key;
+
+observationsForDay:
+SELECT * FROM observation WHERE local_date = :localDate ORDER BY happened_at, id;
+
+observationsForDayAndType:
+SELECT * FROM observation
+WHERE local_date = :localDate AND type = :type
+ORDER BY happened_at, id;
+
+observationsForTypeBetween:
+SELECT * FROM observation
+WHERE type = :type AND happened_at >= :from AND happened_at < :to
+ORDER BY happened_at, id;
+
+observationsForGroup:
+SELECT * FROM observation WHERE group_key = :groupKey ORDER BY happened_at;
+
+latestObservationOfType:
+SELECT * FROM observation WHERE type = :type ORDER BY happened_at DESC LIMIT 1;
+
+-- The rollup rebuild reads the whole day in one pass.
+observationsForDayOrdered:
+SELECT * FROM observation WHERE local_date = :localDate ORDER BY type, happened_at, id;
+
+daysWithObservations:
+SELECT DISTINCT local_date FROM observation ORDER BY local_date;
+
+countObservations:
+SELECT count(*) FROM observation;
+
+countObservationsForDay:
+SELECT count(*) FROM observation WHERE local_date = :localDate;
+
+-- "Exclude this reading from trends" without deleting it (pr.md §6.28).
+setExcludedFromTrends:
+UPDATE observation SET excluded_from_trends = :excluded WHERE id = :id;
+
+-- A user edit keeps the value it replaced (pr.md §7.2).
+markUserEdited:
+UPDATE observation
+SET user_edited = 1, user_verified = 1, value = :value, edit_reason = :reason,
+    original_value = COALESCE(original_value, :previousValue),
+    original_unit = COALESCE(original_unit, :previousUnit)
+WHERE id = :id;
+
+allObservations:
+SELECT * FROM observation ORDER BY local_date, happened_at, id;
+
+observationLocalDatesBetween:
+SELECT DISTINCT local_date FROM observation
+WHERE local_date >= :from AND local_date <= :to
+ORDER BY local_date;

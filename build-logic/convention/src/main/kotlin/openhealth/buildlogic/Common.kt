@@ -1,6 +1,7 @@
 package openhealth.buildlogic
 
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
+import org.jlleitschuh.gradle.ktlint.KtlintExtension
 import org.gradle.api.Project
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.provider.Provider
@@ -21,6 +22,12 @@ internal fun Project.applyCodeQuality() {
         buildUponDefaultConfig = true
         config.setFrom(rootProject.files("gradle/detekt.yml"))
         parallel = true
+    }
+    extensions.configure<KtlintExtension> {
+        // Generated sources (SQLDelight) are not hand-written and are excluded.
+        filter {
+            exclude { element -> element.file.path.contains("/build/generated/") }
+        }
     }
 }
 

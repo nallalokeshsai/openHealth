@@ -1,0 +1,106 @@
+-- Layer 4 body and vital objects (pr.md §6.8, §6.9, §7.4). A measurement is a tape or
+-- scale value; a vital is a clinical reading. Both keep provenance and a local day so
+-- the timeline shows them next to observations.
+
+CREATE TABLE measurement (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL,
+    method TEXT,
+    notes TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX measurement_local_date ON measurement(local_date);
+CREATE INDEX measurement_happened ON measurement(happened_at);
+CREATE INDEX measurement_type_happened ON measurement(type, happened_at);
+
+CREATE TABLE vital (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL,
+    method TEXT,
+    context TEXT,
+    note TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX vital_local_date ON vital(local_date);
+CREATE INDEX vital_happened ON vital(happened_at);
+CREATE INDEX vital_type_happened ON vital(type, happened_at);
+
+insertMeasurement:
+INSERT OR REPLACE INTO measurement(
+    id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id,
+    method, notes, revision
+) VALUES (
+    :id, :type, :value, :unit, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
+    :method, :notes, :revision
+);
+
+measurementById:
+SELECT * FROM measurement WHERE id = :id;
+
+measurementsForDay:
+SELECT * FROM measurement WHERE local_date = :localDate ORDER BY happened_at;
+
+measurementsForTypeBetween:
+SELECT * FROM measurement
+WHERE type = :type AND happened_at >= :from AND happened_at < :to
+ORDER BY happened_at;
+
+latestMeasurements:
+SELECT * FROM measurement ORDER BY happened_at DESC LIMIT :limit;
+
+countMeasurements:
+SELECT count(*) FROM measurement;
+
+allMeasurements:
+SELECT * FROM measurement ORDER BY happened_at;
+
+deleteMeasurement:
+DELETE FROM measurement WHERE id = :id;
+
+insertVital:
+INSERT OR REPLACE INTO vital(
+    id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id,
+    method, context, note, revision
+) VALUES (
+    :id, :type, :value, :unit, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
+    :method, :context, :note, :revision
+);
+
+vitalById:
+SELECT * FROM vital WHERE id = :id;
+
+vitalsForDay:
+SELECT * FROM vital WHERE local_date = :localDate ORDER BY happened_at;
+
+vitalsForTypeBetween:
+SELECT * FROM vital
+WHERE type = :type AND happened_at >= :from AND happened_at < :to
+ORDER BY happened_at;
+
+latestVitals:
+SELECT * FROM vital ORDER BY happened_at DESC LIMIT :limit;
+
+countVitals:
+SELECT count(*) FROM vital;
+
+allVitals:
+SELECT * FROM vital ORDER BY happened_at;
+
+deleteVital:
+DELETE FROM vital WHERE id = :id;

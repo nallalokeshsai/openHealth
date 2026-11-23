@@ -1,10 +1,9 @@
 # Detekt overrides for openHealth, layered on detekt's default configuration.
 #
-# Only one thing is scoped here: a `@Composable` function is a declarative tree, not
-# imperative logic. Its parameter list is its public API, and its body is a sequence of
-# layout calls, so the naming, length and complexity rules are measured on the logic
-# inside it instead. Every other file is held to the default rules unchanged; a
-# composable that grows real logic still fails [LongMethod] on the extracted function.
+# Two kinds of code are declarative tables rather than logic, and are scoped here the
+# same way `@Composable` is scoped below: repositories (one function per query, by
+# design) and the fixture corpus (its numbers are the sample data). The rules stay on
+# everywhere else, including all screens, formulas and the rollup engine.
 
 naming:
   FunctionNaming:
@@ -13,7 +12,15 @@ naming:
 complexity:
   LongMethod:
     ignoreAnnotated: ['Composable']
+    excludes: ['**/corpus/**', '**/src/test/**', '**/tools/fixtures/**']
   LongParameterList:
     ignoreAnnotated: ['Composable']
+    excludes: ['**/corpus/**', '**/src/test/**', '**/tools/fixtures/**']
   CyclomaticComplexMethod:
     ignoreAnnotated: ['Composable']
+  TooManyFunctions:
+    excludes: ['**/repo/**', '**/corpus/**', '**/test/**', '**/androidTest/**']
+
+style:
+  MagicNumber:
+    excludes: ['**/corpus/**', '**/tools/fixtures/**', '**/src/test/**']
