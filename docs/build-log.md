@@ -205,7 +205,8 @@ cannot drift (`BUILD-ROADMAP.md` §B1).
 | Command | Result |
 |---|---|
 | `./gradlew check` | **BUILD SUCCESSFUL**; 45 tests (26 screenshot × 4 variants, 8 accessibility-semantics, 11 contrast), lint, ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
-| `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; debug APK. |
+| `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; debug APK, with two launcher entries (the app and the gallery). |
+| `./gradlew :app-android:assembleRelease` | **BUILD SUCCESSFUL**; unsigned release APK. Its manifest has **one** activity and its dex/zip has no `Gallery` entry, so the debug-only gallery cannot ship (ries checked with `aapt2` and `unzip -l`). |
 | `./gradlew :ui:testDebugUnitTest` (verify mode, the default in `check`) | **BUILD SUCCESSFUL**; 104 goldens compared, none missing, none changed. |
 | `./gradlew :ui:testDebugUnitTest -Proborazzi.record` | **BUILD SUCCESSFUL**; recordings are byte-identical between runs (compared by re-running the verify pass). |
 | Guard proof 1 (`checkDesignTokens`): a file in `ui/…/components` with `Color(0xFF112233)` and `13.dp` | `:ui:checkDesignTokens` **failed** naming both lines; file removed, gate green. |
@@ -274,6 +275,8 @@ and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is u
   the 19; they are built with the screens that show them.
 - `modal` sheet and dialog are used through Material 3 `ModalBottomSheet`/`Dialog` for
   behaviour only, with every colour, shape and inset passed from `OhTheme`.
+- The timer's spoken countdown (10 s, 3, 2, 1) is session behaviour, not a component
+  property; the timer bar already exposes a live region hook for B5 to drive.
 
 ### Open issues
 

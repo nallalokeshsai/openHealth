@@ -53,9 +53,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
@@ -499,10 +501,7 @@ fun OhTextField(
                     shape = shape,
                 )
                 .padding(horizontal = dims.fieldPadH)
-                .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled)
-                .semantics {
-                    if (contentDescription != null) this.contentDescription = contentDescription
-                },
+                .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled),
             contentAlignment = Alignment.CenterStart,
         ) {
             BasicTextField(
@@ -515,7 +514,11 @@ fun OhTextField(
                 keyboardOptions = keyboardOptions,
                 visualTransformation = visualTransformation,
                 interactionSource = interaction,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        if (contentDescription != null) this.contentDescription = contentDescription
+                    },
                 decorationBox = { inner ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (leading != null) {
@@ -552,7 +555,12 @@ fun OhTextField(
                     tint = colors.redInk,
                 )
                 Spacer(Modifier.width(OhTheme.space.s1))
-                Text(text = error, style = type.footnote, color = colors.redInk)
+                Text(
+                    text = error,
+                    style = type.footnote,
+                    color = colors.redInk,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
             }
         }
     }

@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -30,7 +32,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
@@ -73,6 +77,7 @@ fun OhSheet(
             .heightIn(max = maxHeight)
             .clip(RoundedCornerShape(topStart = OhTheme.radius.xl, topEnd = OhTheme.radius.xl))
             .background(colors.bgEl)
+            .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(
                 start = OhTheme.space.s6,
                 end = OhTheme.space.s6,
@@ -317,7 +322,8 @@ fun OhToast(
             .widthIn(max = maxWidth)
             .clip(RoundedCornerShape(OhTheme.radius.xl))
             .background(colors.toastFill)
-            .padding(horizontal = dims.toastPadH, vertical = dims.toastPadV),
+            .padding(horizontal = dims.toastPadH, vertical = dims.toastPadV)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
