@@ -1,0 +1,32 @@
+# Licence allowlist for client modules (core, data, sync, integrations, ui, app-android).
+#
+# Format:  group:module<TAB>licence<TAB>note
+# `*` is a wildcard. Every resolved runtime dependency of a client module must match a
+# row here, so a dependency that is not recorded fails `checkLicences`. The GPL family
+# (GPL, LGPL, AGPL) is never allowed in the client (pr.md §12.4, Tech-Stack.md §16);
+# only server/ is AGPL-3.0.
+#
+# Add a row with its real licence and the reason it is present. Do not widen a pattern
+# to make a GPL-family dependency pass.
+
+androidx.*:*	Apache-2.0	AndroidX libraries
+com.google.android.*:*	Apache-2.0	Android support libraries
+com.google.*:*	Apache-2.0	Guava, errorprone annotations, auto-value
+com.google.code.findbugs:jsr305	BSD-3-Clause	Annotations pulled in by AndroidX
+com.google.guava:*	Apache-2.0	ListenableFuture, pulled in by AndroidX
+org.jetbrains:*	Apache-2.0	Kotlin annotations and JetBrains tooling runtime
+org.jetbrains.*:*	Apache-2.0	Kotlin and kotlinx (stdlib, coroutines, datetime, serialization)
+org.slf4j:*	MIT	Logging facade used by test infrastructure
+junit:junit	EPL-1.0	Test-only, JUnit 4 harness
+org.junit*:*	EPL-2.0	Test-only, JUnit 5 harness
+org.hamcrest:*	BSD-3-Clause	Test-only, matchers
+org.opentest4j:*	Apache-2.0	Test-only, JUnit 5 plumbing
+org.apiguardian:*	Apache-2.0	Test-only, JUnit 5 annotations
+org.robolectric:*	Apache-2.0	Test-only, JVM Android runtime
+io.github.takahirom.roborazzi:*	Apache-2.0	Screenshot tests
+io.insert-koin:*	Apache-2.0	Koin DI (Tech-Stack.md §3)
+app.cash.sqldelight:*	Apache-2.0	SQLDelight storage (Tech-Stack.md §5)
+io.ktor:*	Apache-2.0	Ktor client and server (Tech-Stack.md §6-7)
+com.squareup.okio:*	Apache-2.0	Ktor/Coil IO dependency
+com.squareup.okhttp3:*	Apache-2.0	Coil/network dependency
+org.jetbrains.kotlinx:atomicfu*	Apache-2.0	Coroutines dependency
