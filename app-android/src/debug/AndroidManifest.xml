@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Debug builds only: the B1 component gallery (BUILD-ROADMAP.md §B1). -->
+    <application>
+        <activity
+            android:name="app.openhealth.android.gallery.GalleryActivity"
+            android:exported="true"
+            android:label="openHealth design gallery">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

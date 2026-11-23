@@ -1,0 +1,19 @@
+# Detekt overrides for openHealth, layered on detekt's default configuration.
+#
+# Only one thing is scoped here: a `@Composable` function is a declarative tree, not
+# imperative logic. Its parameter list is its public API, and its body is a sequence of
+# layout calls, so the naming, length and complexity rules are measured on the logic
+# inside it instead. Every other file is held to the default rules unchanged; a
+# composable that grows real logic still fails [LongMethod] on the extracted function.
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+
+complexity:
+  LongMethod:
+    ignoreAnnotated: ['Composable']
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
+  CyclomaticComplexMethod:
+    ignoreAnnotated: ['Composable']
