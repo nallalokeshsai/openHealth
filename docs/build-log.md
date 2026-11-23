@@ -73,6 +73,28 @@ architecture (`BUILD-ROADMAP.md` §B0). No feature code.
 
 No device identity (serial, model, build) is recorded in this repository.
 
+### Extended verification (owner-requested follow-up, same day)
+
+Every gate was exercised on purpose, and the app was checked again from a fresh clone.
+
+| Check | Result |
+|---|---|
+| `git clone` of the branch into a clean directory (no `local.properties`, `ANDROID_HOME` set) then `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**; `gradlew` is executable in the index and nothing machine-local is needed. |
+| ktlint probe: a badly formatted file in `:core` | `:core:ktlintMainSourceSetCheck` **FAILED** with style violations; file removed. |
+| Detekt probe: a seven-parameter constructor in `:core` | `:core:detekt` **FAILED** on `LongParameterList`; file removed. |
+| Portability probe in `:data` (`import androidx.annotation.NonNull`) | `:data:checkPortability` **FAILED**, naming the file and line; file removed. |
+| Licence probe in `:integrations` (LGPL `hibernate-core` as `testImplementation`) | `:integrations:checkLicences` **FAILED**; dependency removed. |
+| `:app-android:assembleRelease` | **BUILD SUCCESSFUL**; unsigned release APK produced (release builds through R8's default config). |
+| CI workflow | `.github/workflows/ci.yml` parses; one `build` job, five steps. |
+| Debug APK manifest audit (`apkanalyzer`) | `minSdk 28`, `targetSdk 37`, `debuggable true`, `allowBackup false`, `fullBackupContent` and `dataExtractionRules` present; the only permission is AndroidX's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. No network, storage, location or health permission. |
+| `:app-android:lintDebug` | 0 errors, 1 warning: no application icon yet (design work, B1/B10). |
+
+**Fix made in this pass.** Lint flagged that `android:allowBackup="false"` no longer
+covers device-to-device transfer on Android 12+. Added
+`app-android/src/main/res/xml/data_extraction_rules.xml` and `backup_rules.xml`, both
+excluding every domain, and wired them into the manifest, so no health data leaves the
+device through platform backup or transfer (Tech-Stack.md §5). That warning is gone.
+
 ### Exit tests
 
 | Exit test (`BUILD-ROADMAP.md` §B0) | Evidence | Result |
@@ -92,6 +114,9 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 - `:core`, `:data`, `:sync`, `:integrations` and `:ui` have no source files yet, so
   their Detekt tasks report NO-SOURCE. Their guards still run.
 - `app-android` has one blank Compose screen by design; the design system is B1.
+- The launcher icon is the one remaining lint warning; the icon set and the app mark
+  are design work (B1) and the store icon is release work (B10). No placeholder icon
+  was invented.
 
 ### Open issues
 
