@@ -334,8 +334,10 @@ class PrimarySourcePolicy : DedupPolicy {
 }
 
 /**
- * Sleep: the most detailed complete record wins. A full night is never replaced by a
- * partial one, so the source with the greatest recorded duration wins.
+ * Sleep: the most detailed complete record wins (`pr.md` §7.6). "Most detailed" is the
+ * source that recorded the most separate records, because a staged night arrives as many
+ * records and a single summary figure as one; the greatest total duration breaks a tie,
+ * so a full night is never replaced by a partial one, and priority breaks the rest.
  */
 class MostDetailedPolicy : DedupPolicy {
     override fun resolve(
@@ -349,10 +351,12 @@ class MostDetailedPolicy : DedupPolicy {
         val winner = bySource.entries
             .sortedWith(
                 compareByDescending<Map.Entry<SourceId, List<Observation>>> { (_, observations) ->
+                    observations.size
+                }.thenByDescending { (_, observations) ->
                     observations.sumOf { it.value.value }
                 }.thenBy { (sourceId, _) ->
-                    registry.priorityOf(sourceId, candidates.first().type)
-                },
+                    registry.priorityOf(sourceId, reduced.first().type)
+                }.thenBy { (sourceId, _) -> sourceId.value },
             )
             .first()
         return DayResolution.Selected(
@@ -383,14 +387,36 @@ class KeepAllPolicy : DedupPolicy {
     }
 }
 
-/** Nutrition totals add up: they are different foods, not two reports of one number. */
+/**
+ * Nutrition totals add up: they are different foods, not two reports of one number, so
+ * nothing here is discarded for being a second source.
+ *
+ * The one exception is `pr.md` §7.6's "user-edited entries win over imported ones": when
+ * several observations carry the same `groupKey` they describe one entry — the imported
+ * figure and the correction the user made to it — and only one may count towards the
+ * day. A user-edited observation wins; between two of the same kind the later recording
+ * wins. An observation with no group key stands alone and always counts.
+ */
 class SumAllPolicy : DedupPolicy {
     override fun resolve(
         candidates: List<Observation>,
         registry: SourceRegistry,
         day: LocalDay,
     ): DayResolution {
-        val reduced = DedupPolicies.collapseFamilies(candidates, registry)
+        val collapsed = DedupPolicies.collapseFamilies(candidates, registry)
+        val (grouped, ungrouped) = collapsed.partition { it.groupKey != null }
+        val reduced = ungrouped + grouped
+            .groupBy { it.groupKey }
+            .values
+            .map { group ->
+                group.sortedWith(
+                    compareBy(
+                        { if (it.userEdited) 0 else 1 },
+                        { -it.provenance.recordedAt.epochSeconds },
+                        { it.id.value },
+                    ),
+                ).first()
+            }
         if (reduced.isEmpty()) return DayResolution.Empty
         val first = reduced.first()
         return DayResolution.Selected(

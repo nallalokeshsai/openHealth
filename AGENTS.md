@@ -154,13 +154,15 @@ git -C references/<name> pull --ff-only
 rg -n --glob '!**/.git/**' '<pattern>' references/<name>
 ```
 
-`git`, `adb`, JDK 21, Gradle 9.x and the Android SDK are installed on this workstation (verified 2026-11-22); `rg` may not be. If something is missing, use PowerShell:
+The workstation is Linux. `git`, `adb`, JDK 21 and the Android SDK are installed (verified 2026-11-23); Gradle is the wrapper (`./gradlew`), not a `PATH` install, and `rg` may not be present. Shell fallbacks:
 
-```powershell
-Test-Path references\wger
-Get-ChildItem references -Directory | Select-Object -ExpandProperty Name
-Select-String -Path *.md -Pattern 'WIREFRAMES|BUILD-PLAN'
+```sh
+test -d references/wger && echo present || echo missing
+ls -1 references
+grep -rn 'WIREFRAMES\|BUILD-PLAN' --include='*.md' .
 ```
+
+The working copy is on a plain local path, not OneDrive or any synced folder; earlier drafts of `prompts.md` and `BUILD-ROADMAP.md` assumed a Windows + OneDrive machine and no longer do.
 
 ### Test device
 
@@ -210,23 +212,28 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B2 Core and data** (2026-11-23); next is **B3 Shell and
+- Last completed phase: **B2 Core and data** (2026-11-23), plus a review follow-up on
+  the same day (`docs/adr/0006-referential-integrity.md`); next is **B3 Shell and
   onboarding**.
 - Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `build/b2-core-and-data`; 170 JVM tests plus one instrumented test pass, the debug app
-  installs and launches on the owner's physical phone, and the encrypted database is
-  proven on the device. Seven modules exist (`:core :data :sync :integrations :ui
+  `fix/b2-review-followups`; 171 JVM tests pass. The instrumented test was last run on
+  the phone at the B2 exit; its new foreign key assertion has **not** been run on
+  hardware yet and B3 must do so. Seven modules exist (`:core :data :sync :integrations :ui
   :app-android :tools:fixtures`) with ktlint, Detekt, `checkPortability`,
   `checkLicences` and `checkDesignTokens` wired into `check`. `:ui` holds the B1 design
   system (closed tokens, 19 components, five-tab bar, top bar, icons, 104 goldens and a
   contrast audit). `:core` holds ids, time, UCUM units, provenance, observations, the
   source registry, dedup and merge policies, validators, twelve cited formulas, raw
   record and rollup types and the platform seams. `:data` holds the SQLDelight schema
-  (20 tables, five layers, schema v2 with a migration), repositories, the rebuild-only
-  rollup engine, Trash, an Argon2id/AES-GCM export and restore, CSV export and the
+  (20 tables, five layers, schema **v3** with 36 foreign keys and two migrations),
+  repositories, the rebuild-only rollup engine, Trash, an Argon2id/AES-GCM export and restore, CSV export and the
   seeded five-year corpus; `tools/fixtures` runs the corpus and the 16 ms query
   benchmark. `app-android` implements the Keystore secret vault and the SQLCipher driver
   behind the seam. Versions are pinned in `docs/adr/0003-pinned-versions.md`; B1's
-  design choices are `docs/adr/0004-design-system.md` and B2's are
-  `docs/adr/0005-core-and-data.md`. No feature screen has been written.
+  design choices are `docs/adr/0004-design-system.md`, B2's are
+  `docs/adr/0005-core-and-data.md` and the referential-integrity follow-up is
+  `docs/adr/0006-referential-integrity.md`. `DatabaseOpener` takes a
+  `DatabaseDriverFactory`, not a driver: foreign keys can only be enabled when a
+  connection is created, never by a later `PRAGMA`. R8 is **off** in release; turning it
+  on is B10's. No feature screen has been written.
 - Open issues: see `docs/build-log.md`.

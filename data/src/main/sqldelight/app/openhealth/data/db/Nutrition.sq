@@ -39,8 +39,8 @@ CREATE INDEX meal_local_date ON meal(local_date);
 
 CREATE TABLE entry (
     id TEXT NOT NULL PRIMARY KEY,
-    meal_id TEXT,
-    food_id TEXT,
+    meal_id TEXT REFERENCES meal(id) ON DELETE SET NULL,
+    food_id TEXT REFERENCES food(id) ON DELETE SET NULL,
     local_date TEXT NOT NULL,
     zone_id TEXT NOT NULL,
     happened_at INTEGER NOT NULL,
@@ -52,11 +52,11 @@ CREATE TABLE entry (
     fat_g REAL,
     fibre_g REAL,
     source_kind TEXT NOT NULL,
-    source_id TEXT,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
     user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
-    observation_id TEXT,
-    raw_record_id TEXT,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
     idempotency_key TEXT NOT NULL UNIQUE,
     device TEXT,
     app_version TEXT,
@@ -68,7 +68,7 @@ CREATE INDEX entry_happened ON entry(happened_at);
 CREATE INDEX entry_meal ON entry(meal_id);
 
 insertFood:
-INSERT OR REPLACE INTO food(
+INSERT INTO food(
     id, name, brand, barcode, source_kind, source_ref, energy_kcal_per_100g,
     protein_g_per_100g, carbs_g_per_100g, fat_g_per_100g, fibre_g_per_100g,
     serving_json, verified, created_at, updated_at, revision
@@ -76,7 +76,24 @@ INSERT OR REPLACE INTO food(
     :id, :name, :brand, :barcode, :sourceKind, :sourceRef, :energyKcalPer100g,
     :proteinGPer100g, :carbsGPer100g, :fatGPer100g, :fibreGPer100g,
     :servingJson, :verified, :createdAt, :updatedAt, :revision
-);
+)
+-- A real upsert, not INSERT OR REPLACE: food is referenced by a foreign
+-- key, and replacing the row would delete it and its children with it.
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    brand = excluded.brand,
+    barcode = excluded.barcode,
+    source_kind = excluded.source_kind,
+    source_ref = excluded.source_ref,
+    energy_kcal_per_100g = excluded.energy_kcal_per_100g,
+    protein_g_per_100g = excluded.protein_g_per_100g,
+    carbs_g_per_100g = excluded.carbs_g_per_100g,
+    fat_g_per_100g = excluded.fat_g_per_100g,
+    fibre_g_per_100g = excluded.fibre_g_per_100g,
+    serving_json = excluded.serving_json,
+    verified = excluded.verified,
+    updated_at = excluded.updated_at,
+    revision = excluded.revision;
 
 foodById:
 SELECT * FROM food WHERE id = :id;
@@ -97,11 +114,20 @@ allFoods:
 SELECT * FROM food ORDER BY name;
 
 insertMeal:
-INSERT OR REPLACE INTO meal(
+INSERT INTO meal(
     id, name, kind, local_date, notes, created_at, updated_at, revision
 ) VALUES (
     :id, :name, :kind, :localDate, :notes, :createdAt, :updatedAt, :revision
-);
+)
+-- A real upsert, not INSERT OR REPLACE: meal is referenced by a foreign
+-- key, and replacing the row would delete it and its children with it.
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    kind = excluded.kind,
+    local_date = excluded.local_date,
+    notes = excluded.notes,
+    updated_at = excluded.updated_at,
+    revision = excluded.revision;
 
 mealById:
 SELECT * FROM meal WHERE id = :id;

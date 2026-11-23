@@ -102,6 +102,10 @@ class ExportService(
             )
         }
         val counts = db.transactionWithResult {
+            // Foreign keys are checked at COMMIT rather than per row, so a bundle can be
+            // reloaded table by table without ordering parents before children. A
+            // genuinely inconsistent bundle still fails, and fails the whole restore.
+            driver.execute(null, "PRAGMA defer_foreign_keys = ON", 0)
             ExportTables.all.asReversed().forEach { SqlDump.clear(driver, it) }
             var rows = 0L
             // Rollups are derived and never restored from the file; they are rebuilt

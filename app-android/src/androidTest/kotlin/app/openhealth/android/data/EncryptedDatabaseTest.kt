@@ -52,6 +52,8 @@ class EncryptedDatabaseTest {
         val vault = AndroidSecretVault(context, VAULT)
         val first = AndroidDatabaseFactory(context, vault, DATABASE).open()
         assertEquals("wal", app.openhealth.data.db.journalMode(first.driver).lowercase())
+        assertForeignKeysEnforced(first)
+        seedManualSource(first)
         val observation = weight()
         val outcome = ObservationRepository(first.db).record(observation)
         assertTrue(outcome is app.openhealth.data.repo.RecordOutcome.Inserted)
@@ -67,6 +69,7 @@ class EncryptedDatabaseTest {
         )
 
         val reopened = AndroidDatabaseFactory(context, vault, DATABASE).open()
+        assertForeignKeysEnforced(reopened)
         val stored = ObservationRepository(reopened.db).forDay(LocalDate(2026, 3, 1)).single()
         assertEquals(80.5, stored.value.value, 0.0001)
         assertEquals(observation.provenance.recordedAt, stored.provenance.recordedAt)
@@ -98,6 +101,52 @@ class EncryptedDatabaseTest {
             assertEquals(80.5, restoredObservation.value.value, 0.0001)
         }
         context.deleteDatabase(RESTORED)
+    }
+
+    /**
+     * SQLCipher's own SQLite, with Android's connection pool, is the only place the
+     * foreign keys are really proved: `PRAGMA foreign_keys` is ignored on a live
+     * connection, so enforcement comes from `setForeignKeyConstraintsEnabled` in the
+     * open-helper callback and has to be read back on the device to be believed.
+     */
+    private fun assertForeignKeysEnforced(store: app.openhealth.data.db.OpenHealthStore) {
+        val enforced = store.driver.executeQuery(
+            identifier = null,
+            sql = "PRAGMA foreign_keys",
+            mapper = { cursor ->
+                app.cash.sqldelight.db.QueryResult.Value(
+                    if (cursor.next().value) cursor.getLong(0) ?: 0L else 0L,
+                )
+            },
+            parameters = 0,
+        ).value
+        assertEquals("foreign keys must be enforced on device", 1L, enforced)
+
+        // And they must bite: an observation may not name a source that does not exist.
+        var refused = false
+        try {
+            store.driver.execute(
+                null,
+                "INSERT INTO observation(id, type, value, unit, start_at, local_date, " +
+                    "zone_id, happened_at, recorded_at, source_id, idempotency_key) VALUES " +
+                    "('fk-probe','WEIGHT',1.0,'kg',0,'2026-03-01','UTC',0,0,'ghost','fk-probe')",
+                0,
+            )
+        } catch (expected: Exception) {
+            refused = true
+        }
+        assertTrue("a dangling source_id must be refused on device", refused)
+    }
+
+    /** `observation.source_id` is a foreign key, so the source has to exist first. */
+    private fun seedManualSource(store: app.openhealth.data.db.OpenHealthStore) {
+        app.openhealth.data.repo.SourceRepository(store.db).upsert(
+            app.openhealth.core.source.Source(
+                id = SourceId("manual"),
+                kind = app.openhealth.core.observation.SourceKind.MANUAL,
+                label = "Manual entry",
+            ),
+        )
     }
 
     private fun vault(): AndroidSecretVault = AndroidSecretVault(context, VAULT)

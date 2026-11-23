@@ -1,0 +1,388 @@
+-- Migration 2 -> 3 (2026-11-23, post-B2 review). Declares the referential integrity
+-- the v2 schema only implied: every source_id, raw_record_id, observation_id, meal_id,
+-- food_id and training parent is now a real foreign key. SQLite cannot add a constraint
+-- with ALTER TABLE, so each affected table is rebuilt.
+--
+-- A structural parent is RESTRICT, so a delete must go through TrashService and write a
+-- tombstone for the children rather than cascade silently (pr.md §6.29). An optional
+-- provenance link is SET NULL, so compacting a raw record or deleting a meal leaves the
+-- value and its own provenance intact (pr.md §7.1).
+--
+-- Three constraints shape how this is written:
+--   * DatabaseOpener turns foreign keys OFF around the migration and runs
+--     PRAGMA foreign_key_check afterwards, so copy order does not matter.
+--   * No ALTER TABLE RENAME is used, so the schema is never reparsed while a referenced
+--     table is missing.
+--   * Columns are listed explicitly. SQLDelight drops the `*` from `SELECT *` when it
+--     emits migration SQL, so a star here would reach SQLite as `SELECT  FROM`.
+-- The carry tables are ordinary tables, not TEMP ones: TEMP is per-connection and the
+-- driver does not promise one connection for the whole migration.
+
+
+-- raw_record
+CREATE TABLE raw_record_carry_v3 AS SELECT id, source_id, source_kind, device, app_version, received_at, recorded_at, happened_at, payload_hash, payload_ref, payload, idempotency_key, schema_version, compacted_at FROM raw_record;
+DROP TABLE raw_record;
+CREATE TABLE raw_record (
+    id TEXT NOT NULL PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    source_kind TEXT NOT NULL,
+    device TEXT,
+    app_version TEXT,
+    received_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    happened_at INTEGER,
+    payload_hash TEXT NOT NULL,
+    payload_ref TEXT,
+    payload TEXT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    schema_version INTEGER NOT NULL,
+    compacted_at INTEGER
+);
+INSERT INTO raw_record (id, source_id, source_kind, device, app_version, received_at, recorded_at, happened_at, payload_hash, payload_ref, payload, idempotency_key, schema_version, compacted_at) SELECT id, source_id, source_kind, device, app_version, received_at, recorded_at, happened_at, payload_hash, payload_ref, payload, idempotency_key, schema_version, compacted_at FROM raw_record_carry_v3;
+DROP TABLE raw_record_carry_v3;
+CREATE INDEX raw_record_received ON raw_record(received_at);
+CREATE INDEX raw_record_hash ON raw_record(payload_hash);
+
+-- observation
+CREATE TABLE observation_carry_v3 AS SELECT id, type, value, unit, start_at, end_at, local_date, zone_id, happened_at, recorded_at, source_id, device, app_version, method, context, confidence, quality, user_verified, user_edited, original_value, original_unit, edit_reason, edited_at, group_key, excluded_from_trends, idempotency_key, raw_record_id FROM observation;
+DROP TABLE observation;
+CREATE TABLE observation (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    start_at INTEGER NOT NULL,
+    end_at INTEGER,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    device TEXT,
+    app_version TEXT,
+    method TEXT,
+    context TEXT,
+    confidence REAL,
+    quality TEXT,
+    user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    original_value REAL,
+    original_unit TEXT,
+    edit_reason TEXT,
+    edited_at INTEGER,
+    group_key TEXT,
+    excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL
+);
+INSERT INTO observation (id, type, value, unit, start_at, end_at, local_date, zone_id, happened_at, recorded_at, source_id, device, app_version, method, context, confidence, quality, user_verified, user_edited, original_value, original_unit, edit_reason, edited_at, group_key, excluded_from_trends, idempotency_key, raw_record_id) SELECT id, type, value, unit, start_at, end_at, local_date, zone_id, happened_at, recorded_at, source_id, device, app_version, method, context, confidence, quality, user_verified, user_edited, original_value, original_unit, edit_reason, edited_at, group_key, excluded_from_trends, idempotency_key, raw_record_id FROM observation_carry_v3;
+DROP TABLE observation_carry_v3;
+CREATE INDEX observation_local_date ON observation(local_date);
+CREATE INDEX observation_type_happened ON observation(type, happened_at);
+CREATE INDEX observation_type_local_date ON observation(type, local_date);
+CREATE INDEX observation_happened ON observation(happened_at);
+CREATE INDEX observation_source_date ON observation(source_id, local_date);
+
+-- profile
+CREATE TABLE profile_carry_v3 AS SELECT id, name, date_of_birth, sex_at_birth, gender, height_cm, weight_kg, units, zone_id, language, goal, activity_level, training_experience, weight_neutral, intake_tier, created_at, updated_at, source_id, revision FROM profile;
+DROP TABLE profile;
+CREATE TABLE profile (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    date_of_birth TEXT,
+    sex_at_birth TEXT,
+    gender TEXT,
+    height_cm REAL,
+    weight_kg REAL,
+    units TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    language TEXT NOT NULL,
+    goal TEXT,
+    activity_level TEXT,
+    training_experience TEXT,
+    weight_neutral INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    intake_tier INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO profile (id, name, date_of_birth, sex_at_birth, gender, height_cm, weight_kg, units, zone_id, language, goal, activity_level, training_experience, weight_neutral, intake_tier, created_at, updated_at, source_id, revision) SELECT id, name, date_of_birth, sex_at_birth, gender, height_cm, weight_kg, units, zone_id, language, goal, activity_level, training_experience, weight_neutral, intake_tier, created_at, updated_at, source_id, revision FROM profile_carry_v3;
+DROP TABLE profile_carry_v3;
+
+-- daily_rollup
+CREATE TABLE daily_rollup_carry_v3 AS SELECT local_date, type, value, unit, secondary_value, source_id, contributing_sources, dedup_reason, watermark, computed_at, detail FROM daily_rollup;
+DROP TABLE daily_rollup;
+CREATE TABLE daily_rollup (
+    local_date TEXT NOT NULL,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    secondary_value REAL,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    contributing_sources INTEGER NOT NULL DEFAULT 0,
+    dedup_reason TEXT,
+    watermark INTEGER NOT NULL,
+    computed_at INTEGER NOT NULL,
+    detail TEXT,
+    PRIMARY KEY (local_date, type)
+);
+INSERT INTO daily_rollup (local_date, type, value, unit, secondary_value, source_id, contributing_sources, dedup_reason, watermark, computed_at, detail) SELECT local_date, type, value, unit, secondary_value, source_id, contributing_sources, dedup_reason, watermark, computed_at, detail FROM daily_rollup_carry_v3;
+DROP TABLE daily_rollup_carry_v3;
+CREATE INDEX daily_rollup_date ON daily_rollup(local_date);
+
+-- measurement
+CREATE TABLE measurement_carry_v3 AS SELECT id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id, method, notes, excluded_from_trends, observation_id, raw_record_id, idempotency_key, device, app_version, revision FROM measurement;
+DROP TABLE measurement;
+CREATE TABLE measurement (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    method TEXT,
+    notes TEXT,
+    excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO measurement (id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id, method, notes, excluded_from_trends, observation_id, raw_record_id, idempotency_key, device, app_version, revision) SELECT id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id, method, notes, excluded_from_trends, observation_id, raw_record_id, idempotency_key, device, app_version, revision FROM measurement_carry_v3;
+DROP TABLE measurement_carry_v3;
+CREATE INDEX measurement_local_date ON measurement(local_date);
+CREATE INDEX measurement_happened ON measurement(happened_at);
+CREATE INDEX measurement_type_happened ON measurement(type, happened_at);
+
+-- vital
+CREATE TABLE vital_carry_v3 AS SELECT id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id, method, context, note, excluded_from_trends, observation_id, raw_record_id, idempotency_key, device, app_version, revision FROM vital;
+DROP TABLE vital;
+CREATE TABLE vital (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    method TEXT,
+    context TEXT,
+    note TEXT,
+    excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO vital (id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id, method, context, note, excluded_from_trends, observation_id, raw_record_id, idempotency_key, device, app_version, revision) SELECT id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id, method, context, note, excluded_from_trends, observation_id, raw_record_id, idempotency_key, device, app_version, revision FROM vital_carry_v3;
+DROP TABLE vital_carry_v3;
+CREATE INDEX vital_local_date ON vital(local_date);
+CREATE INDEX vital_happened ON vital(happened_at);
+CREATE INDEX vital_type_happened ON vital(type, happened_at);
+
+-- entry
+CREATE TABLE entry_carry_v3 AS SELECT id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g, energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, source_id, user_verified, user_edited, observation_id, raw_record_id, idempotency_key, device, app_version, revision FROM entry;
+DROP TABLE entry;
+CREATE TABLE entry (
+    id TEXT NOT NULL PRIMARY KEY,
+    meal_id TEXT REFERENCES meal(id) ON DELETE SET NULL,
+    food_id TEXT REFERENCES food(id) ON DELETE SET NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    quantity_g REAL,
+    energy_kcal REAL,
+    protein_g REAL,
+    carbs_g REAL,
+    fat_g REAL,
+    fibre_g REAL,
+    source_kind TEXT NOT NULL,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO entry (id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g, energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, source_id, user_verified, user_edited, observation_id, raw_record_id, idempotency_key, device, app_version, revision) SELECT id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g, energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, source_id, user_verified, user_edited, observation_id, raw_record_id, idempotency_key, device, app_version, revision FROM entry_carry_v3;
+DROP TABLE entry_carry_v3;
+CREATE INDEX entry_local_date ON entry(local_date);
+CREATE INDEX entry_happened ON entry(happened_at);
+CREATE INDEX entry_meal ON entry(meal_id);
+
+-- exercise
+CREATE TABLE exercise_carry_v3 AS SELECT id, name, primary_muscles, secondary_muscles, equipment, instructions, met_activity, is_custom, source_id, created_at, updated_at, revision FROM exercise;
+DROP TABLE exercise;
+CREATE TABLE exercise (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    primary_muscles TEXT NOT NULL,
+    secondary_muscles TEXT NOT NULL,
+    equipment TEXT,
+    instructions TEXT,
+    met_activity TEXT,
+    is_custom INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO exercise (id, name, primary_muscles, secondary_muscles, equipment, instructions, met_activity, is_custom, source_id, created_at, updated_at, revision) SELECT id, name, primary_muscles, secondary_muscles, equipment, instructions, met_activity, is_custom, source_id, created_at, updated_at, revision FROM exercise_carry_v3;
+DROP TABLE exercise_carry_v3;
+CREATE INDEX exercise_name ON exercise(name);
+
+-- routine
+CREATE TABLE routine_carry_v3 AS SELECT id, name, folder, notes, archived_at, created_at, updated_at, source_id, revision FROM routine;
+DROP TABLE routine;
+CREATE TABLE routine (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    folder TEXT,
+    notes TEXT,
+    archived_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO routine (id, name, folder, notes, archived_at, created_at, updated_at, source_id, revision) SELECT id, name, folder, notes, archived_at, created_at, updated_at, source_id, revision FROM routine_carry_v3;
+DROP TABLE routine_carry_v3;
+
+-- programme
+CREATE TABLE programme_carry_v3 AS SELECT id, name, weeks, notes, archived_at, created_at, updated_at, source_id, revision FROM programme;
+DROP TABLE programme;
+CREATE TABLE programme (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    weeks INTEGER NOT NULL,
+    notes TEXT,
+    archived_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO programme (id, name, weeks, notes, archived_at, created_at, updated_at, source_id, revision) SELECT id, name, weeks, notes, archived_at, created_at, updated_at, source_id, revision FROM programme_carry_v3;
+DROP TABLE programme_carry_v3;
+
+-- routine_exercise
+CREATE TABLE routine_exercise_carry_v3 AS SELECT id, routine_id, exercise_id, position, target_sets, target_reps, target_weight_kg, notes FROM routine_exercise;
+DROP TABLE routine_exercise;
+CREATE TABLE routine_exercise (
+    id TEXT NOT NULL PRIMARY KEY,
+    routine_id TEXT NOT NULL REFERENCES routine(id) ON DELETE RESTRICT,
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
+    position INTEGER NOT NULL,
+    target_sets INTEGER,
+    target_reps INTEGER,
+    target_weight_kg REAL,
+    notes TEXT
+);
+INSERT INTO routine_exercise (id, routine_id, exercise_id, position, target_sets, target_reps, target_weight_kg, notes) SELECT id, routine_id, exercise_id, position, target_sets, target_reps, target_weight_kg, notes FROM routine_exercise_carry_v3;
+DROP TABLE routine_exercise_carry_v3;
+CREATE INDEX routine_exercise_routine ON routine_exercise(routine_id);
+
+-- programme_routine
+CREATE TABLE programme_routine_carry_v3 AS SELECT id, programme_id, routine_id, week, position FROM programme_routine;
+DROP TABLE programme_routine;
+CREATE TABLE programme_routine (
+    id TEXT NOT NULL PRIMARY KEY,
+    programme_id TEXT NOT NULL REFERENCES programme(id) ON DELETE RESTRICT,
+    routine_id TEXT NOT NULL REFERENCES routine(id) ON DELETE RESTRICT,
+    week INTEGER NOT NULL,
+    position INTEGER NOT NULL
+);
+INSERT INTO programme_routine (id, programme_id, routine_id, week, position) SELECT id, programme_id, routine_id, week, position FROM programme_routine_carry_v3;
+DROP TABLE programme_routine_carry_v3;
+CREATE INDEX programme_routine_programme ON programme_routine(programme_id);
+
+-- session
+CREATE TABLE session_carry_v3 AS SELECT id, started_at, ended_at, local_date, zone_id, happened_at, recorded_at, routine_id, programme_id, notes, source_id, idempotency_key, observation_id, raw_record_id, device, app_version, revision, updated_at FROM session;
+DROP TABLE session;
+CREATE TABLE session (
+    id TEXT NOT NULL PRIMARY KEY,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    routine_id TEXT REFERENCES routine(id) ON DELETE SET NULL,
+    programme_id TEXT REFERENCES programme(id) ON DELETE SET NULL,
+    notes TEXT,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL
+);
+INSERT INTO session (id, started_at, ended_at, local_date, zone_id, happened_at, recorded_at, routine_id, programme_id, notes, source_id, idempotency_key, observation_id, raw_record_id, device, app_version, revision, updated_at) SELECT id, started_at, ended_at, local_date, zone_id, happened_at, recorded_at, routine_id, programme_id, notes, source_id, idempotency_key, observation_id, raw_record_id, device, app_version, revision, updated_at FROM session_carry_v3;
+DROP TABLE session_carry_v3;
+CREATE INDEX session_local_date ON session(local_date);
+CREATE INDEX session_happened ON session(happened_at);
+
+-- session_exercise
+CREATE TABLE session_exercise_carry_v3 AS SELECT id, session_id, exercise_id, position, notes FROM session_exercise;
+DROP TABLE session_exercise;
+CREATE TABLE session_exercise (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES session(id) ON DELETE RESTRICT,
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
+    position INTEGER NOT NULL,
+    notes TEXT
+);
+INSERT INTO session_exercise (id, session_id, exercise_id, position, notes) SELECT id, session_id, exercise_id, position, notes FROM session_exercise_carry_v3;
+DROP TABLE session_exercise_carry_v3;
+CREATE INDEX session_exercise_session ON session_exercise(session_id);
+
+-- work_set
+CREATE TABLE work_set_carry_v3 AS SELECT id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps, rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds, completed_at, happened_at, recorded_at, source_id, idempotency_key, observation_id, raw_record_id, device, app_version, revision FROM work_set;
+DROP TABLE work_set;
+CREATE TABLE work_set (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES session(id) ON DELETE RESTRICT,
+    session_exercise_id TEXT REFERENCES session_exercise(id) ON DELETE SET NULL,
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
+    position INTEGER NOT NULL,
+    weight_kg REAL NOT NULL,
+    reps INTEGER NOT NULL,
+    rir REAL,
+    rpe REAL,
+    is_warmup INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    is_backoff INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    is_failure INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    is_bodyweight INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    tempo TEXT,
+    rest_seconds INTEGER,
+    completed_at INTEGER NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO work_set (id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps, rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds, completed_at, happened_at, recorded_at, source_id, idempotency_key, observation_id, raw_record_id, device, app_version, revision) SELECT id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps, rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds, completed_at, happened_at, recorded_at, source_id, idempotency_key, observation_id, raw_record_id, device, app_version, revision FROM work_set_carry_v3;
+DROP TABLE work_set_carry_v3;
+CREATE INDEX work_set_session ON work_set(session_id, position);
+CREATE INDEX work_set_exercise ON work_set(exercise_id, completed_at);

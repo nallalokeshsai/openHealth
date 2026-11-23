@@ -54,9 +54,9 @@ Deliver:
 5. `.gitignore` (build outputs, `local.properties`, keystores, `references/` except the two indexes), GitHub Actions workflow file (not pushed).
 6. `app-android` shows one blank screen; `docs/build-log.md` started.
 
-Exit: `./gradlew check` green; a deliberate `import android.os.Bundle` in `core` makes `check` fail, then is removed; the app installs and launches on an emulator or the owner's phone.
+Exit: `./gradlew check` green; a deliberate `import android.os.Bundle` in `core` makes `check` fail, then is removed; the app installs and launches on the owner's phone.
 Hands to B1/B2: a green build and pinned versions.
-Ask the owner: emulator or physical phone (list `adb devices` first); and, because the repository sits in OneDrive, whether to move the working copy to `C:devopenHealth` (recommended) or pause OneDrive for build folders. Nothing else.
+Ask the owner: nothing. The test target is the physical phone (`AGENTS.md` "Test device") and the working copy is on a plain local path, so neither B0 question stands.
 
 ## B1 — Design system
 

@@ -8,7 +8,7 @@ CREATE TABLE daily_rollup (
     value REAL NOT NULL,
     unit TEXT NOT NULL,
     secondary_value REAL,
-    source_id TEXT,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
     contributing_sources INTEGER NOT NULL DEFAULT 0,
     dedup_reason TEXT,
     watermark INTEGER NOT NULL,

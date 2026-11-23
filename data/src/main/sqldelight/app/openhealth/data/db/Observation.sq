@@ -13,7 +13,7 @@ CREATE TABLE observation (
     zone_id TEXT NOT NULL,
     happened_at INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL,
-    source_id TEXT NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
     device TEXT,
     app_version TEXT,
     method TEXT,
@@ -29,7 +29,7 @@ CREATE TABLE observation (
     group_key TEXT,
     excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     idempotency_key TEXT NOT NULL UNIQUE,
-    raw_record_id TEXT
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL
 );
 
 -- The two indexes Tech-Stack.md §5 requires of every UI query.

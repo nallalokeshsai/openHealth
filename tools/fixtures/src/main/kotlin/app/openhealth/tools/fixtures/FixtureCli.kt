@@ -3,6 +3,7 @@ package app.openhealth.tools.fixtures
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.openhealth.data.corpus.CorpusGenerator
 import app.openhealth.data.corpus.CorpusRequest
+import app.openhealth.data.db.DatabaseDriverFactory
 import app.openhealth.data.db.DatabaseOpener
 import java.util.Properties
 import kotlinx.datetime.LocalDate
@@ -22,8 +23,7 @@ object FixtureCli {
         val seed = valueOf(options, "--seed")?.toLongOrNull() ?: DEFAULT_SEED
         val end = valueOf(options, "--end")?.let(LocalDate::parse) ?: DEFAULT_END_DATE
 
-        val driver = JdbcSqliteDriver("jdbc:sqlite:$out", Properties())
-        val store = DatabaseOpener().open(driver)
+        val store = DatabaseOpener().open(jdbcFactory("jdbc:sqlite:$out"))
         val stats = CorpusGenerator(store.db).generate(
             CorpusRequest(days = days, seed = seed, endDate = end),
         )
@@ -41,4 +41,15 @@ object FixtureCli {
         val index = args.indexOf(name)
         return if (index >= 0 && index + 1 < args.size) args[index + 1] else null
     }
+}
+
+/**
+ * Foreign keys are a connection property for sqlite-jdbc, never a PRAGMA on a live
+ * connection, so the tooling builds its drivers the same way the app does.
+ */
+fun jdbcFactory(url: String): DatabaseDriverFactory = DatabaseDriverFactory { foreignKeys ->
+    JdbcSqliteDriver(
+        url,
+        Properties().apply { setProperty("foreign_keys", foreignKeys.toString()) },
+    )
 }

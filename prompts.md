@@ -21,7 +21,7 @@ What you will be asked, across the whole build (everything else is already decid
 
 | When | Question |
 |---|---|
-| B0 | Emulator or your phone? Is the repo allowed to move out of OneDrive (recommended) or should OneDrive be paused for build folders? |
+| B0 | Nothing. Both B0 questions are already answered: the owner tests on the physical phone (`AGENTS.md` "Test device"), and the working copy is on a plain local path. |
 | B8 | Which scale and BP cuff you own, if any; a physical device for the battery test? |
 | B10 | Create the signing keystore yourself; Play, F-Droid or sideload; privacy-policy hosting |
 | B11 | Map tile source, one-time map-pack download allowed? |
@@ -80,7 +80,7 @@ You are building openHealth, an Android personal health app, in the repository y
 Build phase B0 (Foundation) of openHealth. Read AGENTS.md, prompts.md "Standing rules" and BUILD-ROADMAP.md section B0, then every document it names. Follow the Standing rules exactly.
 
 Specific to B0:
-- The repository path contains OneDrive. Gradle build outputs and a 5 GB references folder inside a synced folder cause locked files, slow builds and long-path failures on Windows. After orienting, ask me one batched question dialog: (1) emulator or my physical phone (run `adb devices` and an `emulator -list-avds` first and tell me what you found; create an AVD with API 35 if none exists and I choose the emulator); (2) recommended: move the working copy to C:\dev\openHealth with git (you may do this only if I say yes), otherwise pause OneDrive sync for build folders and configure Gradle build directories outside the synced tree.
+- The working copy is on a plain local path on Linux, not in a synced folder, so nothing has to be moved and no sync has to be paused. Do not ask about either: B0 has no questions. The test target is the owner's physical phone over USB debugging (`AGENTS.md` "Test device"); source `.env.local` before any `adb` or Gradle call and do not fall back to an emulator if the phone is absent — ask the owner to attach it.
 - Verify every version in Tech-Stack.md section 14 against its current release before pinning, and make sure the Gradle wrapper, AGP, Kotlin, KSP/SQLDelight and Compose BOM versions are mutually compatible. Record the result in docs/adr/0003-pinned-versions.md.
 - Prove the guards work: add and then remove a forbidden import and a forbidden dependency and show that `check` fails and then passes.
 - Create docs/build-log.md with the first entry. Do not write any feature code.
