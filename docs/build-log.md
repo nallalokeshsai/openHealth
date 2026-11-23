@@ -477,7 +477,7 @@ any feature screen (`BUILD-ROADMAP.md` §B2).
    library loaded explicitly, WAL, integrity check) and `AndroidMigrationBackup`;
    a device test that proves persistence, encryption and reopen. `tools/fixtures` is a
    runnable generator plus the query benchmark.
-4. **Verification and documentation** — commit `734eef7`. Two fresh review passes,
+4. **Verification and documentation** — commit `61a4927`. Two fresh review passes,
    every confirmed finding fixed, the clean rebuild and device run re-run over the
    fixes, this log, ADR 0005, the NOTICE additions, and the "Current state" update in
    `AGENTS.md`.
@@ -487,7 +487,7 @@ any feature screen (`BUILD-ROADMAP.md` §B2).
 | Command | Result |
 |---|---|
 | `./gradlew clean check :app-android:assembleDebug --no-build-cache` | **BUILD SUCCESSFUL**, 195 tasks (186 executed), from a cleaned tree. |
-| `./gradlew check` | **BUILD SUCCESSFUL**: 153 JVM tests (62 `:core`, 43 `:data`, 47 `:ui` from B1, 1 benchmark), ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
+| `./gradlew check` | **BUILD SUCCESSFUL**: 155 JVM tests (63 `:core`, 44 `:data`, 47 `:ui` from B1, 1 benchmark), ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
 | `./gradlew :tools:fixtures:test` (inside `check`) | **BUILD SUCCESSFUL**; five-year corpus built in **~4 s** (33,372 observations, 261 raw records, 392 sessions, 5,880 sets, 16,335 entries, 2,010 foods), 15,253 rollup rows (five layers, nutrition and vitals included) rebuilt in **~1.4 s**, every UI query under **6.9 ms** against the 16 ms budget. |
 | `./gradlew :app-android:assembleRelease` | **BUILD SUCCESSFUL**; 41 MB unsigned APK with four SQLCipher ABIs, **no `Gallery` class or activity**, and only AndroidX's internal `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` — no network, storage, location or health permission was added. |
 | `./gradlew :app-android:installDebug` then `MainActivity` cold/warm launch | `Status: ok`, focused activity, `logcat -s AndroidRuntime:E` empty. |
@@ -512,6 +512,9 @@ No device identity (serial, model, build) is recorded in this repository.
 
 ### Regression over earlier phases
 
+- **B0 clean checkout** — a fresh `git clone` of the branch into an empty directory
+  with no `local.properties` and only `ANDROID_HOME` set ran `check` and
+  `:app-android:assembleDebug`: **BUILD SUCCESSFUL**.
 - **B0 `./gradlew check`** — covered by the clean rebuild above.
 - **B0 portability guard** — re-run because the convention plugins changed for generated
   sources; it still fails on an `android.*` import (probe above).
