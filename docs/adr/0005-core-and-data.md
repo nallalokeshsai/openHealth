@@ -305,8 +305,18 @@ screens. The scopes are visible in one file and are not a global disable.
 - SQLCipher's BSD notice must appear on B3's About screen; `NOTICE.md` records it and
   B3's exit test carries it.
 - The encrypted store is opened by `AndroidDatabaseFactory`, which loads SQLCipher's
-  native library, sets WAL and runs the integrity check. A future entry point must not
-  construct a driver directly.
+  native library, sets WAL, foreign keys and the integrity check. A future entry point
+  must not construct a driver directly. The Android path relies on SQLiteOpenHelper's
+  own downgrade refusal rather than `DatabaseOpener`'s explicit message; B10 unifies the
+  two when it has a real upgrade matrix.
+- Foreign keys are not declared. Dangling `source_id`, `observation_id`, `meal_id` and
+  `session_id` links are not yet rejected by the database; the export registry and the
+  write paths validate the links they own, and B10 adds the constraint matrix.
+- An imported observation is expected to carry a raw record; the boundary cannot tell an
+  import from a manual entry, so B8's importers own the enforcement and the corpus
+  demonstrates the link on its batch-import days.
+- Observations, sessions, meals and foods have no Trash entry yet. No code path deletes
+  an observation; the Timeline undo and the session/recipe cascade are B3/B5 work.
 
 ## Consequences
 

@@ -442,7 +442,7 @@ any feature screen (`BUILD-ROADMAP.md` §B2).
    library loaded explicitly, WAL, integrity check) and `AndroidMigrationBackup`;
    a device test that proves persistence, encryption and reopen. `tools/fixtures` is a
    runnable generator plus the query benchmark.
-4. **Verification and documentation** — commits `61a4927` and `9455cb1`. Two fresh review passes,
+4. **Verification and documentation** — commits `61a4927`, `9455cb1` and `ba7688f`. Two fresh review passes,
    every confirmed finding fixed, the clean rebuild and device run re-run over the
    fixes, this log, ADR 0005, the NOTICE additions, and the "Current state" update in
    `AGENTS.md`.
@@ -547,6 +547,8 @@ pushed.
 | `checkPortability` only looked at `import` lines | It also fails a fully-qualified `android.`/`androidx.` use; proved with `android.util.Log` in `:core` |
 | Test gaps: no meal in the timeline test, no vital-only day, no two-source vital, no daily-total test, no no-backup refusal | All added; the suite is now 170 JVM tests |
 | ADR 0005 overstated "under 3 ms", called the corpus measurements weekly and left a broken sentence | Corrected: the slowest query is the timeline page at about 5.2 ms against 16 ms, a measurement is seeded every 30 days, and the prose is repaired |
+| Layer-4 corrections had no edit time, and a layer-4 date could disagree with its timestamp | `edited_at` is stored and mapped; every layer-4 insert checks that `local_date` is `happened_at` in its zone |
+| Observations, sessions and foods had no Trash entry; no foreign keys; training volume was not rolled up | Recorded as B3/B5/B10 work rather than faked; no delete path exists for them today |
 
 ### Invariant audit (`AGENTS.md`)
 
