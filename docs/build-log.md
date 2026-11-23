@@ -122,6 +122,16 @@ CI noise was deprecation: `checkout@v4` and `setup-java@v4` run on Node 20, and
 | A deliberate `import android.os.Bundle` in `core` makes `check` fail, then is removed | Guard proof 1 above | **pass** |
 | The app installs and launches on an emulator or the owner's phone | Cold launch on the physical phone (`Status: ok`, focused activity, no crash) after a clean build | **pass** |
 
+### Post-exit amendment (2026-11-23, after the merge)
+
+The owner supplied the anatomical reference for the body model and asked for its fat
+colour. `fat` is now `#F2C230` in dark (the reference's golden yellow; 12.5:1 on `bg`,
+10.2:1 on `surface`, 8.3:1 on `surface-2`) and `#A87C00` in light, the same hue at the
+brightest value that still clears the 3:1 graphic bar (`#F2C230` measures 1.5:1 on light
+`bg`). `DESIGN.md` §2.5, §12.5 and Appendix A carry the values and the measurements in a
+dated edit, and `OhContrastTest` still passes over both themes. Nothing renders the layer
+until B4, so no golden changed.
+
 iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 
 ### Placeholders and deferred work
@@ -365,5 +375,15 @@ and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is u
   role.
 - The gallery's colour-swatch section is a debug aid and is not held to the screen gate;
   product screens are.
+
+### Post-exit amendment (2026-11-23, after the merge)
+
+The owner supplied the anatomical reference for the body model and asked for its fat
+colour. `fat` is now `#F2C230` in dark (the reference's golden yellow; 12.5:1 on `bg`,
+10.2:1 on `surface`, 8.3:1 on `surface-2`) and `#A87C00` in light, the same hue at the
+brightest value that still clears the 3:1 graphic bar (`#F2C230` measures 1.5:1 on light
+`bg`). `DESIGN.md` §2.5, §12.5 and Appendix A carry the values and the measurements in a
+dated edit, and `OhContrastTest` still passes over both themes. Nothing renders the layer
+until B4, so no golden changed.
 
 iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.

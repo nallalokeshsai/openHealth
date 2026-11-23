@@ -2,7 +2,10 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-23 — B1 corrections, no new token: the chip's text is the
+**Last revision:** 2026-11-23 (second edit) — `fat` re-valued from the anatomical
+reference to `#F2C230` in dark and its brightest 3:1 sibling `#A87C00` in light (§2.5,
+§12.5, Appendix A).
+Previous: 2026-11-23 — B1 corrections, no new token: the chip's text is the
 `subhead` role (§5.9, the stated 14 sp is not one of the 11 roles in §3.2); `acc-2` is
 resolved for the eight non-brand presets (§2.6); Appendix A's row padding matches §5.3
 (12/16, not 11/14); the `headline` of §4.4 is the §10.5 wordmark (`body` 17/600); the
@@ -263,7 +266,7 @@ borrow the values because they are calibrated, not because we want an iOS clone.
 | `red` | `#FF453A` | `#FF3B30` | Destructive, error, user-set clinical alert, and the "Recovering" step of the muscle recovery map (§9.1). **Nothing else.** |
 | `orange` | `#FF9F0A` | `#FF9500` | Attention: over target, missed, offline, in-progress. |
 | `yellow` | `#FFD60A` | `#FFCC00` | Records, PRs, favourites, goal lines. |
-| `fat` | `#EBD27A` | `#9A6F00` | **Added 2026-11-22.** Adipose layer of the dynamic body model (§9.1.1) and body-fat series. Data only, never status, never an accent. Measured: 11.4:1 on dark `surface`; 4.5:1 on light `surface`, 4.1:1 on light `bg` (§12.5). |
+| `fat` | `#F2C230` | `#A87C00` | **Added 2026-11-22, re-valued 2026-11-23** from the anatomical reference (the fat in the figure is this golden yellow). Adipose layer of the dynamic body model (§9.1.1) and body-fat series. Data only, never status, never an accent. Measured: 12.5:1 on dark `bg`, 10.2:1 on dark `surface`, 8.3:1 on dark `surface-2`; light 3.9:1 on `bg`, 4.4:1 on `surface`, 3.7:1 on `surface-2` (§12.5). The light theme takes the same hue at the brightest value that clears 3:1; a light value of `#F2C230` is 1.5:1 and cannot carry the layer there. |
 | `teal` | `#40C8E0` | `#30B0C7` | Location, gym, fibre in the macro set. |
 | `indigo` | `#5E5CE6` | `#5856D6` | Life events and notes drawn as bands on charts. |
 | `pink` | `#FF375F` | `#FF2D55` | Mood and cycle accents; never status. |
@@ -1521,10 +1524,11 @@ The review gate (§14.5) checks, in both themes:
 - Text on a tinted fill is measured with the fill composited over an opaque base:
   `label` on `acc-soft`, on the 15 % Danger fill, on the toast and on the timer bar;
   `acc-ink` on the work timer bar; `label-2` on the bar (2026-11-23).
-- `fat` (2026-11-22) as a graphic ≥ 3 on `bg`, `surface` and `surface-2`. Measured:
-  dark `#EBD27A` 14.0 on `bg`, 11.4 on `surface`, 9.3 on `surface-2`; light
-  `#9A6F00` 4.5 on `surface`, 4.1 on `bg`, 3.8 on `surface-2`.
-  The first light value `#C99A1E` measured 2.6 and was rejected.
+- `fat` (2026-11-22, re-valued 2026-11-23) as a graphic ≥ 3 on `bg`, `surface` and
+  `surface-2`. Measured: dark `#F2C230` 12.5 on `bg`, 10.2 on `surface`, 8.3 on
+  `surface-2`; light `#A87C00` 3.9 on `bg`, 4.4 on `surface`, 3.7 on `surface-2`.
+  The light theme takes the same hue at the brightest value that clears 3:1, because
+  `#F2C230` measures 1.5 on light `bg`.
 - `fat` is close in hue to `orange` and `yellow`, so luminance cannot separate
   them (1.1 to 1.5). The separation is structural, not chromatic: the adipose
   layer is drawn only outside the muscle shapes, behind the 2.5 dp surface stroke
@@ -1823,7 +1827,7 @@ acc-ink       #A3E635
 acc-soft      acc 16%
 acc-line      acc 38%
 
-fat           #EBD27A   (added 2026-11-22; body model + body-fat series only)
+fat           #F2C230   (added 2026-11-22, re-valued 2026-11-23; body model + body-fat series only)
 rec-ready     = green   #30D158
 rec-easing    = orange  #FF9F0A
 rec-active    = red     #FF453A   (label "Recovering")
@@ -1854,7 +1858,7 @@ acc-2         #65A30D
 on-acc        #0C0E12
 acc-ink       #4A7A0E
 
-fat           #9A6F00   (added 2026-11-22)
+fat           #A87C00   (2026-11-23: same hue, brightest value clearing 3:1 in light)
 rec-ready     = green   #34C759
 rec-easing    = orange  #FF9500
 rec-active    = red     #FF3B30
