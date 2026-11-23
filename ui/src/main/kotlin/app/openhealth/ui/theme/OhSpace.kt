@@ -158,6 +158,10 @@ data class OhDims(
     val searchGlyph: Dp = 18.dp,
     val clearGlyph: Dp = 22.dp,
 
+    // §14.2 Today and global quick add: an 84 dp tile with a 21 dp accent glyph.
+    val quickTile: Dp = 84.dp,
+    val quickTileGlyph: Dp = 21.dp,
+
     // §5.15 tab bar
     val tabBarHeight: Dp = 56.dp,
     val tabIcon: Dp = 25.dp,

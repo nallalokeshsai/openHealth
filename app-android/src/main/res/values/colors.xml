@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The platform frame only. Every colour inside the app comes from OhTheme
+      (DESIGN.md §12.6); these two values exist so the launch window and the
+      pre-31 starting window match the first frame and never flash white.
+    -->
+    <color name="oh_bg">#F2F2F7</color>
+    <color name="oh_splash_mark">#4A7A0E</color>
+</resources>

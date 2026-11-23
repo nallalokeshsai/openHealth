@@ -3,21 +3,29 @@ package app.openhealth.android
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.Modifier
+import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import app.openhealth.android.ui.OpenHealthRoot
+import app.openhealth.android.ui.StartupErrorScreen
 
 /**
- * B0 shell: one blank screen, nothing else.
- *
- * The design system arrives in B1 and the navigation shell, splash and Today
- * skeleton in B3; until then this screen only proves the app installs and launches.
+ * The one activity (`BUILD-ROADMAP.md` §B3). The system splash is installed before the
+ * first frame; no network or sync is awaited, so first launch goes straight to
+ * onboarding and every later launch to Today.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        val app = application as OpenHealthApp
         setContent {
-            Box(modifier = Modifier.fillMaxSize())
+            val container = runCatching { app.container }.getOrNull()
+            if (app.startupError != null || container == null) {
+                StartupErrorScreen()
+            } else {
+                OpenHealthRoot(container)
+            }
         }
     }
 }

@@ -90,4 +90,6 @@ class BodyRepository(private val db: OpenHealthDb) {
         db.bodyQueries.vitalsForTypeBetween(type, from, to).executeAsList()
 
     fun latestVitals(limit: Long): List<Vital> = db.bodyQueries.latestVitals(limit).executeAsList()
+
+    fun countMeasurements(): Long = db.bodyQueries.countMeasurements().executeAsOne()
 }

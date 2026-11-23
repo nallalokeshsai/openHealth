@@ -110,3 +110,7 @@ observationLocalDatesBetween:
 SELECT DISTINCT local_date FROM observation
 WHERE local_date >= :from AND local_date <= :to
 ORDER BY local_date;
+
+-- Only TrashService calls this, after the tombstone holds the row (pr.md §6.29).
+deleteObservationById:
+DELETE FROM observation WHERE id = :id;

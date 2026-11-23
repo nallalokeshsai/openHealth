@@ -1,5 +1,6 @@
 plugins {
     id("openhealth.android.app")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -19,6 +20,11 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.koin.core)
+    implementation(libs.koin.android)
 
     // Encrypted storage behind the :core seam (Tech-Stack.md §5). SQLCipher is the
     // community edition; its attribution requirement is recorded in NOTICE.md.

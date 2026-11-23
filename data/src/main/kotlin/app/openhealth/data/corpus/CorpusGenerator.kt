@@ -60,6 +60,12 @@ data class CorpusRequest(
     val endDate: LocalDate,
     val zone: TimeZone = TimeZone.of("Europe/Berlin"),
     val profileId: String = "profile-demo",
+    /**
+     * Write the demo profile as part of the corpus. False when the corpus fills a
+     * profile the person already created (demo mode after onboarding): the sample days
+     * must never overwrite their name, goal or units.
+     */
+    val writeProfile: Boolean = true,
 ) {
     companion object {
         const val FIVE_YEARS_OF_DAYS = 365 * 5
@@ -134,7 +140,7 @@ class CorpusGenerator(
         val context: TrainingContext = db.transactionWithResult {
             val sources = SourceRepository(db, clock)
             seedSources(sources, request.endDate)
-            seedProfile(request)
+            if (request.writeProfile) seedProfile(request)
             val training = seedTraining(request)
             days.forEachIndexed { dayIndex, date ->
                 val dayStart = LocalDateTime(date, LocalTime(0, 0)).toInstant(request.zone)

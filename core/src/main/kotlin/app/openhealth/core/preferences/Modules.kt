@@ -25,7 +25,7 @@ enum class HealthModule(val key: String) {
     ;
 
     companion object {
-        fun fromKey(key: String): HealthModule? = entries.firstOrNull { it.key == key }
+        fun fromKey(key: String?): HealthModule? = entries.firstOrNull { it.key == key }
     }
 }
 
@@ -54,6 +54,6 @@ enum class ModulePreset(val key: String, val enabled: Set<HealthModule>) {
     ;
 
     companion object {
-        fun fromKey(key: String): ModulePreset? = entries.firstOrNull { it.key == key }
+        fun fromKey(key: String?): ModulePreset? = entries.firstOrNull { it.key == key }
     }
 }

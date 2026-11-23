@@ -15,6 +15,9 @@ class SettingsRepository(
 ) {
     fun get(key: String): String? = db.settingsQueries.setting(key).executeAsOneOrNull()?.value_
 
+    fun updatedAt(key: String): Long? =
+        db.settingsQueries.setting(key).executeAsOneOrNull()?.updated_at
+
     fun put(key: String, value: String) {
         db.settingsQueries.putSetting(
             key = key,
@@ -57,4 +60,19 @@ object SettingKeys {
     const val THEME = "appearance.theme"
     const val ACCENT_PRESET = "appearance.accent"
     const val ONBOARDING_COMPLETE = "onboarding.complete"
+    const val ONBOARDING_TIER = "onboarding.tier"
+    const val MODULE_PRESET = "module.preset"
+    const val APP_LOCK = "privacy.app_lock"
+    const val DEMO_DATA = "demo.sample_data"
+
+    /** Tier-3 answers with no observation or measurement type of their own. */
+    const val INJURIES = "profile.injuries"
+    const val MEDICATIONS = "profile.medications"
+    const val CYCLE_TRACKING = "profile.cycle_tracking"
+    const val EQUIPMENT = "profile.equipment"
+    const val DIETARY_PATTERN = "profile.dietary_pattern"
+    const val ALLERGIES = "profile.allergies"
+    const val SLEEP_WINDOW = "profile.sleep_window"
+    const val GOAL_WEIGHT_KG = "goal.target_weight_kg"
+    const val GOAL_TARGET_DATE = "goal.target_date"
 }

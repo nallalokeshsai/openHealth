@@ -1,17 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
     <!--
-      The window frame only: no ActionBar, a black window behind the Compose tree.
-      Every colour inside the app comes from OhTheme (DESIGN.md §12.6); the two values
-      here are the platform frame, and the real shell theme with edge-to-edge insets
-      arrives in B3.
+      The window frame. Colours inside the app come from OhTheme (DESIGN.md §12.6).
+      The starting theme powers the Android 12 splash API and, through
+      splash_background, the API 28-30 starting window (core-splashscreen).
     -->
     <style name="Theme.OpenHealth" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
-        <item name="android:statusBarColor">@android:color/black</item>
-        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowBackground">@color/oh_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <style name="Theme.OpenHealth.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/oh_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+        <item name="postSplashScreenTheme">@style/Theme.OpenHealth</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
     </style>
 </resources>
