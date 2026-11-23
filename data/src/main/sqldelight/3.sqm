@@ -22,6 +22,10 @@ CREATE TABLE note (
 CREATE INDEX note_local_date ON note(local_date);
 CREATE INDEX note_happened_at ON note(happened_at);
 
+-- The timeline's meal branch sorts by created_at; without this index a five-year
+-- corpus sorts every meal on each page.
+CREATE INDEX IF NOT EXISTS meal_created ON meal(created_at);
+
 -- The view is part of the schema, not a query: a migration that creates a new table the
 -- timeline unions must recreate it, or upgraded devices silently hide the new rows.
 DROP VIEW timeline;
