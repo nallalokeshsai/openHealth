@@ -44,3 +44,14 @@ org.bouncycastle:bcprov-jdk18on	Bouncy-Castle	Test-only, Bouncy Castle licence, 
 org.conscrypt:conscrypt-openjdk-uber	Apache-2.0	Test-only, Robolectric TLS provider
 org.ow2.asm:*	BSD-3-Clause	Test-only, bytecode inspection
 org.yaml:snakeyaml	Apache-2.0	Test-only, Robolectric configuration
+
+# B2 core and data tests (Kotest property tests and their transitives), all test-only.
+# Each licence was read from the artefact's POM or its repository's LICENSE on 2026-11-23.
+io.kotest:*	Apache-2.0	Test-only, Kotest assertions and property testing
+io.github.classgraph:classgraph	MIT	Test-only, pulled in by Kotest
+io.github.pdvrieze.xmlutil:*	Apache-2.0	Test-only, pulled in by Kotest
+io.github.java-diff-utils:*	Apache-2.0	Test-only, pulled in by Kotest; POM omits the block, repository LICENSE is Apache-2.0
+com.github.curious-odd-man:rgxgen	Apache-2.0	Test-only, pulled in by Kotest
+community.flock.kotlinx.rgxgen:*	MIT	Test-only, pulled in by Kotest
+net.bytebuddy:*	Apache-2.0	Test-only, pulled in by Kotest
+net.java.dev.jna:*	Apache-2.0	Test-only, pulled in by Kotest; dual LGPL-2.1+/Apache-2.0, Apache elected so no LGPL code is taken
