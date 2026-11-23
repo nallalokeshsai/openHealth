@@ -1,5 +1,6 @@
 package openhealth.buildlogic
 
+import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 import org.gradle.api.Project
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.provider.Provider
@@ -15,6 +16,12 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 internal fun Project.applyCodeQuality() {
     pluginManager.apply("io.gitlab.arturbosch.detekt")
     pluginManager.apply("org.jlleitschuh.gradle.ktlint")
+    extensions.configure<DetektExtension> {
+        // The defaults stay on; gradle/detekt.yml scopes four rules for @Composable.
+        buildUponDefaultConfig = true
+        config.setFrom(rootProject.files("gradle/detekt.yml"))
+        parallel = true
+    }
 }
 
 /** Adds `checkPortability` to `check`: no `android.*` or `androidx.*` in a pure module. */
@@ -71,6 +78,29 @@ internal fun Project.registerLicenceCheck() {
         allowed.set(allowlist)
     }
     tasks.matching { it.name == "check" }.configureEach { dependsOn(checkLicences) }
+}
+
+/**
+ * Adds `checkDesignTokens` to `check`: no colour literal, raw `.dp`/`.sp` or
+ * `MaterialTheme` reference outside the theme package (`DESIGN.md` §12.6, Appendix B;
+ * `BUILD-ROADMAP.md` §B1 exit).
+ */
+internal fun Project.registerDesignTokenCheck() {
+    val checkDesignTokens = tasks.register<CheckDesignTokensTask>("checkDesignTokens") {
+        group = "verification"
+        description = "Fails on a colour, .dp or .sp literal outside the theme package."
+        sources.from(fileTree("src") { include("**/*.kt") })
+        // The allowlist is module-relative, so a checkout path can never widen it.
+        modulePath.set(projectDir.invariantSeparatorsPath)
+        allowedPrefixes.set(
+            if (project.path == ":ui") {
+                listOf("src/main/kotlin/app/openhealth/ui/theme")
+            } else {
+                emptyList()
+            },
+        )
+    }
+    tasks.matching { it.name == "check" }.configureEach { dependsOn(checkDesignTokens) }
 }
 
 /** JVM toolchain and Kotlin target for the pure Kotlin modules. */

@@ -31,6 +31,7 @@ class AndroidAppConventionPlugin : Plugin<Project> {
         }
         applyCodeQuality()
         registerLicenceCheck()
+        registerDesignTokenCheck()
         configureTestTask()
     }
 }
