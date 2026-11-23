@@ -318,42 +318,6 @@ and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is u
   full-screen clock is the 700 end of the same role. §3.3 now says so.
 - The revision line of `DESIGN.md` carries the 2026-11-23 note.
 
-### Independent review and the fixes it produced
-
-Two fresh reviewers saw only the diff and the contract (correctness and tests;
-`AGENTS.md` invariants and licences) and worked in parallel. Every finding below was
-confirmed in the code, then fixed in this phase and re-verified:
-
-| Finding | Fix |
-|---|---|
-| Family dedup was declared but never applied, so Garmin over FIT and Garmin over Health Connect counted twice for heart rate and water | Every policy first collapses candidates to one source per upstream family, highest priority wins; a test makes the Health Connect copy the higher-priority one and still gets one day |
-| Heart rate was averaged across devices, which `pr.md` §7.6 forbids | `PrimarySourcePolicy`: the day's row is the highest-priority source's series mean; the other readings stay in layer 2 |
-| Restore wrote `daily_rollup` rows from the file | Restore never inserts rollups; it rebuilds them from the observations through the engine. A deliberately corrupted rollup in the bundle is overwritten by the derived value |
-| A bundle missing a table restored successfully and emptied that table | Restore requires the exact table set and refuses missing or unknown tables |
-| No production write path kept rollups in step | `ObservationRepository`, `NutritionRepository` and `BodyRepository` take a rollup invalidator; the engine is wired to it in tests, and a backfilled day rebuilds that day |
-| Step coverage demanded midnight-to-midnight and marked every real day a fallback | Coverage is internal gaps ≤1 h over at least a 16-hour waking window; a one-hour sync is not a day, and a 07:00–23:00 watch is |
-| A single `end == null` daily-total steps record was not recognised | Any `end == null` observation of a SUM type is a daily total |
-| Sleep "most detailed" was the greatest sum, so a fragmented `SLEEP_AWAKE` won | Most records first, then greatest duration; stage grouping by night stays B12's |
-| EWMA applied its coefficient per observation, so a weekly weigher had a 49-day half-life | Alpha is computed from the elapsed days between entries |
-| The ETA took the caller's raw current weight | It divides the last smoothed trend value; the raw parameter was removed |
-| The goal-rate clamp was labelled as the CDC's cited range | `allowedRangeKgPerWeek` and `citedLossRangeKgPerWeek` are separate fields |
-| `HardSession` compared a session with a weekly median | It compares with the median **session** for that muscle |
-| Readiness ignored a short training-load baseline and a zero sleep need | The load average carries its day count, the minimum covers every baseline, and a non-positive sleep need is not a number |
-| Layer-4 entries, vitals and sets had no idempotency key or observation link | One unique `idempotency_key`, `observation_id`, `raw_record_id`, `device` and `app_version` on each; the canonical value's full provenance lives on the linked observation |
-| Tombstone purge deleted the sync deletion marker | Purge clears the payload and keeps the row as the permanent marker; a later sync cannot resurrect it |
-| Unguarded `deleteProfile`, `deleteSource` and `deleteSession` | Removed; `TrashService` is the only delete path, and a session cascade waits for the screen that owns it |
-| Work-set restore used `INSERT OR IGNORE`, so undo could silently do nothing | `INSERT OR REPLACE`; a restore writes the row it holds |
-| Food search used a bound `LIKE`, a full scan | Range seek on the name index, and 2,000 indexed foods in the corpus; the benchmark measures it |
-| The timeline omitted meals | A meal branch in the view and in the paged read |
-| Export completeness had no tripwire for a new table or column | Tests compare the registry against `sqlite_master` tables and `PRAGMA table_info` for every table |
-| The round-trip test never exercised settings or tombstones | The fixture writes both; the comparison ignores only `computedAt` on rollups |
-| The rollup property test was one fixed dataset | A seeded, shuffled incremental rebuild is compared with the full rebuild |
-| A tautological dedup assertion | Removed; the property asserts the total equals one source |
-| The Bouncy Castle allowlist row said test-only | It is main scope for Argon2id and test-only for Robolectric |
-| The export passphrase stayed live, and a truncated container escaped as a raw exception | `export`/`read` wipe the caller's array; truncation and every GCM failure become typed errors |
-| `FieldLevelMergePolicy` was a no-op | `SettingsFieldMergePolicy` adds remote-only keys and keeps the local value on conflict, until B13 adds per-field clocks |
-| The SQLCipher About notice was only promised | Recorded in `NOTICE.md`, the ADR and B3's exit note; nothing is distributed yet |
-
 ### Invariant audit (`AGENTS.md`)
 
 | Invariant | This phase |
@@ -468,8 +432,9 @@ any feature screen (`BUILD-ROADMAP.md` §B2).
    `happened_at`, schema version 2 with `1.sqm`, WAL, foreign keys, integrity check and a
    backup-before-migration wrapper. Repositories for observations, raw records, rollups,
    sources, profile, training, nutrition, body, settings and the timeline; a rollup
-   engine that rebuilds a day from observations and a full rebuild that runs the same
-   code; `TrashService` as the only delete path; the Argon2id/AES-GCM export with a
+   engine that rebuilds a day from observations, entries, measurements and vitals and a
+   full rebuild that runs the same code; `LocalStore` as the one production write path
+   that wires every repository to that engine; `TrashService` as the only delete path; the Argon2id/AES-GCM export with a
    versioned bundle of every table and a CSV export; and the seeded five-year corpus.
 3. **Android seams and fixture tool** — in commit `bc3ab88`.
    `app-android`: `AndroidSecretVault` (Keystore AES-256-GCM wrapping the database
@@ -487,8 +452,8 @@ any feature screen (`BUILD-ROADMAP.md` §B2).
 | Command | Result |
 |---|---|
 | `./gradlew clean check :app-android:assembleDebug --no-build-cache` | **BUILD SUCCESSFUL**, 195 tasks (186 executed), from a cleaned tree. |
-| `./gradlew check` | **BUILD SUCCESSFUL**: 155 JVM tests (63 `:core`, 44 `:data`, 47 `:ui` from B1, 1 benchmark), ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
-| `./gradlew :tools:fixtures:test` (inside `check`) | **BUILD SUCCESSFUL**; five-year corpus built in **~4 s** (33,372 observations, 261 raw records, 392 sessions, 5,880 sets, 16,335 entries, 2,010 foods), 15,253 rollup rows (five layers, nutrition and vitals included) rebuilt in **~1.4 s**, every UI query under **6.9 ms** against the 16 ms budget. |
+| `./gradlew check` | **BUILD SUCCESSFUL**: 170 JVM tests (66 `:core`, 56 `:data`, 47 `:ui` from B1, 1 benchmark), ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
+| `./gradlew :tools:fixtures:test` (inside `check`) | **BUILD SUCCESSFUL**; five-year corpus built in **~4 s** (33,372 observations, 261 raw records, 392 sessions, 5,880 sets, 16,335 entries, 2,010 foods), 15,253 rollup rows (five layers, nutrition and vitals included) rebuilt in **~1.4 s**, every UI query under **5.2 ms** against the 16 ms budget. |
 | `./gradlew :app-android:assembleRelease` | **BUILD SUCCESSFUL**; 41 MB unsigned APK with four SQLCipher ABIs, **no `Gallery` class or activity**, and only AndroidX's internal `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` — no network, storage, location or health permission was added. |
 | `./gradlew :app-android:installDebug` then `MainActivity` cold/warm launch | `Status: ok`, focused activity, `logcat -s AndroidRuntime:E` empty. |
 | Gallery launch after the changes | `Status: ok`, cold, focused `GalleryActivity`, no crash (B1 regression). |
@@ -551,7 +516,7 @@ confirmed in the code, then fixed in this phase and re-verified:
 | Layer-4 entries, vitals and sets had no idempotency key or observation link | One unique `idempotency_key`, `observation_id`, `raw_record_id`, `device` and `app_version` on each; the canonical value's full provenance lives on the linked observation |
 | Tombstone purge deleted the sync deletion marker | Purge clears the payload and keeps the row as the permanent marker; a later sync cannot resurrect it |
 | Unguarded `deleteProfile`, `deleteSource` and `deleteSession` | Removed; `TrashService` is the only delete path, and a session cascade waits for the screen that owns it |
-| Work-set restore used `INSERT OR IGNORE`, so undo could silently do nothing | `INSERT OR REPLACE`; a restore writes the row it holds |
+| Work-set restore used `INSERT OR IGNORE`, so undo could silently do nothing | Layer-4 writes are append-only; undo only marks restored after checking the row is present, so a missing row is never reported as restored |
 | Food search used a bound `LIKE`, a full scan | Range seek on the name index, and 2,000 indexed foods in the corpus; the benchmark measures it |
 | The timeline omitted meals | A meal branch in the view and in the paged read |
 | Export completeness had no tripwire for a new table or column | Tests compare the registry against `sqlite_master` tables and `PRAGMA table_info` for every table |
@@ -562,6 +527,26 @@ confirmed in the code, then fixed in this phase and re-verified:
 | The export passphrase stayed live, and a truncated container escaped as a raw exception | `export`/`read` wipe the caller's array; truncation and every GCM failure become typed errors |
 | `FieldLevelMergePolicy` was a no-op | `SettingsFieldMergePolicy` adds remote-only keys and keeps the local value on conflict, until B13 adds per-field clocks |
 | The SQLCipher About notice was only promised | Recorded in `NOTICE.md`, the ADR and B3's exit note; nothing is distributed yet |
+
+A second review round ran over the fixes themselves. It confirmed most of them and
+found the remaining edges below; all were fixed and re-verified before the branch was
+pushed.
+
+| Final finding | Fix |
+|---|---|
+| Family collapse had no deterministic tie-break, so a backfill could flip the day's winner between two equal-priority sources | The tie-break is the source id, as every other policy does; a shuffled-order test proves the same winner |
+| A source reporting a daily total *and* its intervals had both summed | A SUM type aggregates the daily total only when one exists |
+| The write committed before its rollup rebuild | Every repository calls its invalidator inside the write transaction; `LocalStore` wires the observation, nutrition, body and trash paths to one engine, and a source-priority change refreshes the registry and rebuilds all days |
+| Restore committed the data before rebuilding rollups, and `restoreBundle` skipped the format/schema guards | Guard first, rebuild inside the restore transaction; a failed rebuild leaves the old database |
+| Layer-4 writes used `INSERT OR REPLACE`, which could rewrite `recorded_at` or delete a row silently; sessions had no provenance block | Layer-4 value inserts are `INSERT OR IGNORE` (append-only); sessions carry idempotency key, observation link, raw ref, device and app version; a replay test proves `recorded_at` and the value do not move |
+| Weight entered as a measurement never reached layer 3; vital rollups averaged across devices and could overwrite a layer-2 row | Measurements that name an observation type produce the day's latest value; vitals follow the type's aggregation (last or mean); a layer-2 observation wins over a layer-4 row for the same type |
+| An undone tombstone kept its payload forever | Undo clears the payload; only the marker remains |
+| A zero sleep need was reported as "not enough data" and a one-minute need scored 100 | Below an hour is `OUT_OF_RANGE`; a supplied baseline shorter than seven days now drops that input instead of blocking a score the remaining inputs can support |
+| Two readings with the same `happenedAt` kept the earlier `recordedAt` | The later recording wins, as documented |
+| The Epley citation pointed at a DOI that returns 404 | It cites LeSuer et al. 1997, the validation paper for the Epley equation, with a resolving DOI |
+| `checkPortability` only looked at `import` lines | It also fails a fully-qualified `android.`/`androidx.` use; proved with `android.util.Log` in `:core` |
+| Test gaps: no meal in the timeline test, no vital-only day, no two-source vital, no daily-total test, no no-backup refusal | All added; the suite is now 170 JVM tests |
+| ADR 0005 overstated "under 3 ms", called the corpus measurements weekly and left a broken sentence | Corrected: the slowest query is the timeline page at about 5.2 ms against 16 ms, a measurement is seeded every 30 days, and the prose is repaired |
 
 ### Invariant audit (`AGENTS.md`)
 
@@ -582,7 +567,7 @@ confirmed in the code, then fixed in this phase and re-verified:
 | Chart has a table and a sentence | No chart component exists (B9). **N/A.** |
 | Closed design tokens | `DESIGN.md` untouched, no colour, size, component or screen was added; `checkDesignTokens` still runs in both Android modules. **Holds.** |
 | Closed cut list | Nothing from `pr.md` §14.5 was built. **Holds.** |
-| Quality bars | Database: worst UI query **6.84 ms** against 16 ms on 1,825 days. Cold start and Today are unchanged because no screen was added. No budget was lowered. **Holds.** |
+| Quality bars | Database: worst UI query **5.17 ms** against 16 ms on 1,825 days. Cold start and Today are unchanged because no screen was added. No budget was lowered. **Holds.** |
 
 iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 
@@ -603,7 +588,7 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
   the camera and the PDF seam are declared but wait for the phases that use them
   (B8/B11/B12).
 - **Dependency injection.** Koin is pinned but not started; B3 owns the application
-  container and opens the store at launch.
+  container and opens `LocalStore` at launch.
 - **Health-data wiring.** No screen opens the database yet; the instrumented test is the
   proof that the encrypted path works end to end.
 - **Migration from a real release.** Version 1 never shipped. The machinery, the

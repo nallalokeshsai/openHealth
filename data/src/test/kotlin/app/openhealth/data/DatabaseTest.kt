@@ -118,6 +118,40 @@ class DatabaseTest {
     }
 
     @Test
+    fun aMigrationWithoutABackupIsRefused() {
+        val directory = Files.createTempDirectory("openhealth-nobackup")
+        val path = directory.resolve("v1.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
+        first.execute(null, "PRAGMA user_version = 1", 0)
+        first.close()
+        val driver = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        assertFailsWith<IllegalStateException> { DatabaseOpener().open(driver) }
+        driver.close()
+        Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(directory)
+    }
+
+    @Test
+    fun aFailedSnapshotRefusesTheMigration() {
+        val directory = Files.createTempDirectory("openhealth-badsnapshot")
+        val path = directory.resolve("v1.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
+        first.execute(null, "PRAGMA user_version = 1", 0)
+        first.close()
+        val driver = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        assertFailsWith<IllegalStateException> {
+            DatabaseOpener(MigrationBackup { _, _ -> null }).open(driver)
+        }
+        driver.close()
+        Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(directory)
+    }
+
+    @Test
     fun aNewerDatabaseIsRefused() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         openHealthDatabase(driver)

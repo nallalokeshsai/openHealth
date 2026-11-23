@@ -4,6 +4,7 @@ import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Food
 import app.openhealth.data.db.Meal
 import app.openhealth.data.db.OpenHealthDb
+import app.openhealth.data.mapping.requireConsistentDay
 import kotlinx.datetime.LocalDate
 
 /** Layer 4 nutrition objects (`pr.md` §6.3). Totals are computed from entries, never stored. */
@@ -62,31 +63,35 @@ class NutritionRepository(private val db: OpenHealthDb) {
         db.nutritionQueries.mealsForDay(date.toString()).executeAsList()
 
     fun upsertEntry(entry: Entry) {
-        db.nutritionQueries.insertEntry(
-            id = entry.id,
-            mealId = entry.meal_id,
-            foodId = entry.food_id,
-            localDate = entry.local_date,
-            zoneId = entry.zone_id,
-            happenedAt = entry.happened_at,
-            recordedAt = entry.recorded_at,
-            quantityG = entry.quantity_g,
-            energyKcal = entry.energy_kcal,
-            proteinG = entry.protein_g,
-            carbsG = entry.carbs_g,
-            fatG = entry.fat_g,
-            fibreG = entry.fibre_g,
-            sourceKind = entry.source_kind,
-            userVerified = entry.user_verified,
-            userEdited = entry.user_edited,
-            observationId = entry.observation_id,
-            rawRecordId = entry.raw_record_id,
-            idempotencyKey = entry.idempotency_key,
-            device = entry.device,
-            appVersion = entry.app_version,
-            revision = entry.revision,
-        )
-        rollupInvalidator?.invoke(LocalDate.parse(entry.local_date))
+        requireConsistentDay(entry.local_date, entry.zone_id, entry.happened_at)
+        db.transaction {
+            db.nutritionQueries.insertEntry(
+                id = entry.id,
+                mealId = entry.meal_id,
+                foodId = entry.food_id,
+                localDate = entry.local_date,
+                zoneId = entry.zone_id,
+                happenedAt = entry.happened_at,
+                recordedAt = entry.recorded_at,
+                quantityG = entry.quantity_g,
+                energyKcal = entry.energy_kcal,
+                proteinG = entry.protein_g,
+                carbsG = entry.carbs_g,
+                fatG = entry.fat_g,
+                fibreG = entry.fibre_g,
+                sourceKind = entry.source_kind,
+                sourceId = entry.source_id,
+                userVerified = entry.user_verified,
+                userEdited = entry.user_edited,
+                observationId = entry.observation_id,
+                rawRecordId = entry.raw_record_id,
+                idempotencyKey = entry.idempotency_key,
+                device = entry.device,
+                appVersion = entry.app_version,
+                revision = entry.revision,
+            )
+            rollupInvalidator?.invoke(LocalDate.parse(entry.local_date))
+        }
     }
 
     fun entryById(id: String): Entry? = db.nutritionQueries.entryById(id).executeAsOneOrNull()

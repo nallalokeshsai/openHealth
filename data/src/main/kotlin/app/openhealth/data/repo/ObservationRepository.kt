@@ -20,7 +20,10 @@ sealed interface RecordOutcome {
  * idempotency key is unique, so a retried import or a replayed sync batch inserts
  * nothing and is not an error (`pr.md` §7.1, §7.7).
  */
-class ObservationRepository(private val db: OpenHealthDb) {
+class ObservationRepository(
+    private val db: OpenHealthDb,
+    private val clock: app.openhealth.core.seam.ClockSeam = app.openhealth.core.seam.SystemClock,
+) {
     private var rollupInvalidator: ((LocalDate) -> Unit)? = null
 
     /**
@@ -41,11 +44,9 @@ class ObservationRepository(private val db: OpenHealthDb) {
                 RecordOutcome.Duplicate(ObservationId(existing.id))
             } else {
                 insert(observation)
+                rollupInvalidator?.invoke(observation.localDate)
                 RecordOutcome.Inserted(observation.id)
             }
-        }
-        if (outcome is RecordOutcome.Inserted) {
-            rollupInvalidator?.invoke(observation.localDate)
         }
         return outcome
     }
@@ -67,10 +68,12 @@ class ObservationRepository(private val db: OpenHealthDb) {
                     inserted += 1
                 }
             }
+            if (inserted > 0) {
+                observations.map { it.localDate }.distinct().forEach {
+                    rollupInvalidator?.invoke(it)
+                }
+            }
             inserted
-        }
-        if (inserted > 0) {
-            observations.map { it.localDate }.distinct().forEach { rollupInvalidator?.invoke(it) }
         }
         return inserted
     }
@@ -118,6 +121,7 @@ class ObservationRepository(private val db: OpenHealthDb) {
             originalValue = observation.editTrail.originalValue,
             originalUnit = observation.editTrail.originalUnit,
             editReason = observation.editTrail.reason,
+            editedAt = observation.editTrail.editedAt?.toEpochMilliseconds(),
             groupKey = observation.groupKey,
             excludedFromTrends = observation.excludedFromTrends,
             idempotencyKey = provenance.idempotencyKey,
@@ -158,14 +162,17 @@ class ObservationRepository(private val db: OpenHealthDb) {
     fun correct(id: ObservationId, correctedValue: Double, reason: String): Boolean {
         val existing = db.observationQueries.observationById(id.value).executeAsOneOrNull()
             ?: return false
-        db.observationQueries.markUserEdited(
-            value = correctedValue,
-            reason = reason,
-            previousValue = existing.value_,
-            previousUnit = existing.unit,
-            id = id.value,
-        )
-        rollupInvalidator?.invoke(LocalDate.parse(existing.local_date))
+        db.transaction {
+            db.observationQueries.markUserEdited(
+                value = correctedValue,
+                reason = reason,
+                editedAt = clock.now().toEpochMilliseconds(),
+                previousValue = existing.value_,
+                previousUnit = existing.unit,
+                id = id.value,
+            )
+            rollupInvalidator?.invoke(LocalDate.parse(existing.local_date))
+        }
         return true
     }
 

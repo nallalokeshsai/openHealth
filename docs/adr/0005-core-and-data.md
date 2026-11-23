@@ -79,12 +79,25 @@ every rule is visible and overridable.
   reading from the deduplicated family set is kept and averaged for the day's row.
 - Nutrition entries add up; they are different foods, not two reports of one number.
 - **Family collapse runs first.** Two sources with the same upstream family — Garmin over
-  FIT and Garmin over Health Connect — are reduced to the higher-priority member before
-  any policy sees them, so a heart-rate series or a water total is never counted twice
-  (`pr.md` §6.18).
+  FIT and Garmin over Health Connect — are reduced to the higher-priority member, with
+  the source id as a deterministic tie-break, before any policy sees them, so a
+  heart-rate series or a water total is never counted twice (`pr.md` §6.18). A source
+  that reports a daily total and its intervals is aggregated from the total only, never
+  both.
+
+`LocalStore` is the production write path: it constructs the repositories and the
+engine, wires every repository that changes a day to `engine.rebuildDay`, and refreshes
+the registry then rebuilds all days when a source or its priorities changes. The plain
+repositories stay available for importers and tests that do their own batching; the app
+constructs `LocalStore` (B3).
 
 The engine also rolls layer 4 into layer 3: a day's nutrition totals are the exact sum
-of its diary entries, and a vital type is the mean of its readings that day. A full
+of its diary entries (a macro no entry reports is skipped, not written as zero; an entry
+carries `source_id` so B6 can apply its family and user-edited rules), a vital
+type follows its observation aggregation (mean or last, never a blind cross-device mean),
+and a tape or scale measurement that names an observation type (weight, body fat, lean
+mass) contributes its latest value. A layer-2 observation for the same type wins: layer 4
+fills a gap, it never overwrites a canonical observation. A full
 rebuild walks every day that has an observation, an entry or a vital, so a diary-only
 day is not missed. Entry and
 vital writes invalidate their day the same way an observation does. Sets feed the
@@ -94,10 +107,12 @@ The engine writes one `daily_rollup` row per type and local day, with the winnin
 (absent when several sources contribute to a mean), the number of contributing sources,
 the reason and the observation watermark. An observation carries a raw-record reference
 whenever there was an ingestion record; a manual entry has none because the observation
-is the entry. Layer-4 measurements, vitals, entries and sets carry their own
-`idempotency_key` (unique) and an `observation_id` link for the canonical value with the
-full provenance block; the phases that write them (B6/B7) write both rows in one
-transaction. Property
+is the entry. Layer-4 measurements, vitals, entries, sessions and sets carry their own
+`idempotency_key` (unique), an `observation_id` link, raw-record ref, device and app
+version; the phases that write them (B5/B6/B7) write both rows in one transaction. They
+are append-only (`INSERT OR IGNORE`): a replayed import cannot move `recorded_at`, and a
+correction is a separate path that never rewrites it. A repository also refuses a
+`local_date` that is not `happened_at` in the stated zone. Property
 tests compare an incremental rebuild with a full rebuild on random event orders and
 prove a day never sums two sources.
 
@@ -132,10 +147,12 @@ for Argon2id and the platform JCE for AES-256-GCM. No other crypto library was a
 `de.mkammerer:argon2-jvm` was rejected because it ships native binaries, which is extra
 work for the iOS port and the F-Droid build.
 
-- Implementation note: the JVM primitives (javax.crypto, Bouncy Castle, MessageDigest)
-  live in `:data` behind the `ExportCipher` seam. They compile for the JVM and Android;
-  when the iOS gate opens, the actual for that target replaces this file rather than
-  reimplementing the export format. This is recorded debt, not an Android leak.
+- Implementation note: the encryption primitives (javax.crypto and Bouncy Castle) live in
+  `:data` behind the `ExportCipher` seam; SHA-256 for payload hashes uses
+  `java.security.MessageDigest` in `:data` and is not behind a seam yet. They compile for
+  the JVM and Android; when the iOS gate opens, an actual for that target replaces these
+  files rather than reimplementing the export format. This is recorded debt, not an
+  Android leak.
 - Argon2id parameters: 64 MiB, 3 passes, 1 lane, 16-byte salt, 32-byte key.
 - Container: magic `OHX1`, format version, KDF parameters, salt, 12-byte nonce,
   ciphertext and GCM tag. Parameters are capped on read (8–256 MiB, 1–10 passes,
@@ -147,16 +164,19 @@ work for the iOS port and the F-Droid build.
 ## 7. Export and restore shape
 
 The export includes **every table of every layer**, including raw records, settings and
-tombstones. `daily_rollup` is dumped for inspection but **never restored from the file**:
-restore clears it and rebuilds it from the observations through the same engine, so a
-hand-edited bundle cannot seed a lie (`Tech-Stack.md` §5-6). A bundle missing any table,
-or carrying an unknown one, is refused rather than half-restored., plus the schema version, format version and export timestamp. It is a
-generic column dump driven by one table registry (`ExportTables`) rather than a
-hand-written mapper per table: a mapper that forgets a column is a silent data-loss bug,
-and the registry is checked by the round-trip test against the live schema. Values move
-as JSON scalars; unknown tables are refused and unknown columns cannot be inserted. The
-RU test is export → Argon2id container → restore into a fresh database → export again,
-and the two bundles must be equal.
+tombstones, plus the schema version, format version and export timestamp. `daily_rollup`
+is dumped for inspection but **never restored from the file**: restore clears it and
+rebuilds it through the same engine inside the restore transaction, so a hand-edited
+bundle cannot seed a lie and a failed rebuild leaves the old database (`Tech-Stack.md`
+§5-6). A bundle missing any table, or carrying an unknown one, is refused rather than
+half-restored, and `restoreBundle` re-checks the format and schema itself rather than
+trusting its caller. It is a generic column dump driven by one table registry
+(`ExportTables`) rather than a hand-written mapper per table: a mapper that forgets a
+column is a silent data-loss bug, and the registry is checked against the live schema by
+a table/column test. Values move as JSON scalars; unknown columns are ignored by the
+local loader because the same schema is required. The round-trip test is export →
+Argon2id container → restore into a fresh database → export again, and the two bundles
+must be equal.
 
 CSV export covers observations only, with their provenance, RFC 4180 quoting and ISO
 timestamps. A report surface is never the place to hide where a number came from.
@@ -164,8 +184,9 @@ timestamps. A report surface is never the place to hide where a number came from
 ## 8. Trash
 
 `TrashService` writes a tombstone holding the row, deletes the row and marks the
-tombstone restorable for 30 days. Undo restores it and marks the tombstone used, so it
-cannot be restored twice. Purge clears the payload past the window but keeps the row as
+tombstone restorable for 30 days. Undo restores it, clears the payload and marks the
+tombstone used, so it cannot be restored twice and no copy of the data survives the
+undo. Purge clears the payload past the window but keeps the row as
 the permanent deletion marker, so a device that syncs after 30 days cannot resurrect the
 entity (`pr.md` §7.7); "delete permanently" is the only path that removes the marker. The four leaf entities the MVP deletes — a set, a diary entry, a measurement,
 a vital — are restorable today; a session or a recipe that owns children needs a
@@ -201,7 +222,8 @@ Decisions inside the formulas:
   sets and reps but not as external load; bodyweight work contributes no kilograms.
 - **Weight trend** is an EWMA with a seven-day half-life, applied per **elapsed day** so
   a weekly weigher gets the same smoothing as a daily one; the weekly rate compares the
-  trend with its value seven days earlier.
+  trend with its value seven days earlier. A family tie is broken by source id, never by
+  the order rows happen to arrive in.
 - **Goal ETA** is always a window: ±20 % of the central day count, at least seven days
   wide. It needs 14 days of data, refuses to project when the trend moves away from the
   goal, and divides the **last smoothed trend value** (not the latest scale reading) by
@@ -212,7 +234,9 @@ Decisions inside the formulas:
   1,200/1,500 kcal absolute floor and the person's BMR.
 - **Readiness v1** is versioned and explained: sleep against the sleep need, resting
   heart rate and HRV against their 28-day baselines, load against the usual 48 hours
-  (the caller passes how many days the load average covers);
+  (the caller passes how many days the load average covers). A supplied baseline shorter
+  than seven days drops that input; a sleep need below an hour is an out-of-range input,
+  not "not enough data";
   weights 0.35/0.25/0.20/0.20 renormalised over the inputs present. Fewer than two
   inputs or fewer than seven baseline days returns "not enough data", never a number.
   The mappings are documented in `Readiness` and change only with a version bump.
@@ -230,15 +254,16 @@ Decisions inside the formulas:
 `CorpusGenerator` writes a deterministic five-year corpus through the real repositories:
 hourly steps from one watch with a second source on some days, a daily weight with a
 slow downward trend, nightly sleep, three meals with entries, three sessions a week with
-sets, weekly tape measurements and occasional vitals. It builds in about two seconds and
+sets, a tape measurement every 30 days and occasional vitals. It builds in about two seconds and
 produces roughly 33,000 observations, 16,000 entries, 5,900 sets and 260 raw records.
 The food table is seeded with 2,000 indexed rows so the search benchmark measures an
 indexed range seek rather than a ten-row table. The corpus lacks no layer: nutrition
 entries and vitals are included, so the engine's layer-4 rollups are exercised too. The
 timeline view and its paged read include meals as well as observations, sessions,
-entries, measurements and vitals. The
-query benchmark rebuilds every rollup through the engine, warms each query and takes the
-best of five runs; all current UI queries measure under 3 ms against the 16 ms budget. The Timeline page originally used the SQL `UNION` view with a global ORDER BY,
+entries, measurements and vitals. The query benchmark rebuilds every rollup through the
+engine, warms each query and takes the best of five runs. The slowest query is the
+timeline page at about 6 ms; every query is under the 16 ms budget, and the margin is
+about 2.5x on the slowest. The Timeline page originally used the SQL `UNION` view with a global ORDER BY,
 which measured 23.7 ms; it now reads each table through its own `happened_at` index and
 merges 50 rows in Kotlin.
 
@@ -259,6 +284,20 @@ screens. The scopes are visible in one file and are not a global disable.
   detailed source for that stage, not a claim that all stages came from one device.
 - An export from a different schema version is refused with a clear message; the
   conversion matrix is B10's.
+- Observations, sessions, meals, foods and the profile have no Trash entry in B2. No
+  code path deletes an observation; the Timeline undo and the session/recipe cascade
+  arrive with B3/B5, as recorded in the build log.
+- Layer-4 corrections (an entry, a measurement, a vital, a set) are append-only in B2
+  and have no edit trail yet; B6/B7 add the correction UI and the trail tracks
+  `edited_at` on the linked observation.
+- Nutrition's "user-edited wins over imported" and source-family collapse at entry level
+  are B6's, because the entry carries `source_kind` and not a source id yet.
+- Training volume, sets and duration are read from sets when the training screen needs
+  them (B5); they are not stored as daily rollups in B2.
+- Foreign keys are not declared; link resolution is validated by the write path and
+  the export registry, and B10 adds the constraint matrix.
+- An imported observation should carry a raw record; B8's importers own that rule and
+  the corpus demonstrates the link on its batch-import days.
 - `verifyMigrations` stays off until B10 commits real schema snapshots; the v1→v2 test
   reproduces v1 exactly as v2 minus the six indexes `1.sqm` adds.
 - The settings field merge keeps the local value on a conflict until B13 adds per-field

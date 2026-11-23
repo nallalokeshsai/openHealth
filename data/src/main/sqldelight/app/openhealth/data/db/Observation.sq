@@ -25,6 +25,7 @@ CREATE TABLE observation (
     original_value REAL,
     original_unit TEXT,
     edit_reason TEXT,
+    edited_at INTEGER,
     group_key TEXT,
     excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     idempotency_key TEXT NOT NULL UNIQUE,
@@ -42,13 +43,13 @@ insertObservation:
 INSERT OR IGNORE INTO observation(
     id, type, value, unit, start_at, end_at, local_date, zone_id, happened_at,
     recorded_at, source_id, device, app_version, method, context, confidence, quality,
-    user_verified, user_edited, original_value, original_unit, edit_reason, group_key,
-    excluded_from_trends, idempotency_key, raw_record_id
+    user_verified, user_edited, original_value, original_unit, edit_reason, edited_at,
+    group_key, excluded_from_trends, idempotency_key, raw_record_id
 ) VALUES (
     :id, :type, :value, :unit, :startAt, :endAt, :localDate, :zoneId, :happenedAt,
     :recordedAt, :sourceId, :device, :appVersion, :method, :context, :confidence, :quality,
-    :userVerified, :userEdited, :originalValue, :originalUnit, :editReason, :groupKey,
-    :excludedFromTrends, :idempotencyKey, :rawRecordId
+    :userVerified, :userEdited, :originalValue, :originalUnit, :editReason, :editedAt,
+    :groupKey, :excludedFromTrends, :idempotencyKey, :rawRecordId
 );
 
 observationById:
@@ -97,6 +98,7 @@ UPDATE observation SET excluded_from_trends = :excluded WHERE id = :id;
 markUserEdited:
 UPDATE observation
 SET user_edited = 1, user_verified = 1, value = :value, edit_reason = :reason,
+    edited_at = :editedAt,
     original_value = COALESCE(original_value, :previousValue),
     original_unit = COALESCE(original_unit, :previousUnit)
 WHERE id = :id;

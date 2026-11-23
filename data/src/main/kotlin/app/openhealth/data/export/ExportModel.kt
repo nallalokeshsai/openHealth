@@ -91,8 +91,9 @@ object ExportTables {
             listOf(
                 text("id"), long("started_at"), long("ended_at"), text("local_date"),
                 text("zone_id"), long("happened_at"), long("recorded_at"), text("routine_id"),
-                text("programme_id"), text("notes"), text("source_id"), long("revision"),
-                long("updated_at"),
+                text("programme_id"), text("notes"), text("source_id"),
+                text("idempotency_key"), text("observation_id"), text("raw_record_id"),
+                text("device"), text("app_version"), long("revision"), long("updated_at"),
             ),
         ),
         ExportTable(
@@ -148,6 +149,9 @@ object ExportTables {
                 text("zone_id"), long("happened_at"), long("recorded_at"),
                 double("quantity_g"), double("energy_kcal"), double("protein_g"),
                 double("carbs_g"), double("fat_g"), double("fibre_g"), text("source_kind"),
+                text(
+                    "source_id",
+                ),
                 bool("user_verified"), bool("user_edited"), text("observation_id"),
                 text("raw_record_id"), text("idempotency_key"), text("device"),
                 text("app_version"), long("revision"),
@@ -159,8 +163,8 @@ object ExportTables {
                 text("id"), text("type"), double("value"), text("unit"),
                 text("local_date"), text("zone_id"), long("happened_at"),
                 long("recorded_at"), text("source_id"), text("method"), text("notes"),
-                text("observation_id"), text("raw_record_id"), text("idempotency_key"),
-                text("device"), text("app_version"), long("revision"),
+                bool("excluded_from_trends"), text("observation_id"), text("raw_record_id"),
+                text("idempotency_key"), text("device"), text("app_version"), long("revision"),
             ),
         ),
         ExportTable(
@@ -169,9 +173,9 @@ object ExportTables {
                 text("id"), text("type"), double("value"), text("unit"),
                 text("local_date"), text("zone_id"), long("happened_at"),
                 long("recorded_at"), text("source_id"), text("method"), text("context"),
-                text("note"), text("observation_id"), text("raw_record_id"),
-                text("idempotency_key"), text("device"), text("app_version"),
-                long("revision"),
+                text("note"), bool("excluded_from_trends"), text("observation_id"),
+                text("raw_record_id"), text("idempotency_key"), text("device"),
+                text("app_version"), long("revision"),
             ),
         ),
         ExportTable(
@@ -193,6 +197,9 @@ object ExportTables {
                 text("app_version"), text("method"), text("context"), double("confidence"),
                 text("quality"), bool("user_verified"), bool("user_edited"),
                 double("original_value"), text("original_unit"), text("edit_reason"),
+                long(
+                    "edited_at",
+                ),
                 text("group_key"), bool("excluded_from_trends"), text("idempotency_key"),
                 text("raw_record_id"),
             ),

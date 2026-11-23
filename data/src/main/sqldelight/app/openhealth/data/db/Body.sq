@@ -14,6 +14,7 @@ CREATE TABLE measurement (
     source_id TEXT NOT NULL,
     method TEXT,
     notes TEXT,
+    excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     observation_id TEXT,
     raw_record_id TEXT,
     idempotency_key TEXT NOT NULL UNIQUE,
@@ -39,6 +40,7 @@ CREATE TABLE vital (
     method TEXT,
     context TEXT,
     note TEXT,
+    excluded_from_trends INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     observation_id TEXT,
     raw_record_id TEXT,
     idempotency_key TEXT NOT NULL UNIQUE,
@@ -52,13 +54,14 @@ CREATE INDEX vital_happened ON vital(happened_at);
 CREATE INDEX vital_type_happened ON vital(type, happened_at);
 
 insertMeasurement:
-INSERT OR REPLACE INTO measurement(
+INSERT OR IGNORE INTO measurement(
     id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id,
-    method, notes, observation_id, raw_record_id, idempotency_key, device, app_version, revision
+    method, notes, excluded_from_trends, observation_id, raw_record_id, idempotency_key,
+    device, app_version, revision
 ) VALUES (
     :id, :type, :value, :unit, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
-    :method, :notes, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
-    :revision
+    :method, :notes, :excludedFromTrends, :observationId, :rawRecordId, :idempotencyKey,
+    :device, :appVersion, :revision
 );
 
 measurementById:
@@ -85,14 +88,14 @@ deleteMeasurement:
 DELETE FROM measurement WHERE id = :id;
 
 insertVital:
-INSERT OR REPLACE INTO vital(
+INSERT OR IGNORE INTO vital(
     id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id,
-    method, context, note, observation_id, raw_record_id, idempotency_key, device,
-    app_version, revision
+    method, context, note, excluded_from_trends, observation_id, raw_record_id,
+    idempotency_key, device, app_version, revision
 ) VALUES (
     :id, :type, :value, :unit, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
-    :method, :context, :note, :observationId, :rawRecordId, :idempotencyKey, :device,
-    :appVersion, :revision
+    :method, :context, :note, :excludedFromTrends, :observationId, :rawRecordId,
+    :idempotencyKey, :device, :appVersion, :revision
 );
 
 vitalById:
@@ -117,6 +120,9 @@ SELECT * FROM vital ORDER BY happened_at;
 
 vitalDays:
 SELECT DISTINCT local_date FROM vital ORDER BY local_date;
+
+measurementDays:
+SELECT DISTINCT local_date FROM measurement ORDER BY local_date;
 
 deleteVital:
 DELETE FROM vital WHERE id = :id;

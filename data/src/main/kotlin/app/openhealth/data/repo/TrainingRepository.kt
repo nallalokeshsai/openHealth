@@ -8,6 +8,7 @@ import app.openhealth.data.db.Routine_exercise
 import app.openhealth.data.db.Session
 import app.openhealth.data.db.Session_exercise
 import app.openhealth.data.db.Work_set
+import app.openhealth.data.mapping.requireConsistentDay
 import kotlinx.datetime.LocalDate
 
 /**
@@ -99,6 +100,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
         db.trainingQueries.routinesInProgramme(programmeId).executeAsList()
 
     fun upsertSession(session: Session) {
+        requireConsistentDay(session.local_date, session.zone_id, session.happened_at)
         db.trainingQueries.insertSession(
             id = session.id,
             startedAt = session.started_at,
@@ -111,6 +113,11 @@ class TrainingRepository(private val db: OpenHealthDb) {
             programmeId = session.programme_id,
             notes = session.notes,
             sourceId = session.source_id,
+            idempotencyKey = session.idempotency_key,
+            observationId = session.observation_id,
+            rawRecordId = session.raw_record_id,
+            device = session.device,
+            appVersion = session.app_version,
             revision = session.revision,
             updatedAt = session.updated_at,
         )

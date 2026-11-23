@@ -32,9 +32,17 @@ abstract class CheckPortabilityTask : DefaultTask() {
             .forEach { file ->
                 file.readLines().forEachIndexed { index, line ->
                     val trimmed = line.trim()
-                    if (!trimmed.startsWith("import ")) return@forEachIndexed
+                    val isComment = trimmed.startsWith("//") ||
+                        trimmed.startsWith("*") ||
+                        trimmed.startsWith("/*")
+                    if (trimmed.isEmpty() || isComment) return@forEachIndexed
                     forbiddenPrefixes.get().forEach { prefix ->
-                        if (trimmed.startsWith("import $prefix")) {
+                        val imported = trimmed.startsWith("import $prefix")
+                        // A fully-qualified use is as much an Android dependency as an
+                        // import: `android.util.Log` in a body must fail too.
+                        val qualified = Regex("\\b${Regex.escape(prefix)}[A-Za-z]")
+                            .containsMatchIn(trimmed)
+                        if (imported || qualified) {
                             violations += "${file.path}:${index + 1}: $trimmed"
                         }
                     }

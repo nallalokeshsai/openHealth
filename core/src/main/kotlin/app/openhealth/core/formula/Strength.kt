@@ -26,7 +26,7 @@ object OneRepMax {
     ): FormulaOutcome<Double> {
         val inputs = listOf(input("weight", weightKg, "kg"), input("reps", reps.toDouble(), "1"))
         val citation = when (estimator) {
-            OneRepMaxEstimator.EPLEY -> CitationKey.EPLEY_1985
+            OneRepMaxEstimator.EPLEY -> CitationKey.EPLEY_LESUER_1997
             OneRepMaxEstimator.BRZYCKI -> CitationKey.BRZYCKI_1993
         }
         return when {

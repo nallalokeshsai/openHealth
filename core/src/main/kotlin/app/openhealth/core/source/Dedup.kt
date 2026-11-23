@@ -115,9 +115,14 @@ object DedupPolicies {
         .flatMap { familyCandidates ->
             familyCandidates
                 .groupBy { it.provenance.sourceId }
-                .minBy { (sourceId, _) ->
-                    registry.priorityOf(sourceId, familyCandidates.first().type)
-                }
+                .minWith(
+                    compareBy<Map.Entry<SourceId, List<Observation>>>(
+                        { (sourceId, _) ->
+                            registry.priorityOf(sourceId, familyCandidates.first().type)
+                        },
+                        { it.key.value },
+                    ),
+                )
                 .value
         }
 
@@ -260,7 +265,7 @@ class ManualFirstPerDayPolicy : DedupPolicy {
             compareBy(
                 { if (kindOf(it, registry) == SourceKind.MANUAL) 0 else 1 },
                 { -it.provenance.happenedAt.epochSeconds },
-                { it.provenance.recordedAt.epochSeconds },
+                { -it.provenance.recordedAt.epochSeconds },
             ),
         ).first()
         val reason = when {

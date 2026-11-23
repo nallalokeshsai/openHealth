@@ -355,12 +355,177 @@ class RollupEngineTest {
     fun aDayWithOnlyADiaryEntryIsStillRebuilt() {
         val (store, engine) = storeAndEngine()
         val row = entry("only-entry", 100.0, 5.0, 10.0, 2.0, 1.0, 1)
-            .copy(local_date = D2.toString())
+            .copy(
+                local_date = D2.toString(),
+                happened_at = dayStart(D2).plus(12.hours).toEpochMilliseconds() + 1,
+                recorded_at = dayStart(D2).plus(12.hours).toEpochMilliseconds() + 1,
+            )
         app.openhealth.data.repo.NutritionRepository(store.db).upsertEntry(row)
         engine.rebuildAll()
         assertNotNull(
             RollupRepository(store.db).forDayAndType(D2, ObservationType.NUTRITION_ENERGY),
         )
+        store.close()
+    }
+
+    @Test
+    fun aDailyTotalIsNotSummedWithItsOwnIntervals() {
+        val (store, engine) = storeAndEngine()
+        val buckets = hourlySteps("daily", D1, "garmin", 100.0)
+        val total = testObservation(
+            "daily-total",
+            ObservationType.STEPS,
+            2_400.0,
+            UcumUnit.STEP,
+            dayStart(D1),
+            sourceId = "garmin",
+        )
+        ObservationRepository(store.db).recordAll(buckets + total)
+        engine.rebuildDay(D1)
+        val rollup = RollupRepository(store.db).forDayAndType(D1, ObservationType.STEPS)!!
+        assertEquals(2_400.0, rollup.value.value, 1e-9)
+        store.close()
+    }
+
+    @Test
+    fun aMeasurementOfAnObservationTypeReachesTheRollup() {
+        val (store, engine) = storeAndEngine()
+        app.openhealth.data.repo.BodyRepository(store.db).upsertMeasurement(
+            app.openhealth.data.db.Measurement(
+                id = "scale-weight",
+                type = "WEIGHT",
+                value_ = 80.4,
+                unit = "kg",
+                local_date = D1.toString(),
+                zone_id = TEST_ZONE.id,
+                happened_at = dayStart(D1).plus(7.hours).toEpochMilliseconds(),
+                recorded_at = dayStart(D1).plus(7.hours).toEpochMilliseconds(),
+                source_id = "manual",
+                method = "SCALE",
+                notes = null,
+                excluded_from_trends = false,
+                observation_id = null,
+                raw_record_id = null,
+                idempotency_key = "scale-weight",
+                device = "scale",
+                app_version = "test",
+                revision = 1L,
+            ),
+        )
+        engine.rebuildDay(D1)
+        assertEquals(
+            80.4,
+            RollupRepository(store.db).forDayAndType(D1, ObservationType.WEIGHT)!!.value.value,
+        )
+        store.close()
+    }
+
+    @Test
+    fun vitalsFromTwoSourcesRecordNoSingleWinner() {
+        val (store, engine) = storeAndEngine()
+        val body = app.openhealth.data.repo.BodyRepository(store.db)
+        body.upsertVital(vital("v-g", "BLOOD_PRESSURE_SYSTOLIC", 120.0, "mm[Hg]", 1, "garmin"))
+        body.upsertVital(vital("v-f", "BLOOD_PRESSURE_SYSTOLIC", 130.0, "mm[Hg]", 2, "fitbit"))
+        engine.rebuildDay(D1)
+        val rollup = RollupRepository(store.db)
+            .forDayAndType(D1, ObservationType.BLOOD_PRESSURE_SYSTOLIC)!!
+        assertEquals(125.0, rollup.value.value, 1e-9)
+        assertEquals(2, rollup.contributingSources)
+        assertNull(rollup.sourceId)
+        store.close()
+    }
+
+    @Test
+    fun aLastValueVitalKeepsTheLastReadingNotTheMean() {
+        val (store, engine) = storeAndEngine()
+        val body = app.openhealth.data.repo.BodyRepository(store.db)
+        body.upsertVital(
+            vital("rhr-1", "RESTING_HEART_RATE", 60.0, "/min", 1),
+        )
+        body.upsertVital(
+            vital("rhr-2", "RESTING_HEART_RATE", 70.0, "/min", 2),
+        )
+        engine.rebuildDay(D1)
+        assertEquals(
+            70.0,
+            RollupRepository(store.db)
+                .forDayAndType(D1, ObservationType.RESTING_HEART_RATE)!!.value.value,
+        )
+        store.close()
+    }
+
+    @Test
+    fun aDayWithOnlyAVitalIsStillRebuilt() {
+        val (store, engine) = storeAndEngine()
+        app.openhealth.data.repo.BodyRepository(store.db).upsertVital(
+            vital("only-vital", "BLOOD_PRESSURE_SYSTOLIC", 122.0, "mm[Hg]", 1),
+        )
+        engine.rebuildAll()
+        assertNotNull(
+            RollupRepository(store.db)
+                .forDayAndType(D1, ObservationType.BLOOD_PRESSURE_SYSTOLIC),
+        )
+        store.close()
+    }
+
+    @Test
+    fun alayerTwoObservationWinsOverAVitalOfTheSameType() {
+        val (store, engine) = storeAndEngine()
+        ObservationRepository(store.db).record(
+            testObservation(
+                "bp-observation",
+                ObservationType.BLOOD_PRESSURE_SYSTOLIC,
+                118.0,
+                UcumUnit.MILLIMETRE_MERCURY,
+                dayStart(D1).plus(8.hours),
+            ),
+        )
+        app.openhealth.data.repo.BodyRepository(store.db).upsertVital(
+            vital("bp-vital", "BLOOD_PRESSURE_SYSTOLIC", 150.0, "mm[Hg]", 1),
+        )
+        engine.rebuildDay(D1)
+        assertEquals(
+            118.0,
+            RollupRepository(store.db)
+                .forDayAndType(D1, ObservationType.BLOOD_PRESSURE_SYSTOLIC)!!.value.value,
+        )
+        store.close()
+    }
+
+    @Test
+    fun aLayerFourReplayCannotMoveRecordedAt() {
+        val (store, _) = storeAndEngine()
+        val body = app.openhealth.data.repo.BodyRepository(store.db)
+        val first = app.openhealth.data.db.Measurement(
+            id = "replay-measurement",
+            type = "waist",
+            value_ = 84.0,
+            unit = "cm",
+            local_date = D1.toString(),
+            zone_id = TEST_ZONE.id,
+            happened_at = dayStart(D1).plus(9.hours).toEpochMilliseconds(),
+            recorded_at = dayStart(D1).plus(9.hours).toEpochMilliseconds(),
+            source_id = "manual",
+            method = "MANUAL_ENTRY",
+            notes = null,
+            excluded_from_trends = false,
+            observation_id = null,
+            raw_record_id = null,
+            idempotency_key = "replay-measurement",
+            device = "manual",
+            app_version = "test",
+            revision = 1L,
+        )
+        body.upsertMeasurement(first)
+        body.upsertMeasurement(
+            first.copy(
+                value_ = 90.0,
+                recorded_at = dayStart(D1).plus(11.hours).toEpochMilliseconds(),
+            ),
+        )
+        val stored = store.db.bodyQueries.measurementById("replay-measurement").executeAsOne()
+        assertEquals(84.0, stored.value_)
+        assertEquals(first.recorded_at, stored.recorded_at)
         store.close()
     }
 
@@ -401,6 +566,7 @@ class RollupEngineTest {
         fat_g = fat,
         fibre_g = fibre,
         source_kind = "manual",
+        source_id = "manual",
         user_verified = true,
         user_edited = false,
         observation_id = null,
@@ -411,27 +577,34 @@ class RollupEngineTest {
         revision = 1L,
     )
 
-    private fun vital(id: String, type: String, value: Double, unit: String, second: Long) =
-        app.openhealth.data.db.Vital(
-            id = id,
-            type = type,
-            value_ = value,
-            unit = unit,
-            local_date = D1.toString(),
-            zone_id = TEST_ZONE.id,
-            happened_at = dayStart(D1).plus(10.hours).toEpochMilliseconds() + second,
-            recorded_at = dayStart(D1).plus(10.hours).toEpochMilliseconds() + second,
-            source_id = "manual",
-            method = "CUFF",
-            context = "RESTING",
-            note = null,
-            observation_id = null,
-            raw_record_id = null,
-            idempotency_key = "vital-$id",
-            device = "manual",
-            app_version = "test",
-            revision = 1L,
-        )
+    private fun vital(
+        id: String,
+        type: String,
+        value: Double,
+        unit: String,
+        second: Long,
+        sourceId: String = "manual",
+    ) = app.openhealth.data.db.Vital(
+        id = id,
+        type = type,
+        value_ = value,
+        unit = unit,
+        local_date = D1.toString(),
+        zone_id = TEST_ZONE.id,
+        happened_at = dayStart(D1).plus(10.hours).toEpochMilliseconds() + second,
+        recorded_at = dayStart(D1).plus(10.hours).toEpochMilliseconds() + second,
+        source_id = sourceId,
+        method = "CUFF",
+        context = "RESTING",
+        note = null,
+        excluded_from_trends = false,
+        observation_id = null,
+        raw_record_id = null,
+        idempotency_key = "vital-$id",
+        device = "manual",
+        app_version = "test",
+        revision = 1L,
+    )
 
     @Test
     fun excludedReadingsDoNotReachTheRollup() {

@@ -72,6 +72,7 @@ data class EntryPayload(
     val fatG: Double?,
     val fibreG: Double?,
     val sourceKind: String,
+    val sourceId: String?,
     val userVerified: Boolean,
     val userEdited: Boolean,
     val observationId: String?,
@@ -95,6 +96,7 @@ data class MeasurementPayload(
     val sourceId: String,
     val method: String?,
     val notes: String?,
+    val excludedFromTrends: Boolean,
     val observationId: String?,
     val rawRecordId: String?,
     val idempotencyKey: String,
@@ -117,6 +119,7 @@ data class VitalPayload(
     val method: String?,
     val context: String?,
     val note: String?,
+    val excludedFromTrends: Boolean,
     val observationId: String?,
     val rawRecordId: String?,
     val idempotencyKey: String,
@@ -154,39 +157,36 @@ class TrashService(
     }
 
     fun deleteEntry(id: EntryId): TombstoneId? = entry(id.value)?.let { row ->
-        val tombstone = record(
+        record(
             entity = TrashEntity.ENTRY,
             entityId = row.id,
             payload = json.encodeToString(EntryPayload.serializer(), row.toPayload()),
+            invalidateOn = LocalDate.parse(row.local_date),
         ) {
             db.nutritionQueries.deleteEntry(row.id)
         }
-        rollupInvalidator?.invoke(LocalDate.parse(row.local_date))
-        tombstone
     }
 
     fun deleteMeasurement(id: MeasurementId): TombstoneId? = measurement(id.value)?.let { row ->
-        val tombstone = record(
+        record(
             entity = TrashEntity.MEASUREMENT,
             entityId = row.id,
             payload = json.encodeToString(MeasurementPayload.serializer(), row.toPayload()),
+            invalidateOn = LocalDate.parse(row.local_date),
         ) {
             db.bodyQueries.deleteMeasurement(row.id)
         }
-        rollupInvalidator?.invoke(LocalDate.parse(row.local_date))
-        tombstone
     }
 
     fun deleteVital(id: VitalId): TombstoneId? = vital(id.value)?.let { row ->
-        val tombstone = record(
+        record(
             entity = TrashEntity.VITAL,
             entityId = row.id,
             payload = json.encodeToString(VitalPayload.serializer(), row.toPayload()),
+            invalidateOn = LocalDate.parse(row.local_date),
         ) {
             db.bodyQueries.deleteVital(row.id)
         }
-        rollupInvalidator?.invoke(LocalDate.parse(row.local_date))
-        tombstone
     }
 
     /** Restores one tombstoned row. Returns false when it is gone or already restored. */
@@ -198,6 +198,7 @@ class TrashService(
         if (missing || tombstone.restored_at != null) {
             return false
         }
+        var restored = false
         db.transaction {
             when (entity) {
                 TrashEntity.WORK_SET -> restoreWorkSet(payload)
@@ -205,10 +206,15 @@ class TrashService(
                 TrashEntity.MEASUREMENT -> restoreMeasurement(payload)
                 TrashEntity.VITAL -> restoreVital(payload)
             }
-            db.tombstoneQueries.markRestored(clock.now().toEpochMilliseconds(), tombstone.id)
+            // Append-only inserts ignore an id that a re-created row owns. The undo is
+            // only complete when the row is really there afterwards.
+            if (rowExists(entity, tombstone.entity_id)) {
+                db.tombstoneQueries.markRestored(clock.now().toEpochMilliseconds(), tombstone.id)
+                invalidateRestoredDay(entity, payload)
+                restored = true
+            }
         }
-        invalidateRestoredDay(entity, payload)
-        return true
+        return restored
     }
 
     fun purgeExpired(now: Instant = clock.now()): Int {
@@ -231,6 +237,7 @@ class TrashService(
         entity: TrashEntity,
         entityId: String,
         payload: String,
+        invalidateOn: LocalDate? = null,
         remove: () -> Unit,
     ): TombstoneId {
         val now = clock.now()
@@ -246,8 +253,16 @@ class TrashService(
                 reason = null,
             )
             remove()
+            invalidateOn?.let { rollupInvalidator?.invoke(it) }
         }
         return id
+    }
+
+    private fun rowExists(entity: TrashEntity, id: String): Boolean = when (entity) {
+        TrashEntity.WORK_SET -> db.trainingQueries.workSetById(id).executeAsOneOrNull() != null
+        TrashEntity.ENTRY -> db.nutritionQueries.entryById(id).executeAsOneOrNull() != null
+        TrashEntity.MEASUREMENT -> db.bodyQueries.measurementById(id).executeAsOneOrNull() != null
+        TrashEntity.VITAL -> db.bodyQueries.vitalById(id).executeAsOneOrNull() != null
     }
 
     private fun invalidateRestoredDay(entity: TrashEntity, payload: String) {
@@ -324,6 +339,7 @@ class TrashService(
             fatG = row.fatG,
             fibreG = row.fibreG,
             sourceKind = row.sourceKind,
+            sourceId = row.sourceId,
             userVerified = row.userVerified,
             userEdited = row.userEdited,
             observationId = row.observationId,
@@ -349,6 +365,7 @@ class TrashService(
             sourceId = row.sourceId,
             method = row.method,
             notes = row.notes,
+            excludedFromTrends = row.excludedFromTrends,
             observationId = row.observationId,
             rawRecordId = row.rawRecordId,
             idempotencyKey = row.idempotencyKey,
@@ -373,6 +390,7 @@ class TrashService(
             method = row.method,
             context = row.context,
             note = row.note,
+            excludedFromTrends = row.excludedFromTrends,
             observationId = row.observationId,
             rawRecordId = row.rawRecordId,
             idempotencyKey = row.idempotencyKey,
@@ -391,21 +409,21 @@ class TrashService(
 
     private fun Entry.toPayload(): EntryPayload = EntryPayload(
         id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g,
-        energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, user_verified,
-        user_edited, observation_id, raw_record_id, idempotency_key, device, app_version,
-        revision,
+        energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, source_id,
+        user_verified, user_edited, observation_id, raw_record_id, idempotency_key,
+        device, app_version, revision,
     )
 
     private fun Measurement.toPayload(): MeasurementPayload = MeasurementPayload(
         id, type, value_, unit, local_date, zone_id, happened_at, recorded_at, source_id,
-        method, notes, observation_id, raw_record_id, idempotency_key, device, app_version,
-        revision,
+        method, notes, excluded_from_trends, observation_id, raw_record_id, idempotency_key,
+        device, app_version, revision,
     )
 
     private fun Vital.toPayload(): VitalPayload = VitalPayload(
         id, type, value_, unit, local_date, zone_id, happened_at, recorded_at, source_id,
-        method, context, note, observation_id, raw_record_id, idempotency_key, device,
-        app_version, revision,
+        method, context, note, excluded_from_trends, observation_id, raw_record_id,
+        idempotency_key, device, app_version, revision,
     )
 
     companion object {

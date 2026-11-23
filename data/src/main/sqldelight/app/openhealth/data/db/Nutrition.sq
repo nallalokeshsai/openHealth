@@ -52,6 +52,7 @@ CREATE TABLE entry (
     fat_g REAL,
     fibre_g REAL,
     source_kind TEXT NOT NULL,
+    source_id TEXT,
     user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     observation_id TEXT,
@@ -112,15 +113,15 @@ allMeals:
 SELECT * FROM meal ORDER BY created_at;
 
 insertEntry:
-INSERT OR REPLACE INTO entry(
+INSERT OR IGNORE INTO entry(
     id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g,
-    energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, user_verified,
-    user_edited, observation_id, raw_record_id, idempotency_key, device, app_version,
+    energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, source_id,
+    user_verified, user_edited, observation_id, raw_record_id, idempotency_key, device, app_version,
     revision
 ) VALUES (
     :id, :mealId, :foodId, :localDate, :zoneId, :happenedAt, :recordedAt, :quantityG,
-    :energyKcal, :proteinG, :carbsG, :fatG, :fibreG, :sourceKind, :userVerified,
-    :userEdited, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
+    :energyKcal, :proteinG, :carbsG, :fatG, :fibreG, :sourceKind, :sourceId,
+    :userVerified, :userEdited, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
     :revision
 );
 

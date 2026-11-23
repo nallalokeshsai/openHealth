@@ -10,6 +10,8 @@ naming:
     ignoreAnnotated: ['Composable']
 
 complexity:
+  LargeClass:
+    excludes: ['**/src/test/**']
   LongMethod:
     ignoreAnnotated: ['Composable']
     excludes: ['**/corpus/**', '**/src/test/**', '**/tools/fixtures/**']

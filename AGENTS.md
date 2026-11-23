@@ -213,7 +213,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B2 Core and data** (2026-11-23); next is **B3 Shell and
   onboarding**.
 - Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `build/b2-core-and-data`; 155 JVM tests plus one instrumented test pass, the debug app
+  `build/b2-core-and-data`; 170 JVM tests plus one instrumented test pass, the debug app
   installs and launches on the owner's physical phone, and the encrypted database is
   proven on the device. Seven modules exist (`:core :data :sync :integrations :ui
   :app-android :tools:fixtures`) with ktlint, Detekt, `checkPortability`,

@@ -125,6 +125,21 @@ class ExportRoundTripTest {
     }
 
     @Test
+    fun aDirectRestoreStillChecksFormatAndSchema() {
+        val store = corpusStore()
+        val cipher = Argon2ExportCipher(iterations = 1, memoryKiB = 8_192, parallelism = 1)
+        val service = ExportService(store.driver, store.db, cipher, FixedClock(now))
+        val bundle = service.snapshot()
+        assertFailsWith<app.openhealth.core.seam.UnsupportedExportFormat> {
+            service.restoreBundle(bundle.copy(format = "something-else"))
+        }
+        assertFailsWith<app.openhealth.core.seam.UnsupportedExportFormat> {
+            service.restoreBundle(bundle.copy(schemaVersion = bundle.schemaVersion + 1))
+        }
+        store.close()
+    }
+
+    @Test
     fun theProductionArgon2DefaultsSealAndOpen() {
         val store = inMemoryStore()
         val exporter = ExportService(

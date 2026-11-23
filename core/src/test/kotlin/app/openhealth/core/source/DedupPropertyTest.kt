@@ -170,6 +170,30 @@ class StepsDedupPropertyTest {
     }
 
     @Test
+    fun aFamilyTieIsBrokenBySourceIdNotInputOrder() {
+        val sources = SourceRegistry(
+            listOf(
+                source("garmin-b", SourceKind.GARMIN),
+                source("garmin-a", SourceKind.GARMIN),
+            ),
+        )
+        val a = hourlySteps("garmin-a", List(24) { 100.0 })
+        val b = hourlySteps("garmin-b", List(24) { 100.0 })
+        val first = OneSourcePerDayPolicy().resolve(
+            a + b,
+            sources,
+            app.openhealth.core.time.LocalDay(DAY, ZONE),
+        ) as DayResolution.Selected
+        val second = OneSourcePerDayPolicy().resolve(
+            b + a,
+            sources,
+            app.openhealth.core.time.LocalDay(DAY, ZONE),
+        ) as DayResolution.Selected
+        assertEquals(SourceId("garmin-a"), first.sourceId)
+        assertEquals(first.sourceId, second.sourceId)
+    }
+
+    @Test
     fun theSameVendorThroughTwoPipesIsNotCountedTwice() {
         val viaFit = hourlySteps("garmin", List(24) { 150.0 })
         val viaHealthConnect = hourlySteps("garmin-hc", List(24) { 150.0 })
@@ -340,6 +364,9 @@ class MergePolicyTest {
         val registry = MergePolicyRegistry.default()
         assertEquals(listOf("daily_rollup"), registry.neverSynced())
         assertTrue(registry.get("observation") is AppendOnlyPolicy<*>)
+        listOf("measurement", "vital", "entry", "session", "profile", "source", "food").forEach {
+            assertTrue(registry.get(it) != null, "no merge policy for $it")
+        }
     }
 }
 

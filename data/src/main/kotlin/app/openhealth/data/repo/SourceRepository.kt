@@ -21,8 +21,18 @@ import kotlinx.serialization.json.Json
 class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSeam = SystemClock) {
     private val json = Json { ignoreUnknownKeys = true }
     private val prioritiesSerializer = MapSerializer(String.serializer(), Int.serializer())
+    private var rebuildAllRollups: (() -> Unit)? = null
+
+    fun invalidateAllRollupsWith(rebuild: (() -> Unit)?) {
+        rebuildAllRollups = rebuild
+    }
 
     fun upsert(source: Source) {
+        upsertInternal(source)
+        rebuildAllRollups?.invoke()
+    }
+
+    private fun upsertInternal(source: Source) {
         val now = clock.now()
         val createdAt = db.sourceQueries.sourceById(source.id.value).executeAsOneOrNull()
             ?.created_at ?: now.toEpochMilliseconds()
@@ -46,7 +56,8 @@ class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSea
     }
 
     fun upsertAll(sources: List<Source>) {
-        db.transaction { sources.forEach(::upsert) }
+        db.transaction { sources.forEach(::upsertInternal) }
+        rebuildAllRollups?.invoke()
     }
 
     fun byId(id: SourceId): Source? =

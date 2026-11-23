@@ -26,6 +26,7 @@ data class ReadinessInputs(
     companion object {
         const val DEFAULT_SLEEP_NEED_MINUTES = 8.0 * 60.0
         const val MIN_BASELINE_DAYS = 7
+        const val MIN_SLEEP_NEED_MINUTES = 60.0
     }
 }
 
@@ -65,13 +66,20 @@ object Readiness {
             inputs.trainingLoadDailyAverage28d != null &&
             inputs.trainingLoadDailyAverage28d > 0.0
         val baselineDays = listOfNotNull(
-            inputs.restingHeartRateBaseline?.days,
-            inputs.hrvBaseline?.days,
+            inputs.restingHeartRateBaseline?.takeIf(::usable)?.days,
+            inputs.hrvBaseline?.takeIf(::usable)?.days,
             if (hasLoadInput) inputs.trainingLoadBaselineDays else null,
         ).minOrNull()
-        val sleepNeedInvalid = inputs.sleepMinutes != null && inputs.sleepNeedMinutes <= 0.0
-        val enoughData = !sleepNeedInvalid &&
-            parts.size >= MIN_INPUTS &&
+        val sleepNeedInvalid = inputs.sleepMinutes != null &&
+            inputs.sleepNeedMinutes < ReadinessInputs.MIN_SLEEP_NEED_MINUTES
+        if (sleepNeedInvalid) {
+            return notAvailable(
+                NotAvailableReason.OUT_OF_RANGE,
+                CitationKey.APP_RULE,
+                formulaInputs,
+            )
+        }
+        val enoughData = parts.size >= MIN_INPUTS &&
             (baselineDays == null || baselineDays >= ReadinessInputs.MIN_BASELINE_DAYS)
         return if (!enoughData) {
             notAvailable(NotAvailableReason.NOT_ENOUGH_DATA, CitationKey.APP_RULE, formulaInputs)

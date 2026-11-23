@@ -34,15 +34,29 @@ class TimelineRepositoryTest {
                 dayStart(date).plus(20.hours),
             ),
         )
+        app.openhealth.data.repo.NutritionRepository(store.db).upsertMeal(
+            app.openhealth.data.db.Meal(
+                id = "meal-1",
+                name = "Lunch",
+                kind = "lunch",
+                local_date = date.toString(),
+                notes = null,
+                created_at = dayStart(date).plus(22.hours).toEpochMilliseconds(),
+                updated_at = dayStart(date).plus(22.hours).toEpochMilliseconds(),
+                revision = 1L,
+            ),
+        )
         val timeline = TimelineRepository(store.db, store.driver)
         val page = timeline.page(10)
-        assertEquals(2, page.size)
-        assertEquals("late", page.first().entityId)
+        assertEquals(3, page.size)
+        assertEquals("meal-1", page.first().entityId)
+        assertEquals("meal", page.first().kind)
         assertTrue(page.first().happenedAt > page.last().happenedAt)
-        assertEquals("observation", page.first().kind)
+        assertEquals("observation", page[1].kind)
         assertEquals(date, page.first().localDate)
-        assertEquals(2, timeline.forDay(date).size)
-        assertEquals(2, timeline.count())
+        assertEquals(3, timeline.forDay(date).size)
+        assertTrue(timeline.forDay(date).any { it.kind == "meal" })
+        assertEquals(3, timeline.count())
         assertEquals(1, timeline.page(1).size)
         store.close()
     }

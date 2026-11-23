@@ -12,7 +12,7 @@ enum class CitationKey {
     FFMI_SCHUTZ_2002,
     COMPENDIUM_OF_PHYSICAL_ACTIVITIES_2024,
     FAO_WHO_UNU_2004_PAL,
-    EPLEY_1985,
+    EPLEY_LESUER_1997,
     BRZYCKI_1993,
     WISHNOFSKY_1958,
     CDC_WEIGHT_LOSS,
@@ -102,13 +102,15 @@ object Citations {
             supports = "Physical activity levels used to derive TDEE from BMR",
         ),
         Citation(
-            key = CitationKey.EPLEY_1985,
-            title = "Poundage chart",
-            authors = "Epley B",
-            year = 1985,
-            publication = "Boyd Epley workout, University of Nebraska",
-            url = "https://doi.org/10.1519/00124278-199403000-00018",
-            supports = "Estimated one-rep max from a weight and a rep count (Epley)",
+            key = CitationKey.EPLEY_LESUER_1997,
+            title = "The accuracy of prediction equations for estimating 1-RM performance " +
+                "in the bench press, squat, and deadlift",
+            authors = "LeSuer DA, McCormick JH, Mayhew JL, Wasserstein RL, Arnold MD",
+            year = 1997,
+            publication = "The Journal of Strength and Conditioning Research 11(4):211-213",
+            url = "https://doi.org/10.1519/1533-4287(1997)011%3C0211:TAOPEF%3E2.3.CO;2",
+            supports = "The Epley equation used to estimate one-rep max, evaluated against " +
+                "measured 1-RM",
         ),
         Citation(
             key = CitationKey.BRZYCKI_1993,

@@ -78,6 +78,11 @@ CREATE TABLE session (
     programme_id TEXT,
     notes TEXT,
     source_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    observation_id TEXT,
+    raw_record_id TEXT,
+    device TEXT,
+    app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1,
     updated_at INTEGER NOT NULL
 );
@@ -205,12 +210,14 @@ WHERE programme_routine.programme_id = :programmeId
 ORDER BY programme_routine.week, programme_routine.position;
 
 insertSession:
-INSERT OR REPLACE INTO session(
+INSERT OR IGNORE INTO session(
     id, started_at, ended_at, local_date, zone_id, happened_at, recorded_at,
-    routine_id, programme_id, notes, source_id, revision, updated_at
+    routine_id, programme_id, notes, source_id, idempotency_key, observation_id,
+    raw_record_id, device, app_version, revision, updated_at
 ) VALUES (
     :id, :startedAt, :endedAt, :localDate, :zoneId, :happenedAt, :recordedAt,
-    :routineId, :programmeId, :notes, :sourceId, :revision, :updatedAt
+    :routineId, :programmeId, :notes, :sourceId, :idempotencyKey, :observationId,
+    :rawRecordId, :device, :appVersion, :revision, :updatedAt
 );
 
 sessionById:
@@ -242,7 +249,7 @@ allSessionExercises:
 SELECT * FROM session_exercise ORDER BY session_id, position;
 
 insertWorkSet:
-INSERT OR REPLACE INTO work_set(
+INSERT OR IGNORE INTO work_set(
     id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps,
     rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds,
     completed_at, happened_at, recorded_at, source_id, idempotency_key, observation_id,

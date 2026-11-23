@@ -46,7 +46,7 @@ clearTombstonePayload:
 UPDATE tombstone SET payload = NULL WHERE id = :id;
 
 markRestored:
-UPDATE tombstone SET restored_at = :restoredAt WHERE id = :id;
+UPDATE tombstone SET restored_at = :restoredAt, payload = NULL WHERE id = :id;
 
 deleteTombstone:
 DELETE FROM tombstone WHERE id = :id;

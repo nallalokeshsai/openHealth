@@ -328,6 +328,34 @@ class ReadinessTest {
     }
 
     @Test
+    fun anUnusedShortHrvBaselineDoesNotHideAScoreItCanCompute() {
+        val result = Readiness.compute(
+            ReadinessInputs(
+                sleepMinutes = 480.0,
+                restingHeartRate = 60.0,
+                restingHeartRateBaseline = Baseline(60.0, 30),
+                hrvMillis = 50.0,
+                hrvBaseline = Baseline(50.0, 3),
+            ),
+        ).value()
+        assertEquals(2, result.parts.size)
+    }
+
+    @Test
+    fun aOneMinuteSleepNeedIsOutOfRangeRatherThanEnoughData() {
+        val result = Readiness.compute(
+            ReadinessInputs(
+                sleepMinutes = 420.0,
+                sleepNeedMinutes = 1.0,
+                trainingLoad48h = 100.0,
+                trainingLoadDailyAverage28d = 100.0,
+            ),
+        )
+        assertIs<FormulaOutcome.NotAvailable>(result)
+        assertEquals(NotAvailableReason.OUT_OF_RANGE, result.reason)
+    }
+
+    @Test
     fun aThreeDayLoadBaselineIsNotANumber() {
         val result = Readiness.compute(
             ReadinessInputs(

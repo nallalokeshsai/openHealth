@@ -52,7 +52,12 @@ fun ObservationRow.toDomain(): Observation {
         quality = Quality(qualityLabel ?: QualityLabel.UNKNOWN, confidence),
         userVerified = user_verified,
         userEdited = user_edited,
-        editTrail = EditTrail(original_value, original_unit, edit_reason, null),
+        editTrail = EditTrail(
+            originalValue = original_value,
+            originalUnit = original_unit,
+            reason = edit_reason,
+            editedAt = edited_at?.let(Instant::fromEpochMilliseconds),
+        ),
         groupKey = group_key,
         excludedFromTrends = excluded_from_trends,
     )

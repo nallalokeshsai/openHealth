@@ -89,6 +89,8 @@ class ExportService(
         restoreBundle(read(container, passphrase))
 
     fun restoreBundle(bundle: ExportBundle): RestoreReport {
+        requireSupportedFormat(bundle)
+        requireSupportedSchema(bundle)
         val byName = bundle.tables.associateBy { it.table }
         val expected = ExportTables.all.map { it.name }.toSet()
         val missing = expected - byName.keys
@@ -111,16 +113,16 @@ class ExportService(
                     SqlDump.insert(driver, table, rowsOfTable)
                     rows += rowsOfTable.size
                 }
+            // Rebuild in the same transaction: a failed rebuild leaves the old database.
+            RollupEngine(
+                observations = ObservationRepository(db),
+                rollups = RollupRepository(db),
+                db = db,
+                registry = SourceRegistry(SourceRepository(db, clock).all()),
+                clock = clock,
+            ).rebuildAll()
             rows
         }
-        val engine = RollupEngine(
-            observations = ObservationRepository(db),
-            rollups = RollupRepository(db),
-            db = db,
-            registry = SourceRegistry(SourceRepository(db, clock).all()),
-            clock = clock,
-        )
-        engine.rebuildAll()
         return RestoreReport(
             tables = ExportTables.all.size,
             rows = counts,
