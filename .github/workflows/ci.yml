@@ -8,8 +8,10 @@ on:
 permissions:
   contents: read
 
+# Branch protection requires a status named `check`, so the job is named `check`.
 jobs:
-  build:
+  check:
+    name: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +21,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v3
+      # The runner image already ships the Android SDK and its own sdkmanager.
+      # setup-android@v3 is not used: it still asks for the removed `tools` package.
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          sdkmanager="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | sort | tail -1)"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" "platform-tools" "platforms;android-37.2" "build-tools;36.0.0"
 
       # check runs unit tests, lint, ktlint, Detekt, checkPortability and checkLicences.
       - name: Check

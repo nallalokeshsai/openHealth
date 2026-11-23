@@ -85,7 +85,7 @@ Every gate was exercised on purpose, and the app was checked again from a fresh 
 | Portability probe in `:data` (`import androidx.annotation.NonNull`) | `:data:checkPortability` **FAILED**, naming the file and line; file removed. |
 | Licence probe in `:integrations` (LGPL `hibernate-core` as `testImplementation`) | `:integrations:checkLicences` **FAILED**; dependency removed. |
 | `:app-android:assembleRelease` | **BUILD SUCCESSFUL**; unsigned release APK produced (release builds through R8's default config). |
-| CI workflow | `.github/workflows/ci.yml` parses; one `build` job, five steps. |
+| CI workflow | `.github/workflows/ci.yml` parses; one job named `check` (the status name branch protection requires), five steps. |
 | Debug APK manifest audit (`apkanalyzer`) | `minSdk 28`, `targetSdk 37`, `debuggable true`, `allowBackup false`, `fullBackupContent` and `dataExtractionRules` present; the only permission is AndroidX's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. No network, storage, location or health permission. |
 | `:app-android:lintDebug` | 0 errors, 1 warning: no application icon yet (design work, B1/B10). |
 
@@ -94,6 +94,19 @@ covers device-to-device transfer on Android 12+. Added
 `app-android/src/main/res/xml/data_extraction_rules.xml` and `backup_rules.xml`, both
 excluding every domain, and wired them into the manifest, so no health data leaves the
 device through platform backup or transfer (Tech-Stack.md §5). That warning is gone.
+
+### Hosted CI (first run, 2026-11-23)
+
+The first GitHub Actions run failed in 22 s, before Gradle started, and reported no
+status under the name branch protection requires:
+
+- `android-actions/setup-android@v3` defaults to `packages: tools platform-tools`, and
+  current `sdkmanager` no longer has a `tools` package: "Failed to find package 'tools'".
+  The workflow now uses the runner image's own `sdkmanager` to accept licences and
+  install `platform-tools`, `platforms;android-37.2` and `build-tools;36.0.0`.
+- The job was named `build`; branch protection on `main` requires a status named
+  `check` (contexts: `check`), which is what the PR showed as waiting. The job is now
+  named `check`.
 
 ### Exit tests
 
