@@ -34,8 +34,4 @@ class ProfileRepository(private val db: OpenHealthDb) {
     fun active(): Profile? = db.profileQueries.activeProfile().executeAsOneOrNull()
 
     fun all(): List<Profile> = db.profileQueries.allProfiles().executeAsList()
-
-    fun delete(id: String) {
-        db.profileQueries.deleteProfile(id)
-    }
 }

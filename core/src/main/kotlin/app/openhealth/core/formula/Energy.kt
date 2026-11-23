@@ -90,9 +90,16 @@ data class GoalRate(
     val requestedKgPerWeek: Double,
     val appliedKgPerWeek: Double,
     val clamped: Boolean,
-    val citedRangeKgPerWeek: ClosedFloatingPointRange<Double>,
+    /** The range this app allows for the mode; its source is the app rule. */
+    val allowedRangeKgPerWeek: ClosedFloatingPointRange<Double>,
+    /** The published loss range the neutral note cites (CDC, 0.5-1 kg per week). */
+    val citedLossRangeKgPerWeek: ClosedFloatingPointRange<Double> = CITED_LOSS_RANGE,
 ) {
     val isLoss: Boolean get() = appliedKgPerWeek < 0.0
+
+    companion object {
+        val CITED_LOSS_RANGE = 0.5..1.0
+    }
 }
 
 object GoalRatePolicy {
@@ -120,7 +127,12 @@ object GoalRatePolicy {
         }
         return when (mode) {
             GoalMode.MAINTAIN -> computed(
-                GoalRate(requestedKgPerWeek, 0.0, requestedKgPerWeek != 0.0, 0.0..0.0),
+                GoalRate(
+                    requestedKgPerWeek = requestedKgPerWeek,
+                    appliedKgPerWeek = 0.0,
+                    clamped = requestedKgPerWeek != 0.0,
+                    allowedRangeKgPerWeek = 0.0..0.0,
+                ),
                 CitationKey.CDC_WEIGHT_LOSS,
                 inputs,
             )
@@ -130,7 +142,12 @@ object GoalRatePolicy {
                 val max = -MIN_LOSS_FRACTION * weightKg
                 val applied = requestedKgPerWeek.coerceIn(min, max)
                 computed(
-                    GoalRate(requestedKgPerWeek, applied, applied != requestedKgPerWeek, min..max),
+                    GoalRate(
+                        requestedKgPerWeek = requestedKgPerWeek,
+                        appliedKgPerWeek = applied,
+                        clamped = applied != requestedKgPerWeek,
+                        allowedRangeKgPerWeek = min..max,
+                    ),
                     CitationKey.CDC_WEIGHT_LOSS,
                     inputs,
                 )
@@ -141,7 +158,12 @@ object GoalRatePolicy {
                 val max = MAX_GAIN_FRACTION * weightKg
                 val applied = requestedKgPerWeek.coerceIn(min, max)
                 computed(
-                    GoalRate(requestedKgPerWeek, applied, applied != requestedKgPerWeek, min..max),
+                    GoalRate(
+                        requestedKgPerWeek = requestedKgPerWeek,
+                        appliedKgPerWeek = applied,
+                        clamped = applied != requestedKgPerWeek,
+                        allowedRangeKgPerWeek = min..max,
+                    ),
                     CitationKey.CDC_WEIGHT_LOSS,
                     inputs,
                 )

@@ -20,6 +20,8 @@ data class ReadinessInputs(
     val hrvBaseline: Baseline? = null,
     val trainingLoad48h: Double? = null,
     val trainingLoadDailyAverage28d: Double? = null,
+    /** Days behind the 28-day average; the caller must say how much history it has. */
+    val trainingLoadBaselineDays: Int = 28,
 ) {
     companion object {
         const val DEFAULT_SLEEP_NEED_MINUTES = 8.0 * 60.0
@@ -59,11 +61,17 @@ object Readiness {
     fun compute(inputs: ReadinessInputs): FormulaOutcome<ReadinessScore> {
         val parts = readinessParts(inputs)
         val formulaInputs = parts.map { input(it.name, it.score, "1") }
+        val hasLoadInput = inputs.trainingLoad48h != null &&
+            inputs.trainingLoadDailyAverage28d != null &&
+            inputs.trainingLoadDailyAverage28d > 0.0
         val baselineDays = listOfNotNull(
-            inputs.restingHeartRateBaseline?.takeIf(::usable),
-            inputs.hrvBaseline?.takeIf(::usable),
-        ).minOfOrNull { it.days }
-        val enoughData = parts.size >= MIN_INPUTS &&
+            inputs.restingHeartRateBaseline?.days,
+            inputs.hrvBaseline?.days,
+            if (hasLoadInput) inputs.trainingLoadBaselineDays else null,
+        ).minOrNull()
+        val sleepNeedInvalid = inputs.sleepMinutes != null && inputs.sleepNeedMinutes <= 0.0
+        val enoughData = !sleepNeedInvalid &&
+            parts.size >= MIN_INPUTS &&
             (baselineDays == null || baselineDays >= ReadinessInputs.MIN_BASELINE_DAYS)
         return if (!enoughData) {
             notAvailable(NotAvailableReason.NOT_ENOUGH_DATA, CitationKey.APP_RULE, formulaInputs)

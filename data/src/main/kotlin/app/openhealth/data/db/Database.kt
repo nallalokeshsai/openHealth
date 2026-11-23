@@ -58,8 +58,11 @@ class DatabaseOpener(private val backup: MigrationBackup? = null) {
     }
 
     private fun migrate(driver: SqlDriver, fromVersion: Long, toVersion: Long) {
-        val label = backup?.snapshot(fromVersion, toVersion)
-        check(backup == null || label != null) {
+        val backup = backup ?: error(
+            "Migration $fromVersion -> $toVersion needs a MigrationBackup; refusing to upgrade " +
+                "without a restorable snapshot",
+        )
+        check(backup.snapshot(fromVersion, toVersion) != null) {
             "Migration $fromVersion -> $toVersion needs a backup and the platform could not take one"
         }
         OpenHealthDb.Schema.migrate(driver, fromVersion, toVersion).value

@@ -116,7 +116,9 @@ class EnergyTest {
         val lose = GoalRatePolicy.clamp(GoalMode.LOSE, -2.0, 80.0).value()
         assertTrue(lose.clamped)
         assertEquals(-0.8, lose.appliedKgPerWeek, 0.0001)
-        assertEquals(-0.8, lose.citedRangeKgPerWeek.start, 0.0001)
+        assertEquals(-0.8, lose.allowedRangeKgPerWeek.start, 0.0001)
+        assertEquals(0.5, lose.citedLossRangeKgPerWeek.start, 0.0)
+        assertEquals(1.0, lose.citedLossRangeKgPerWeek.endInclusive, 0.0)
         val maintain = GoalRatePolicy.clamp(GoalMode.MAINTAIN, -1.0, 80.0).value()
         assertTrue(maintain.clamped)
         assertEquals(0.0, maintain.appliedKgPerWeek)
@@ -202,7 +204,7 @@ class TrendTest {
     @Test
     fun etaNeedsFourteenDays() {
         val short = WeightTrend.ewma((0 until 5).map { WeightEntry(day(it), 90.0) }).value()
-        val result = GoalEta.fromTrend(90.0, 85.0, short, day(4))
+        val result = GoalEta.fromTrend(85.0, short, day(4))
         assertIs<FormulaOutcome.NotAvailable>(result)
         assertEquals(NotAvailableReason.NOT_ENOUGH_DATA, result.reason)
     }
@@ -211,7 +213,7 @@ class TrendTest {
     fun etaIsAWindowAroundTheCentralDay() {
         val entries = (0 until 28).map { WeightEntry(day(it), 90.0 - it * 0.07) }
         val series = WeightTrend.ewma(entries).value()
-        val window = GoalEta.fromTrend(88.11, 85.0, series, day(27)).value()
+        val window = GoalEta.fromTrend(85.0, series, day(27)).value()
         assertTrue(window.start < window.end)
         assertTrue(window.centralDays in 30..60, "central ${window.centralDays}")
         assertEquals("goal.basis.trend", window.basisKey)
@@ -229,7 +231,7 @@ class TrendTest {
     fun aTrendMovingAwayHasNoDate() {
         val entries = (0 until 20).map { WeightEntry(day(it), 80.0 + it * 0.05) }
         val series = WeightTrend.ewma(entries).value()
-        val result = GoalEta.fromTrend(80.95, 75.0, series, day(19))
+        val result = GoalEta.fromTrend(75.0, series, day(19))
         assertIs<FormulaOutcome.NotAvailable>(result)
     }
 
@@ -260,6 +262,13 @@ class RecoveryTest {
         assertEquals(RecoveryStep.EASING, MuscleRecovery.stepAtHours(30.0, false).value())
         assertEquals(RecoveryStep.READY, MuscleRecovery.stepAtHours(60.0, false).value())
         assertEquals(RecoveryStep.UNTRAINED, MuscleRecovery.stepAtHours(80.0, false).value())
+    }
+
+    @Test
+    fun aHardSessionIsComparedWithTheMedianSession() {
+        val history = MuscleLoadHistory(sessionMedianSets = 12.0, sessionMedianTonnage = 1_500.0)
+        assertTrue(HardSession.isHard(sets = 16, tonnageKg = 1_800.0, history = history))
+        assertTrue(!HardSession.isHard(sets = 12, tonnageKg = 1_500.0, history = history))
     }
 
     @Test
@@ -300,6 +309,32 @@ class ReadinessTest {
                 sleepMinutes = 480.0,
                 restingHeartRate = 60.0,
                 restingHeartRateBaseline = Baseline(60.0, 3),
+            ),
+        )
+        assertIs<FormulaOutcome.NotAvailable>(result)
+    }
+
+    @Test
+    fun aZeroSleepNeedIsNotANumber() {
+        val result = Readiness.compute(
+            ReadinessInputs(
+                sleepMinutes = 420.0,
+                sleepNeedMinutes = 0.0,
+                trainingLoad48h = 100.0,
+                trainingLoadDailyAverage28d = 100.0,
+            ),
+        )
+        assertIs<FormulaOutcome.NotAvailable>(result)
+    }
+
+    @Test
+    fun aThreeDayLoadBaselineIsNotANumber() {
+        val result = Readiness.compute(
+            ReadinessInputs(
+                sleepMinutes = 480.0,
+                trainingLoad48h = 100.0,
+                trainingLoadDailyAverage28d = 100.0,
+                trainingLoadBaselineDays = 3,
             ),
         )
         assertIs<FormulaOutcome.NotAvailable>(result)

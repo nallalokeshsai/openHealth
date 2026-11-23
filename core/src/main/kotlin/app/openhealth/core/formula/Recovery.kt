@@ -73,18 +73,22 @@ object MuscleRecovery {
     }
 }
 
-/** A muscle's four-week load, used to decide whether a session was hard for it. */
-data class MuscleLoadHistory(val weeklyMedianSets: Double, val weeklyMedianTonnage: Double)
+/**
+ * A muscle's per-session load over the last four weeks: the median sets and the median
+ * tonnage of the sessions that trained it.
+ */
+data class MuscleLoadHistory(val sessionMedianSets: Double, val sessionMedianTonnage: Double)
 
 object HardSession {
     private const val HARD_MULTIPLIER = 1.0
 
     /**
      * A session is hard for a muscle when its sets or tonnage exceed that muscle's own
-     * four-week median. Median, not mean: one unusual week must not raise the bar for
-     * everything that follows.
+     * four-week median session. Median, not mean: one unusual session must not raise the
+     * bar for everything that follows. The comparison is session to session; a weekly
+     * total would make every session of a high-volume week look hard.
      */
     fun isHard(sets: Int, tonnageKg: Double, history: MuscleLoadHistory): Boolean =
-        sets > history.weeklyMedianSets * HARD_MULTIPLIER ||
-            tonnageKg > history.weeklyMedianTonnage * HARD_MULTIPLIER
+        sets > history.sessionMedianSets * HARD_MULTIPLIER ||
+            tonnageKg > history.sessionMedianTonnage * HARD_MULTIPLIER
 }

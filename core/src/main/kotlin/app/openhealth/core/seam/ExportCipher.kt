@@ -16,4 +16,4 @@ interface ExportCipher {
 class WrongPassphrase(cause: Throwable? = null) :
     Exception("The passphrase does not open this export", cause)
 
-class UnsupportedExportFormat(message: String) : Exception(message)
+class UnsupportedExportFormat(message: String, cause: Throwable? = null) : Exception(message, cause)

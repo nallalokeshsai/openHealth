@@ -158,6 +158,11 @@ class TrainingRepository(private val db: OpenHealthDb) {
             happenedAt = set.happened_at,
             recordedAt = set.recorded_at,
             sourceId = set.source_id,
+            idempotencyKey = set.idempotency_key,
+            observationId = set.observation_id,
+            rawRecordId = set.raw_record_id,
+            device = set.device,
+            appVersion = set.app_version,
             revision = set.revision,
         )
     }

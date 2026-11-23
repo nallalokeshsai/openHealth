@@ -8,6 +8,12 @@ import kotlinx.datetime.LocalDate
 
 /** Layer 4 nutrition objects (`pr.md` §6.3). Totals are computed from entries, never stored. */
 class NutritionRepository(private val db: OpenHealthDb) {
+    private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+
+    fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
+        rollupInvalidator = invalidator
+    }
+
     fun upsertFood(food: Food) {
         db.nutritionQueries.insertFood(
             id = food.id,
@@ -73,8 +79,14 @@ class NutritionRepository(private val db: OpenHealthDb) {
             sourceKind = entry.source_kind,
             userVerified = entry.user_verified,
             userEdited = entry.user_edited,
+            observationId = entry.observation_id,
+            rawRecordId = entry.raw_record_id,
+            idempotencyKey = entry.idempotency_key,
+            device = entry.device,
+            appVersion = entry.app_version,
             revision = entry.revision,
         )
+        rollupInvalidator?.invoke(LocalDate.parse(entry.local_date))
     }
 
     fun entryById(id: String): Entry? = db.nutritionQueries.entryById(id).executeAsOneOrNull()

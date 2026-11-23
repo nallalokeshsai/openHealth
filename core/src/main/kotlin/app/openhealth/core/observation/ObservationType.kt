@@ -58,6 +58,7 @@ enum class ObservationType(
     BODY_FAT_PERCENT(UcumUnit.PERCENT, TemporalShape.DAILY_VALUE, ObservationCategory.BODY),
     LEAN_MASS(UcumUnit.KILOGRAM, TemporalShape.DAILY_VALUE, ObservationCategory.BODY),
 
+    /** Sleep is attributed to the local date it **started**, like every other event. */
     SLEEP_DURATION(UcumUnit.SECOND, TemporalShape.INTERVAL, ObservationCategory.SLEEP),
     SLEEP_DEEP(UcumUnit.SECOND, TemporalShape.INTERVAL, ObservationCategory.SLEEP),
     SLEEP_LIGHT(UcumUnit.SECOND, TemporalShape.INTERVAL, ObservationCategory.SLEEP),

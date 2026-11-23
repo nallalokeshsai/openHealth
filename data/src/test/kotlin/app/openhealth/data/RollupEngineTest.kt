@@ -16,7 +16,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 
 private val D1 = LocalDate(2026, 3, 1)
 private val D2 = LocalDate(2026, 3, 2)
@@ -116,6 +118,54 @@ class RollupEngineTest {
     }
 
     @Test
+    fun shuffledIncrementalRebuildsMatchAFullRebuild() {
+        val (store, engine) = storeAndEngine()
+        val repository = ObservationRepository(store.db)
+        val random = kotlin.random.Random(99)
+        val types = listOf(
+            ObservationType.WEIGHT,
+            ObservationType.HEART_RATE,
+            ObservationType.STEPS,
+            ObservationType.NUTRITION_ENERGY,
+            ObservationType.BLOOD_GLUCOSE,
+        )
+        val observations = (0 until 60).map { index ->
+            val date = D1.plus(kotlinx.datetime.DatePeriod(days = random.nextInt(0, 10)))
+            val type = types[random.nextInt(types.size)]
+            val start = dayStart(date).plus(random.nextInt(0, 22).hours)
+            testObservation(
+                id = "random-$index",
+                type = type,
+                value = when (type) {
+                    ObservationType.STEPS -> random.nextInt(0, 12_000).toDouble()
+                    ObservationType.HEART_RATE -> random.nextInt(45, 160).toDouble()
+                    ObservationType.BLOOD_GLUCOSE -> 3.9 + random.nextDouble(0.0, 6.0)
+                    ObservationType.NUTRITION_ENERGY -> random.nextInt(100, 1_200).toDouble()
+                    else -> 70.0 + random.nextDouble(0.0, 20.0)
+                },
+                unit = type.canonicalUnit,
+                start = start,
+                sourceId = if (random.nextBoolean()) "garmin" else "fitbit",
+            )
+        }
+        repository.recordAll(observations)
+        val days = observations.map { it.localDate }.distinct().shuffled(random)
+        days.forEach { engine.rebuildDay(it) }
+        val lastDay = D1.plus(DatePeriod(days = 9))
+        val incremental = normalize(RollupRepository(store.db).forRange(D1, lastDay))
+        engine.rebuildAll()
+        val full = normalize(RollupRepository(store.db).forRange(D1, lastDay))
+        assertEquals(full, incremental)
+        assertTrue(full.isNotEmpty())
+        store.close()
+    }
+
+    private fun normalize(
+        rollups: List<app.openhealth.core.rollup.DailyRollup>,
+    ): List<app.openhealth.core.rollup.DailyRollup> =
+        rollups.map { it.copy(computedAt = Instant.fromEpochMilliseconds(0)) }
+
+    @Test
     fun aBackfilledObservationKeepsItsRecordedAtAndRebuildsTheDay() {
         val (store, engine) = storeAndEngine()
         val repository = ObservationRepository(store.db)
@@ -187,6 +237,201 @@ class RollupEngineTest {
         assertEquals("MANUAL_OVERRIDE", rollup.dedupReason)
         store.close()
     }
+
+    @Test
+    fun aCorrectionKeepsTheOriginalAndDoesNotMoveRecordedAt() {
+        val (store, engine) = storeAndEngine()
+        val repository = ObservationRepository(store.db)
+        val original = testObservation(
+            "correct-me",
+            ObservationType.WEIGHT,
+            80.0,
+            UcumUnit.KILOGRAM,
+            dayStart(D1).plus(7.hours),
+        )
+        repository.record(original)
+        engine.rebuildDay(D1)
+        assertTrue(repository.correct(original.id, 79.4, "scale was on a rug"))
+        val corrected = repository.forDay(D1).single()
+        assertEquals(79.4, corrected.value.value)
+        assertEquals(80.0, corrected.editTrail.originalValue)
+        assertEquals("scale was on a rug", corrected.editTrail.reason)
+        assertEquals(original.provenance.recordedAt, corrected.provenance.recordedAt)
+        engine.rebuildDay(D1)
+        assertEquals(
+            79.4,
+            RollupRepository(store.db).forDayAndType(D1, ObservationType.WEIGHT)!!.value.value,
+        )
+        store.close()
+    }
+
+    @Test
+    fun heartRateTakesThePrimarySourceSeries() {
+        val (store, engine) = storeAndEngine()
+        ObservationRepository(store.db).recordAll(
+            listOf(
+                testObservation(
+                    "hr-a",
+                    ObservationType.HEART_RATE,
+                    60.0,
+                    UcumUnit.PER_MINUTE,
+                    dayStart(D1).plus(8.hours),
+                    sourceId = "garmin",
+                ),
+                testObservation(
+                    "hr-b",
+                    ObservationType.HEART_RATE,
+                    70.0,
+                    UcumUnit.PER_MINUTE,
+                    dayStart(D1).plus(9.hours),
+                    sourceId = "fitbit",
+                ),
+            ),
+        )
+        engine.rebuildDay(D1)
+        val rollup = RollupRepository(store.db).forDayAndType(D1, ObservationType.HEART_RATE)!!
+        assertEquals(60.0, rollup.value.value, 0.001)
+        assertEquals(1, rollup.contributingSources)
+        assertEquals("garmin", rollup.sourceId?.value)
+        assertTrue(rollup.value.value != 65.0, "heart rate must not be averaged across devices")
+        store.close()
+    }
+
+    @Test
+    fun recordingAnObservationRebuildsItsDayThroughTheInvalidator() {
+        val (store, engine) = storeAndEngine()
+        val repository = ObservationRepository(store.db)
+        repository.invalidateRollupsWith { engine.rebuildDay(it) }
+        repository.record(
+            testObservation(
+                "auto-rebuild",
+                ObservationType.WEIGHT,
+                80.2,
+                UcumUnit.KILOGRAM,
+                dayStart(D1).plus(7.hours),
+            ),
+        )
+        assertNotNull(RollupRepository(store.db).forDayAndType(D1, ObservationType.WEIGHT))
+        store.close()
+    }
+
+    @Test
+    fun nutritionTotalsAreTheExactSumOfEntries() {
+        val (store, engine) = storeAndEngine()
+        val nutrition = app.openhealth.data.repo.NutritionRepository(store.db)
+        nutrition.upsertEntry(entry("e-1", 520.0, 30.0, 60.0, 20.0, 8.0, 1))
+        nutrition.upsertEntry(entry("e-2", 180.0, 12.0, 20.0, 5.0, 2.0, 2))
+        engine.rebuildDay(D1)
+        val rollups = RollupRepository(store.db)
+        assertEquals(
+            700.0,
+            rollups.forDayAndType(D1, ObservationType.NUTRITION_ENERGY)!!.value.value,
+            1e-9,
+        )
+        assertEquals(
+            42.0,
+            rollups.forDayAndType(D1, ObservationType.NUTRITION_PROTEIN)!!.value.value,
+            1e-9,
+        )
+        assertEquals(
+            80.0,
+            rollups.forDayAndType(D1, ObservationType.NUTRITION_CARBS)!!.value.value,
+            1e-9,
+        )
+        assertEquals(
+            25.0,
+            rollups.forDayAndType(D1, ObservationType.NUTRITION_FAT)!!.value.value,
+            1e-9,
+        )
+        assertEquals(
+            10.0,
+            rollups.forDayAndType(D1, ObservationType.NUTRITION_FIBRE)!!.value.value,
+            1e-9,
+        )
+        store.close()
+    }
+
+    @Test
+    fun aDayWithOnlyADiaryEntryIsStillRebuilt() {
+        val (store, engine) = storeAndEngine()
+        val row = entry("only-entry", 100.0, 5.0, 10.0, 2.0, 1.0, 1)
+            .copy(local_date = D2.toString())
+        app.openhealth.data.repo.NutritionRepository(store.db).upsertEntry(row)
+        engine.rebuildAll()
+        assertNotNull(
+            RollupRepository(store.db).forDayAndType(D2, ObservationType.NUTRITION_ENERGY),
+        )
+        store.close()
+    }
+
+    @Test
+    fun vitalReadingsAveragePerType() {
+        val (store, engine) = storeAndEngine()
+        val body = app.openhealth.data.repo.BodyRepository(store.db)
+        body.upsertVital(vital("v-1", "BLOOD_PRESSURE_SYSTOLIC", 120.0, "mm[Hg]", 1))
+        body.upsertVital(vital("v-2", "BLOOD_PRESSURE_SYSTOLIC", 130.0, "mm[Hg]", 2))
+        engine.rebuildDay(D1)
+        val rollup = RollupRepository(store.db)
+            .forDayAndType(D1, ObservationType.BLOOD_PRESSURE_SYSTOLIC)!!
+        assertEquals(125.0, rollup.value.value, 1e-9)
+        assertEquals(2, rollup.secondaryValue?.toInt())
+        store.close()
+    }
+
+    private fun entry(
+        id: String,
+        energy: Double,
+        protein: Double,
+        carbs: Double,
+        fat: Double,
+        fibre: Double,
+        second: Long,
+    ) = app.openhealth.data.db.Entry(
+        id = id,
+        meal_id = null,
+        food_id = null,
+        local_date = D1.toString(),
+        zone_id = TEST_ZONE.id,
+        happened_at = dayStart(D1).plus(12.hours).toEpochMilliseconds() + second,
+        recorded_at = dayStart(D1).plus(12.hours).toEpochMilliseconds() + second,
+        quantity_g = 100.0,
+        energy_kcal = energy,
+        protein_g = protein,
+        carbs_g = carbs,
+        fat_g = fat,
+        fibre_g = fibre,
+        source_kind = "manual",
+        user_verified = true,
+        user_edited = false,
+        observation_id = null,
+        raw_record_id = null,
+        idempotency_key = "entry-$id",
+        device = "manual",
+        app_version = "test",
+        revision = 1L,
+    )
+
+    private fun vital(id: String, type: String, value: Double, unit: String, second: Long) =
+        app.openhealth.data.db.Vital(
+            id = id,
+            type = type,
+            value_ = value,
+            unit = unit,
+            local_date = D1.toString(),
+            zone_id = TEST_ZONE.id,
+            happened_at = dayStart(D1).plus(10.hours).toEpochMilliseconds() + second,
+            recorded_at = dayStart(D1).plus(10.hours).toEpochMilliseconds() + second,
+            source_id = "manual",
+            method = "CUFF",
+            context = "RESTING",
+            note = null,
+            observation_id = null,
+            raw_record_id = null,
+            idempotency_key = "vital-$id",
+            device = "manual",
+            app_version = "test",
+            revision = 1L,
+        )
 
     @Test
     fun excludedReadingsDoNotReachTheRollup() {

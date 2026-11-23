@@ -19,7 +19,7 @@ complexity:
   CyclomaticComplexMethod:
     ignoreAnnotated: ['Composable']
   TooManyFunctions:
-    excludes: ['**/repo/**', '**/corpus/**', '**/test/**', '**/androidTest/**']
+    excludes: ['**/repo/**', '**/corpus/**', '**/rollup/**', '**/test/**', '**/androidTest/**']
 
 style:
   MagicNumber:

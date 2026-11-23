@@ -51,6 +51,11 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                     "SELECT 'vital', id, local_date, happened_at, recorded_at, source_id, " +
                         "type, 0 FROM vital ORDER BY happened_at DESC LIMIT ?",
                     perTable,
+                ) +
+                newest(
+                    "SELECT 'meal', id, local_date, created_at, created_at, 'manual', " +
+                        "kind, 0 FROM meal ORDER BY created_at DESC LIMIT ?",
+                    perTable,
                 )
             )
             .sortedByDescending { it.happenedAt }

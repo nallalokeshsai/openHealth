@@ -63,35 +63,41 @@ class Argon2ExportCipher(
         }
     }
 
-    override fun open(container: ByteArray, passphrase: CharArray): ByteArray {
+    override fun open(container: ByteArray, passphrase: CharArray): ByteArray = try {
+        openContainer(container, passphrase)
+    } catch (failure: java.io.IOException) {
+        throw UnsupportedExportFormat("The export file is truncated or unreadable", failure)
+    }
+
+    private fun openContainer(container: ByteArray, passphrase: CharArray): ByteArray {
         val input = DataInputStream(ByteArrayInputStream(container))
         val magic = ByteArray(MAGIC.size)
         input.readFully(magic)
-        if (!magic.contentEquals(MAGIC)) throw UnsupportedExportFormat("Not an openHealth export")
+        requireHeader(magic.contentEquals(MAGIC), "Not an openHealth export")
         val formatVersion = input.readInt()
-        if (formatVersion != FORMAT_VERSION) {
-            throw UnsupportedExportFormat("Export format $formatVersion is not supported")
-        }
+        requireHeader(
+            formatVersion == FORMAT_VERSION,
+            "Export format $formatVersion is not supported",
+        )
         val readIterations = input.readInt()
         val readMemoryKiB = input.readInt()
         val readParallelism = input.readInt()
-        if (readIterations !in 1..MAX_ITERATIONS ||
-            readMemoryKiB !in MIN_MEMORY_KIB..MAX_MEMORY_KIB ||
-            readParallelism !in 1..MAX_PARALLELISM
-        ) {
-            throw UnsupportedExportFormat("Export key-derivation parameters are out of range")
-        }
+        requireHeader(
+            readIterations in 1..MAX_ITERATIONS &&
+                readMemoryKiB in MIN_MEMORY_KIB..MAX_MEMORY_KIB &&
+                readParallelism in 1..MAX_PARALLELISM,
+            "Export key-derivation parameters are out of range",
+        )
         val salt = ByteArray(input.readUnsignedByte())
         input.readFully(salt)
         val nonce = ByteArray(input.readUnsignedByte())
         input.readFully(nonce)
-        if (salt.size < MIN_SALT_BYTES || nonce.size != NONCE_BYTES) {
-            throw UnsupportedExportFormat("Export salt or nonce has the wrong length")
-        }
+        requireHeader(
+            salt.size >= MIN_SALT_BYTES && nonce.size == NONCE_BYTES,
+            "Export salt or nonce has the wrong length",
+        )
         val length = input.readInt()
-        if (length < 0 || length > container.size) {
-            throw UnsupportedExportFormat("Export ciphertext length is invalid")
-        }
+        requireHeader(length in 0..container.size, "Export ciphertext length is invalid")
         val ciphertext = ByteArray(length)
         input.readFully(ciphertext)
         val key = deriveKey(passphrase, salt, readIterations, readMemoryKiB, readParallelism)
@@ -104,6 +110,8 @@ class Argon2ExportCipher(
             )
             return cipher.doFinal(ciphertext)
         } catch (failure: AEADBadTagException) {
+            throw WrongPassphrase(failure)
+        } catch (failure: java.security.GeneralSecurityException) {
             throw WrongPassphrase(failure)
         } finally {
             key.fill(0)
@@ -128,6 +136,10 @@ class Argon2ExportCipher(
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val FORMAT_VERSION = 1
         private val MAGIC = byteArrayOf(0x4F, 0x48, 0x58, 0x31) // "OHX1"
+    }
+
+    private fun requireHeader(condition: Boolean, message: String) {
+        if (!condition) throw UnsupportedExportFormat(message)
     }
 
     private fun deriveKey(

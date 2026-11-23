@@ -34,6 +34,17 @@ class AndroidDatabaseFactory(
             name = databaseName,
             factory = SupportOpenHelperFactory(passphrase),
         )
+        driver.execute(null, "PRAGMA foreign_keys = ON", 0)
+        // A PRAGMA that returns a row cannot go through SqlDriver.execute on Android.
+        driver.executeQuery(
+            identifier = null,
+            sql = "PRAGMA journal_mode = WAL",
+            mapper = { cursor ->
+                cursor.next()
+                app.cash.sqldelight.db.QueryResult.Value(Unit)
+            },
+            parameters = 0,
+        )
         verifyDatabaseIntegrity(driver, databaseName)
         return OpenHealthStore(driver, openHealthDatabase(driver), OpenHealthDb.Schema.version)
     }

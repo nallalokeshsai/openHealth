@@ -145,6 +145,31 @@ class StepsDedupPropertyTest {
     }
 
     @Test
+    fun aFamilyMemberWithTheBetterPriorityStillWinsOneCopy() {
+        val sources = SourceRegistry(
+            listOf(
+                source("garmin", SourceKind.GARMIN),
+                Source(
+                    SourceId("garmin-hc"),
+                    SourceKind.HEALTH_CONNECT,
+                    "Garmin via Health Connect",
+                    family = "garmin",
+                    priorities = mapOf(ObservationType.STEPS to 1),
+                ),
+            ),
+        )
+        val observations = hourlySteps("garmin", List(24) { 100.0 }) +
+            hourlySteps("garmin-hc", List(24) { 100.0 })
+        val resolution = OneSourcePerDayPolicy().resolve(
+            observations,
+            sources,
+            app.openhealth.core.time.LocalDay(DAY, ZONE),
+        ) as DayResolution.Selected
+        assertEquals(SourceId("garmin-hc"), resolution.sourceId)
+        assertEquals(2_400.0, resolution.observations.sumOf { it.value.value }, 1e-9)
+    }
+
+    @Test
     fun theSameVendorThroughTwoPipesIsNotCountedTwice() {
         val viaFit = hourlySteps("garmin", List(24) { 150.0 })
         val viaHealthConnect = hourlySteps("garmin-hc", List(24) { 150.0 })
@@ -158,10 +183,89 @@ class StepsDedupPropertyTest {
     }
 
     @Test
+    fun aWakingWindowOfSixteenHoursCoversTheDay() {
+        val waking = hourlySteps("garmin", List(16) { 100.0 }, startHour = 7)
+        val fitbit = hourlySteps("fitbit", List(24) { 300.0 })
+        val resolution = OneSourcePerDayPolicy().resolve(
+            waking + fitbit,
+            registry(),
+            app.openhealth.core.time.LocalDay(DAY, ZONE),
+        ) as DayResolution.Selected
+        assertEquals(SourceId("garmin"), resolution.sourceId)
+        assertEquals(DedupReason.ONE_SOURCE_WINS, resolution.reason)
+        assertEquals(1_600.0, resolution.observations.sumOf { it.value.value }, 1e-9)
+    }
+
+    @Test
+    fun oneSyncedHourIsNotACoveredDay() {
+        val oneHour = hourlySteps("garmin", List(1) { 500.0 }, startHour = 9)
+        val fitbit = hourlySteps("fitbit", List(24) { 120.0 })
+        val resolution = OneSourcePerDayPolicy().resolve(
+            oneHour + fitbit,
+            registry(),
+            app.openhealth.core.time.LocalDay(DAY, ZONE),
+        ) as DayResolution.Selected
+        assertEquals(SourceId("fitbit"), resolution.sourceId)
+        assertEquals(DedupReason.GAP_FALLBACK, resolution.reason)
+    }
+
+    @Test
     fun anEmptyDayResolvesToNothing() {
         val resolution = OneSourcePerDayPolicy()
             .resolve(emptyList(), registry(), app.openhealth.core.time.LocalDay(DAY, ZONE))
         assertEquals(DayResolution.Empty, resolution)
+    }
+}
+
+class HeartRateDedupTest {
+    private val day = app.openhealth.core.time.LocalDay(DAY, ZONE)
+
+    @Test
+    fun aDayTakesTheHigherPrioritySourcesSeriesAndTheOtherReadingsRemain() {
+        val garmin = (0 until 3).map { hour ->
+            Observation(
+                id = ObservationId("hr-g-$hour"),
+                type = ObservationType.HEART_RATE,
+                value = Measure(60.0, UcumUnit.PER_MINUTE),
+                start = DAY_START.plus(hour.hours),
+                end = null,
+                provenance = Provenance(
+                    sourceId = SourceId("garmin"),
+                    time = TimeProvenance.of(
+                        DAY_START.plus(hour.hours),
+                        DAY_START.plus(hour.hours),
+                        ZONE,
+                    ),
+                    idempotencyKey = "hr-g-$hour",
+                ),
+            )
+        }
+        val fitbit = (0 until 3).map { hour ->
+            Observation(
+                id = ObservationId("hr-f-$hour"),
+                type = ObservationType.HEART_RATE,
+                value = Measure(90.0, UcumUnit.PER_MINUTE),
+                start = DAY_START.plus(hour.hours),
+                end = null,
+                provenance = Provenance(
+                    sourceId = SourceId("fitbit"),
+                    time = TimeProvenance.of(
+                        DAY_START.plus(hour.hours),
+                        DAY_START.plus(hour.hours),
+                        ZONE,
+                    ),
+                    idempotencyKey = "hr-f-$hour",
+                ),
+            )
+        }
+        val resolution = PrimarySourcePolicy().resolve(
+            garmin + fitbit,
+            registry(),
+            day,
+        ) as DayResolution.Selected
+        assertEquals(SourceId("garmin"), resolution.sourceId)
+        assertEquals(3, resolution.observations.size)
+        assertEquals(60.0, resolution.observations.map { it.value.value }.average(), 1e-9)
     }
 }
 
@@ -215,6 +319,20 @@ class MergePolicyTest {
         val policy = LastWriterWinsPolicy<String>("note")
         assertEquals("remote", policy.merge("local", "remote", 1, 2).value)
         assertEquals("local", policy.merge("local", "remote", 2, 1).value)
+    }
+
+    @Test
+    fun settingsMergeKeyByKeyAndKeepTheLocalValueOnConflict() {
+        val policy = app.openhealth.core.merge.SettingsFieldMergePolicy()
+        val merged = policy.merge(
+            mapOf("units" to "metric", "theme" to "dark"),
+            mapOf("units" to "imperial", "accent" to "blue"),
+            1,
+            2,
+        ).value
+        assertEquals("metric", merged?.get("units"))
+        assertEquals("dark", merged?.get("theme"))
+        assertEquals("blue", merged?.get("accent"))
     }
 
     @Test

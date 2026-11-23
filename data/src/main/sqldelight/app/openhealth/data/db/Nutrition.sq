@@ -54,6 +54,11 @@ CREATE TABLE entry (
     source_kind TEXT NOT NULL,
     user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    observation_id TEXT,
+    raw_record_id TEXT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1
 );
 
@@ -78,8 +83,11 @@ SELECT * FROM food WHERE id = :id;
 foodByBarcode:
 SELECT * FROM food WHERE barcode = :barcode LIMIT 1;
 
+-- A range seek on the name index, not LIKE: a bound LIKE pattern cannot use the index.
 searchFoods:
-SELECT * FROM food WHERE name LIKE :prefix ORDER BY name LIMIT :limit;
+SELECT * FROM food
+WHERE name >= :prefix AND name < :prefix || char(1114111)
+ORDER BY name LIMIT :limit;
 
 countFoods:
 SELECT count(*) FROM food;
@@ -107,11 +115,13 @@ insertEntry:
 INSERT OR REPLACE INTO entry(
     id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g,
     energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, user_verified,
-    user_edited, revision
+    user_edited, observation_id, raw_record_id, idempotency_key, device, app_version,
+    revision
 ) VALUES (
     :id, :mealId, :foodId, :localDate, :zoneId, :happenedAt, :recordedAt, :quantityG,
     :energyKcal, :proteinG, :carbsG, :fatG, :fibreG, :sourceKind, :userVerified,
-    :userEdited, :revision
+    :userEdited, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
+    :revision
 );
 
 entryById:
@@ -128,6 +138,9 @@ SELECT count(*) FROM entry;
 
 allEntries:
 SELECT * FROM entry ORDER BY happened_at;
+
+entryDays:
+SELECT DISTINCT local_date FROM entry ORDER BY local_date;
 
 deleteEntry:
 DELETE FROM entry WHERE id = :id;

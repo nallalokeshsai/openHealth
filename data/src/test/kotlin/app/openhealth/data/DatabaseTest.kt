@@ -42,6 +42,8 @@ class DatabaseTest {
     fun anOlderDatabaseIsBackedUpThenMigrated() {
         val directory = Files.createTempDirectory("openhealth-migrate")
         val path = directory.resolve("v1.db").toString()
+        // v1 never shipped; it is exactly the v2 schema without the six indexes that
+        // 1.sqm adds, so dropping them reproduces the pre-migration state faithfully.
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
@@ -63,6 +65,56 @@ class DatabaseTest {
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
         Files.deleteIfExists(directory)
+    }
+
+    @Test
+    fun everyStoredTableIsInTheExportRegistry() {
+        val store = inMemoryStore()
+        val tables = store.db.transactionWithResult {
+            store.driver.executeQuery(
+                null,
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                { cursor ->
+                    val names = mutableListOf<String>()
+                    while (cursor.next().value) names += cursor.getString(0).orEmpty()
+                    QueryResult.Value(names)
+                },
+                0,
+            ).value
+        }
+        val exported = app.openhealth.data.export.ExportTables.all.map { it.name }.toSet()
+        assertEquals(
+            emptySet<String>(),
+            tables.toSet() - exported,
+            "a table is missing from ExportTables and would be silently dropped from an export",
+        )
+        assertEquals(tables.toSet(), exported)
+        store.close()
+    }
+
+    @Test
+    fun theExportRegistryMatchesEveryTableAndColumn() {
+        val store = inMemoryStore()
+        app.openhealth.data.export.ExportTables.all.forEach { table ->
+            val columns = store.db.transactionWithResult {
+                store.driver.executeQuery(
+                    null,
+                    "PRAGMA table_info(${table.name})",
+                    { cursor ->
+                        val names = mutableListOf<String>()
+                        while (cursor.next().value) names += cursor.getString(1).orEmpty()
+                        QueryResult.Value(names)
+                    },
+                    0,
+                ).value
+            }
+            assertEquals(
+                columns.toSet(),
+                table.columns.map { it.name }.toSet(),
+                "columns of ${table.name}",
+            )
+        }
+        store.close()
     }
 
     @Test

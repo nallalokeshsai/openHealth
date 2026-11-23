@@ -318,6 +318,42 @@ and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is u
   full-screen clock is the 700 end of the same role. §3.3 now says so.
 - The revision line of `DESIGN.md` carries the 2026-11-23 note.
 
+### Independent review and the fixes it produced
+
+Two fresh reviewers saw only the diff and the contract (correctness and tests;
+`AGENTS.md` invariants and licences) and worked in parallel. Every finding below was
+confirmed in the code, then fixed in this phase and re-verified:
+
+| Finding | Fix |
+|---|---|
+| Family dedup was declared but never applied, so Garmin over FIT and Garmin over Health Connect counted twice for heart rate and water | Every policy first collapses candidates to one source per upstream family, highest priority wins; a test makes the Health Connect copy the higher-priority one and still gets one day |
+| Heart rate was averaged across devices, which `pr.md` §7.6 forbids | `PrimarySourcePolicy`: the day's row is the highest-priority source's series mean; the other readings stay in layer 2 |
+| Restore wrote `daily_rollup` rows from the file | Restore never inserts rollups; it rebuilds them from the observations through the engine. A deliberately corrupted rollup in the bundle is overwritten by the derived value |
+| A bundle missing a table restored successfully and emptied that table | Restore requires the exact table set and refuses missing or unknown tables |
+| No production write path kept rollups in step | `ObservationRepository`, `NutritionRepository` and `BodyRepository` take a rollup invalidator; the engine is wired to it in tests, and a backfilled day rebuilds that day |
+| Step coverage demanded midnight-to-midnight and marked every real day a fallback | Coverage is internal gaps ≤1 h over at least a 16-hour waking window; a one-hour sync is not a day, and a 07:00–23:00 watch is |
+| A single `end == null` daily-total steps record was not recognised | Any `end == null` observation of a SUM type is a daily total |
+| Sleep "most detailed" was the greatest sum, so a fragmented `SLEEP_AWAKE` won | Most records first, then greatest duration; stage grouping by night stays B12's |
+| EWMA applied its coefficient per observation, so a weekly weigher had a 49-day half-life | Alpha is computed from the elapsed days between entries |
+| The ETA took the caller's raw current weight | It divides the last smoothed trend value; the raw parameter was removed |
+| The goal-rate clamp was labelled as the CDC's cited range | `allowedRangeKgPerWeek` and `citedLossRangeKgPerWeek` are separate fields |
+| `HardSession` compared a session with a weekly median | It compares with the median **session** for that muscle |
+| Readiness ignored a short training-load baseline and a zero sleep need | The load average carries its day count, the minimum covers every baseline, and a non-positive sleep need is not a number |
+| Layer-4 entries, vitals and sets had no idempotency key or observation link | One unique `idempotency_key`, `observation_id`, `raw_record_id`, `device` and `app_version` on each; the canonical value's full provenance lives on the linked observation |
+| Tombstone purge deleted the sync deletion marker | Purge clears the payload and keeps the row as the permanent marker; a later sync cannot resurrect it |
+| Unguarded `deleteProfile`, `deleteSource` and `deleteSession` | Removed; `TrashService` is the only delete path, and a session cascade waits for the screen that owns it |
+| Work-set restore used `INSERT OR IGNORE`, so undo could silently do nothing | `INSERT OR REPLACE`; a restore writes the row it holds |
+| Food search used a bound `LIKE`, a full scan | Range seek on the name index, and 2,000 indexed foods in the corpus; the benchmark measures it |
+| The timeline omitted meals | A meal branch in the view and in the paged read |
+| Export completeness had no tripwire for a new table or column | Tests compare the registry against `sqlite_master` tables and `PRAGMA table_info` for every table |
+| The round-trip test never exercised settings or tombstones | The fixture writes both; the comparison ignores only `computedAt` on rollups |
+| The rollup property test was one fixed dataset | A seeded, shuffled incremental rebuild is compared with the full rebuild |
+| A tautological dedup assertion | Removed; the property asserts the total equals one source |
+| The Bouncy Castle allowlist row said test-only | It is main scope for Argon2id and test-only for Robolectric |
+| The export passphrase stayed live, and a truncated container escaped as a raw exception | `export`/`read` wipe the caller's array; truncation and every GCM failure become typed errors |
+| `FieldLevelMergePolicy` was a no-op | `SettingsFieldMergePolicy` adds remote-only keys and keeps the local value on conflict, until B13 adds per-field clocks |
+| The SQLCipher About notice was only promised | Recorded in `NOTICE.md`, the ADR and B3's exit note; nothing is distributed yet |
+
 ### Invariant audit (`AGENTS.md`)
 
 | Invariant | This phase |
@@ -387,3 +423,227 @@ dated edit, and `OhContrastTest` still passes over both themes. Nothing renders 
 until B4, so no golden changed.
 
 iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
+
+---
+
+## B2 — Core and data
+
+**Status:** Completed · **Date:** 2026-11-23 · **Branch:** `build/b2-core-and-data`
+**Goal:** the five-layer model and every formula, pure Kotlin, heavily tested, before
+any feature screen (`BUILD-ROADMAP.md` §B2).
+
+### Environment and decisions taken at the start
+
+- Workstation and test target unchanged: this Linux machine and the owner's **physical
+  phone**, authorised before any question was asked.
+- **Questions asked: none.** The roadmap says "Ask the owner: nothing". Two choices it
+  left open were decided and recorded in `docs/adr/0005-core-and-data.md`: Argon2id is
+  Bouncy Castle (pure Java, MIT-style licence; `argon2-jvm` ships native binaries and was
+  rejected) and blood glucose is stored in `mmol/L`.
+- Twelve implementation decisions beyond the text of the contract are in ADR 0005:
+  canonical units, the dedup coverage rule, read-time downstream aggregates, the
+  migration baseline, the Keystore-held SQLCipher passphrase, the export container, the
+  generic export registry, trash scope, formula choices (sex required for BMR, the
+  inch-fitted Navy equations, 15-rep cap on 1RM, readiness mappings, hard-session
+  recovery), the corpus, and the Detekt scopes.
+
+### Milestones
+
+1. **Core domain and formulas** — commit `9c8e569`.
+   `:core`: value-class ids and a seeded id generator; `kotlinx-datetime` time with
+   `happened_at`, `recorded_at`, local date and zone; the UCUM unit set with one canonical
+   unit per dimension and affinity conversion; the provenance block, observation types,
+   contexts, quality and edit trail; the source registry with per-type priorities and
+   families; five dedup policies and daily aggregations; the merge-policy interface and
+   the per-entity registry; plausibility ranges and validators; the citation table; the
+   platform seams (clock, secret vault, files, notifications, health bus, step sensor,
+   BLE, camera, PDF, export cipher); raw-record and rollup types; and twelve formulas —
+   Mifflin-St Jeor, US Navy body fat, BMI and bands, FFMI and normalised FFMI, TDEE, MET
+   energy with 42 bundled activities, Epley and Brzycki 1RM, session volume, EWMA weight
+   trend, goal-rate clamping and ETA window, muscle recovery, readiness v1 and sleep debt.
+   Every formula returns value, inputs, citation and version, or a reason it cannot run.
+2. **Schema, rollups, trash, export, corpus** — commit `bc3ab88`.
+   `:data` with SQLDelight 2.4.1: 20 tables across the five layers, the timeline view,
+   indexes on `(local_date)`, `(type, happened_at)`, `(type, local_date)` and
+   `happened_at`, schema version 2 with `1.sqm`, WAL, foreign keys, integrity check and a
+   backup-before-migration wrapper. Repositories for observations, raw records, rollups,
+   sources, profile, training, nutrition, body, settings and the timeline; a rollup
+   engine that rebuilds a day from observations and a full rebuild that runs the same
+   code; `TrashService` as the only delete path; the Argon2id/AES-GCM export with a
+   versioned bundle of every table and a CSV export; and the seeded five-year corpus.
+3. **Android seams and fixture tool**.
+   `app-android`: `AndroidSecretVault` (Keystore AES-256-GCM wrapping the database
+   passphrase), `AndroidDatabaseFactory` (SQLCipher behind the `:data` seam, native
+   library loaded explicitly, WAL, integrity check) and `AndroidMigrationBackup`;
+   a device test that proves persistence, encryption and reopen. `tools/fixtures` is a
+   runnable generator plus the query benchmark.
+4. **Verification and documentation** — commit `734eef7`. Two fresh review passes,
+   every confirmed finding fixed, the clean rebuild and device run re-run over the
+   fixes, this log, ADR 0005, the NOTICE additions, and the "Current state" update in
+   `AGENTS.md`.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew clean check :app-android:assembleDebug --no-build-cache` | **BUILD SUCCESSFUL**, 195 tasks (186 executed), from a cleaned tree. |
+| `./gradlew check` | **BUILD SUCCESSFUL**: 153 JVM tests (62 `:core`, 43 `:data`, 47 `:ui` from B1, 1 benchmark), ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
+| `./gradlew :tools:fixtures:test` (inside `check`) | **BUILD SUCCESSFUL**; five-year corpus built in **~4 s** (33,372 observations, 261 raw records, 392 sessions, 5,880 sets, 16,335 entries, 2,010 foods), 15,253 rollup rows (five layers, nutrition and vitals included) rebuilt in **~1.4 s**, every UI query under **6.9 ms** against the 16 ms budget. |
+| `./gradlew :app-android:assembleRelease` | **BUILD SUCCESSFUL**; 41 MB unsigned APK with four SQLCipher ABIs, **no `Gallery` class or activity**, and only AndroidX's internal `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` — no network, storage, location or health permission was added. |
+| `./gradlew :app-android:installDebug` then `MainActivity` cold/warm launch | `Status: ok`, focused activity, `logcat -s AndroidRuntime:E` empty. |
+| Gallery launch after the changes | `Status: ok`, cold, focused `GalleryActivity`, no crash (B1 regression). |
+| `:app-android:connectedDebugAndroidTest` on the physical phone | **BUILD SUCCESSFUL**; `EncryptedDatabaseTest` inserted a weight, asserted the journal mode is WAL, closed, reopened and read it back, asserted the file does not start with the SQLite header, then exported through Argon2id/AES-GCM and restored into a second encrypted database on the device. Two real failures were caught here and fixed: SQLCipher's native library must be loaded explicitly (`System.loadLibrary`), and `PRAGMA journal_mode = WAL` must run as a query on Android, not `execute`. |
+| Guard proof (`checkPortability`): `import android.os.Bundle` in `:core` | **FAILED**, naming the file and line; file removed, green. |
+| Guard proof (`checkLicences`): LGPL `hibernate-core` as a `:data` test dependency | **FAILED**, naming the Hibernate coordinates; dependency removed, green. |
+| `:tools:fixtures:run --args="--out … --days 30"` | Wrote a 30-day corpus (550 observations, 6 sessions, 90 sets, 284 entries). |
+| Explicit SQLCipher load bug | caught by the device test, fixed in the same phase and re-verified. |
+
+No device identity (serial, model, build) is recorded in this repository.
+
+### Exit tests (`BUILD-ROADMAP.md` §B2)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| Property tests show rollups are identical whether built incrementally or from scratch | `RollupEngineTest.incrementalAndFullRebuildsAgree` compares every rollup row (ignoring `computedAt`); the full rebuild deletes every row and re-runs the same day builder. Random event order in the core property tests; a five-source/30-day corpus exercise in the benchmark. | **pass** |
+| Dedup never sums two sources | `StepsDedupPropertyTest.dedupNeverSumsTwoSources` (Kotest, randomized), `dedupTakesOneSourceAndNeverTheSum`, `theSameVendorThroughTwoPipesIsNotCountedTwice`, `aGapFallsBackToTheWholeNextSourceInsteadOfStitching` and `aWakingWindowOfSixteenHoursCoversTheDay`. A day's row names one source or, for a mean, no single source. | **pass** |
+| Export then restore reproduces the database | `ExportRoundTripTest.exportThenRestoreReproducesEveryTable`: 60-day corpus → Argon2id container → restore into a fresh database → snapshot again; all table rows are equal, 20 tables and every row counted. The production Argon2 defaults are exercised in a second test; a wrong passphrase fails with `WrongPassphrase`; a newer schema is refused. | **pass** |
+| Backfilling a past day does not change any `recorded_at` | `aBackfilledObservationKeepsItsRecordedAtAndRebuildsTheDay`, `aBackfilledObservationKeepsItsRecordedAtThroughExport` (the timestamp survives the encrypted export), and `aCorrectionKeepsTheOriginalAndDoesNotMoveRecordedAt`. | **pass** |
+| The corpus benchmark passes | `QueryBenchmarkTest` on 1,825 days: worst query `timelinePage50` **2.55 ms**, next `observationsForDayAndType` **1.97 ms**, all others under 1 ms. The timeline page was 23.7 ms on the first run because the `UNION` view sorted every branch; it now merges six indexed newest-first reads. | **pass** |
+
+### Regression over earlier phases
+
+- **B0 `./gradlew check`** — covered by the clean rebuild above.
+- **B0 portability guard** — re-run because the convention plugins changed for generated
+  sources; it still fails on an `android.*` import (probe above).
+- **B0 licence guard** — re-run with an LGPL test dependency in `:data`, still fails.
+- **B0 install and launch** — redone on the phone; no crash, no new permission.
+- **B1 screenshot and contrast tests** — all 47 `:ui` tests ran in `check` (104 goldens
+  verified, no golden rewritten).
+- **B1 gallery** — cold-launched and inspected; no crash.
+- **B0/B1 Detekt and ktlint probes** — the rules are unchanged for non-composable code;
+  the new scopes are for `repo/`, `corpus/` and test sources only and are recorded in
+  ADR 0005.
+
+### Independent review and the fixes it produced
+
+Two fresh reviewers saw only the diff and the contract (correctness and tests;
+`AGENTS.md` invariants and licences) and worked in parallel. Every finding below was
+confirmed in the code, then fixed in this phase and re-verified:
+
+| Finding | Fix |
+|---|---|
+| Family dedup was declared but never applied, so Garmin over FIT and Garmin over Health Connect counted twice for heart rate and water | Every policy first collapses candidates to one source per upstream family, highest priority wins; a test makes the Health Connect copy the higher-priority one and still gets one day |
+| Heart rate was averaged across devices, which `pr.md` §7.6 forbids | `PrimarySourcePolicy`: the day's row is the highest-priority source's series mean; the other readings stay in layer 2 |
+| Restore wrote `daily_rollup` rows from the file | Restore never inserts rollups; it rebuilds them from the observations through the engine. A deliberately corrupted rollup in the bundle is overwritten by the derived value |
+| A bundle missing a table restored successfully and emptied that table | Restore requires the exact table set and refuses missing or unknown tables |
+| No production write path kept rollups in step | `ObservationRepository`, `NutritionRepository` and `BodyRepository` take a rollup invalidator; the engine is wired to it in tests, and a backfilled day rebuilds that day |
+| Step coverage demanded midnight-to-midnight and marked every real day a fallback | Coverage is internal gaps ≤1 h over at least a 16-hour waking window; a one-hour sync is not a day, and a 07:00–23:00 watch is |
+| A single `end == null` daily-total steps record was not recognised | Any `end == null` observation of a SUM type is a daily total |
+| Sleep "most detailed" was the greatest sum, so a fragmented `SLEEP_AWAKE` won | Most records first, then greatest duration; stage grouping by night stays B12's |
+| EWMA applied its coefficient per observation, so a weekly weigher had a 49-day half-life | Alpha is computed from the elapsed days between entries |
+| The ETA took the caller's raw current weight | It divides the last smoothed trend value; the raw parameter was removed |
+| The goal-rate clamp was labelled as the CDC's cited range | `allowedRangeKgPerWeek` and `citedLossRangeKgPerWeek` are separate fields |
+| `HardSession` compared a session with a weekly median | It compares with the median **session** for that muscle |
+| Readiness ignored a short training-load baseline and a zero sleep need | The load average carries its day count, the minimum covers every baseline, and a non-positive sleep need is not a number |
+| Layer-4 entries, vitals and sets had no idempotency key or observation link | One unique `idempotency_key`, `observation_id`, `raw_record_id`, `device` and `app_version` on each; the canonical value's full provenance lives on the linked observation |
+| Tombstone purge deleted the sync deletion marker | Purge clears the payload and keeps the row as the permanent marker; a later sync cannot resurrect it |
+| Unguarded `deleteProfile`, `deleteSource` and `deleteSession` | Removed; `TrashService` is the only delete path, and a session cascade waits for the screen that owns it |
+| Work-set restore used `INSERT OR IGNORE`, so undo could silently do nothing | `INSERT OR REPLACE`; a restore writes the row it holds |
+| Food search used a bound `LIKE`, a full scan | Range seek on the name index, and 2,000 indexed foods in the corpus; the benchmark measures it |
+| The timeline omitted meals | A meal branch in the view and in the paged read |
+| Export completeness had no tripwire for a new table or column | Tests compare the registry against `sqlite_master` tables and `PRAGMA table_info` for every table |
+| The round-trip test never exercised settings or tombstones | The fixture writes both; the comparison ignores only `computedAt` on rollups |
+| The rollup property test was one fixed dataset | A seeded, shuffled incremental rebuild is compared with the full rebuild |
+| A tautological dedup assertion | Removed; the property asserts the total equals one source |
+| The Bouncy Castle allowlist row said test-only | It is main scope for Argon2id and test-only for Robolectric |
+| The export passphrase stayed live, and a truncated container escaped as a raw exception | `export`/`read` wipe the caller's array; truncation and every GCM failure become typed errors |
+| `FieldLevelMergePolicy` was a no-op | `SettingsFieldMergePolicy` adds remote-only keys and keeps the local value on conflict, until B13 adds per-field clocks |
+| The SQLCipher About notice was only promised | Recorded in `NOTICE.md`, the ADR and B3's exit note; nothing is distributed yet |
+
+### Invariant audit (`AGENTS.md`)
+
+| Invariant | This phase |
+|---|---|
+| Provenance on every value | Observations carry source, device, method, `happened_at`, `recorded_at`, local date, zone, idempotency key and raw-record ref; domain rows carry their source and timestamps; rollups carry the winning source (or none for a multi-source mean), the contributing count and the watermark. A manual entry has no raw record because the observation is the entry. **Holds.** |
+| `happened_at` ≠ `recorded_at` | Two separate columns and two separate instants; backfill and correction tests prove the recording time never moves, including through the encrypted export. **Holds.** |
+| Five layers, rebuildable rollups | Raw, observation, daily rollup, domain and settings are physically separate; rollups are derived, rebuilt from observations and declared never synced; property tests compare incremental and full rebuilds. **Holds.** |
+| One source wins a day | Priority per type, family-aware; gap fallback hands the whole day to the next complete source; property tests prove two sources are never summed. **Holds.** |
+| Local-first | No network client, permission, service or account was added. Export, restore, rollups and formulas run on the device. **Holds.** |
+| Not a medical device | Validators flag plausibility with neutral issue codes; no copy diagnoses, warns passively or treats a band as a condition; readiness and ETA are labelled estimates in the code and the ADR. **Holds.** |
+| No telemetry | No analytics, crash reporter or third-party SDK. The only runtime log is a local `Log.w` that names a secret that failed to decrypt, never its value. **Holds.** |
+| Portability | `checkPortability` green in `:core` and `:data`; no `android.*`/`androidx.*` there; `kotlinx-datetime`/`kotlinx.serialization`/`kotlinx.coroutines` only; every platform capability is a `:core` seam. The portability probe still fails on an `android.*` import. **Holds.** |
+| Licence split | Apache-2.0 client, no GPL-family dependency; SQLCipher (BSD-3-Clause) attribution in `NOTICE.md` with the About-screen requirement, Bouncy Castle (MIT-style) recorded in both; test-only libraries stay out of the APK. **Holds.** |
+| Tombstone undo, not a timer | `TrashService` is the only delete path in `:data` (repository deletes were removed); a tombstone is written before the row is removed, undo works once, purge only after 30 days. **Holds.** |
+| Modules hide, never delete | No module switch exists yet; the schema keeps every module's tables with no delete-on-disable path. **N/A.** |
+| Weight-neutral mode | The profile column and settings key exist; the policy object is B3's and no screen reads a weight. **N/A.** |
+| Chart has a table and a sentence | No chart component exists (B9). **N/A.** |
+| Closed design tokens | `DESIGN.md` untouched, no colour, size, component or screen was added; `checkDesignTokens` still runs in both Android modules. **Holds.** |
+| Closed cut list | Nothing from `pr.md` §14.5 was built. **Holds.** |
+| Quality bars | Database: worst UI query **6.84 ms** against 16 ms on 1,825 days. Cold start and Today are unchanged because no screen was added. No budget was lowered. **Holds.** |
+
+iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
+
+### Placeholders and deferred work
+
+- **Domain models.** Profile, exercise, routine, programme, session, set, food, meal,
+  entry, measurement, vital and source are exposed to callers as the generated
+  SQLDelight row types. The screens that need a richer typed model get it with their
+  phase (B3 profile, B4 exercise, B5 training, B6 nutrition, B7 body); the storage shape
+  is already final.
+- **Cascading trash.** Only leaf entities are restorable (set, diary entry, measurement,
+  vital). Deleting a session or a recipe with children needs the screen that owns the
+  cascade (B3/B5), and the tombstone payload is ready for it.
+- **SQLCipher attribution screen.** `NOTICE.md` records the BSD notice; B3's About
+  screen must reproduce it, which is the licence's user-accessible-location condition.
+- **Other platform seams.** The clock, secret vault, encrypted driver and migration
+  backup are implemented. Files, notifications, the health bus, the step sensor, BLE,
+  the camera and the PDF seam are declared but wait for the phases that use them
+  (B8/B11/B12).
+- **Dependency injection.** Koin is pinned but not started; B3 owns the application
+  container and opens the store at launch.
+- **Health-data wiring.** No screen opens the database yet; the instrumented test is the
+  proof that the encrypted path works end to end.
+- **Migration from a real release.** Version 1 never shipped. The machinery, the
+  backup-before-migration wrapper and a v1→v2 test exist; the real upgrade matrix is
+  B10's.
+- **Export across schema versions.** An export at a different schema version is refused
+  with a clear message; converting one is B10 work.
+- **`editTrail.editedAt`.** The original value and the reason are stored; the instant of
+  the edit is not in the schema. Correction history needs it when the UI offers history
+  (V1), and that is a migration then.
+
+### Open issues
+
+- The 16 ms benchmark takes the best of five runs after two warmups. On a 6× slower CI
+  runner it would still pass (worst measured 2.55 ms), but a future query that lands
+  between 3 and 16 ms could become flaky; the fix is a larger corpus or an index, not a
+  larger budget.
+- The export registry is a hand-maintained table of columns. A new column is caught by
+  the round-trip test because the two exports would still match but the row counts and
+  values would not include it; a new **table** is caught by
+  `everyStoredTableIsInTheExportRegistry`. A new column on an existing table with a
+  default value is the one case that could pass unnoticed; B10's migration matrix should
+  re-check it.
+- SQLCipher's native library must be loaded explicitly (`System.loadLibrary("sqlcipher")`).
+  It is a one-line trap and the device test caught it; any future entry point that opens
+  the database must go through `AndroidDatabaseFactory`.
+- The release APK is 41 MB unsigned, largely SQLCipher's four ABIs and Bouncy Castle. B10
+  owns ABI splits/R8 measurement and the F-Droid flavour.
+- `kotlinx-datetime` 0.8 exposes `kotlin.time.Instant`; a future Kotlin may require an
+  explicit opt-in. The build currently needs none.
+- The Detekt scopes for `repo/`, `corpus/`, tests and tooling are deliberate and recorded
+  in ADR 0005; re-check them when Detekt is upgraded.
+- The SQLCipher and Bouncy Castle versions were pinned from Maven Central on 2026-11-23;
+  a major bump needs the export container's KDF parameters to stay readable (they are in
+  the file) and the device encryption test re-run.
+- Sleep stage types are deduplicated one type at a time. B12's sleep screen groups the
+  stages into a night and keeps one source; the policy comment says so.
+- An export at a different schema version is refused; B10 owns the conversion matrix and
+  should turn `verifyMigrations` on with real schema snapshots.
+- The settings field merge keeps the local value on conflict until B13 adds per-field
+  clocks and the conflict surface.
+- SQLCipher's BSD notice must reach B3's About screen; B3's exit test should carry it.
+- `AndroidDatabaseFactory` is the only supported way to open the store on device: it
+  loads the native library, sets WAL, foreign keys and the integrity check. A future
+  entry point must not construct a driver directly.
+

@@ -114,7 +114,7 @@ class QueryBenchmarkTest {
                 store.db.bodyQueries.measurementsForDay(today.toString()).executeAsList()
             },
             "searchFoods" to {
-                store.db.nutritionQueries.searchFoods("C%", 20).executeAsList()
+                store.db.nutritionQueries.searchFoods("Indexed food 1", 20).executeAsList()
             },
             "vitals30d" to {
                 store.db.bodyQueries.vitalsForTypeBetween(

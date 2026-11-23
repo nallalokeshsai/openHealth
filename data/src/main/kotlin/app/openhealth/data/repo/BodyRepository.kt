@@ -7,6 +7,12 @@ import kotlinx.datetime.LocalDate
 
 /** Layer 4 body and vital rows (`pr.md` §6.8, §6.9). */
 class BodyRepository(private val db: OpenHealthDb) {
+    private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+
+    fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
+        rollupInvalidator = invalidator
+    }
+
     fun upsertMeasurement(measurement: Measurement) {
         db.bodyQueries.insertMeasurement(
             id = measurement.id,
@@ -20,6 +26,11 @@ class BodyRepository(private val db: OpenHealthDb) {
             sourceId = measurement.source_id,
             method = measurement.method,
             notes = measurement.notes,
+            observationId = measurement.observation_id,
+            rawRecordId = measurement.raw_record_id,
+            idempotencyKey = measurement.idempotency_key,
+            device = measurement.device,
+            appVersion = measurement.app_version,
             revision = measurement.revision,
         )
     }
@@ -50,8 +61,14 @@ class BodyRepository(private val db: OpenHealthDb) {
             method = vital.method,
             context = vital.context,
             note = vital.note,
+            observationId = vital.observation_id,
+            rawRecordId = vital.raw_record_id,
+            idempotencyKey = vital.idempotency_key,
+            device = vital.device,
+            appVersion = vital.app_version,
             revision = vital.revision,
         )
+        rollupInvalidator?.invoke(LocalDate.parse(vital.local_date))
     }
 
     fun vitalById(id: String): Vital? = db.bodyQueries.vitalById(id).executeAsOneOrNull()

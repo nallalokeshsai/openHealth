@@ -115,6 +115,11 @@ CREATE TABLE work_set (
     happened_at INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL,
     source_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    observation_id TEXT,
+    raw_record_id TEXT,
+    device TEXT,
+    app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1
 );
 
@@ -237,14 +242,16 @@ allSessionExercises:
 SELECT * FROM session_exercise ORDER BY session_id, position;
 
 insertWorkSet:
-INSERT OR IGNORE INTO work_set(
+INSERT OR REPLACE INTO work_set(
     id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps,
     rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds,
-    completed_at, happened_at, recorded_at, source_id, revision
+    completed_at, happened_at, recorded_at, source_id, idempotency_key, observation_id,
+    raw_record_id, device, app_version, revision
 ) VALUES (
     :id, :sessionId, :sessionExerciseId, :exerciseId, :position, :weightKg, :reps,
     :rir, :rpe, :isWarmup, :isBackoff, :isFailure, :isBodyweight, :tempo, :restSeconds,
-    :completedAt, :happenedAt, :recordedAt, :sourceId, :revision
+    :completedAt, :happenedAt, :recordedAt, :sourceId, :idempotencyKey, :observationId,
+    :rawRecordId, :device, :appVersion, :revision
 );
 
 workSetById:
@@ -269,6 +276,3 @@ SELECT * FROM work_set ORDER BY session_id, position;
 
 deleteWorkSet:
 DELETE FROM work_set WHERE id = :id;
-
-deleteSession:
-DELETE FROM session WHERE id = :id;

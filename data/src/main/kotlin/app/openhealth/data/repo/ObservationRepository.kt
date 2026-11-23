@@ -21,8 +21,18 @@ sealed interface RecordOutcome {
  * nothing and is not an error (`pr.md` §7.1, §7.7).
  */
 class ObservationRepository(private val db: OpenHealthDb) {
-    fun record(observation: Observation, raw: RawRecord? = null): RecordOutcome =
-        db.transactionWithResult {
+    private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+
+    /**
+     * Wired by the composition root once the rollup engine exists. Every write that
+     * changes a day calls it, so a backfilled Tuesday rewrites Tuesday (`pr.md` §7.3).
+     */
+    fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
+        rollupInvalidator = invalidator
+    }
+
+    fun record(observation: Observation, raw: RawRecord? = null): RecordOutcome {
+        val outcome = db.transactionWithResult {
             raw?.let { insertRaw(it) }
             val existing = db.observationQueries.observationByIdempotencyKey(
                 observation.provenance.idempotencyKey,
@@ -34,13 +44,18 @@ class ObservationRepository(private val db: OpenHealthDb) {
                 RecordOutcome.Inserted(observation.id)
             }
         }
+        if (outcome is RecordOutcome.Inserted) {
+            rollupInvalidator?.invoke(observation.localDate)
+        }
+        return outcome
+    }
 
     /**
      * Bulk ingestion for imports and the fixture corpus: one transaction, one existence
      * check per observation, raw records first.
      */
-    fun recordAll(observations: List<Observation>, rawRecords: List<RawRecord> = emptyList()): Int =
-        db.transactionWithResult {
+    fun recordAll(observations: List<Observation>, rawRecords: List<RawRecord> = emptyList()): Int {
+        val inserted = db.transactionWithResult {
             rawRecords.forEach(::insertRaw)
             var inserted = 0
             observations.forEach { observation ->
@@ -54,6 +69,11 @@ class ObservationRepository(private val db: OpenHealthDb) {
             }
             inserted
         }
+        if (inserted > 0) {
+            observations.map { it.localDate }.distinct().forEach { rollupInvalidator?.invoke(it) }
+        }
+        return inserted
+    }
 
     private fun insertRaw(raw: RawRecord) {
         db.rawRecordQueries.insertRawRecord(
@@ -131,8 +151,29 @@ class ObservationRepository(private val db: OpenHealthDb) {
     fun daysWithObservations(): List<LocalDate> =
         db.observationQueries.daysWithObservations().executeAsList().map(LocalDate::parse)
 
+    /**
+     * A user correction keeps the value it replaced and the reason (`pr.md` §6.28). The
+     * recording timestamp does not move; the next rollup rebuild sees the new value.
+     */
+    fun correct(id: ObservationId, correctedValue: Double, reason: String): Boolean {
+        val existing = db.observationQueries.observationById(id.value).executeAsOneOrNull()
+            ?: return false
+        db.observationQueries.markUserEdited(
+            value = correctedValue,
+            reason = reason,
+            previousValue = existing.value_,
+            previousUnit = existing.unit,
+            id = id.value,
+        )
+        rollupInvalidator?.invoke(LocalDate.parse(existing.local_date))
+        return true
+    }
+
     fun excludeFromTrends(id: ObservationId, excluded: Boolean) {
+        val existing =
+            db.observationQueries.observationById(id.value).executeAsOneOrNull() ?: return
         db.observationQueries.setExcludedFromTrends(excluded, id.value)
+        rollupInvalidator?.invoke(LocalDate.parse(existing.local_date))
     }
 
     fun count(): Long = db.observationQueries.countObservations().executeAsOne()

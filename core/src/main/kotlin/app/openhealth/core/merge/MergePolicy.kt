@@ -67,13 +67,20 @@ class LastWriterWinsPolicy<T>(override val entity: String) : MergePolicy<T> {
         }
 }
 
-/** Settings merge field by field, so two devices changing different keys both keep theirs. */
-class FieldLevelMergePolicy<T>(override val entity: String, private val fields: List<String>) :
-    MergePolicy<T> {
-    override fun merge(local: T, remote: T, localClock: Long, remoteClock: Long): MergeOutcome<T> =
-        MergeOutcome.merged(local)
-
-    fun mergedFieldNames(): List<String> = fields.sorted()
+/**
+ * Settings merge key by key: a key only the remote device has is added, and a key both
+ * changed keeps the local value (the conflict is visible in the change log). The
+ * transport that carries per-field clocks is B13's; this is the rule it must implement.
+ */
+class SettingsFieldMergePolicy(override val entity: String = "settings") :
+    MergePolicy<Map<String, String>> {
+    override fun merge(
+        local: Map<String, String>,
+        remote: Map<String, String>,
+        localClock: Long,
+        remoteClock: Long,
+    ): MergeOutcome<Map<String, String>> =
+        MergeOutcome.merged(local + remote.filterKeys { it !in local })
 }
 
 /** Declared for completeness: rollups are derived and never synced (`Tech-Stack.md` §6). */
@@ -103,7 +110,7 @@ class MergePolicyRegistry(policies: List<MergePolicy<*>>) {
                 AppendOnlyPolicy<Any>("raw_record"),
                 LastWriterWinsPolicy<Any>("note"),
                 LastWriterWinsPolicy<Any>("journal_entry"),
-                FieldLevelMergePolicy<Any>("settings", emptyList()),
+                SettingsFieldMergePolicy(),
                 NeverSyncedPolicy<Any>("daily_rollup"),
             ),
         )

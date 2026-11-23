@@ -14,6 +14,11 @@ CREATE TABLE measurement (
     source_id TEXT NOT NULL,
     method TEXT,
     notes TEXT,
+    observation_id TEXT,
+    raw_record_id TEXT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1
 );
 
@@ -34,6 +39,11 @@ CREATE TABLE vital (
     method TEXT,
     context TEXT,
     note TEXT,
+    observation_id TEXT,
+    raw_record_id TEXT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1
 );
 
@@ -44,10 +54,11 @@ CREATE INDEX vital_type_happened ON vital(type, happened_at);
 insertMeasurement:
 INSERT OR REPLACE INTO measurement(
     id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id,
-    method, notes, revision
+    method, notes, observation_id, raw_record_id, idempotency_key, device, app_version, revision
 ) VALUES (
     :id, :type, :value, :unit, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
-    :method, :notes, :revision
+    :method, :notes, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
+    :revision
 );
 
 measurementById:
@@ -76,10 +87,12 @@ DELETE FROM measurement WHERE id = :id;
 insertVital:
 INSERT OR REPLACE INTO vital(
     id, type, value, unit, local_date, zone_id, happened_at, recorded_at, source_id,
-    method, context, note, revision
+    method, context, note, observation_id, raw_record_id, idempotency_key, device,
+    app_version, revision
 ) VALUES (
     :id, :type, :value, :unit, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
-    :method, :context, :note, :revision
+    :method, :context, :note, :observationId, :rawRecordId, :idempotencyKey, :device,
+    :appVersion, :revision
 );
 
 vitalById:
@@ -101,6 +114,9 @@ SELECT count(*) FROM vital;
 
 allVitals:
 SELECT * FROM vital ORDER BY happened_at;
+
+vitalDays:
+SELECT DISTINCT local_date FROM vital ORDER BY local_date;
 
 deleteVital:
 DELETE FROM vital WHERE id = :id;

@@ -35,6 +35,11 @@ class TrashServiceTest {
                 source_id = "manual",
                 method = "MANUAL_ENTRY",
                 notes = null,
+                observation_id = null,
+                raw_record_id = null,
+                idempotency_key = "trash-measurement-$id",
+                device = "manual",
+                app_version = "test",
                 revision = 1L,
             ),
         )
@@ -83,6 +88,9 @@ class TrashServiceTest {
         assertEquals(1, trash.purgeExpired())
         assertTrue(trash.active().isEmpty())
         assertTrue(!trash.undo(tombstone))
+        val marker = trash.byId(tombstone)!!
+        assertNull(marker.payload)
+        assertEquals("measurement", marker.entity_table)
         store.close()
     }
 
@@ -108,6 +116,11 @@ class TrashServiceTest {
                 source_kind = "manual",
                 user_verified = true,
                 user_edited = false,
+                observation_id = null,
+                raw_record_id = null,
+                idempotency_key = "trash-entry-e-1",
+                device = "manual",
+                app_version = "test",
                 revision = 1L,
             ),
         )
@@ -145,6 +158,11 @@ class TrashServiceTest {
             happened_at = now.toEpochMilliseconds(),
             recorded_at = now.toEpochMilliseconds(),
             source_id = "manual",
+            idempotency_key = "trash-set-s-1",
+            observation_id = null,
+            raw_record_id = null,
+            device = "manual",
+            app_version = "test",
             revision = 2L,
         )
         app.openhealth.data.repo.TrainingRepository(store.db).upsertSet(set)

@@ -1,5 +1,6 @@
 package app.openhealth.data.rollup
 
+import app.openhealth.core.ids.SourceId
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.rollup.DailyRollup
@@ -12,9 +13,12 @@ import app.openhealth.core.source.RollupAggregation
 import app.openhealth.core.source.SourceRegistry
 import app.openhealth.core.time.LocalDay
 import app.openhealth.core.units.Measure
+import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.db.OpenHealthDb
+import app.openhealth.data.mapping.enumValueOrNull
 import app.openhealth.data.repo.ObservationRepository
 import app.openhealth.data.repo.RollupRepository
+import kotlin.time.Instant
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
@@ -44,7 +48,11 @@ class RollupEngine(
     /** Full rebuild: delete everything, then rebuild every day that has observations. */
     fun rebuildAll(): Int = db.transactionWithResult {
         rollups.deleteAll()
-        observations.daysWithObservations().sumOf { rebuildDayInternal(it) }
+        val entryDays = db.nutritionQueries.entryDays().executeAsList().map(LocalDate::parse)
+        val vitalDays = db.bodyQueries.vitalDays().executeAsList().map(LocalDate::parse)
+        (observations.daysWithObservations() + entryDays + vitalDays)
+            .distinct()
+            .sumOf { rebuildDayInternal(it) }
     }
 
     /**
@@ -74,7 +82,77 @@ class RollupEngine(
             rollups.upsert(rollup)
             written += 1
         }
+        nutritionRollups(date).forEach {
+            rollups.upsert(it)
+            written += 1
+        }
+        vitalRollups(date).forEach {
+            rollups.upsert(it)
+            written += 1
+        }
         return written
+    }
+
+    /**
+     * Layer 4 nutrition is the source of truth for a diary entry, so its totals are
+     * summed here rather than duplicated as observations (`pr.md` §7.3, §6.3). A day's
+     * energy and macros are the exact sum of its entries, with no intermediate rounding.
+     */
+    private fun nutritionRollups(date: LocalDate): List<DailyRollup> {
+        val entries = db.nutritionQueries.entriesForDay(date.toString()).executeAsList()
+        if (entries.isEmpty()) return emptyList()
+        val watermark = entries.maxOf { it.recorded_at }
+        val sources = entries.map { it.source_kind }.distinct()
+        val count = entries.size.toDouble()
+        fun rollup(type: ObservationType, value: Double): DailyRollup = DailyRollup(
+            localDate = date,
+            type = type,
+            value = Measure(value, type.canonicalUnit),
+            secondaryValue = count,
+            sourceId = null,
+            contributingSources = sources.size,
+            dedupReason = DedupReason.NO_DEDUP.name,
+            watermark = Instant.fromEpochMilliseconds(watermark),
+            computedAt = clock.now(),
+            detail = null,
+        )
+        return listOf(
+            rollup(ObservationType.NUTRITION_ENERGY, entries.sumOf { it.energy_kcal ?: 0.0 }),
+            rollup(ObservationType.NUTRITION_PROTEIN, entries.sumOf { it.protein_g ?: 0.0 }),
+            rollup(ObservationType.NUTRITION_CARBS, entries.sumOf { it.carbs_g ?: 0.0 }),
+            rollup(ObservationType.NUTRITION_FAT, entries.sumOf { it.fat_g ?: 0.0 }),
+            rollup(ObservationType.NUTRITION_FIBRE, entries.sumOf { it.fibre_g ?: 0.0 }),
+        )
+    }
+
+    /** Layer 4 vitals are averaged per type for the day; every reading stays in its row. */
+    private fun vitalRollups(date: LocalDate): List<DailyRollup> {
+        val vitals = db.bodyQueries.vitalsForDay(date.toString()).executeAsList()
+        if (vitals.isEmpty()) return emptyList()
+        return vitals.groupBy { it.type }.mapNotNull { (typeName, readings) ->
+            val type = enumValueOrNull<ObservationType>(typeName) ?: return@mapNotNull null
+            val canonical = readings.mapNotNull { reading ->
+                runCatching {
+                    Measure(reading.value_, UcumUnit.byUcum(reading.unit))
+                        .convertTo(type.canonicalUnit)
+                        .value
+                }.getOrNull()
+            }
+            if (canonical.isEmpty()) return@mapNotNull null
+            val sources = readings.map { it.source_id }.distinct()
+            DailyRollup(
+                localDate = date,
+                type = type,
+                value = Measure(canonical.average(), type.canonicalUnit),
+                secondaryValue = canonical.size.toDouble(),
+                sourceId = sources.singleOrNull()?.let(::SourceId),
+                contributingSources = sources.size,
+                dedupReason = DedupReason.NO_DEDUP.name,
+                watermark = Instant.fromEpochMilliseconds(readings.maxOf { it.recorded_at }),
+                computedAt = clock.now(),
+                detail = null,
+            )
+        }
     }
 
     private fun aggregate(
@@ -108,13 +186,14 @@ class RollupEngine(
         }
         val isAggregated = DedupPolicies.aggregation(type) != RollupAggregation.SUM ||
             resolution.reason == DedupReason.NO_DEDUP
+        val contributingSources = selected.map { it.provenance.sourceId }.distinct()
         return DailyRollup(
             localDate = date,
             type = type,
             value = Measure(value, type.canonicalUnit),
             secondaryValue = if (isAggregated) selected.size.toDouble() else null,
-            sourceId = resolution.sourceId,
-            contributingSources = selected.map { it.provenance.sourceId }.distinct().size,
+            sourceId = resolution.sourceId.takeIf { contributingSources.size == 1 },
+            contributingSources = contributingSources.size,
             dedupReason = resolution.reason.name,
             watermark = selected.maxOf { it.provenance.recordedAt },
             computedAt = clock.now(),

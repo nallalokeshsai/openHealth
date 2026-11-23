@@ -5,7 +5,12 @@ import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.ExportCipher
 import app.openhealth.core.seam.SystemClock
 import app.openhealth.core.seam.UnsupportedExportFormat
+import app.openhealth.core.source.SourceRegistry
 import app.openhealth.data.db.OpenHealthDb
+import app.openhealth.data.repo.ObservationRepository
+import app.openhealth.data.repo.RollupRepository
+import app.openhealth.data.repo.SourceRepository
+import app.openhealth.data.rollup.RollupEngine
 import kotlinx.serialization.json.Json
 
 /**
@@ -64,31 +69,58 @@ class ExportService(
         }
     }
 
-    fun export(passphrase: CharArray): ByteArray = cipher.seal(encode(snapshot()), passphrase)
+    private companion object {
+        const val ROLLUP_TABLE = "daily_rollup"
+    }
 
-    fun read(container: ByteArray, passphrase: CharArray): ExportBundle =
+    fun export(passphrase: CharArray): ByteArray = try {
+        cipher.seal(encode(snapshot()), passphrase)
+    } finally {
+        passphrase.fill('\u0000')
+    }
+
+    fun read(container: ByteArray, passphrase: CharArray): ExportBundle = try {
         decode(cipher.open(container, passphrase))
+    } finally {
+        passphrase.fill('\u0000')
+    }
 
     fun restore(container: ByteArray, passphrase: CharArray): RestoreReport =
         restoreBundle(read(container, passphrase))
 
     fun restoreBundle(bundle: ExportBundle): RestoreReport {
         val byName = bundle.tables.associateBy { it.table }
-        val known = ExportTables.all.map { table -> table to byName[table.name] }
-        val unknown = byName.keys - ExportTables.all.map { it.name }.toSet()
-        if (unknown.isNotEmpty()) {
-            throw UnsupportedExportFormat("Export has unknown tables: ${unknown.sorted()}")
+        val expected = ExportTables.all.map { it.name }.toSet()
+        val missing = expected - byName.keys
+        val unknown = byName.keys - expected
+        if (missing.isNotEmpty() || unknown.isNotEmpty()) {
+            throw UnsupportedExportFormat(
+                "Export tables do not match this app (missing ${missing.sorted()}, " +
+                    "unknown ${unknown.sorted()})",
+            )
         }
         val counts = db.transactionWithResult {
             ExportTables.all.asReversed().forEach { SqlDump.clear(driver, it) }
             var rows = 0L
-            known.forEach { (table, data) ->
-                val rowsOfTable = data?.rows.orEmpty()
-                SqlDump.insert(driver, table, rowsOfTable)
-                rows += rowsOfTable.size
-            }
+            // Rollups are derived and never restored from the file; they are rebuilt
+            // from the observations after the transaction (`Tech-Stack.md` §5-6).
+            ExportTables.all
+                .filterNot { it.name == ROLLUP_TABLE }
+                .forEach { table ->
+                    val rowsOfTable = byName.getValue(table.name).rows
+                    SqlDump.insert(driver, table, rowsOfTable)
+                    rows += rowsOfTable.size
+                }
             rows
         }
+        val engine = RollupEngine(
+            observations = ObservationRepository(db),
+            rollups = RollupRepository(db),
+            db = db,
+            registry = SourceRegistry(SourceRepository(db, clock).all()),
+            clock = clock,
+        )
+        engine.rebuildAll()
         return RestoreReport(
             tables = ExportTables.all.size,
             rows = counts,

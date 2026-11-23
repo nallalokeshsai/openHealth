@@ -36,12 +36,14 @@ class EncryptedDatabaseTest {
     @Before
     fun clean() {
         context.deleteDatabase(DATABASE)
+        context.deleteDatabase(RESTORED)
         context.getSharedPreferences(VAULT, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     @After
     fun cleanUp() {
         context.deleteDatabase(DATABASE)
+        context.deleteDatabase(RESTORED)
         context.getSharedPreferences(VAULT, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
@@ -49,6 +51,7 @@ class EncryptedDatabaseTest {
     fun aValueSurvivesCloseAndReopenAndTheFileIsEncrypted() {
         val vault = AndroidSecretVault(context, VAULT)
         val first = AndroidDatabaseFactory(context, vault, DATABASE).open()
+        assertEquals("wal", app.openhealth.data.db.journalMode(first.driver).lowercase())
         val observation = weight()
         val outcome = ObservationRepository(first.db).record(observation)
         assertTrue(outcome is app.openhealth.data.repo.RecordOutcome.Inserted)
@@ -67,8 +70,37 @@ class EncryptedDatabaseTest {
         val stored = ObservationRepository(reopened.db).forDay(LocalDate(2026, 3, 1)).single()
         assertEquals(80.5, stored.value.value, 0.0001)
         assertEquals(observation.provenance.recordedAt, stored.provenance.recordedAt)
+        exportAndRestoreOnDevice(reopened)
         reopened.close()
     }
+
+    private fun exportAndRestoreOnDevice(source: app.openhealth.data.db.OpenHealthStore) {
+        val cipher = app.openhealth.data.export.Argon2ExportCipher(
+            iterations = 1,
+            memoryKiB = 8_192,
+            parallelism = 1,
+        )
+        val exporter = app.openhealth.data.export.ExportService(source.driver, source.db, cipher)
+        val container = exporter.export("device passphrase".toCharArray())
+
+        context.deleteDatabase(RESTORED)
+        AndroidDatabaseFactory(context, vault(), RESTORED).open().use { restored ->
+            val report = app.openhealth.data.export.ExportService(
+                restored.driver,
+                restored.db,
+                cipher,
+            )
+                .restore(container, "device passphrase".toCharArray())
+            assertTrue(report.rows > 0)
+            val restoredObservation = ObservationRepository(restored.db)
+                .forDay(LocalDate(2026, 3, 1))
+                .single()
+            assertEquals(80.5, restoredObservation.value.value, 0.0001)
+        }
+        context.deleteDatabase(RESTORED)
+    }
+
+    private fun vault(): AndroidSecretVault = AndroidSecretVault(context, VAULT)
 
     private fun weight(): Observation {
         val happened = Instant.parse("2026-03-01T07:00:00Z")
@@ -89,6 +121,7 @@ class EncryptedDatabaseTest {
 
     private companion object {
         const val DATABASE = "openhealth-instrumented.db"
+        const val RESTORED = "openhealth-instrumented-restore.db"
         const val VAULT = "openhealth.instrumented.vault"
         val SQLITE_HEADER = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
     }

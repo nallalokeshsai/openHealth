@@ -2,21 +2,28 @@ package app.openhealth.data
 
 import app.openhealth.core.seam.FixedClock
 import app.openhealth.core.seam.WrongPassphrase
+import app.openhealth.core.source.SourceRegistry
 import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.corpus.CorpusGenerator
 import app.openhealth.data.corpus.CorpusRequest
 import app.openhealth.data.export.Argon2ExportCipher
 import app.openhealth.data.export.CsvExport
+import app.openhealth.data.export.ExportBundle
 import app.openhealth.data.export.ExportService
 import app.openhealth.data.export.ExportTables
 import app.openhealth.data.repo.ObservationRepository
+import app.openhealth.data.repo.RollupRepository
+import app.openhealth.data.repo.SourceRepository
+import app.openhealth.data.rollup.RollupEngine
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.JsonPrimitive
 
 class ExportRoundTripTest {
     private val now = Instant.parse("2026-03-01T12:00:00Z")
@@ -27,6 +34,23 @@ class ExportRoundTripTest {
         CorpusGenerator(store.db, clock = FixedClock(now)).generate(
             CorpusRequest(days = 60, seed = 7L, endDate = endDate),
         )
+        app.openhealth.data.repo.SettingsRepository(store.db).put("units", "metric")
+        store.db.tombstoneQueries.insertTombstone(
+            id = "tombstone-fixture",
+            entityTable = "measurement",
+            entityId = "measurement-gone",
+            deletedAt = now.toEpochMilliseconds(),
+            purgeAfter = (now + 30.days).toEpochMilliseconds(),
+            payload = "{}",
+            reason = "fixture",
+        )
+        RollupEngine(
+            ObservationRepository(store.db),
+            RollupRepository(store.db),
+            store.db,
+            SourceRegistry(SourceRepository(store.db).all()),
+            FixedClock(now),
+        ).rebuildAll()
         return store
     }
 
@@ -46,13 +70,73 @@ class ExportRoundTripTest {
         val restorer = ExportService(restored.driver, restored.db, cipher, FixedClock(now))
         val report = restorer.restore(container, "correct horse battery staple".toCharArray())
         assertEquals(ExportTables.all.size, report.tables)
-        assertEquals(before.tables.sumOf { it.rows.size }.toLong(), report.rows)
+        assertEquals(
+            before.tables.filterNot { it.table == "daily_rollup" }.sumOf { it.rows.size }.toLong(),
+            report.rows,
+        )
 
         val after = restorer.snapshot()
         assertEquals(before.schemaVersion, after.schemaVersion)
-        assertEquals(before.tables, after.tables)
+        assertEquals(semanticTables(before), semanticTables(after))
         restored.close()
         original.close()
+    }
+
+    @Test
+    fun aBundleMissingATableIsRefused() {
+        val store = corpusStore()
+        val cipher = Argon2ExportCipher(iterations = 1, memoryKiB = 8_192, parallelism = 1)
+        val service = ExportService(store.driver, store.db, cipher, FixedClock(now))
+        val bundle = service.snapshot()
+        val truncated = bundle.copy(tables = bundle.tables.filterNot { it.table == "observation" })
+        assertFailsWith<app.openhealth.core.seam.UnsupportedExportFormat> {
+            service.restoreBundle(truncated)
+        }
+        store.close()
+    }
+
+    @Test
+    fun restoreRebuildsRollupsInsteadOfTrustingTheFile() {
+        val store = corpusStore()
+        val cipher = Argon2ExportCipher(iterations = 1, memoryKiB = 8_192, parallelism = 1)
+        val service = ExportService(store.driver, store.db, cipher, FixedClock(now))
+        val bundle = service.snapshot()
+        val rollups = bundle.tables.first { it.table == "daily_rollup" }
+        assertTrue(rollups.rows.isNotEmpty())
+        val originalValue = rollups.rows.first().getValue("value")
+        val corrupted = bundle.copy(
+            tables = bundle.tables.map { table ->
+                if (table.table != "daily_rollup") {
+                    table
+                } else {
+                    table.copy(
+                        rows = table.rows.mapIndexed { index, row ->
+                            if (index == 0) row + ("value" to JsonPrimitive(999_999.0)) else row
+                        },
+                    )
+                }
+            },
+        )
+        service.restoreBundle(corrupted)
+        val restored = service.snapshot().tables.first { it.table == "daily_rollup" }
+            .rows.first().getValue("value")
+        assertEquals(originalValue, restored)
+        store.close()
+    }
+
+    @Test
+    fun theProductionArgon2DefaultsSealAndOpen() {
+        val store = inMemoryStore()
+        val exporter = ExportService(
+            store.driver,
+            store.db,
+            Argon2ExportCipher(),
+            FixedClock(now),
+        )
+        val container = exporter.export("a real passphrase".toCharArray())
+        val bundle = exporter.read(container, "a real passphrase".toCharArray())
+        assertEquals(ExportTables.all.size, bundle.tables.size)
+        store.close()
     }
 
     @Test
@@ -104,6 +188,16 @@ class ExportRoundTripTest {
         val twice = service.snapshot().tables.sumOf { it.rows.size }
         assertEquals(once, twice)
         store.close()
+    }
+
+    private fun semanticTables(
+        bundle: ExportBundle,
+    ): List<app.openhealth.data.export.ExportTableData> = bundle.tables.map { table ->
+        if (table.table != "daily_rollup") {
+            table
+        } else {
+            table.copy(rows = table.rows.map { row -> row.filterKeys { it != "computed_at" } })
+        }
     }
 
     @Test

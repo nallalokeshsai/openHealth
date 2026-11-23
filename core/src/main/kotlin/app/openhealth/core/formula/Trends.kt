@@ -62,10 +62,17 @@ object WeightTrend {
     }
 
     private fun buildSeries(ordered: List<WeightEntry>, halfLifeDays: Double): WeightTrendSeries {
-        val alpha = HALF.pow(1.0 / halfLifeDays)
         var trend = ordered.first().kg
+        var previousDate = ordered.first().date
         val points = ordered.mapIndexed { index, entry ->
-            trend = if (index == 0) entry.kg else trend + (1.0 - alpha) * (entry.kg - trend)
+            if (index == 0) {
+                trend = entry.kg
+            } else {
+                val elapsedDays = previousDate.daysUntil(entry.date).toDouble().coerceAtLeast(1.0)
+                val alpha = 1.0 - HALF.pow(elapsedDays / halfLifeDays)
+                trend += alpha * (entry.kg - trend)
+            }
+            previousDate = entry.date
             TrendPoint(entry.date, entry.kg, trend)
         }
         val last = points.last()
@@ -109,12 +116,16 @@ object GoalEta {
     private const val MIN_KG = 1.0
     private const val MAX_KG = 500.0
 
+    /**
+     * The current weight is the last smoothed trend point, not the latest scale reading:
+     * dividing by the trend is the whole point of smoothing (`pr.md` §6.4).
+     */
     fun fromTrend(
-        currentWeightKg: Double,
         goalWeightKg: Double,
         trend: WeightTrendSeries,
         today: LocalDate,
     ): FormulaOutcome<EtaWindow> {
+        val currentWeightKg = trend.points.last().trendKg
         val inputs = listOf(
             input("current", currentWeightKg, "kg"),
             input("goal", goalWeightKg, "kg"),

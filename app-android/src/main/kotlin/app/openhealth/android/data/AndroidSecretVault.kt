@@ -32,9 +32,14 @@ class AndroidSecretVault(context: Context, preferencesName: String = "openhealth
         return if (stored == null || separator <= 0) {
             null
         } else {
-            val iv = Base64.decode(stored.substring(0, separator), Base64.NO_WRAP)
-            val ciphertext = Base64.decode(stored.substring(separator + 1), Base64.NO_WRAP)
-            decrypt(name, iv, ciphertext)
+            try {
+                val iv = Base64.decode(stored.substring(0, separator), Base64.NO_WRAP)
+                val ciphertext = Base64.decode(stored.substring(separator + 1), Base64.NO_WRAP)
+                decrypt(name, iv, ciphertext)
+            } catch (failure: IllegalArgumentException) {
+                android.util.Log.w(TAG, "Secret $name is stored malformed", failure)
+                null
+            }
         }
     }
 

@@ -115,6 +115,9 @@ class CorpusGenerator(
     private val clock: ClockSeam = SystemClock,
 ) {
     fun generate(request: CorpusRequest): CorpusStats {
+        require(db.observationQueries.countObservations().executeAsOne() == 0L) {
+            "CorpusGenerator writes a fresh database; this one already has observations"
+        }
         val random = Random(request.seed)
         val startDate = request.endDate.minus(DatePeriod(days = request.days - 1))
         val days = Days.range(startDate, request.endDate)
@@ -199,10 +202,13 @@ class CorpusGenerator(
     ) {
         var used = 0
         repeat(HOURS_TRACKED) { hour ->
-            val hourValue = if (hour == HOURS_TRACKED - 1) {
-                steps - used
+            val remainingHours = HOURS_TRACKED - hour
+            val remainingSteps = (steps - used).coerceAtLeast(0)
+            val hourValue = if (remainingHours == 1) {
+                remainingSteps
             } else {
-                (steps / HOURS_TRACKED + random.nextInt(-250, 250)).coerceAtLeast(0)
+                (remainingSteps / remainingHours + random.nextInt(-250, 250))
+                    .coerceIn(0, remainingSteps)
             }
             used += hourValue
             val at = dayStart.plus((hour + FIRST_TRACKED_HOUR).hours)
@@ -515,6 +521,11 @@ class CorpusGenerator(
                         happened_at = completedAt.toEpochMilliseconds(),
                         recorded_at = completedAt.toEpochMilliseconds(),
                         source_id = "manual",
+                        idempotency_key = "corpus-set-${idGenerator.newId()}",
+                        observation_id = null,
+                        raw_record_id = null,
+                        device = "manual",
+                        app_version = "fixture",
                         revision = 1L,
                     ),
                 )
@@ -533,6 +544,7 @@ class CorpusGenerator(
         zone: TimeZone,
     ): NutritionCount {
         val nutrition = NutritionRepository(db)
+        val entryFoods = foods.take(BASE_FOOD_COUNT)
         var entries = 0
         listOf("breakfast" to 7, "lunch" to 12, "dinner" to 19).forEach { (kind, hour) ->
             val mealId = idGenerator.newId()
@@ -550,7 +562,7 @@ class CorpusGenerator(
                 ),
             )
             repeat(2 + random.nextInt(0, 3)) {
-                val food = foods[random.nextInt(foods.size)]
+                val food = entryFoods[random.nextInt(entryFoods.size)]
                 val quantity = 80 + random.nextInt(0, 220)
                 nutrition.upsertEntry(
                     Entry(
@@ -570,6 +582,11 @@ class CorpusGenerator(
                         source_kind = "manual",
                         user_verified = true,
                         user_edited = false,
+                        observation_id = null,
+                        raw_record_id = null,
+                        idempotency_key = "corpus-entry-${idGenerator.newId()}",
+                        device = "manual",
+                        app_version = "fixture",
                         revision = 1L,
                     ),
                 )
@@ -596,7 +613,7 @@ class CorpusGenerator(
             Triple("Yoghurt", 59.0, 10.0),
             Triple("Apple", 52.0, 0.3),
         )
-        return items.map { (name, energy, protein) ->
+        val base = items.map { (name, energy, protein) ->
             Food(
                 id = "food-$name",
                 name = name,
@@ -615,7 +632,30 @@ class CorpusGenerator(
                 updated_at = now,
                 revision = 1L,
             )
-        }.onEach { nutrition.upsertFood(it) }
+        }
+        // A few thousand rows so the food search benchmark measures an index, not a
+        // ten-row table (the real index is B6's; this is the right shape).
+        val indexed = (1..INDEXED_FOOD_COUNT).map { index ->
+            Food(
+                id = "food-indexed-$index",
+                name = "Indexed food %04d".format(index),
+                brand = null,
+                barcode = null,
+                source_kind = "synthetic",
+                source_ref = null,
+                energy_kcal_per_100g = 100.0,
+                protein_g_per_100g = 5.0,
+                carbs_g_per_100g = 10.0,
+                fat_g_per_100g = 3.0,
+                fibre_g_per_100g = 1.0,
+                serving_json = null,
+                verified = false,
+                created_at = now,
+                updated_at = now,
+                revision = 1L,
+            )
+        }
+        return (base + indexed).onEach { nutrition.upsertFood(it) }
     }
 
     private fun seedMeasurement(
@@ -637,6 +677,11 @@ class CorpusGenerator(
                 source_id = "manual",
                 method = "MANUAL_ENTRY",
                 notes = null,
+                observation_id = null,
+                raw_record_id = null,
+                idempotency_key = "corpus-measurement-${idGenerator.newId()}",
+                device = "manual",
+                app_version = "fixture",
                 revision = 1L,
             ),
         )
@@ -663,6 +708,11 @@ class CorpusGenerator(
                 method = "CUFF",
                 context = "RESTING",
                 note = null,
+                observation_id = null,
+                raw_record_id = null,
+                idempotency_key = "corpus-vital-${idGenerator.newId()}",
+                device = "manual",
+                app_version = "fixture",
                 revision = 1L,
             ),
         )
@@ -670,6 +720,8 @@ class CorpusGenerator(
     }
 
     private companion object {
+        const val BASE_FOOD_COUNT = 10
+        const val INDEXED_FOOD_COUNT = 2_000
         const val HOURS_TRACKED = 16
         const val FIRST_TRACKED_HOUR = 7
         const val WEIGHT_TREND_PER_DAY = 0.0025

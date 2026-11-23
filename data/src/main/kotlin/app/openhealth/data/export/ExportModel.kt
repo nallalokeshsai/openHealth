@@ -113,7 +113,9 @@ object ExportTables {
                 double("rir"), double("rpe"), bool("is_warmup"), bool("is_backoff"),
                 bool("is_failure"), bool("is_bodyweight"), text("tempo"),
                 long("rest_seconds"), long("completed_at"), long("happened_at"),
-                long("recorded_at"), text("source_id"), long("revision"),
+                long("recorded_at"), text("source_id"), text("idempotency_key"),
+                text("observation_id"), text("raw_record_id"), text("device"),
+                text("app_version"), long("revision"),
             ),
         ),
         ExportTable(
@@ -146,7 +148,9 @@ object ExportTables {
                 text("zone_id"), long("happened_at"), long("recorded_at"),
                 double("quantity_g"), double("energy_kcal"), double("protein_g"),
                 double("carbs_g"), double("fat_g"), double("fibre_g"), text("source_kind"),
-                bool("user_verified"), bool("user_edited"), long("revision"),
+                bool("user_verified"), bool("user_edited"), text("observation_id"),
+                text("raw_record_id"), text("idempotency_key"), text("device"),
+                text("app_version"), long("revision"),
             ),
         ),
         ExportTable(
@@ -155,7 +159,8 @@ object ExportTables {
                 text("id"), text("type"), double("value"), text("unit"),
                 text("local_date"), text("zone_id"), long("happened_at"),
                 long("recorded_at"), text("source_id"), text("method"), text("notes"),
-                long("revision"),
+                text("observation_id"), text("raw_record_id"), text("idempotency_key"),
+                text("device"), text("app_version"), long("revision"),
             ),
         ),
         ExportTable(
@@ -164,7 +169,9 @@ object ExportTables {
                 text("id"), text("type"), double("value"), text("unit"),
                 text("local_date"), text("zone_id"), long("happened_at"),
                 long("recorded_at"), text("source_id"), text("method"), text("context"),
-                text("note"), long("revision"),
+                text("note"), text("observation_id"), text("raw_record_id"),
+                text("idempotency_key"), text("device"), text("app_version"),
+                long("revision"),
             ),
         ),
         ExportTable(

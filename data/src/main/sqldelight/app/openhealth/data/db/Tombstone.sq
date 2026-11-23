@@ -28,13 +28,22 @@ SELECT * FROM tombstone WHERE id = :id;
 
 tombstoneForEntity:
 SELECT * FROM tombstone
-WHERE entity_table = :entityTable AND entity_id = :entityId AND restored_at IS NULL;
+WHERE entity_table = :entityTable AND entity_id = :entityId
+    AND restored_at IS NULL AND payload IS NOT NULL;
 
 activeTombstones:
-SELECT * FROM tombstone WHERE restored_at IS NULL ORDER BY deleted_at DESC;
+SELECT * FROM tombstone
+WHERE restored_at IS NULL AND payload IS NOT NULL
+ORDER BY deleted_at DESC;
 
 tombstonesDueForPurge:
-SELECT * FROM tombstone WHERE restored_at IS NULL AND purge_after <= :now;
+SELECT * FROM tombstone
+WHERE restored_at IS NULL AND payload IS NOT NULL AND purge_after <= :now;
+
+-- Purge drops the payload but keeps the row as the permanent deletion marker, so a
+-- device that syncs later cannot resurrect the entity (pr.md §7.7).
+clearTombstonePayload:
+UPDATE tombstone SET payload = NULL WHERE id = :id;
 
 markRestored:
 UPDATE tombstone SET restored_at = :restoredAt WHERE id = :id;
@@ -43,7 +52,7 @@ deleteTombstone:
 DELETE FROM tombstone WHERE id = :id;
 
 countActiveTombstones:
-SELECT count(*) FROM tombstone WHERE restored_at IS NULL;
+SELECT count(*) FROM tombstone WHERE restored_at IS NULL AND payload IS NOT NULL;
 
 allTombstones:
 SELECT * FROM tombstone ORDER BY deleted_at;

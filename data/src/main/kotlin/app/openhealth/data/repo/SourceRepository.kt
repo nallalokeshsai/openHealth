@@ -67,10 +67,6 @@ class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSea
         )
     }
 
-    fun delete(id: SourceId) {
-        db.sourceQueries.deleteSource(id.value)
-    }
-
     private fun SourceRow.toDomain(): Source {
         val parsedPriorities = priorities?.takeIf { it.isNotBlank() }?.let {
             json.decodeFromString(prioritiesSerializer, it)

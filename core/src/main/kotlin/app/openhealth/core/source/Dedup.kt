@@ -4,7 +4,6 @@ import app.openhealth.core.ids.SourceId
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.SourceKind
-import app.openhealth.core.observation.TemporalShape
 import app.openhealth.core.time.LocalDay
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -51,6 +50,7 @@ enum class RollupAggregation { SUM, MEAN, LAST, MIN, MAX }
 object DedupPolicies {
     private val manualFirst = ManualFirstPerDayPolicy()
     private val oneSource = OneSourcePerDayPolicy()
+    private val primarySource = PrimarySourcePolicy()
     private val mostDetailed = MostDetailedPolicy()
     private val keepAll = KeepAllPolicy()
     private val sumAll = SumAllPolicy()
@@ -65,6 +65,7 @@ object DedupPolicies {
 
         ObservationType.WEIGHT,
         ObservationType.BODY_FAT_PERCENT,
+        ObservationType.LEAN_MASS,
         ObservationType.RESTING_HEART_RATE,
         -> manualFirst
 
@@ -78,6 +79,8 @@ object DedupPolicies {
 
         ObservationType.HEART_RATE,
         ObservationType.HEART_RATE_VARIABILITY,
+        -> primarySource
+
         ObservationType.BLOOD_PRESSURE_SYSTOLIC,
         ObservationType.BLOOD_PRESSURE_DIASTOLIC,
         ObservationType.BLOOD_GLUCOSE,
@@ -86,7 +89,6 @@ object DedupPolicies {
         ObservationType.RESPIRATORY_RATE,
         ObservationType.MOOD,
         ObservationType.STRESS,
-        ObservationType.LEAN_MASS,
         -> keepAll
 
         ObservationType.NUTRITION_ENERGY,
@@ -99,6 +101,26 @@ object DedupPolicies {
         -> sumAll
     }
 
+    /**
+     * One source per upstream family before any policy runs (`pr.md` §6.18). Garmin over
+     * FIT and Garmin over Health Connect are the same watch; keeping both would double a
+     * heart-rate series or a water total even when the steps rule already picks one.
+     */
+    internal fun collapseFamilies(
+        candidates: List<Observation>,
+        registry: SourceRegistry,
+    ): List<Observation> = candidates
+        .groupBy { registry.familyOf(it.provenance.sourceId) }
+        .values
+        .flatMap { familyCandidates ->
+            familyCandidates
+                .groupBy { it.provenance.sourceId }
+                .minBy { (sourceId, _) ->
+                    registry.priorityOf(sourceId, familyCandidates.first().type)
+                }
+                .value
+        }
+
     fun aggregation(type: ObservationType): RollupAggregation = when (type) {
         ObservationType.WEIGHT,
         ObservationType.BODY_FAT_PERCENT,
@@ -108,6 +130,8 @@ object DedupPolicies {
 
         ObservationType.HEART_RATE,
         ObservationType.HEART_RATE_VARIABILITY,
+        -> RollupAggregation.MEAN
+
         ObservationType.BLOOD_PRESSURE_SYSTOLIC,
         ObservationType.BLOOD_PRESSURE_DIASTOLIC,
         ObservationType.BLOOD_GLUCOSE,
@@ -151,10 +175,11 @@ class OneSourcePerDayPolicy : DedupPolicy {
         registry: SourceRegistry,
         day: LocalDay,
     ): DayResolution {
-        if (candidates.isEmpty()) return DayResolution.Empty
-        val bySource = candidates.groupBy { it.provenance.sourceId }
+        val reduced = DedupPolicies.collapseFamilies(candidates, registry)
+        if (reduced.isEmpty()) return DayResolution.Empty
+        val bySource = reduced.groupBy { it.provenance.sourceId }
         val ordered = bySource.entries.sortedWith(
-            compareBy({ registry.priorityOf(it.key, candidates.first().type) }, { it.key.value }),
+            compareBy({ registry.priorityOf(it.key, reduced.first().type) }, { it.key.value }),
         )
         val preferred = ordered.first()
         val complete = ordered.firstOrNull { (_, observations) -> covers(observations, day) }
@@ -174,7 +199,7 @@ class OneSourcePerDayPolicy : DedupPolicy {
 
     private fun covers(observations: List<Observation>, day: LocalDay): Boolean {
         val dailyTotal = observations.any {
-            it.type.shape == TemporalShape.DAILY_TOTAL && it.end == null
+            it.end == null && DedupPolicies.aggregation(it.type) == RollupAggregation.SUM
         }
         val dayStart = day.startInclusive()
         val dayEnd = day.endExclusive()
@@ -182,35 +207,39 @@ class OneSourcePerDayPolicy : DedupPolicy {
             .filter { it.end != null }
             .map { Pair(it.start, it.end!!) }
             .sortedBy { it.first }
-        val coverage = intervals.fold(Coverage(cursor = dayStart)) { state, interval ->
+        val coverage = intervals.fold(Coverage()) { state, interval ->
             val from = maxOf(interval.first, dayStart)
             val to = minOf(interval.second, dayEnd)
+            val previous = state.cursor
             when {
                 state.gapTooLarge || to <= from -> state
-                from - state.cursor > MAX_GAP -> state.copy(gapTooLarge = true)
+                previous != null && from - previous > MAX_GAP -> state.copy(gapTooLarge = true)
                 else -> Coverage(
                     covered = state.covered + (to - from),
-                    cursor = maxOf(state.cursor, to),
+                    cursor = if (previous == null) to else maxOf(previous, to),
                 )
             }
         }
+        // A watch that reports only its waking hours is not a gap: a day is covered when
+        // the intervals have no internal gap longer than an hour and span at least the
+        // waking window. A source that synced one hour is not a day.
         return dailyTotal ||
             (
                 intervals.isNotEmpty() &&
                     !coverage.gapTooLarge &&
-                    dayEnd - coverage.cursor <= MAX_GAP &&
-                    coverage.covered >= day.length() - MAX_GAP
+                    coverage.covered >= MIN_COVERAGE
                 )
     }
 
     private data class Coverage(
         val covered: Duration = Duration.ZERO,
-        val cursor: kotlin.time.Instant,
+        val cursor: kotlin.time.Instant? = null,
         val gapTooLarge: Boolean = false,
     )
 
     private companion object {
         val MAX_GAP: Duration = 1.hours
+        val MIN_COVERAGE: Duration = 16.hours
     }
 }
 
@@ -225,8 +254,9 @@ class ManualFirstPerDayPolicy : DedupPolicy {
         registry: SourceRegistry,
         day: LocalDay,
     ): DayResolution {
-        if (candidates.isEmpty()) return DayResolution.Empty
-        val winner = candidates.sortedWith(
+        val reduced = DedupPolicies.collapseFamilies(candidates, registry)
+        if (reduced.isEmpty()) return DayResolution.Empty
+        val winner = reduced.sortedWith(
             compareBy(
                 { if (kindOf(it, registry) == SourceKind.MANUAL) 0 else 1 },
                 { -it.provenance.happenedAt.epochSeconds },
@@ -269,6 +299,36 @@ class ManualFirstPerDayPolicy : DedupPolicy {
 }
 
 /**
+ * Heart rate and HRV are per-source series (`pr.md` §7.6). The day's row is the
+ * highest-priority source's series mean; the other sources stay in layer 2 untouched,
+ * and nothing across devices is averaged into one number.
+ */
+class PrimarySourcePolicy : DedupPolicy {
+    override fun resolve(
+        candidates: List<Observation>,
+        registry: SourceRegistry,
+        day: LocalDay,
+    ): DayResolution {
+        val reduced = DedupPolicies.collapseFamilies(candidates, registry)
+        if (reduced.isEmpty()) return DayResolution.Empty
+        val bySource = reduced.groupBy { it.provenance.sourceId }
+        val winner = bySource.entries
+            .minWith(
+                compareBy<Map.Entry<SourceId, List<Observation>>>(
+                    { (sourceId, _) -> registry.priorityOf(sourceId, reduced.first().type) },
+                    { it.key.value },
+                ),
+            )
+        return DayResolution.Selected(
+            observations = winner.value,
+            sourceId = winner.key,
+            family = registry.familyOf(winner.key),
+            reason = DedupReason.ONE_SOURCE_WINS,
+        )
+    }
+}
+
+/**
  * Sleep: the most detailed complete record wins. A full night is never replaced by a
  * partial one, so the source with the greatest recorded duration wins.
  */
@@ -278,8 +338,9 @@ class MostDetailedPolicy : DedupPolicy {
         registry: SourceRegistry,
         day: LocalDay,
     ): DayResolution {
-        if (candidates.isEmpty()) return DayResolution.Empty
-        val bySource = candidates.groupBy { it.provenance.sourceId }
+        val reduced = DedupPolicies.collapseFamilies(candidates, registry)
+        if (reduced.isEmpty()) return DayResolution.Empty
+        val bySource = reduced.groupBy { it.provenance.sourceId }
         val winner = bySource.entries
             .sortedWith(
                 compareByDescending<Map.Entry<SourceId, List<Observation>>> { (_, observations) ->
@@ -298,17 +359,18 @@ class MostDetailedPolicy : DedupPolicy {
     }
 }
 
-/** Blood pressure, heart rate, glucose: every reading is kept and averaged for display. */
+/** Blood pressure and glucose: every reading is kept from the deduplicated family set. */
 class KeepAllPolicy : DedupPolicy {
     override fun resolve(
         candidates: List<Observation>,
         registry: SourceRegistry,
         day: LocalDay,
     ): DayResolution {
-        if (candidates.isEmpty()) return DayResolution.Empty
-        val first = candidates.first()
+        val reduced = DedupPolicies.collapseFamilies(candidates, registry)
+        if (reduced.isEmpty()) return DayResolution.Empty
+        val first = reduced.first()
         return DayResolution.Selected(
-            observations = candidates,
+            observations = reduced,
             sourceId = first.provenance.sourceId,
             family = registry.familyOf(first.provenance.sourceId),
             reason = DedupReason.NO_DEDUP,
@@ -323,10 +385,11 @@ class SumAllPolicy : DedupPolicy {
         registry: SourceRegistry,
         day: LocalDay,
     ): DayResolution {
-        if (candidates.isEmpty()) return DayResolution.Empty
-        val first = candidates.first()
+        val reduced = DedupPolicies.collapseFamilies(candidates, registry)
+        if (reduced.isEmpty()) return DayResolution.Empty
+        val first = reduced.first()
         return DayResolution.Selected(
-            observations = candidates,
+            observations = reduced,
             sourceId = first.provenance.sourceId,
             family = registry.familyOf(first.provenance.sourceId),
             reason = DedupReason.NO_DEDUP,
