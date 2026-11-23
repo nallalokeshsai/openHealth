@@ -214,6 +214,15 @@ object ExportTables {
             ),
         ),
         ExportTable(
+            "note",
+            listOf(
+                text("id"), text("body"), text("local_date"), text("zone_id"),
+                long("happened_at"), long("recorded_at"), long("edited_at"),
+                text("source_id"), text("raw_record_id"), text("idempotency_key"),
+                text("device"), text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
             "settings",
             listOf(
                 text("key"),

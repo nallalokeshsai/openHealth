@@ -2,6 +2,7 @@ package app.openhealth.data.repo
 
 import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.MeasurementId
+import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.SetId
 import app.openhealth.core.ids.TombstoneId
 import app.openhealth.core.ids.VitalId
@@ -9,6 +10,7 @@ import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SystemClock
 import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Measurement
+import app.openhealth.data.db.Note
 import app.openhealth.data.db.OpenHealthDb
 import app.openhealth.data.db.Tombstone
 import app.openhealth.data.db.Vital
@@ -25,6 +27,7 @@ enum class TrashEntity(val table: String) {
     ENTRY("entry"),
     MEASUREMENT("measurement"),
     VITAL("vital"),
+    NOTE("note"),
 }
 
 @Serializable
@@ -128,6 +131,23 @@ data class VitalPayload(
     val revision: Long,
 )
 
+@Serializable
+data class NotePayload(
+    val id: String,
+    val body: String,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val editedAt: Long?,
+    val sourceId: String?,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+)
+
 /**
  * Undo, Trash and recovery (`pr.md` §6.29). A delete writes a tombstone holding the row
  * it removes, then removes the row, in one transaction. Undo restores it for the rest of
@@ -189,6 +209,16 @@ class TrashService(
         }
     }
 
+    fun deleteNote(id: NoteId): TombstoneId? = note(id.value)?.let { row ->
+        record(
+            entity = TrashEntity.NOTE,
+            entityId = row.id,
+            payload = json.encodeToString(NotePayload.serializer(), row.toPayload()),
+        ) {
+            db.noteQueries.deleteNote(row.id)
+        }
+    }
+
     /** Restores one tombstoned row. Returns false when it is gone or already restored. */
     fun undo(id: TombstoneId): Boolean {
         val tombstone = tombstoneById(id.value)
@@ -205,6 +235,7 @@ class TrashService(
                 TrashEntity.ENTRY -> restoreEntry(payload)
                 TrashEntity.MEASUREMENT -> restoreMeasurement(payload)
                 TrashEntity.VITAL -> restoreVital(payload)
+                TrashEntity.NOTE -> restoreNote(payload)
             }
             // Append-only inserts ignore an id that a re-created row owns. The undo is
             // only complete when the row is really there afterwards.
@@ -263,6 +294,7 @@ class TrashService(
         TrashEntity.ENTRY -> db.nutritionQueries.entryById(id).executeAsOneOrNull() != null
         TrashEntity.MEASUREMENT -> db.bodyQueries.measurementById(id).executeAsOneOrNull() != null
         TrashEntity.VITAL -> db.bodyQueries.vitalById(id).executeAsOneOrNull() != null
+        TrashEntity.NOTE -> db.noteQueries.noteById(id).executeAsOneOrNull() != null
     }
 
     private fun invalidateRestoredDay(entity: TrashEntity, payload: String) {
@@ -273,7 +305,7 @@ class TrashService(
                 json.decodeFromString(MeasurementPayload.serializer(), payload).localDate
             TrashEntity.VITAL ->
                 json.decodeFromString(VitalPayload.serializer(), payload).localDate
-            TrashEntity.WORK_SET -> null
+            TrashEntity.WORK_SET, TrashEntity.NOTE -> null
         }
         date?.let { rollupInvalidator?.invoke(LocalDate.parse(it)) }
     }
@@ -290,6 +322,8 @@ class TrashService(
         db.bodyQueries.measurementById(id).executeAsOneOrNull()
 
     private fun vital(id: String): Vital? = db.bodyQueries.vitalById(id).executeAsOneOrNull()
+
+    private fun note(id: String): Note? = db.noteQueries.noteById(id).executeAsOneOrNull()
 
     private fun restoreWorkSet(payload: String) {
         val row = json.decodeFromString(WorkSetPayload.serializer(), payload)
@@ -400,6 +434,25 @@ class TrashService(
         )
     }
 
+    private fun restoreNote(payload: String) {
+        val row = json.decodeFromString(NotePayload.serializer(), payload)
+        db.noteQueries.insertNote(
+            id = row.id,
+            body = row.body,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            editedAt = row.editedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+    }
+
     private fun Work_set.toPayload(): WorkSetPayload = WorkSetPayload(
         id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps, rir, rpe,
         is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds, completed_at,
@@ -424,6 +477,11 @@ class TrashService(
         id, type, value_, unit, local_date, zone_id, happened_at, recorded_at, source_id,
         method, context, note, excluded_from_trends, observation_id, raw_record_id,
         idempotency_key, device, app_version, revision,
+    )
+
+    private fun Note.toPayload(): NotePayload = NotePayload(
+        id, body, local_date, zone_id, happened_at, recorded_at, edited_at, source_id,
+        raw_record_id, idempotency_key, device, app_version, revision,
     )
 
     companion object {

@@ -56,6 +56,12 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                     "SELECT 'meal', id, local_date, created_at, created_at, 'manual', " +
                         "kind, 0 FROM meal ORDER BY created_at DESC LIMIT ?",
                     perTable,
+                ) +
+                newest(
+                    "SELECT 'note', id, local_date, happened_at, recorded_at, " +
+                        "COALESCE(source_id, ''), NULL, 0 FROM note " +
+                        "ORDER BY happened_at DESC LIMIT ?",
+                    perTable,
                 )
             )
             .sortedByDescending { it.happenedAt }
@@ -70,7 +76,7 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                 localDate = LocalDate.parse(row.local_date),
                 happenedAt = row.happened_at,
                 recordedAt = row.recorded_at,
-                sourceId = row.source_id,
+                sourceId = row.source_id.orEmpty(),
                 detail = row.detail,
                 edited = row.edited,
             )

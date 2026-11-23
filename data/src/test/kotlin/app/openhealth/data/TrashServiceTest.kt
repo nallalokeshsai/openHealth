@@ -2,11 +2,14 @@ package app.openhealth.data
 
 import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.MeasurementId
+import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.SetId
 import app.openhealth.core.seam.FixedClock
 import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Measurement
+import app.openhealth.data.db.Note
 import app.openhealth.data.db.Work_set
+import app.openhealth.data.repo.NoteRepository
 import app.openhealth.data.repo.NutritionRepository
 import app.openhealth.data.repo.TrashService
 import kotlin.test.Test
@@ -61,6 +64,39 @@ class TrashServiceTest {
             store.db.bodyQueries.measurementById("m-1").executeAsOneOrNull()!!.value_,
         )
         assertTrue(trash.active().isEmpty())
+        store.close()
+    }
+
+    @Test
+    fun aDeletedNoteKeepsItsTextInTheTombstoneAndUndoBringsItBack() {
+        val store = inMemoryStore()
+        val clock = FixedClock(now)
+        val trash = TrashService(store.db, clock)
+        NoteRepository(store.db).insert(
+            Note(
+                id = "note-trash-1",
+                body = "Left knee felt fine",
+                local_date = date.toString(),
+                zone_id = TEST_ZONE.id,
+                happened_at = now.toEpochMilliseconds(),
+                recorded_at = now.toEpochMilliseconds(),
+                edited_at = null,
+                source_id = "manual",
+                raw_record_id = null,
+                idempotency_key = "trash-note-1",
+                device = "manual",
+                app_version = "test",
+                revision = 1L,
+            ),
+        )
+        val tombstone = trash.deleteNote(NoteId("note-trash-1"))!!
+        assertNull(store.db.noteQueries.noteById("note-trash-1").executeAsOneOrNull())
+        assertTrue(trash.byId(tombstone)!!.payload!!.contains("Left knee felt fine"))
+        assertTrue(trash.undo(tombstone))
+        assertEquals(
+            "Left knee felt fine",
+            store.db.noteQueries.noteById("note-trash-1").executeAsOneOrNull()!!.body,
+        )
         store.close()
     }
 
