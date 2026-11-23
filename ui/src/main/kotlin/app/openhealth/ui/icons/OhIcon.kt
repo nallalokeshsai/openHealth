@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
+import androidx.compose.ui.graphics.vector.VectorGroup
+import androidx.compose.ui.graphics.vector.VectorNode
+import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.Dp
 import app.openhealth.ui.theme.OhTheme
@@ -45,6 +48,61 @@ internal fun ImageVector.Builder.stroke(
         strokeLineJoin = StrokeJoin.Round,
         pathBuilder = block,
     )
+}
+
+/**
+ * The same icon at a different stroke weight: a tab's glyph rests at 1.65 and goes to
+ * 2.0 when active (`DESIGN.md` §5.15, §10.1). The path data is shared, so the set still
+ * has one geometry.
+ */
+fun ImageVector.withStrokeWidth(width: Float): ImageVector {
+    val builder = ImageVector.Builder(
+        name = name,
+        defaultWidth = defaultWidth,
+        defaultHeight = defaultHeight,
+        viewportWidth = viewportWidth,
+        viewportHeight = viewportHeight,
+    )
+
+    fun addNode(node: VectorNode) {
+        when (node) {
+            is VectorPath -> builder.addPath(
+                pathData = node.pathData,
+                pathFillType = node.pathFillType,
+                name = node.name,
+                fill = node.fill,
+                fillAlpha = node.fillAlpha,
+                stroke = node.stroke,
+                strokeAlpha = node.strokeAlpha,
+                strokeLineWidth = if (node.stroke == null) 0f else width,
+                strokeLineCap = node.strokeLineCap,
+                strokeLineJoin = node.strokeLineJoin,
+                strokeLineMiter = node.strokeLineMiter,
+                trimPathStart = node.trimPathStart,
+                trimPathEnd = node.trimPathEnd,
+                trimPathOffset = node.trimPathOffset,
+            )
+
+            is VectorGroup -> {
+                // addGroup opens a group; the children added next belong to it.
+                builder.addGroup(
+                    name = node.name,
+                    rotate = node.rotation,
+                    pivotX = node.pivotX,
+                    pivotY = node.pivotY,
+                    scaleX = node.scaleX,
+                    scaleY = node.scaleY,
+                    translationX = node.translationX,
+                    translationY = node.translationY,
+                    clipPathData = node.clipPathData,
+                )
+                node.forEach { child -> addNode(child) }
+            }
+        }
+    }
+
+    root.forEach { node -> addNode(node) }
+    return builder.build()
 }
 
 /** Draws one icon at the optical size the caller asks for (`DESIGN.md` §10.1). */

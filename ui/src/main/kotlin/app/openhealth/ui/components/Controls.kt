@@ -16,8 +16,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -107,7 +107,9 @@ fun OhSegmentedControl(
             val thumbShape = RoundedCornerShape(OhTheme.radius.sm)
             Box(
                 modifier = Modifier
-                    .then(if (scrollable) Modifier.width(IntrinsicSize.Max) else Modifier.weight(1f))
+                    .then(
+                        if (scrollable) Modifier.width(IntrinsicSize.Max) else Modifier.weight(1f),
+                    )
                     .heightIn(min = dims.segmentHeight)
                     .clip(thumbShape)
                     .then(

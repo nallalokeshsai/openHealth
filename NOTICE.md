@@ -9,6 +9,17 @@ It is not a medical device (`pr.md` §12.1).
 
 ## Third-party notices
 
+### Typefaces — none bundled
+
+openHealth ships no typeface at 1.0 (`DESIGN.md` §3.1). Type is the platform UI font
+(Roboto on Android) through `FontFamily.Default`, so there is no font file to licence.
+If a later brand pass bundles Inter (OFL) it is recorded here first.
+
+### Icons — drawn for openHealth
+
+The icon set in `ui/…/icons/` is original line art for this product (`DESIGN.md` §10).
+Nothing is copied from Material Icons, SF Symbols or openGym's set.
+
 ### MuscleMap — body diagram geometry (MIT)
 
 The body-map path geometry used from B4 onward is the MIT-licensed MuscleMap set,

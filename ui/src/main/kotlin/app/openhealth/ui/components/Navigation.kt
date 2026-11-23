@@ -19,6 +19,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
+import app.openhealth.ui.icons.withStrokeWidth
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
 
@@ -193,8 +195,13 @@ private fun TabCell(
         verticalArrangement = Arrangement.Center,
     ) {
         Box {
+            val glyph = remember(tab.icon, selected) {
+                tab.icon.withStrokeWidth(
+                    if (selected) dims.tabStrokeActive else dims.tabStrokeRest,
+                )
+            }
             OhIcon(
-                icon = tab.icon,
+                icon = glyph,
                 contentDescription = null,
                 size = dims.tabIcon,
                 tint = tint,

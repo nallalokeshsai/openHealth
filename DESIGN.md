@@ -2,7 +2,11 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-22 — five-tab bar with a raised centre Train (§5.15,
+**Last revision:** 2026-11-23 — B1 build clarifications, no new token: the chip's
+text is the `subhead` role (§5.9, the stated 14 sp is not one of the 11 roles in
+§3.2), `acc-2` is resolved for the eight non-brand presets (§2.6), and Appendix A's
+row padding is aligned with §5.3 (12/16, not 11/14).
+Previous: 2026-11-22 — five-tab bar with a raised centre Train (§5.15,
 §13.1), global top bar (§4.4), `fat` and `recovery` data hues (§2.5, App. A),
 recovery ramp green → orange → red (§9.1), dynamic body model (§9.1.1).
 Previous: 2026-11-21 — establishes the visual system from the openGym
@@ -288,6 +292,12 @@ it does not vanish. `acc-2` is the pressed **graphic** shade for an accent fill
 that carries no text (a bar, a ring segment). A filled button does not use it:
 darkening the fill pushes dark ink below 4.5:1 on six of the nine presets (blue
 falls to 3.7:1). Buttons press by scale and opacity instead (§5.7).
+
+**For the eight presets other than `brand` (2026-11-23).** Appendix A fixes `acc-2`
+for `brand` only, so a preset's `acc-2` is not a new hex: it is the preset's own
+"Accent dark" value in dark and its "Light ink" value in light. Both already clear
+3:1 on `surface`; `brand` keeps `#84CC16` / `#65A30D` exactly as Appendix A states.
+Nothing presses with it (§5.7).
 
 Presets (Settings → Appearance). Nine, no more:
 
@@ -687,7 +697,7 @@ lifetime total may sit underneath at full width. No boxes inside the card.
 
 ### 5.9 Chip
 
-- 32 dp tall, 6/12 padding, `r-full`, `surface`, text 14/400.
+- 32 dp tall, 6/12 padding, `r-full`, `surface`, text 15/400 (`subhead`).
 - Selected: `acc` fill, `on-acc` text, weight 500.
 - Filter rows (Library, Food) may use a **neutral** selected state
   (`surface-3` + `label`) so the accent is not spent three times before the
@@ -1862,7 +1872,7 @@ stroke  1.7 icons (1.65 tab, 2.0 active, 2.4 chevron)
 hair    0.5
 target  44
 column  560 max
-pad     16 screen, 16 card, 11/14 row
+pad     16 screen, 16 card, 12/16 row
 motion  fast 140 / med 220 / push 380 / pop 340 / sheet 340 / dialog 280
 ease    cubic-bezier(.32,.72,0,1)
 press   .97 / .92 small / .985 card

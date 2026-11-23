@@ -149,3 +149,141 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 - `prompts.md`, `BUILD-ROADMAP.md` §B0 and `AGENTS.md` still describe a Windows +
   OneDrive workstation with Gradle on `PATH`. This machine has neither, and the wrapper
   is the only Gradle. Flagged, not swept (a docs sweep is its own task).
+
+---
+
+## B1 — Design system
+
+**Status:** Completed · **Date:** 2026-11-23 · **Branch:** `build/b1-design-system`
+**Goal:** the closed token set and the 19 components exist once, in code, in `:ui`, and
+cannot drift (`BUILD-ROADMAP.md` §B1).
+
+### Environment and decisions taken at the start
+
+- Workstation: the B0 Linux machine, unchanged. Test target: the owner's **physical
+  phone**, as `AGENTS.md` "Test device" decided; it was authorised and listed as
+  `device` before any question was asked.
+- **Questions asked: none.** `DESIGN.md` §3.1 answers the font question itself: "We ship
+  no typeface at 1.0", the platform UI font through `FontFamily.Default`. Nothing is
+  bundled, so there is no font licence to read; `NOTICE.md` records that.
+- Appendix A is the source of every value. Three inconsistencies inside `DESIGN.md` were
+  resolved in a dated edit rather than guessed in code (see "Contract corrections").
+- `docs/adr/0004-design-system.md` records the eleven implementation decisions that go
+  beyond the text of the contract (theme shape, `acc-2` for presets, the token gate,
+  Detekt/ktlint scoping, Roborazzi without its plugin, the 200 % adaptations).
+
+### Milestones
+
+1. **Tokens and theme** — commit `aa04f7c`.
+   `ui/…/theme/`: `OhColors` (surface ramp, text ramp, separators, the nine accent
+   presets, the system palette, nine status inks, `fat`, the three recovery steps and
+   the derived tokens the components state in words), `OhType` (the 9 text roles plus
+   `display` and `timer`, `large` at 30 sp below 420 dp), `OhSpace`, `OhRadius`,
+   `OhMotion`, `OhAlpha`, `OhDims` (component geometry quoted from §4.3/§4.5/§5) and one
+   `OhTheme` over `CompositionLocal`s. No `MaterialTheme` is installed; no dynamic
+   colour; no ripple. `checkDesignTokens` is registered for both Android modules.
+2. **Components, top bar, tab bar, icons** — in the same commit.
+   All 19 components of §5 (card, card header, inset group + row, media row, stat tile,
+   KPI band, button in six variants and three sizes, icon button, chip + strip,
+   segmented control, switch, stepper with press-and-hold acceleration, slider, text and
+   search field, tab bar with the raised Train disc, sheet + modal sheet, dialog card +
+   dialog, toast + undo, timer bar), the global top bar of §4.4, and an original 24 dp
+   line set: 33 navigation/action icons, 12 module icons, 18 object icons and 12 routine
+   glyph keys. Tab glyphs are re-stroked at 1.65 (rest) and 2.0 (active) from the same
+   path data.
+3. **Gallery, screenshots, contrast** — in the same commit.
+   A debug-only `GalleryActivity` (dark/light and 100 %/200 % switches) in
+   `app-android/src/debug`; 26 Roborazzi tests each rendered in dark, light, 200 % text
+   and RTL (104 committed goldens); `OhContrastTest` (11 tests) computes every pair of
+   `DESIGN.md` §12.5 from the token values, compositing alpha over the surface it is read
+   on.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew check` | **BUILD SUCCESSFUL**; 37 tests (26 screenshot × 4 variants, 11 contrast), lint, ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` in every module. |
+| `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; debug APK. |
+| `./gradlew :ui:testDebugUnitTest` (verify mode, the default in `check`) | **BUILD SUCCESSFUL**; 104 goldens compared, none missing, none changed. |
+| `./gradlew :ui:testDebugUnitTest -Proborazzi.record` | **BUILD SUCCESSFUL**; recordings are byte-identical between runs (compared by re-running the verify pass). |
+| Guard proof 1 (`checkDesignTokens`): a file in `ui/…/components` with `Color(0xFF112233)` and `13.dp` | `:ui:checkDesignTokens` **failed** naming both lines; file removed, gate green. |
+| Guard proof 2 (`checkLicences`): first `:ui:check` | **Failed** as designed, listing 13 test-only Robolectric/Roborazzi transitives missing from the allowlist. Each licence was read from its POM and recorded (see "Licences"); both gates then green. |
+| Regression, B0 portability guard: `import android.os.Bundle` in a `:core` file | `:core:checkPortability` **failed** naming the file and line; file removed, green. |
+| `./gradlew :app-android:installDebug` then launch the gallery cold | `LaunchState: COLD`, focused activity `…android.gallery.GalleryActivity`, `logcat -s AndroidRuntime:E` empty. |
+| Same for `MainActivity` | `Status: ok`, cold, focused activity, no crash. |
+| Gallery on the phone, dark → light → 200 % text → back | Every section renders; the two theme switches and both text-size switches work; no crash and no `AndroidRuntime` entry. |
+
+No device identity (serial, model, build) is recorded in this repository.
+
+### Exit tests (`BUILD-ROADMAP.md` §B1)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| Gallery renders | `GalleryActivity` cold-launched on the physical phone in dark, light and 200 % text; screenshots inspected section by section; no crash | **pass** |
+| Screenshot tests pass | 26 Roborazzi tests × 4 variants = 104 goldens under `ui/src/test/screenshots/{dark,light,text200,rtl}`, verified by plain `check` (record mode off) | **pass** |
+| Contrast test passes | `OhContrastTest`, 11 tests over both themes and all nine presets: label-2, label-dim, every `acc-ink`, `on-acc`, `acc-2 ≥ 3`, the six text inks, streak/frost ≥ 3, the focus ring, `fat` on `bg`/`surface`/`surface-2`, and the recovery steps against Appendix A | **pass** |
+| A `Color(` literal or a raw `.dp` literal outside `ui/theme` fails a check | Guard proof 1 above, then green after removal | **pass** |
+
+### Regression over earlier phases
+
+- **B0 `./gradlew check`** — covered by the full run above.
+- **B0 portability guard** — probe re-run (above) because the convention plugins were
+  edited to add `checkDesignTokens` and the Detekt configuration.
+- **B0 licence guard** — re-run; new test-only transitives were allowed by licence, none
+  in the GPL family (see below).
+- **B0 install-and-launch** — redone on the physical phone for both activities.
+- B0's ktlint and Detekt probes were **not** repeated: the rules are unchanged for
+  non-composable code, and the scoped change is recorded in ADR 0004.
+
+### Licences
+
+`gradle/licences/allowed.tsv` gained eleven test-only rows, each read from the artefact's
+own POM on Maven Central on 2026-11-23: sqlite4java (Apache-2.0), dropbox differ
+(Apache-2.0), icu4j (Unicode-3.0), javawriter (Apache-2.0), javax.inject (Apache-2.0),
+bouncycastle (MIT), conscrypt (Apache-2.0), ow2 asm (BSD-3-Clause), snakeyaml
+(Apache-2.0). `javax.annotation:javax.annotation-api` is dual-licensed **CDDL-1.1 or
+GPLv2+CPE**; the allowlist records the CDDL election, so no GPL-family code is elected
+and none reaches the APK (the dependency is on the unit-test classpath only). Robolectric
+and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is unchanged.
+
+### Contract corrections (dated in `DESIGN.md`)
+
+- §5.9 chip text was **14/400**, a size that is not one of the 11 roles of §3.2 and that
+  §0.2 forbids as a twelfth step. It is now **15/400 (`subhead`)**.
+- Appendix A's row padding said "11/14" while §5.3 says 12/16 and the hairline inset
+  depends on 16. Appendix A now says **12/16**, matching §5.3.
+- `acc-2` is specified for `brand` only. For the other eight presets it resolves to that
+  preset's own "Accent dark" (dark theme) or "Light ink" (light theme); no hex was
+  invented, both already clear 3:1 on `surface`, and §2.6 records it.
+- The revision line of `DESIGN.md` carries the 2026-11-23 note.
+
+### Placeholders and deferred work
+
+- **Backdrop blur** on the top bar and tab bar is not implemented: their fills carry the
+  documented 94 % `bg-el`, but a real backdrop blur needs the content behind the bar and
+  belongs to the shell (B3). Under Reduce Transparency they are already opaque enough to
+  read; the switch itself is B10.
+- **Edge-to-edge and inset consumption** are B3's. The debug gallery reserves the status
+  bar itself; the components take inset-free geometry.
+- The XML window frame (`Theme.OpenHealth`, no ActionBar, black window) is deliberately
+  minimal; the real theme, splash and system-bar behaviour arrive in B3.
+- `empty`, `loading` and `offline` are screen patterns of §6.7/§6.4/§6.5, not components of
+  the 19; they are built with the screens that show them.
+- `modal` sheet and dialog are used through Material 3 `ModalBottomSheet`/`Dialog` for
+  behaviour only, with every colour, shape and inset passed from `OhTheme`.
+
+### Open issues
+
+- The screenshot goldens depend on Robolectric's native renderer. Record them on Linux
+  with the pinned Robolectric 4.18.1; a future upgrade may legitimately rewrite all 104
+  images in one commit.
+- Detekt's four rules are scoped to `@Composable` in `gradle/detekt.yml` and ktlint's
+  function-naming rule ignores `@Composable`; both were verified to still fire on
+  non-composable code. Re-check when either tool is upgraded.
+- The `timer` role is exposed as `timer` (28 sp) and `timerFullScreen` (64 sp), the two
+  ends of §3.2's range; a mid-range clock is a size argument at the call site, not a new
+  role.
+- The gallery's colour-swatch section is a debug aid and is not held to the screen gate;
+  product screens are.
+
+iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.

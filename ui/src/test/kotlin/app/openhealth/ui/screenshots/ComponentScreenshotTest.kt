@@ -532,7 +532,6 @@ class ComponentScreenshotTest {
         }
     }
 
-
     /** Captures a control while a finger is down on it (`DESIGN.md` §6.1). */
     private fun shotPressed(name: String, nodeText: String, content: @Composable () -> Unit) {
         val variant = mutableStateOf(Variant.Dark)
