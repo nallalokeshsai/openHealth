@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -44,6 +47,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import app.openhealth.ui.R
+import app.openhealth.ui.icon.OhIcon
+import app.openhealth.ui.icon.OhIconName
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.mediumWeight
 import app.openhealth.ui.theme.semiboldWeight
@@ -61,13 +67,14 @@ fun OhSheet(
     title: String,
     modifier: Modifier = Modifier,
     primaryAction: (@Composable () -> Unit)? = null,
-    cancelLabel: String = "Cancel",
+    cancelLabel: String? = null,
     onCancel: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val colors = OhTheme.colors
     val geometry = OhTheme.geometry
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val resolvedCancelLabel = cancelLabel ?: stringResource(R.string.oh_cancel)
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
@@ -85,6 +92,7 @@ fun OhSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .padding(
                     start = geometry.sheetPaddingHorizontal,
                     end = geometry.sheetPaddingHorizontal,
@@ -101,14 +109,21 @@ fun OhSheet(
             if (onCancel != null) {
                 Spacer(Modifier.height(OhTheme.space.space3))
                 Text(
-                    text = cancelLabel,
+                    text = resolvedCancelLabel,
                     style = OhTheme.type.body,
                     color = colors.label2,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(role = Role.Button, onClick = onCancel)
+                        .clickable(
+                            interactionSource = remember {
+                                MutableInteractionSource()
+                            },
+                            indication = null,
+                            role = Role.Button,
+                            onClick = onCancel
+                        )
                         .padding(vertical = OhTheme.space.space3)
-                        .semantics { contentDescription = cancelLabel }
+                        .semantics { contentDescription = resolvedCancelLabel }
                 )
             }
         }
@@ -179,7 +194,7 @@ fun OhDialog(
     primaryLabel: String,
     onPrimary: () -> Unit,
     modifier: Modifier = Modifier,
-    cancelLabel: String = "Cancel",
+    cancelLabel: String? = null,
     onCancel: (() -> Unit)? = null,
     wide: Boolean = false
 ) {
@@ -208,7 +223,7 @@ fun OhDialogCard(
     primaryLabel: String,
     onPrimary: () -> Unit,
     modifier: Modifier = Modifier,
-    cancelLabel: String = "Cancel",
+    cancelLabel: String? = null,
     onCancel: (() -> Unit)? = null,
     wide: Boolean = false
 ) {
@@ -216,6 +231,7 @@ fun OhDialogCard(
     val type = OhTheme.type
     val geometry = OhTheme.geometry
     val shape = RoundedCornerShape(OhTheme.radius.lg)
+    val resolvedCancelLabel = cancelLabel ?: stringResource(R.string.oh_cancel)
     Column(
         modifier = modifier
             .width(if (wide) geometry.dialogWideWidth else geometry.dialogWidth)
@@ -233,12 +249,19 @@ fun OhDialogCard(
         if (onCancel != null) {
             Spacer(Modifier.height(OhTheme.space.space1))
             Text(
-                text = cancelLabel,
+                text = resolvedCancelLabel,
                 style = type.body,
                 color = colors.label2,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(role = Role.Button, onClick = onCancel)
+                    .clickable(
+                        interactionSource = remember {
+                            MutableInteractionSource()
+                        },
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onCancel
+                    )
                     .padding(vertical = OhTheme.space.space3)
             )
         }
@@ -320,6 +343,7 @@ fun OhToast(
     val colors = OhTheme.colors
     val type = OhTheme.type
     val geometry = OhTheme.geometry
+    val dismissLabel = stringResource(R.string.oh_dismiss)
     Row(
         modifier = modifier
             .fillMaxWidth(geometry.toastMaxWidthFraction)
@@ -343,7 +367,14 @@ fun OhToast(
             Box(
                 modifier = Modifier
                     .height(geometry.toastActionTarget)
-                    .clickable(role = Role.Button, onClick = onAction)
+                    .clickable(
+                        interactionSource = remember {
+                            MutableInteractionSource()
+                        },
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onAction
+                    )
                     .semantics { contentDescription = actionLabel }
                     .padding(horizontal = OhTheme.space.space2),
                 contentAlignment = Alignment.Center
@@ -356,11 +387,23 @@ fun OhToast(
             Box(
                 modifier = Modifier
                     .size(geometry.toastActionTarget)
-                    .clickable(role = Role.Button, onClick = onDismiss)
-                    .semantics { contentDescription = "Dismiss" },
+                    .clickable(
+                        interactionSource = remember {
+                            MutableInteractionSource()
+                        },
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onDismiss
+                    )
+                    .semantics { contentDescription = dismissLabel },
                 contentAlignment = Alignment.Center
             ) {
-                Text("×", style = type.subhead, color = colors.label2)
+                OhIcon(
+                    name = OhIconName.Close,
+                    contentDescription = null,
+                    size = OhTheme.geometry.iconButtonGlyph,
+                    tint = colors.label2
+                )
             }
         }
     }

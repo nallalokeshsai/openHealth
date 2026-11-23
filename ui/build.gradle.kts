@@ -40,3 +40,9 @@ dependencies {
     // them next to the JUnit 5 unit tests.
     testRuntimeOnly(libs.junit.vintage.engine)
 }
+
+// The B1 gate: `check` verifies the committed screenshot goldens, so a component cannot drift
+// with the build still green (BUILD-ROADMAP.md B1).
+tasks.named("check") {
+    dependsOn("verifyRoborazziDebug")
+}

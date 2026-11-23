@@ -44,8 +44,11 @@ B13 with the server image.
 
 ## Added in B1 (verified 2026-11-23)
 
-B1 applies the screenshot testing `Tech-Stack.md` §10 names. All of these are **test-only**: none is
-on a shipped classpath, and `checkLicences` still reviews only what ships.
+B1 applies the screenshot testing `Tech-Stack.md` §10 names and the one behavioural dependency the
+components need. Roborazzi, Robolectric, JUnit 4, the vintage engine and the Compose UI test
+artefacts are **test-only**: none is on a shipped classpath, and `checkLicences` still reviews only
+what ships. Compose Material 3 **does** ship, as a behaviour primitive only (DESIGN.md Appendix B:
+`ModalBottomSheet`, `Icon`, `Text`, `LocalTextStyle`; never its palette or shapes).
 
 | Component | Pinned | Evidence and why this one |
 |---|---|---|
@@ -54,7 +57,8 @@ on a shipped classpath, and `checkLicences` still reviews only what ships.
 | androidx.test.ext:junit | 1.3.0 | Latest stable on Google Maven (1.4.0-alpha04 is the newest alpha). Apache-2.0. |
 | JUnit 4 | 4.13.2 | The last JUnit 4 release; Robolectric and Compose UI rules run on it. EPL-1.0. |
 | JUnit Vintage engine | 6.1.3 | Matches the Jupiter pin, so JUnit 4 test classes run under the module's existing `useJUnitPlatform()`. EPL-2.0. |
-| Compose UI test, Material 3 | via the 2026.11.01 BOM | The UI test artefacts and `material3` come from the BOM already pinned; `material3` is behaviour only (sheet, text-style default), never its palette (DESIGN.md Appendix B). |
+| Compose UI test artefacts | via the 2026.11.01 BOM | From the BOM already pinned; test-only. |
+| Compose Material 3 | via the 2026.11.01 BOM | From the BOM already pinned; the only new shipped module family. Its licence and the three transitive ripple modules are reviewed in `gradle/client-licences.txt`. |
 
 The Roborazzi plugin is applied only to `:ui`; it creates the record/verify/compare tasks and passes
 the mode to the test JVM. Screenshot goldens are committed under `ui/src/test/screenshots` and are

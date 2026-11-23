@@ -26,12 +26,16 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
+import app.openhealth.ui.R
 import app.openhealth.ui.icon.OhIcon
 import app.openhealth.ui.icon.OhIconName
 import app.openhealth.ui.theme.OhTheme
@@ -115,6 +119,7 @@ fun OhRow(
     val type = OhTheme.type
     val geometry = OhTheme.geometry
     val density = LocalDensity.current
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val titleColor = when {
@@ -137,7 +142,7 @@ fun OhRow(
             .heightIn(min = geometry.rowMinHeight)
             .then(
                 if (showDivider) {
-                    Modifier.topHairline(colors.sep, hairlinePx, dividerInsetPx)
+                    Modifier.topHairline(colors.sep, hairlinePx, dividerInsetPx, rtl)
                 } else {
                     Modifier
                 }
@@ -170,14 +175,14 @@ fun OhRow(
                 modifier = Modifier
                     .size(geometry.rowIconTile)
                     .clip(RoundedCornerShape(geometry.rowIconRadius))
-                    .background(if (destructive) colors.red else iconTint),
+                    .background(if (destructive) colors.red.copy(alpha = 0.15f) else iconTint),
                 contentAlignment = Alignment.Center
             ) {
                 OhIcon(
                     name = icon,
                     contentDescription = null,
                     size = geometry.rowIconTile / 2,
-                    tint = colors.onAcc
+                    tint = if (destructive) colors.redInk else colors.onAcc
                 )
             }
             Spacer(Modifier.width(geometry.rowGap))
@@ -212,7 +217,7 @@ fun OhRow(
             trailingChevron -> {
                 Spacer(Modifier.width(geometry.rowGap))
                 OhIcon(
-                    name = OhIconName.ChevronRight,
+                    name = if (rtl) OhIconName.ChevronLeft else OhIconName.ChevronRight,
                     contentDescription = null,
                     size = geometry.rowChevron,
                     tint = colors.label,
@@ -301,6 +306,7 @@ fun OhTombstoneRow(text: String, onUndo: () -> Unit, modifier: Modifier = Modifi
     val colors = OhTheme.colors
     val type = OhTheme.type
     val geometry = OhTheme.geometry
+    val undoDeleteLabel = stringResource(R.string.oh_undo_delete)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -329,13 +335,20 @@ fun OhTombstoneRow(text: String, onUndo: () -> Unit, modifier: Modifier = Modifi
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = "Undo",
+            text = stringResource(R.string.oh_undo),
             style = type.subhead.semiboldWeight(),
             color = colors.accInk,
             modifier = Modifier
-                .clickable(role = Role.Button, onClick = onUndo)
+                .clickable(
+                    interactionSource = remember {
+                        MutableInteractionSource()
+                    },
+                    indication = null,
+                    role = Role.Button,
+                    onClick = onUndo
+                )
                 .padding(horizontal = OhTheme.space.space3, vertical = OhTheme.space.space2)
-                .semantics { contentDescription = "Undo delete" }
+                .semantics { contentDescription = undoDeleteLabel }
         )
     }
 }

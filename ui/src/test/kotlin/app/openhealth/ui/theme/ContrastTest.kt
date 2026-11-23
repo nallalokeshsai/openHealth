@@ -50,13 +50,13 @@ class ContrastTest {
             assertRatio(colors.accInk, colors.surface, bodyMinimum, "$theme surface: acc-ink")
             // The focus ring is acc-ink at 2.5 dp (§11.1); it is a control, so 3:1 is the floor,
             // but it is measured against the same surfaces.
-            assertRatio(colors.accInk, colors.surface, graphicMinimum, "$theme focus ring")
+            assertRatio(colors.accInk, colors.surface2, graphicMinimum, "$theme focus ring on surface-2")
         }
     }
 
     @Test
     fun onAccentClearsBodyTextOnEveryPresetFill() {
-        forEachTheme { theme, colors ->
+        forEachThemeAndPreset { theme, colors ->
             assertRatio(colors.onAcc, colors.acc, bodyMinimum, "$theme on-acc on acc")
         }
     }
@@ -113,15 +113,33 @@ class ContrastTest {
         )
     }
 
+    @Test
+    fun recoveryTokensAreTheDataHuesAndStayVisibleInTheCanonicalTheme() {
+        val dark = darkColors(OhAccentPreset.Brand)
+        // §9.1: the recovery steps are the green, orange and red data hues, named so the map cannot
+        // drift from the palette. Dark is canonical (§12.1), where each is a graphic on page and card.
+        assertTrue(dark.recReady == dark.green, "rec-ready is not green")
+        assertTrue(dark.recEasing == dark.orange, "rec-easing is not orange")
+        assertTrue(dark.recActive == dark.red, "rec-active is not red")
+        assertRatio(dark.recReady, dark.bg, graphicMinimum, "dark bg: rec-ready")
+        assertRatio(dark.recReady, dark.surface, graphicMinimum, "dark surface: rec-ready")
+        assertRatio(dark.recEasing, dark.bg, graphicMinimum, "dark bg: rec-easing")
+        assertRatio(dark.recEasing, dark.surface, graphicMinimum, "dark surface: rec-easing")
+        assertRatio(dark.recActive, dark.bg, graphicMinimum, "dark bg: rec-active")
+        assertRatio(dark.recActive, dark.surface, graphicMinimum, "dark surface: rec-active")
+        assertTrue(dark.fat != dark.recEasing, "fat must not reuse the Easing hue")
+        assertTrue(dark.fat != dark.yellow, "fat is a data hue, not the record tag")
+    }
+
     private fun forEachTheme(block: (String, OhColors) -> Unit) {
-        block("dark", darkColors(OhAccentPreset.Brand, highContrast = false))
-        block("light", lightColors(OhAccentPreset.Brand, highContrast = false))
+        block("dark", darkColors(OhAccentPreset.Brand))
+        block("light", lightColors(OhAccentPreset.Brand))
     }
 
     private fun forEachThemeAndPreset(block: (String, OhColors) -> Unit) {
         for (preset in OhAccentPreset.entries) {
-            block("dark/${preset.key}", darkColors(preset, highContrast = false))
-            block("light/${preset.key}", lightColors(preset, highContrast = false))
+            block("dark/${preset.key}", darkColors(preset))
+            block("light/${preset.key}", lightColors(preset))
         }
     }
 

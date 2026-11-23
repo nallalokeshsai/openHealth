@@ -3,6 +3,7 @@
 package app.openhealth.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,14 +30,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import app.openhealth.ui.R
 import app.openhealth.ui.icon.OhIcon
 import app.openhealth.ui.icon.OhIconName
 import app.openhealth.ui.theme.OhTheme
@@ -53,7 +58,7 @@ fun OhTopBar(
     onQuickAdd: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
-    appName: String = "openHealth",
+    appName: String? = null,
     showSyncDot: Boolean = false
 ) {
     val colors = OhTheme.colors
@@ -61,29 +66,30 @@ fun OhTopBar(
     val geometry = OhTheme.geometry
     val density = LocalDensity.current
     val hairlinePx = with(density) { OhTheme.space.hairline.toPx() }
+    val name = appName ?: stringResource(R.string.oh_app_name)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(geometry.topBarHeight)
+            .heightIn(min = geometry.topBarHeight)
             .bottomHairline(colors.sepOp, hairlinePx)
             .background(colors.bgEl.copy(alpha = geometry.tabBarAlpha))
             .padding(horizontal = OhTheme.geometry.screenPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(appName, style = type.body.semiboldWeight(), color = colors.label)
+            Text(name, style = type.body.semiboldWeight(), color = colors.label)
             Text(date, style = type.caption, color = colors.label2, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         OhIconButton(
             icon = OhIconName.Add,
-            contentDescription = "Quick add",
+            contentDescription = stringResource(R.string.oh_quick_add),
             onClick = onQuickAdd
         )
         Spacer(Modifier.width(OhTheme.space.space1))
         Box {
             OhIconButton(
                 icon = OhIconName.Settings,
-                contentDescription = "Settings",
+                contentDescription = stringResource(R.string.oh_settings),
                 onClick = onSettings
             )
             if (showSyncDot) {
@@ -91,10 +97,18 @@ fun OhTopBar(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = OhTheme.space.space1, end = OhTheme.space.space2)
-                        .size(geometry.tabDot)
+                        .size(geometry.tabDot + geometry.tabDotRing * 2)
                         .clip(RoundedCornerShape(OhTheme.radius.full))
-                        .background(colors.orange)
-                )
+                        .background(colors.bgEl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(geometry.tabDot)
+                            .clip(RoundedCornerShape(OhTheme.radius.full))
+                            .background(colors.orange)
+                    )
+                }
             }
         }
     }
@@ -102,12 +116,12 @@ fun OhTopBar(
 
 /** The five destinations of DESIGN.md §5.15: Today, Vitals, Train (raised centre), Nutrition,
  * Stats. */
-enum class OhTab(val label: String, val icon: OhIconName) {
-    Today("Today", OhIconName.Today),
-    Vitals("Vitals", OhIconName.Body),
-    Train("Train", OhIconName.Train),
-    Nutrition("Nutrition", OhIconName.Food),
-    Stats("Stats", OhIconName.Insights)
+enum class OhTab(val labelRes: Int, val icon: OhIconName) {
+    Today(R.string.oh_tab_today, OhIconName.Today),
+    Vitals(R.string.oh_tab_vitals, OhIconName.Body),
+    Train(R.string.oh_tab_train, OhIconName.Train),
+    Nutrition(R.string.oh_tab_nutrition, OhIconName.Food),
+    Stats(R.string.oh_tab_stats, OhIconName.Insights)
 }
 
 /**
@@ -165,22 +179,32 @@ private fun TabCell(tab: OhTab, selected: Boolean, hasDot: Boolean, modifier: Mo
     val colors = OhTheme.colors
     val type = OhTheme.type
     val geometry = OhTheme.geometry
+    val motion = OhTheme.motion
+    val label = stringResource(tab.labelRes)
     val tint = if (selected) colors.accInk else colors.label2
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale = if (pressed) motion.pressTab else 1f
     Column(
         modifier = modifier
             .fillMaxHeight()
             .selectable(
                 selected = selected,
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = null,
                 role = Role.Tab,
                 onClick = onSelect
             )
-            .semantics { contentDescription = tab.label },
+            .semantics { contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box {
+        Box(
+            modifier = Modifier.graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+        ) {
             OhIcon(
                 name = tab.icon,
                 contentDescription = null,
@@ -193,20 +217,32 @@ private fun TabCell(tab: OhTab, selected: Boolean, hasDot: Boolean, modifier: Mo
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .offset(x = OhTheme.space.space0, y = -OhTheme.space.space0)
-                        .size(geometry.tabDot)
+                        .size(geometry.tabDot + geometry.tabDotRing * 2)
                         .clip(RoundedCornerShape(OhTheme.radius.full))
-                        .background(colors.orange)
-                )
+                        .background(colors.bgEl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(geometry.tabDot)
+                            .clip(RoundedCornerShape(OhTheme.radius.full))
+                            .background(colors.orange)
+                    )
+                }
             }
         }
-        Spacer(Modifier.height(geometry.tabLabelGap))
-        Text(
-            text = tab.label,
-            style = type.caption2.mediumWeight(),
-            color = tint,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        // At the largest text sizes the labels may drop and the icons carry the tab (§4.3);
+        // otherwise 200 % text would clip inside the 56 dp bar.
+        if (LocalDensity.current.fontScale <= geometry.largeTextScale) {
+            Spacer(Modifier.height(geometry.tabLabelGap))
+            Text(
+                text = label,
+                style = type.caption2.mediumWeight(),
+                color = tint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -217,14 +253,26 @@ private fun TrainDisc(selected: Boolean, modifier: Modifier, onSelect: () -> Uni
     val motion = OhTheme.motion
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale = if (pressed) motion.pressTab else 1f
+    val animatedScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) motion.pressTab else 1f,
+        animationSpec = androidx.compose.animation.core.tween(motion.fast, easing = motion.ease),
+        label = "train-disc-scale"
+    )
+    val shape = RoundedCornerShape(OhTheme.radius.full)
+    val trainLabel = stringResource(OhTab.Train.labelRes)
     Box(
         modifier = modifier
+            .shadow(
+                elevation = geometry.trainDiscShadow,
+                shape = shape,
+                ambientColor = colors.acc,
+                spotColor = colors.acc
+            )
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = animatedScale
+                scaleY = animatedScale
             }
-            .clip(RoundedCornerShape(OhTheme.radius.full))
+            .clip(shape)
             .background(colors.acc)
             .selectable(
                 selected = selected,
@@ -233,7 +281,7 @@ private fun TrainDisc(selected: Boolean, modifier: Modifier, onSelect: () -> Uni
                 role = Role.Tab,
                 onClick = onSelect
             )
-            .semantics { contentDescription = OhTab.Train.label },
+            .semantics { contentDescription = trainLabel },
         contentAlignment = Alignment.Center
     ) {
         OhIcon(
@@ -267,15 +315,29 @@ fun OhTimerBar(
     val type = OhTheme.type
     val geometry = OhTheme.geometry
     val density = LocalDensity.current
+    val shape = RoundedCornerShape(OhTheme.radius.base)
+    val timerDescription = stringResource(R.string.oh_timer, clock)
+    val subtractDescription = stringResource(R.string.oh_subtract_15)
+    val addDescription = stringResource(R.string.oh_add_15)
+    val pauseDescription = stringResource(
+        if (running) R.string.oh_pause_timer else R.string.oh_resume_timer
+    )
+    val skipDescription = stringResource(R.string.oh_skip_rest)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(OhTheme.radius.base))
+            .shadow(geometry.timerBarShadow, shape)
+            .clip(shape)
             .background(colors.surfaceRaised.copy(alpha = geometry.timerBarAlpha))
+            .border(
+                width = if (work) geometry.timerWorkRing else OhTheme.space.hairline,
+                color = if (work) colors.acc else colors.raisedLine,
+                shape = shape
+            )
             .alpha(if (running) 1f else geometry.timerPausedAlpha)
             .semantics {
                 liveRegion = LiveRegionMode.Polite
-                contentDescription = "Timer $clock"
+                contentDescription = timerDescription
             }
             .padding(geometry.timerBarPadding)
     ) {
@@ -295,19 +357,50 @@ fun OhTimerBar(
                 color = if (work) colors.accInk else colors.label
             )
             Spacer(Modifier.weight(1f))
-            TimerControl(
-                label = "−15",
-                description = "Subtract 15 seconds",
-                onClick = onMinus
-            )
-            TimerControl(label = "+15", description = "Add 15 seconds", onClick = onPlus)
+            val largeText = LocalDensity.current.fontScale > geometry.largeTextScale
+            if (largeText) {
+                OhIconButton(
+                    icon = OhIconName.Minus,
+                    contentDescription = subtractDescription,
+                    onClick = onMinus
+                )
+                OhIconButton(
+                    icon = OhIconName.Add,
+                    contentDescription = addDescription,
+                    onClick = onPlus
+                )
+            } else {
+                TimerControl(
+                    label = "−15",
+                    description = subtractDescription,
+                    onClick = onMinus
+                )
+                TimerControl(
+                    label = "+15",
+                    description = addDescription,
+                    onClick = onPlus
+                )
+            }
+            Spacer(Modifier.width(geometry.timerSkipGap))
             OhIconButton(
                 icon = if (running) OhIconName.Pause else OhIconName.Play,
-                contentDescription = if (running) "Pause timer" else "Resume timer",
+                contentDescription = pauseDescription,
                 onClick = onPauseToggle
             )
             Spacer(Modifier.width(geometry.timerSkipGap))
-            TimerControl(label = "Skip", description = "Skip rest", onClick = onSkip)
+            if (largeText) {
+                OhIconButton(
+                    icon = OhIconName.Skip,
+                    contentDescription = skipDescription,
+                    onClick = onSkip
+                )
+            } else {
+                TimerControl(
+                    label = "Skip",
+                    description = skipDescription,
+                    onClick = onSkip
+                )
+            }
         }
     }
 }
@@ -318,10 +411,17 @@ private fun TimerControl(label: String, description: String, onClick: () -> Unit
     val type = OhTheme.type
     Box(
         modifier = Modifier
-            .height(OhTheme.geometry.timerControl)
+            .heightIn(min = OhTheme.geometry.timerControl)
             .width(OhTheme.geometry.timerControl)
             .clip(RoundedCornerShape(OhTheme.radius.sm))
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(
+                interactionSource = remember {
+                    MutableInteractionSource()
+                },
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            )
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center
     ) {

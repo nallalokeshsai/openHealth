@@ -3,6 +3,7 @@
 package app.openhealth.ui.gallery
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,10 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -83,13 +82,11 @@ fun ComponentGallery() {
     var accent by remember { mutableStateOf(OhAccentPreset.Brand) }
     var fontScale by remember { mutableStateOf(1f) }
     var rtl by remember { mutableStateOf(false) }
-    var highContrast by remember { mutableStateOf(false) }
     var reduceMotion by remember { mutableStateOf(false) }
 
     OhTheme(
         darkTheme = dark,
         accent = accent,
-        highContrast = highContrast,
         reduceMotion = reduceMotion
     ) {
         val density = LocalDensity.current
@@ -107,8 +104,6 @@ fun ComponentGallery() {
                 onFontScaleChange = { fontScale = it },
                 rtl = rtl,
                 onRtlChange = { rtl = it },
-                highContrast = highContrast,
-                onHighContrastChange = { highContrast = it },
                 reduceMotion = reduceMotion,
                 onReduceMotionChange = { reduceMotion = it }
             )
@@ -126,8 +121,6 @@ private fun GalleryBody(
     onFontScaleChange: (Float) -> Unit,
     rtl: Boolean,
     onRtlChange: (Boolean) -> Unit,
-    highContrast: Boolean,
-    onHighContrastChange: (Boolean) -> Unit,
     reduceMotion: Boolean,
     onReduceMotionChange: (Boolean) -> Unit
 ) {
@@ -154,7 +147,7 @@ private fun GalleryBody(
             Spacer(Modifier.height(OhTheme.space.space6))
             Text("Design system", style = type.large, color = colors.label)
             Text(
-                "Every token, component and state in DESIGN.md §5 and §6",
+                "The components and states of DESIGN.md §5 and §6",
                 style = type.subhead,
                 color = colors.label2
             )
@@ -168,8 +161,6 @@ private fun GalleryBody(
                 onFontScaleChange = onFontScaleChange,
                 rtl = rtl,
                 onRtlChange = onRtlChange,
-                highContrast = highContrast,
-                onHighContrastChange = onHighContrastChange,
                 reduceMotion = reduceMotion,
                 onReduceMotionChange = onReduceMotionChange
             )
@@ -200,8 +191,6 @@ private fun GalleryControls(
     onFontScaleChange: (Float) -> Unit,
     rtl: Boolean,
     onRtlChange: (Boolean) -> Unit,
-    highContrast: Boolean,
-    onHighContrastChange: (Boolean) -> Unit,
     reduceMotion: Boolean,
     onReduceMotionChange: (Boolean) -> Unit
 ) {
@@ -248,11 +237,6 @@ private fun GalleryControls(
                 title = "Right to left",
                 subtitle = "Logical start and end only; the body map is never mirrored",
                 trailing = { OhSwitch(checked = rtl, onCheckedChange = onRtlChange) }
-            )
-            row(
-                title = "High contrast",
-                subtitle = "Steps the ramp up and firms label-2 and separators",
-                trailing = { OhSwitch(checked = highContrast, onCheckedChange = onHighContrastChange) }
             )
             row(
                 title = "Reduce motion",
@@ -318,45 +302,55 @@ fun GalleryEntryContent(entry: GalleryEntry, modifier: Modifier = Modifier) {
                 }
             }
 
-            GalleryEntry.InsetGroup -> OhInsetGroup {
-                row(
-                    title = "Profile",
-                    subtitle = "Name, goal, units",
-                    icon = OhIconName.Body,
-                    trailingChevron = true,
-                    onClick = {}
-                )
-                row(
-                    title = "Modules",
-                    value = "13 on",
-                    icon = OhIconName.More,
-                    onClick = {}
-                )
-                row(
-                    title = "Devices",
-                    subtitle = "No scale connected yet",
-                    icon = OhIconName.Watch,
-                    value = "0",
-                    onClick = {}
-                )
-                row(
-                    title = "Export all data",
-                    subtitle = "A file you keep",
-                    icon = OhIconName.Export,
-                    onClick = {}
-                )
-                row(
-                    title = "Delete this entry",
-                    icon = OhIconName.Delete,
-                    destructive = true,
-                    onClick = {}
-                )
-                row(
-                    title = "Not available yet",
-                    subtitle = "Disabled rows still explain themselves",
-                    icon = OhIconName.Lock,
-                    enabled = false
-                )
+            GalleryEntry.InsetGroup -> Column {
+                OhInsetGroup {
+                    row(
+                        title = "Profile",
+                        subtitle = "Name, goal, units",
+                        icon = OhIconName.Body,
+                        trailingChevron = true,
+                        onClick = {}
+                    )
+                    row(
+                        title = "Modules",
+                        value = "13 on",
+                        icon = OhIconName.More,
+                        onClick = {}
+                    )
+                    row(
+                        title = "Devices",
+                        subtitle = "No scale connected yet",
+                        icon = OhIconName.Watch,
+                        value = "0",
+                        onClick = {}
+                    )
+                    row(
+                        title = "Export all data",
+                        subtitle = "A file you keep",
+                        icon = OhIconName.Export,
+                        onClick = {}
+                    )
+                }
+                // §5.3: a destructive row is separated from the rest by 22 dp and says exactly
+                // what it deletes.
+                Spacer(Modifier.height(OhTheme.geometry.destructiveGroupGap))
+                OhInsetGroup {
+                    row(
+                        title = "Delete this entry",
+                        icon = OhIconName.Delete,
+                        destructive = true,
+                        onClick = {}
+                    )
+                }
+                Spacer(Modifier.height(OhTheme.geometry.destructiveGroupGap))
+                OhInsetGroup {
+                    row(
+                        title = "Not available yet",
+                        subtitle = "Disabled rows still explain themselves",
+                        icon = OhIconName.Lock,
+                        enabled = false
+                    )
+                }
             }
 
             GalleryEntry.MediaRow -> {
@@ -408,7 +402,10 @@ fun GalleryEntryContent(entry: GalleryEntry, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(OhTheme.space.space2))
                 OhButton(label = "Secondary action", onClick = {}, variant = OhButtonVariant.Secondary)
                 Spacer(Modifier.height(OhTheme.space.space2))
-                Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.space2)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(OhTheme.space.space2)
+                ) {
                     OhButton(label = "Tinted", onClick = {
                     }, variant = OhButtonVariant.Tinted, size = OhButtonSize.Small)
                     OhButton(label = "Delete", onClick = {
@@ -430,7 +427,10 @@ fun GalleryEntryContent(entry: GalleryEntry, modifier: Modifier = Modifier) {
             }
 
             GalleryEntry.Chips -> Column {
-                Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.space2)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(OhTheme.space.space2)
+                ) {
                     OhChip("Recovery", selected = false, onClick = {})
                     OhChip("Fat layer", selected = true, onClick = {})
                     OhChip("Plan", selected = false, onClick = {})

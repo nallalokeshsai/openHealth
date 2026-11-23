@@ -23,12 +23,11 @@ import androidx.compose.ui.platform.LocalContext
 fun OhTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     accent: OhAccentPreset = OhAccentPreset.Brand,
-    highContrast: Boolean = false,
     reduceMotion: Boolean = rememberReduceMotion(),
     content: @Composable () -> Unit
 ) {
-    val colors = remember(darkTheme, accent, highContrast) {
-        if (darkTheme) darkColors(accent, highContrast) else lightColors(accent, highContrast)
+    val colors = remember(darkTheme, accent) {
+        if (darkTheme) darkColors(accent) else lightColors(accent)
     }
     val type = remember { OhType() }
     val space = remember { OhSpace() }
@@ -43,7 +42,10 @@ fun OhTheme(
         LocalOhRadius provides radius,
         LocalOhMotion provides motion,
         LocalOhGeometry provides geometry,
-        LocalTextStyle provides type.body
+        LocalTextStyle provides type.body,
+        // Material's only role here: its minimum-target behaviour, set to the design's 44 dp
+        // (§4.5) instead of Material's 48 dp default. No palette or shape comes from Material.
+        androidx.compose.material3.LocalMinimumInteractiveComponentSize provides space.touchTarget
     ) {
         ProvideTextStyle(type.body, content)
     }

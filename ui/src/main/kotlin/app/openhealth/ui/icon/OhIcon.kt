@@ -76,6 +76,7 @@ enum class OhIconName {
     Minus,
     Check,
     Close,
+    Error,
     ChevronLeft,
     ChevronRight,
     ChevronDown,
@@ -395,6 +396,13 @@ private fun glyphOf(name: OhIconName): List<PathNode> = when (name) {
 
     OhIconName.Warning -> Glyph().polygon(12f, 3f, 21.5f, 20.5f, 2.5f, 20.5f)
         .line(12f, 8f, 12f, 14.5f).circle(12f, 17.5f, 0.9f).build()
+
+    OhIconName.Error -> Glyph()
+        .polygon(
+            12f, 2.5f, 18.7f, 5.3f, 21.5f, 12f, 18.7f, 18.7f,
+            12f, 21.5f, 5.3f, 18.7f, 2.5f, 12f, 5.3f, 5.3f
+        )
+        .line(9f, 9f, 15f, 15f).line(15f, 9f, 9f, 15f).build()
 
     OhIconName.ExternalLink -> Glyph().roundRect(3f, 7f, 14f, 14f, 2.5f)
         .line(12f, 3.5f, 20.5f, 3.5f).line(20.5f, 3.5f, 20.5f, 12f)

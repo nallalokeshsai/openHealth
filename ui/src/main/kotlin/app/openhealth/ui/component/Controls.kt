@@ -21,12 +21,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +42,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -50,6 +54,8 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
+import app.openhealth.ui.R
 import app.openhealth.ui.icon.OhIcon
 import app.openhealth.ui.icon.OhIconName
 import app.openhealth.ui.theme.OhTheme
@@ -133,7 +139,8 @@ fun OhButton(
     Box(
         modifier = modifier
             .then(if (size == OhButtonSize.Medium) Modifier.fillMaxWidth() else Modifier)
-            .height(height)
+            .heightIn(min = height)
+            .minimumInteractiveComponentSize()
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -252,7 +259,9 @@ fun OhChip(
                 scaleX = scale
                 scaleY = scale
             }
-            .height(geometry.chipHeight)
+            .heightIn(min = geometry.chipHeight)
+            .minimumInteractiveComponentSize()
+            .alpha(if (enabled) 1f else geometry.buttonDisabledAlpha)
             .clip(RoundedCornerShape(OhTheme.radius.full))
             .background(fill)
             .clickable(
@@ -308,10 +317,28 @@ fun OhSegmentedControl(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(geometry.segmentHeight)
+                    .heightIn(min = geometry.segmentHeight)
+                    .minimumInteractiveComponentSize()
                     .clip(RoundedCornerShape(OhTheme.radius.md))
                     .background(if (selected) colors.segmentThumb else Color.Transparent)
-                    .clickable(role = Role.Tab) { onSelect(index) }
+                    .then(
+                        if (selected) {
+                            Modifier.border(
+                                width = OhTheme.space.hairline,
+                                color = colors.raisedLine,
+                                shape = RoundedCornerShape(OhTheme.radius.md)
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .clickable(
+                        interactionSource = remember {
+                            MutableInteractionSource()
+                        },
+                        indication = null,
+                        role = Role.Tab
+                    ) { onSelect(index) }
                     .semantics { this.selected = selected },
                 contentAlignment = Alignment.Center
             ) {
@@ -319,7 +346,8 @@ fun OhSegmentedControl(
                     text = option,
                     style = if (selected) type.subhead.semiboldWeight() else type.subhead,
                     color = if (selected) colors.label else colors.label2,
-                    maxLines = 1,
+                    maxLines = 2,
+                    textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -340,6 +368,8 @@ fun OhSwitch(
     val motion = OhTheme.motion
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val onLabel = stringResource(R.string.oh_on)
+    val offLabel = stringResource(R.string.oh_off)
     val track by animateColorAsState(
         targetValue = if (checked) colors.acc else colors.surface3,
         animationSpec = tween(motion.fast),
@@ -362,7 +392,7 @@ fun OhSwitch(
                 onClick = { onCheckedChange(!checked) }
             )
             .semantics {
-                stateDescription = if (checked) "On" else "Off"
+                stateDescription = if (checked) onLabel else offLabel
             },
         contentAlignment = Alignment.Center
     ) {
@@ -409,24 +439,31 @@ fun OhStepper(
     val geometry = OhTheme.geometry
     Row(
         modifier = modifier
-            .height(geometry.stepperHeight)
+            .heightIn(min = geometry.stepperHeight)
             .clip(RoundedCornerShape(OhTheme.radius.base))
             .background(colors.surface2)
-            .alpha(if (enabled) 1f else geometry.rowDisabledAlpha),
+            .alpha(if (enabled) 1f else geometry.buttonDisabledAlpha),
         verticalAlignment = Alignment.CenterVertically
     ) {
         StepButton(
             icon = OhIconName.Minus,
-            description = "Decrease",
+            description = stringResource(R.string.oh_decrease),
             enabled = enabled,
             onStep = onDecrement
         )
         Row(
             modifier = Modifier
-                .height(geometry.stepperHeight)
+                .heightIn(min = geometry.stepperHeight)
                 .then(
                     if (onValueClick != null) {
-                        Modifier.clickable(role = Role.Button, onClick = onValueClick)
+                        Modifier.clickable(
+                            interactionSource = remember {
+                                MutableInteractionSource()
+                            },
+                            indication = null,
+                            role = Role.Button,
+                            onClick = onValueClick
+                        )
                     } else {
                         Modifier
                     }
@@ -448,7 +485,7 @@ fun OhStepper(
         }
         StepButton(
             icon = OhIconName.Add,
-            description = "Increase",
+            description = stringResource(R.string.oh_increase),
             enabled = enabled,
             onStep = onIncrement
         )
@@ -473,7 +510,8 @@ private fun StepButton(icon: OhIconName, description: String, enabled: Boolean, 
     }
     Box(
         modifier = Modifier
-            .size(geometry.stepperCellWidth, geometry.stepperHeight)
+            .width(geometry.stepperCellWidth)
+            .heightIn(min = geometry.stepperHeight)
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 detectTapGestures(
@@ -512,12 +550,15 @@ fun OhSlider(
     val type = OhTheme.type
     val geometry = OhTheme.geometry
     var dragging by remember { mutableStateOf(false) }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val span = (valueRange.endInclusive - valueRange.start).takeIf { it > 0f } ?: 1f
     val fraction = ((value - valueRange.start) / span).coerceIn(0f, 1f)
+    val visualFraction = if (rtl) 1f - fraction else fraction
 
-    fun update(rawFraction: Float) {
-        val clamped = rawFraction.coerceIn(0f, 1f)
-        onValueChange(valueRange.start + clamped * span)
+    fun update(trackFraction: Float) {
+        val clamped = trackFraction.coerceIn(0f, 1f)
+        val logical = if (rtl) 1f - clamped else clamped
+        onValueChange(valueRange.start + logical * span)
     }
 
     BoxWithConstraints(
@@ -528,7 +569,7 @@ fun OhSlider(
                 if (contentDescription != null) this.contentDescription = contentDescription
                 progressBarRangeInfo = ProgressBarRangeInfo(value, valueRange)
                 setProgress { target ->
-                    update((target - valueRange.start) / span)
+                    onValueChange(target.coerceIn(valueRange.start, valueRange.endInclusive))
                     true
                 }
             }
@@ -563,13 +604,14 @@ fun OhSlider(
             )
             drawRoundRect(
                 color = if (enabled) colors.acc else colors.acc.copy(alpha = geometry.buttonDisabledAlpha),
-                size = androidx.compose.ui.geometry.Size(size.width * fraction, size.height),
+                topLeft = androidx.compose.ui.geometry.Offset(size.width * (1f - visualFraction), 0f),
+                size = androidx.compose.ui.geometry.Size(size.width * visualFraction, size.height),
                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2f)
             )
         }
         Box(
             modifier = Modifier
-                .offset(x = usable * fraction)
+                .offset(x = usable * visualFraction)
                 .size(geometry.sliderKnob)
                 .align(Alignment.CenterStart)
                 .clip(RoundedCornerShape(OhTheme.radius.full))
@@ -586,7 +628,7 @@ fun OhSlider(
                 style = type.caption.semiboldWeight(),
                 color = colors.label,
                 modifier = Modifier
-                    .offset(x = (usable * fraction).coerceAtMost(maxWidth - geometry.sliderKnob))
+                    .offset(x = (usable * visualFraction).coerceAtMost(maxWidth - geometry.sliderKnob))
                     .clip(RoundedCornerShape(OhTheme.radius.sm))
                     .background(colors.surfaceRaised)
                     .padding(horizontal = OhTheme.space.space1, vertical = OhTheme.space.space0),

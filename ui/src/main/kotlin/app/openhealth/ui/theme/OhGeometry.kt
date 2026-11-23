@@ -44,6 +44,8 @@ data class OhGeometry(
 
     // §10 icons
     val iconBox: Dp = 24.dp,
+    /** Above this font scale the tab labels drop and the timer gives up its text controls (§4.3). */
+    val largeTextScale: Float = 1.5f,
     val iconStroke: Dp = 1.7.dp,
     val iconStrokeTab: Dp = 1.65.dp,
     val iconStrokeTabActive: Dp = 2.0.dp,
@@ -124,6 +126,7 @@ data class OhGeometry(
     val fieldHeight: Dp = 46.dp,
     val fieldPaddingHorizontal: Dp = 16.dp,
     val fieldFocusRing: Dp = 2.5.dp,
+    val fieldErrorRing: Dp = 1.dp,
     val fieldFocusOffset: Dp = 2.dp,
     val fieldFocusRadius: Dp = 8.dp,
     val searchGlyph: Dp = 18.dp,
@@ -136,6 +139,7 @@ data class OhGeometry(
     val tabIcon: Dp = 25.dp,
     val tabLabelGap: Dp = 2.dp,
     val trainDisc: Dp = 56.dp,
+    val trainDiscShadow: Dp = 12.dp,
     val trainDiscLift: Dp = 12.dp,
     val tabDot: Dp = 8.dp,
     val tabDotRing: Dp = 2.dp,
@@ -149,7 +153,6 @@ data class OhGeometry(
     val grabberGap: Dp = 6.dp,
     val sheetMaxHeightFraction: Float = 0.90f,
     val sheetScrimAlpha: Float = 0.40f,
-    val sheetScrimBlur: Dp = 2.dp,
     val sheetTonalElevation: Dp = 0.dp,
 
     // §5.17 dialog
@@ -172,6 +175,8 @@ data class OhGeometry(
     val timerBarLift: Dp = 22.dp,
     val timerBarPadding: Dp = 12.dp,
     val timerBarAlpha: Float = 0.97f,
+    val timerBarShadow: Dp = 12.dp,
+    val timerWorkRing: Dp = 1.dp,
     val timerPausedAlpha: Float = 0.50f,
     val timerProgress: Dp = 3.dp,
     val timerControl: Dp = 44.dp,

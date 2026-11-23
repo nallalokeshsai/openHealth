@@ -181,11 +181,11 @@ enum class OhAccentPreset(
 
 /** The dark ramp, Appendix A.1. Authored first and canonical (§12.1). */
 @Suppress("LongParameterList")
-internal fun darkColors(preset: OhAccentPreset, highContrast: Boolean): OhColors {
-    val label2Alpha = if (highContrast) 0xC7 else 0x99
-    val labelDimAlpha = if (highContrast) 0xB8 else 0x8C
-    val sepAlpha = if (highContrast) 0xD9 else 0x99
-    val sepOpAlpha = if (highContrast) 0x8C else 0x57
+internal fun darkColors(preset: OhAccentPreset): OhColors {
+    val label2Alpha = 0x99
+    val labelDimAlpha = 0x8C
+    val sepAlpha = 0x99
+    val sepOpAlpha = 0x57
     return OhColors(
         bg = Color(0xFF000000),
         bgEl = Color(0xFF0E0E10),
@@ -241,12 +241,12 @@ internal fun darkColors(preset: OhAccentPreset, highContrast: Boolean): OhColors
 
 /** The light ramp, Appendix A.2. Derived and contrast-verified (§12.2). */
 @Suppress("LongParameterList")
-internal fun lightColors(preset: OhAccentPreset, highContrast: Boolean): OhColors {
-    val label2Alpha = if (highContrast) 0xD9 else 0xBF
-    val label3Alpha = if (highContrast) 0x4D else 0x4D
+internal fun lightColors(preset: OhAccentPreset): OhColors {
+    val label2Alpha = 0xBF
+    val label3Alpha = 0x4D
     val label4Alpha = 0x29
-    val sepAlpha = if (highContrast) 0x80 else 0x4A
-    val sepOpAlpha = if (highContrast) 0x59 else 0x33
+    val sepAlpha = 0x4A
+    val sepOpAlpha = 0x33
     val label2 = Color(0x3C3C43).withAlpha(label2Alpha)
     return OhColors(
         bg = Color(0xFFF2F2F7),

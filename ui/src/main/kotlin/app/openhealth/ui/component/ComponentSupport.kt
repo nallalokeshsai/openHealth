@@ -51,21 +51,27 @@ fun Modifier.pressable(
 }
 
 /** §2.4: a 0.5 dp hairline drawn as a sub-pixel line, never a 1 dp divider. */
-fun Modifier.topHairline(color: Color, widthPx: Float, insetStartPx: Float = 0f): Modifier = drawBehind {
-    drawLine(
-        color = color,
-        start = Offset(insetStartPx, 0f),
-        end = Offset(size.width, 0f),
-        strokeWidth = widthPx
-    )
-}
+fun Modifier.topHairline(color: Color, widthPx: Float, insetStartPx: Float = 0f, rtl: Boolean = false): Modifier =
+    drawBehind {
+        val start = if (rtl) 0f else insetStartPx
+        val end = if (rtl) size.width - insetStartPx else size.width
+        drawLine(
+            color = color,
+            start = Offset(start, 0f),
+            end = Offset(end, 0f),
+            strokeWidth = widthPx
+        )
+    }
 
 /** The hairline under a row, inset past the row's icon rail when it has one (§5.3). */
-fun Modifier.bottomHairline(color: Color, widthPx: Float, insetStartPx: Float = 0f): Modifier = drawBehind {
-    drawLine(
-        color = color,
-        start = Offset(insetStartPx, size.height),
-        end = Offset(size.width, size.height),
-        strokeWidth = widthPx
-    )
-}
+fun Modifier.bottomHairline(color: Color, widthPx: Float, insetStartPx: Float = 0f, rtl: Boolean = false): Modifier =
+    drawBehind {
+        val start = if (rtl) 0f else insetStartPx
+        val end = if (rtl) size.width - insetStartPx else size.width
+        drawLine(
+            color = color,
+            start = Offset(start, size.height),
+            end = Offset(end, size.height),
+            strokeWidth = widthPx
+        )
+    }

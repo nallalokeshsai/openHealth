@@ -3,6 +3,7 @@
 package app.openhealth.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,12 +34,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import app.openhealth.ui.R
 import app.openhealth.ui.icon.OhIcon
 import app.openhealth.ui.icon.OhIconName
 import app.openhealth.ui.theme.OhTheme
@@ -76,7 +80,7 @@ fun OhTextField(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(geometry.fieldHeight)
+                .heightIn(min = geometry.fieldHeight)
                 .then(
                     if (focused) {
                         Modifier.drawBehind {
@@ -94,6 +98,17 @@ fun OhTextField(
                 )
                 .clip(RoundedCornerShape(OhTheme.radius.md))
                 .background(colors.surface2)
+                .then(
+                    if (isError) {
+                        Modifier.border(
+                            width = geometry.fieldErrorRing,
+                            color = colors.red,
+                            shape = RoundedCornerShape(OhTheme.radius.md)
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
                 .padding(horizontal = geometry.fieldPaddingHorizontal),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -136,7 +151,7 @@ fun OhTextField(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OhIcon(
-                    name = OhIconName.Warning,
+                    name = OhIconName.Error,
                     contentDescription = null,
                     size = geometry.iconInText,
                     tint = colors.redInk
@@ -184,12 +199,19 @@ fun OhSearchField(
                     Box(
                         modifier = Modifier
                             .size(OhTheme.space.touchTarget)
-                            .clickable(role = Role.Button, onClick = onClear),
+                            .clickable(
+                                interactionSource = remember {
+                                    MutableInteractionSource()
+                                },
+                                indication = null,
+                                role = Role.Button,
+                                onClick = onClear
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         OhIcon(
                             name = OhIconName.Close,
-                            contentDescription = "Clear search",
+                            contentDescription = stringResource(R.string.oh_clear_search),
                             size = geometry.searchClear,
                             tint = colors.label2
                         )

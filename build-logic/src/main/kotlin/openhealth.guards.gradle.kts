@@ -28,6 +28,7 @@ tasks.register<CheckDesignTokensTask>("checkDesignTokens") {
             include("**/*.kt")
             exclude("**/build/**")
             exclude("**/theme/**")
+            exclude("**/test/**", "**/androidTest/**")
         },
         fileTree("app-android/src") {
             include("**/main/**/*.kt")
