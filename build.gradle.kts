@@ -1,5 +1,6 @@
 plugins {
     id("openhealth.guards")
+    alias(libs.plugins.roborazzi) apply false
 }
 
 allprojects {

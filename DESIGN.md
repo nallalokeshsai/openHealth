@@ -1,8 +1,9 @@
 # openHealth — Design System
 
-**Version:** 0.2
+**Version:** 0.3
 **Status:** Living document, first pass
-**Last revision:** 2026-11-22 — five-tab bar with a raised centre Train (§5.15,
+**Last revision:** 2026-11-23 — `acc-2` resolved for the eight non-brand presets (§2.6,
+Appendix A); owner decision. Previous: 2026-11-22 — five-tab bar with a raised centre Train (§5.15,
 §13.1), global top bar (§4.4), `fat` and `recovery` data hues (§2.5, App. A),
 recovery ramp green → orange → red (§9.1), dynamic body model (§9.1.1).
 Previous: 2026-11-21 — establishes the visual system from the openGym
@@ -302,6 +303,12 @@ Presets (Settings → Appearance). Nine, no more:
 | `red` | `#FF453A` | `#FF3B30` | `#D70015` | `#000000` |
 | `teal` | `#40C8E0` | `#30B0C7` | `#0071A4` | `#000000` |
 | `gold` | `#FFD60A` | `#FFCC00` | `#8F5E00` | `#000000` |
+
+**Pressed graphic shade for the presets (2026-11-23).** `acc-2` is specified for the brand preset
+only. The other eight presets reuse their own fill as `acc-2`: no component darkens an accent fill
+that carries text (a filled button presses by scale and opacity, §5.7), and inventing a second
+shade per preset would add nine unmeasured hexes to a closed set. If a future screen needs a
+distinct pressed graphic in a preset, its value is measured and recorded here first.
 
 **Custom accents.** A person may pick any `#rrggbb`. It is never trusted
 blindly and never drawn raw. Per theme: keep it if it clears 3:1 against both
@@ -1794,7 +1801,7 @@ sep-op        rgba(84,84,88,.34)
 hair          0.5 dp
 
 acc           #A3E635
-acc-2         #84CC16
+acc-2         #84CC16   (brand preset only; the other eight presets reuse acc, §2.6)
 on-acc        #0C0E12
 acc-ink       #A3E635
 acc-soft      acc 16%
@@ -1827,7 +1834,7 @@ sep           rgba(60,60,67,.29)
 sep-op        rgba(60,60,67,.20)
 
 acc           #84CC16
-acc-2         #65A30D
+acc-2         #65A30D   (brand preset only; the other eight presets reuse acc, §2.6)
 on-acc        #0C0E12
 acc-ink       #4A7A0E
 
