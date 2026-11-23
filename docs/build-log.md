@@ -186,3 +186,130 @@ Recorded because it changes the operating rules, not because it changes the buil
   opened as PR #1 against `main`; the branch is green in CI and ready to merge. `main` itself was
   not moved by any session: merging is the owner's action, and `main` is protected from direct
   pushes as of 2026-11-22.
+
+---
+
+## B1 — Design system
+
+**Status:** Completed · 2026-11-23
+**Branch:** `build/b1-design-system`, cut from `build/b0-foundation` (B0 completed, `check` green
+before any B1 work).
+**Commits:** `029a26c` (tokens, contrast audit, DESIGN 0.3), `1ff3fd9` (icons, components,
+gallery), `a3f253e` (debug gallery, screenshot goldens, token guard, licences, ADR, NOTICE) and
+`eca587f` (reviewer fixes: 200 % layout, ripple, RTL, chrome, strings, guard completion), plus the
+log/state commit that follows.
+
+**Precondition:** `./gradlew check` was green on `build/b0-foundation` before the branch was cut.
+The B0 PR #1 is still open; `main` was not moved by this session.
+
+### Owner question asked (one batched dialog, before any work)
+
+**`acc-2` for the eight non-brand presets.** DESIGN.md §2.6 and Appendix A define `acc-2` only for
+the brand preset. Answered: the eight reuse their own fill; no hex is invented. Recorded in
+DESIGN.md §2.6 and A.1–A.2 in the same commit, and DESIGN moved to 0.3 (2026-11-23).
+
+### Milestone 1 — Tokens and the contrast audit (`029a26c`)
+
+`:ui` gained one theme in `ui/src/main/kotlin/app/openhealth/ui/theme/`:
+
+- `OhColors` (Appendix A.1–A.2): surface ramp, four-step text ramp plus `label-dim`, separators,
+  nine accent presets with `acc-2`, `acc-soft`, `acc-line`, `fat`, the three recovery steps, every
+  system hue and every status ink. Alpha tokens keep their alpha and are composited where measured.
+- `OhType`: 11 roles plus the `large` 30 sp and `timer` 64 sp ends of their ranges and the chip's
+  14 sp component style; platform UI font, `tnum` on every role.
+- `OhSpace` (9 values + hairline + 44 dp target + 560 dp column), `OhRadius` (6 + full),
+  `OhMotion` (§6.9 durations and §6.1 press scales, zeroed under reduced motion).
+- `OhGeometry`: component sizes from §4–§5, so no screen needs a raw `.dp`; `OhTopBar` and
+  `OhTabBar` build their heights from tokens.
+- `OhTheme`: one provided theme with `OhColors`, `OhType`, `OhSpace`, `OhRadius`, `OhMotion`,
+  `OhGeometry`, `LocalTextStyle`; Material's minimum-target local set to 44 dp. Dark canonical,
+  light verified sibling, nine presets, reduced motion; dynamic colour absent, no Material palette,
+  no ripple. `FontFamily.Default`, so **no font is bundled** (NOTICE.md).
+
+`ContrastTest` computes every §12.5 pair from the tokens, both themes, all nine presets, alpha
+composited: `label-2`, `label-dim`, every `acc-ink`, `on-acc` on every fill, six status inks,
+`streak-ink`/`frost` at 3:1, `acc-2`, `fat` on `bg`/`surface`/`surface-2`, the focus ring, the
+recovery steps in the canonical theme, and the rejected light fat value. **Ran:** six tests, green.
+
+### Milestone 2 — Icons, 19 components, gallery (`1ff3fd9`)
+
+- `OhIcon` + `OhIconName`: ~70 glyphs drawn as path nodes on the 24 dp grid (nav, modules, actions,
+  objects, status, the twenty routine keys, Settings and Error). `IconSetTest` proves every name
+  builds on the 24 dp grid (2 tests).
+- The 19 §5 components with their §6 states: card + card header, inset group + row, media row,
+  stat tile, KPI band, six button variants × three sizes, icon button, chip, segmented control,
+  switch, stepper, slider, text/search field, five-tab bar with the raised Train disc, sheet,
+  dialog, toast + tombstone undo, timer bar; plus the §4.4 `OhTopBar`. Press tiers, selected,
+  disabled, error, offline, empty, loading, success, record and conflict are rendered.
+- `ComponentGallery` (initially `:ui` main, moved to `src/debug` in the review fix) shows every
+  entry and theme control.
+
+### Milestone 3 — App, goldens, guard (`a3f253e`)
+
+- `MainActivity` opens the gallery under `BuildConfig.DEBUG` and the B0 placeholder otherwise; the
+  Android window theme is edge-to-edge with the dark page; `enableEdgeToEdge()`.
+- Roborazzi + Robolectric screenshot tests: 21 gallery entries in dark, light, 200 % font and RTL,
+  plus pressed Button and Chip captures. **86 golden PNGs** (3.5 MB) under
+  `ui/src/test/screenshots`, verified with `:ui:verifyRoborazziDebug`; capture is gated on the
+  Roborazzi properties so a plain test run does not rewrite them.
+- `checkDesignTokens` (build-logic): production Kotlin under `ui/src` (minus `ui/theme` and test
+  sources) and `app-android/src/main` may not contain a `Color(` literal or a raw `.dp` literal;
+  wired into the root `check`. A unit test (`DesignTokenGuardTest`, 2 tests) proves the matcher and
+  scans the same trees.
+- Material 3 is the only new shipped dependency; it and its three ripple modules are reviewed in
+  `gradle/client-licences.txt` (101 modules, all reviewed and non-GPL). New test-only pins are in
+  ADR 0003's "Added in B1" section. No font is bundled; NOTICE.md records that.
+
+### Milestone 4 — Reviewer pass and fixes (`eca587f`)
+
+A fresh reviewer read the branch diff and the `AGENTS.md` invariants, read-only. Fixed: 200 % text
+now grows (`heightIn`, two-line segments, tab labels drop above 150 %, timer gives up its text
+controls), all remaining ripple removed, RTL hairlines/chevron/slider mirrored, Train disc animated
+and glowing, sync-dot rings, timer chrome and work ring, field error ring, chip 44 dp slop, disabled
+chip/stepper, destructive row anatomy and group separation, x-octagon error glyph, component strings
+in `ui/src/main/res/values/strings.xml`, the gallery moved to the debug source set, the token guard's
+named-argument/float-dp/string handling, `check` now depends on `verifyRoborazziDebug`, and the light
+segment thumb's hairline. Deferred and recorded below: high-contrast token stepping (DESIGN gives no
+measured values; B10 owns the system pass), backdrop blur and reduced-transparency wiring (no
+Compose backdrop blur; B10), sheet 90 % cap and icon 1 em scaling (B10).
+
+### Exit tests
+
+| Exit test (`BUILD-ROADMAP.md` B1) | Result | Evidence |
+|---|---|---|
+| Gallery renders | **Pass** | `installDebug` + `am start` on `openHealth_API_36`: `topResumedActivity=app.openhealth/.android.MainActivity`; screenshot shows the gallery with the top bar, controls and tab bar inside the system insets |
+| Screenshot tests pass | **Pass** | 23 Roborazzi tests, 86 goldens, `:ui:verifyRoborazziDebug --rerun-tasks` green; `check` now depends on it |
+| Contrast test computes §12.5 and fails below the ratio | **Pass** | `ContrastTest`: 6 tests over both themes, nine presets, composited alphas, fat and recovery steps |
+| A guard fails on a `Color(` or raw `.dp` outside `ui/theme`, then passes | **Pass** | Probe `Color(color = 0xFF123456)` + `16f.dp` in `ui/component`: `checkDesignTokens FAILED` naming both lines; after deletion `checkDesignTokens: scanned 10 screen file(s), no colour or dp literals.` |
+| `./gradlew check` green | **Pass** | `BUILD SUCCESSFUL`, including `checkPortability` (5 files), `checkDesignTokens` (10 files), `checkLicences` (101 modules), ktlint, Detekt, unit tests and golden verification |
+| `./gradlew :app-android:assembleDebug` passes | **Pass** | `BUILD SUCCESSFUL`; `installDebug` on the emulator |
+| Every screen touched passes `DESIGN.md` §14.5 | **Pass** | The debug gallery only: tokens only, one accent, no borders/ripple/emoji, 44 dp targets, dark/light/200 %/RTL goldens, every status with a word or glyph; provenance and Trash rows belong to B3+ and are not invented here |
+| `docs/build-log.md` entry | **Pass** | This section |
+| iOS gate (`pr.md` §13.17) reviewed | **Not yet** (default) | No iOS work written, designed or planned; `core`/`data`/`sync`/`integrations` remain `android.*`-free |
+
+### Placeholders and stubs left deliberately
+
+| Item | Owner |
+|---|---|
+| Release `MainActivity` still a blank dark surface | B3 |
+| Sheet 90 % max height and keyboard cap | B3/B10 (ModalBottomSheet caps to the screen today; `imePadding` is applied) |
+| 10 dp backdrop blur on top bar/tab bar, 20 dp toast blur, 2 dp scrim blur | B10 (Compose has no backdrop blur; bars are 94 % opaque) |
+| Reduced-transparency and high-contrast system handling | B10 (B1 exposes reduced motion only; no unmeasured high-contrast tokens ship) |
+| Icons scale with type at 1 em | B10 (B1 uses the optical sizes §10.1 lists; no 200 % icon clipping was observed) |
+| Focus-state screenshot | B10 a11y pass (the focus ring is drawn; a captured text cursor made the golden noisy) |
+| Chip's 14 sp style is outside the 11-role scale | DESIGN §5.9 states 14/400; implemented as a component style, flagged here |
+| CI does not run `verifyRoborazziDebug` | The local `check` does; the workflow is B0's and is updated when CI next runs |
+
+### Open issues
+
+- **`acc-2` for eight presets is the fill** (owner decision, DESIGN 0.3). A future screen needing a
+  distinct pressed graphic in a preset must measure and record it in DESIGN first.
+- **The chip's 14 sp** is the one size outside the type scale; DESIGN §5.9 and §3.2 disagree and
+  were not amended because the owner's closed-token rule forbids a new role without a decision.
+- **Screenshot goldens are platform-sensitive** in principle; they were recorded and verified on
+  this Windows/Robolectric 4.18.1 setup. CI verification is wired into `check` but the workflow has
+  not run since B0's, so the first CI run after merge is the proof.
+- **The debug AAR ships `androidx.compose.ui:ui-test-manifest`** to provide the activity Robolectric
+  launches; it is debug-only and reviewed, and never reaches a release build.
+- **The B0 OneDrive empty-folder, targetSdk 37 on API 36 and CI quota open issues are unchanged.**
+

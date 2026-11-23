@@ -196,6 +196,6 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: B0 (Foundation) · 2026-11-22 — green `./gradlew check` and `:app-android:assembleDebug`, both architecture guards proven by making them fail and pass, debug app installed and launched on the API 36 emulator. Next is B1.
-- Build: B0 complete; no feature code yet.
-- Open issues: see `docs/build-log.md`.
+- Last completed phase: B1 (Design system) · 2026-11-23 — `OhTheme` and the closed token set in `:ui`, the drawn icon set, the 19 components with their states, the five-tab bar with the raised Train disc and the global top bar, the debug-only gallery, 86 verified Roborazzi goldens (dark, light, 200 % text, RTL) and the computed §12.5 contrast audit. `checkDesignTokens` fails a `Color(` or raw `.dp` outside `ui/theme`; proved by a probe that failed then passed. Green `./gradlew check` and `:app-android:assembleDebug`, debug app installed and launched on the API 36 emulator. Next is B2.
+- Build: B1 complete. `:core`, `:data`, `:sync` and `:integrations` are still empty modules (B2 starts `:core`/`:data`).
+- Open issues: see `docs/build-log.md` B1.
