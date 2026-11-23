@@ -51,6 +51,69 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+### SQLCipher for Android (BSD-3-Clause)
+
+The encrypted database uses the SQLCipher Community Edition
+(`net.zetetic:sqlcipher-android`, BSD-3-Clause). The licence requires this notice and
+the conditions below to be reachable from the app itself; the About screen in B3
+reproduces them, as `docs/adr/0005-core-and-data.md` records.
+
+```
+Copyright (c) 2008-2023, ZETETIC LLC
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+    * Neither the name of the ZETETIC LLC nor the
+      names of its contributors may be used to endorse or promote products
+      derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY ZETETIC LLC ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL ZETETIC LLC BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+### Bouncy Castle (Bouncy Castle Licence, MIT-style)
+
+Argon2id key derivation for the encrypted export uses
+`org.bouncycastle:bcprov-jdk18on`. The Bouncy Castle Licence is to be read in the same
+way as the MIT licence; copyright (c) 2000–2026 The Legion of the Bouncy Castle Inc.
+(`https://www.bouncycastle.org/licence.html`). Bouncy Castle is used as a library and is
+not modified.
+
+### UCUM — unit codes (attribution)
+
+Values are stored with Unified Code for Units of Measure codes (`pr.md` §7.2). UCUM is
+published by the Regenstrief Institute (`https://ucum.org/ucum`); the app uses the
+codes and conversion factors as identifiers and cites the specification. No UCUM text is
+reproduced in the product.
+
+### Compendium of Physical Activities (cited MET values)
+
+The MET values in `core/…/formula/MetTable.kt` are a curated selection of numeric values
+from the 2024 Adult Compendium of Physical Activities (Herrmann et al., *Journal of Sport
+and Health Science* 13(1):6-12, 2024; `https://doi.org/10.1016/j.jshs.2023.10.005`). MET
+values are cited facts; the Compendium's text and tables are not reproduced. The
+citation table in `core/…/citation/Citations.kt` records the source, and every exercise
+energy estimate names it.
+
+### Test-only dependencies
+
+Kotest, Robolectric and Roborazzi run on the JVM only and never enter the APK. Their
+licences and every transitive are recorded in `gradle/licences/allowed.tsv`.
+
 ### Data and content licences
 
 Recorded with the phase that bundles each source: USDA FoodData Central (CC0) in B6,

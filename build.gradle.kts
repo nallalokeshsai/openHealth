@@ -5,6 +5,8 @@ plugins {
     // Declaring the pinned KGP here raises it for every module; keep in step with
     // gradle/libs.versions.toml and docs/adr/0003-pinned-versions.md.
     alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.sqldelight) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
 }
 
 // The convention plugins in build-logic/ add ktlint, Detekt, checkPortability and

@@ -210,15 +210,23 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B1 Design system** (2026-11-23); next is **B2 Core and data**.
-- Build: green. `./gradlew check` and `./gradlew :app-android:assembleDebug` pass on
-  `build/b1-design-system`; the debug app installs and launches on the owner's physical
-  phone. Six modules exist (`:core :data :sync :integrations :ui :app-android`) with
-  ktlint, Detekt, `checkPortability`, `checkLicences` and `checkDesignTokens` wired into
-  `check`. `:ui` holds the closed token set (`OhTheme`), the 19 components, the global
-  top bar, the five-tab bar with the raised Train disc and an original icon set; a
-  debug-only gallery shows every component in dark, light and 200 % text, and 104
-  Roborazzi goldens plus an 11-test contrast audit guard the tokens. Versions are pinned
-  in `docs/adr/0003-pinned-versions.md`; B1's implementation choices are
-  `docs/adr/0004-design-system.md`. No domain or storage code has been written.
+- Last completed phase: **B2 Core and data** (2026-11-23); next is **B3 Shell and
+  onboarding**.
+- Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
+  `build/b2-core-and-data`; 170 JVM tests plus one instrumented test pass, the debug app
+  installs and launches on the owner's physical phone, and the encrypted database is
+  proven on the device. Seven modules exist (`:core :data :sync :integrations :ui
+  :app-android :tools:fixtures`) with ktlint, Detekt, `checkPortability`,
+  `checkLicences` and `checkDesignTokens` wired into `check`. `:ui` holds the B1 design
+  system (closed tokens, 19 components, five-tab bar, top bar, icons, 104 goldens and a
+  contrast audit). `:core` holds ids, time, UCUM units, provenance, observations, the
+  source registry, dedup and merge policies, validators, twelve cited formulas, raw
+  record and rollup types and the platform seams. `:data` holds the SQLDelight schema
+  (20 tables, five layers, schema v2 with a migration), repositories, the rebuild-only
+  rollup engine, Trash, an Argon2id/AES-GCM export and restore, CSV export and the
+  seeded five-year corpus; `tools/fixtures` runs the corpus and the 16 ms query
+  benchmark. `app-android` implements the Keystore secret vault and the SQLCipher driver
+  behind the seam. Versions are pinned in `docs/adr/0003-pinned-versions.md`; B1's
+  design choices are `docs/adr/0004-design-system.md` and B2's are
+  `docs/adr/0005-core-and-data.md`. No feature screen has been written.
 - Open issues: see `docs/build-log.md`.

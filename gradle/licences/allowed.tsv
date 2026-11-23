@@ -40,7 +40,20 @@ com.squareup:javawriter	Apache-2.0	Test-only, annotation code generation
 javax.annotation:javax.annotation-api	CDDL-1.1	Test-only, Robolectric; the dual CDDL/GPLv2+CPE licence is taken as CDDL, so no GPL-family code is elected
 javax.inject:javax.inject	Apache-2.0	Test-only, Robolectric DI
 org.bouncycastle:bc-jdk18on-bom	Bouncy-Castle	Test-only, Bouncy Castle licence, Robolectric TLS
-org.bouncycastle:bcprov-jdk18on	Bouncy-Castle	Test-only, Bouncy Castle licence, Robolectric TLS
+org.bouncycastle:bcprov-jdk18on	Bouncy-Castle	Argon2id for the encrypted export (main scope) and Robolectric TLS (test scope); Bouncy Castle licence, MIT-style
 org.conscrypt:conscrypt-openjdk-uber	Apache-2.0	Test-only, Robolectric TLS provider
 org.ow2.asm:*	BSD-3-Clause	Test-only, bytecode inspection
 org.yaml:snakeyaml	Apache-2.0	Test-only, Robolectric configuration
+net.zetetic:sqlcipher-android	BSD-3-Clause	SQLCipher Community Edition, database encryption (Tech-Stack.md §5); attribution in NOTICE.md and the About screen
+org.xerial:sqlite-jdbc	Apache-2.0	JVM SQLite driver for unit tests and tools/fixtures; never in the APK
+
+# B2 core and data tests (Kotest property tests and their transitives), all test-only.
+# Each licence was read from the artefact's POM or its repository's LICENSE on 2026-11-23.
+io.kotest:*	Apache-2.0	Test-only, Kotest assertions and property testing
+io.github.classgraph:classgraph	MIT	Test-only, pulled in by Kotest
+io.github.pdvrieze.xmlutil:*	Apache-2.0	Test-only, pulled in by Kotest
+io.github.java-diff-utils:*	Apache-2.0	Test-only, pulled in by Kotest; POM omits the block, repository LICENSE is Apache-2.0
+com.github.curious-odd-man:rgxgen	Apache-2.0	Test-only, pulled in by Kotest
+community.flock.kotlinx.rgxgen:*	MIT	Test-only, pulled in by Kotest
+net.bytebuddy:*	Apache-2.0	Test-only, pulled in by Kotest
+net.java.dev.jna:*	Apache-2.0	Test-only, pulled in by Kotest; dual LGPL-2.1+/Apache-2.0, Apache elected so no LGPL code is taken

@@ -20,5 +20,13 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
 
+    // Encrypted storage behind the :core seam (Tech-Stack.md §5). SQLCipher is the
+    // community edition; its attribution requirement is recorded in NOTICE.md.
+    implementation(libs.sqldelight.android.driver)
+    implementation(libs.sqlcipher.android)
+
     debugImplementation(libs.compose.ui.tooling)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }

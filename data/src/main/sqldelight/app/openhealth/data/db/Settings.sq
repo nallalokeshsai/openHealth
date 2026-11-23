@@ -1,0 +1,25 @@
+-- Layer 5 (pr.md §7.5): settings and preferences as key/value rows so a new setting
+-- needs no migration and two devices can merge field by field (Tech-Stack.md §6).
+
+CREATE TABLE settings (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    schema_version INTEGER NOT NULL DEFAULT 1
+);
+
+putSetting:
+INSERT OR REPLACE INTO settings(key, value, updated_at, schema_version)
+VALUES (:key, :value, :updatedAt, :schemaVersion);
+
+setting:
+SELECT * FROM settings WHERE key = :key;
+
+allSettings:
+SELECT * FROM settings ORDER BY key;
+
+deleteSetting:
+DELETE FROM settings WHERE key = :key;
+
+countSettings:
+SELECT count(*) FROM settings;

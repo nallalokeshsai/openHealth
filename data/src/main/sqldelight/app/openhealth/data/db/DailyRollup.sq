@@ -1,0 +1,60 @@
+-- Layer 3 of the five-layer model (pr.md §7.3): daily summaries. Derived, rebuildable,
+-- never patched and never synced (Tech-Stack.md §5-6). The watermark records the
+-- newest observation the day was computed from.
+
+CREATE TABLE daily_rollup (
+    local_date TEXT NOT NULL,
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    secondary_value REAL,
+    source_id TEXT,
+    contributing_sources INTEGER NOT NULL DEFAULT 0,
+    dedup_reason TEXT,
+    watermark INTEGER NOT NULL,
+    computed_at INTEGER NOT NULL,
+    detail TEXT,
+    PRIMARY KEY (local_date, type)
+);
+
+CREATE INDEX daily_rollup_date ON daily_rollup(local_date);
+
+upsertRollup:
+INSERT OR REPLACE INTO daily_rollup(
+    local_date, type, value, unit, secondary_value, source_id, contributing_sources,
+    dedup_reason, watermark, computed_at, detail
+) VALUES (
+    :localDate, :type, :value, :unit, :secondaryValue, :sourceId, :contributingSources,
+    :dedupReason, :watermark, :computedAt, :detail
+);
+
+rollupForDay:
+SELECT * FROM daily_rollup WHERE local_date = :localDate ORDER BY type;
+
+rollupForDayAndType:
+SELECT * FROM daily_rollup WHERE local_date = :localDate AND type = :type;
+
+rollupsForRange:
+SELECT * FROM daily_rollup
+WHERE local_date >= :from AND local_date <= :to
+ORDER BY local_date, type;
+
+rollupsForTypeRange:
+SELECT * FROM daily_rollup
+WHERE type = :type AND local_date >= :from AND local_date <= :to
+ORDER BY local_date;
+
+deleteRollupsForDay:
+DELETE FROM daily_rollup WHERE local_date = :localDate;
+
+deleteAllRollups:
+DELETE FROM daily_rollup;
+
+countRollups:
+SELECT count(*) FROM daily_rollup;
+
+rollupDays:
+SELECT DISTINCT local_date FROM daily_rollup ORDER BY local_date;
+
+allRollups:
+SELECT * FROM daily_rollup ORDER BY local_date, type;
