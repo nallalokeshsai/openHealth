@@ -261,6 +261,27 @@ and Roborazzi themselves are test-scope; `:app-android`'s runtime classpath is u
   invented, both already clear 3:1 on `surface`, and §2.6 records it.
 - The revision line of `DESIGN.md` carries the 2026-11-23 note.
 
+### Invariant audit (`AGENTS.md`)
+
+| Invariant | This phase |
+|---|---|
+| Provenance on every value | No value is stored or shown yet; the components carry slots for it and the sheet grammar is §7's. N/A. |
+| `happened_at` ≠ `recorded_at` | No observation type yet. N/A. |
+| Five layers, rebuildable rollups | No storage yet. N/A. |
+| One source wins a day | No source registry yet. N/A. |
+| Local-first | No network call, permission or service was added; nothing waits on a network. **Holds.** |
+| Not a medical device | No clinical wording; component copy is neutral ("Two sources disagree", "That is outside the plausible range") and nothing diagnoses. **Holds.** |
+| No telemetry | No analytics, crash reporter or third-party SDK added; test dependencies are test-scope. **Holds.** |
+| Portability | `core/ data/ sync/ integrations/` untouched; the portability probe was re-run and still fails on an `android.*` import. **Holds.** |
+| Licence split | Apache-2.0 client, no GPL-family dependency; the new rows are test-only and recorded with their real licence; `NOTICE.md` states no typeface is bundled and the icons are ours. **Holds.** |
+| Tombstone undo, not a timer | The toast is documented as the shortcut; no destructive action exists yet. The component does not pretend to be the undo. **Holds.** |
+| Modules hide, never delete | No module switch yet. N/A. |
+| Weight-neutral mode | No weight, calorie or body-fat value is rendered app-wide yet; the components take values, they do not source them. The policy object is B3's. N/A. |
+| Chart has a table and a sentence | No chart component was added (charts are B9); no chart can ship without them. N/A. |
+| Closed design tokens | `checkDesignTokens` fails on a colour or raw size outside `ui/theme`; the contrast test measures every stated pair; the only `DESIGN.md` edits are dated corrections of internal contradictions and are listed above. **Holds.** |
+| Closed cut list | Nothing from `pr.md` §14.5 was built. **Holds.** |
+| Quality bars | No measured performance path changed; the gallery's cold start on the phone is ~1.0–1.3 s in debug, which is not the release figure. **Holds.** |
+
 ### Placeholders and deferred work
 
 - **Backdrop blur** on the top bar and tab bar is not implemented: their fills carry the
