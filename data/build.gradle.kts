@@ -15,6 +15,7 @@ sqldelight {
             schemaOutputDirectory.set(file("src/main/sqldelight/databases"))
             deriveSchemaFromMigrations.set(false)
             verifyMigrations.set(false)
+            dialect(libs.sqldelight.dialect.sqlite)
         }
     }
 }

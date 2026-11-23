@@ -11,7 +11,7 @@ CREATE TABLE exercise (
     instructions TEXT,
     met_activity TEXT,
     is_custom INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
-    source_id TEXT,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     revision INTEGER NOT NULL DEFAULT 1
@@ -27,14 +27,14 @@ CREATE TABLE routine (
     archived_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    source_id TEXT,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
     revision INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE routine_exercise (
     id TEXT NOT NULL PRIMARY KEY,
-    routine_id TEXT NOT NULL,
-    exercise_id TEXT NOT NULL,
+    routine_id TEXT NOT NULL REFERENCES routine(id) ON DELETE RESTRICT,
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
     position INTEGER NOT NULL,
     target_sets INTEGER,
     target_reps INTEGER,
@@ -52,14 +52,14 @@ CREATE TABLE programme (
     archived_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    source_id TEXT,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
     revision INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE programme_routine (
     id TEXT NOT NULL PRIMARY KEY,
-    programme_id TEXT NOT NULL,
-    routine_id TEXT NOT NULL,
+    programme_id TEXT NOT NULL REFERENCES programme(id) ON DELETE RESTRICT,
+    routine_id TEXT NOT NULL REFERENCES routine(id) ON DELETE RESTRICT,
     week INTEGER NOT NULL,
     position INTEGER NOT NULL
 );
@@ -74,13 +74,13 @@ CREATE TABLE session (
     zone_id TEXT NOT NULL,
     happened_at INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL,
-    routine_id TEXT,
-    programme_id TEXT,
+    routine_id TEXT REFERENCES routine(id) ON DELETE SET NULL,
+    programme_id TEXT REFERENCES programme(id) ON DELETE SET NULL,
     notes TEXT,
-    source_id TEXT NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
     idempotency_key TEXT NOT NULL UNIQUE,
-    observation_id TEXT,
-    raw_record_id TEXT,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
     device TEXT,
     app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1,
@@ -92,8 +92,8 @@ CREATE INDEX session_happened ON session(happened_at);
 
 CREATE TABLE session_exercise (
     id TEXT NOT NULL PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    exercise_id TEXT NOT NULL,
+    session_id TEXT NOT NULL REFERENCES session(id) ON DELETE RESTRICT,
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
     position INTEGER NOT NULL,
     notes TEXT
 );
@@ -102,9 +102,9 @@ CREATE INDEX session_exercise_session ON session_exercise(session_id);
 
 CREATE TABLE work_set (
     id TEXT NOT NULL PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    session_exercise_id TEXT,
-    exercise_id TEXT NOT NULL,
+    session_id TEXT NOT NULL REFERENCES session(id) ON DELETE RESTRICT,
+    session_exercise_id TEXT REFERENCES session_exercise(id) ON DELETE SET NULL,
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
     position INTEGER NOT NULL,
     weight_kg REAL NOT NULL,
     reps INTEGER NOT NULL,
@@ -119,10 +119,10 @@ CREATE TABLE work_set (
     completed_at INTEGER NOT NULL,
     happened_at INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL,
-    source_id TEXT NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
     idempotency_key TEXT NOT NULL UNIQUE,
-    observation_id TEXT,
-    raw_record_id TEXT,
+    observation_id TEXT REFERENCES observation(id) ON DELETE SET NULL,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
     device TEXT,
     app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1
@@ -132,13 +132,26 @@ CREATE INDEX work_set_session ON work_set(session_id, position);
 CREATE INDEX work_set_exercise ON work_set(exercise_id, completed_at);
 
 insertExercise:
-INSERT OR REPLACE INTO exercise(
+INSERT INTO exercise(
     id, name, primary_muscles, secondary_muscles, equipment, instructions, met_activity,
     is_custom, source_id, created_at, updated_at, revision
 ) VALUES (
     :id, :name, :primaryMuscles, :secondaryMuscles, :equipment, :instructions,
     :metActivity, :isCustom, :sourceId, :createdAt, :updatedAt, :revision
-);
+)
+-- A real upsert, not INSERT OR REPLACE: exercise is referenced by a foreign
+-- key, and replacing the row would delete it and its children with it.
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    primary_muscles = excluded.primary_muscles,
+    secondary_muscles = excluded.secondary_muscles,
+    equipment = excluded.equipment,
+    instructions = excluded.instructions,
+    met_activity = excluded.met_activity,
+    is_custom = excluded.is_custom,
+    source_id = excluded.source_id,
+    updated_at = excluded.updated_at,
+    revision = excluded.revision;
 
 exerciseById:
 SELECT * FROM exercise WHERE id = :id;
@@ -150,11 +163,21 @@ countExercises:
 SELECT count(*) FROM exercise;
 
 insertRoutine:
-INSERT OR REPLACE INTO routine(
+INSERT INTO routine(
     id, name, folder, notes, archived_at, created_at, updated_at, source_id, revision
 ) VALUES (
     :id, :name, :folder, :notes, :archivedAt, :createdAt, :updatedAt, :sourceId, :revision
-);
+)
+-- A real upsert, not INSERT OR REPLACE: routine is referenced by a foreign
+-- key, and replacing the row would delete it and its children with it.
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    folder = excluded.folder,
+    notes = excluded.notes,
+    archived_at = excluded.archived_at,
+    updated_at = excluded.updated_at,
+    source_id = excluded.source_id,
+    revision = excluded.revision;
 
 routineById:
 SELECT * FROM routine WHERE id = :id;
@@ -181,11 +204,21 @@ WHERE routine_exercise.routine_id = :routineId
 ORDER BY routine_exercise.position;
 
 insertProgramme:
-INSERT OR REPLACE INTO programme(
+INSERT INTO programme(
     id, name, weeks, notes, archived_at, created_at, updated_at, source_id, revision
 ) VALUES (
     :id, :name, :weeks, :notes, :archivedAt, :createdAt, :updatedAt, :sourceId, :revision
-);
+)
+-- A real upsert, not INSERT OR REPLACE: programme is referenced by a foreign
+-- key, and replacing the row would delete it and its children with it.
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    weeks = excluded.weeks,
+    notes = excluded.notes,
+    archived_at = excluded.archived_at,
+    updated_at = excluded.updated_at,
+    source_id = excluded.source_id,
+    revision = excluded.revision;
 
 programmeById:
 SELECT * FROM programme WHERE id = :id;
@@ -236,11 +269,18 @@ allSessions:
 SELECT * FROM session ORDER BY started_at;
 
 insertSessionExercise:
-INSERT OR REPLACE INTO session_exercise(
+INSERT INTO session_exercise(
     id, session_id, exercise_id, position, notes
 ) VALUES (
     :id, :sessionId, :exerciseId, :position, :notes
-);
+)
+-- A real upsert, not INSERT OR REPLACE: session_exercise is referenced by a foreign
+-- key, and replacing the row would delete it and its children with it.
+ON CONFLICT(id) DO UPDATE SET
+    session_id = excluded.session_id,
+    exercise_id = excluded.exercise_id,
+    position = excluded.position,
+    notes = excluded.notes;
 
 sessionExercises:
 SELECT * FROM session_exercise WHERE session_id = :sessionId ORDER BY position;

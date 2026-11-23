@@ -99,6 +99,7 @@ class TrashServiceTest {
     fun aDeletedEntryComesBackExactly() {
         val store = inMemoryStore()
         val trash = TrashService(store.db, FixedClock(now))
+        seedFood(store, "food-oats")
         NutritionRepository(store.db).upsertEntry(
             Entry(
                 id = "e-1",
@@ -140,6 +141,7 @@ class TrashServiceTest {
     fun aDeletedSetComesBackWithItsFlagsAndPosition() {
         val store = inMemoryStore()
         val trash = TrashService(store.db, FixedClock(now))
+        seedSessionAndExercise(store, "session-1", "exercise-1", now, date)
         val set = Work_set(
             id = "s-1",
             session_id = "session-1",

@@ -19,7 +19,7 @@ CREATE TABLE profile (
     intake_tier INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    source_id TEXT,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
     revision INTEGER NOT NULL DEFAULT 1
 );
 
@@ -43,5 +43,6 @@ SELECT * FROM profile ORDER BY created_at LIMIT 1;
 allProfiles:
 SELECT * FROM profile ORDER BY created_at;
 
-deleteProfile:
-DELETE FROM profile WHERE id = :id;
+-- No deleteProfile. The profile is never deleted by a query: TrashService is the only
+-- delete path (pr.md §6.29), and erasing the profile is the whole-database wipe that
+-- B3's settings screen owns.

@@ -1,6 +1,5 @@
 package app.openhealth.tools.fixtures
 
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.openhealth.core.source.SourceRegistry
 import app.openhealth.data.corpus.CorpusGenerator
 import app.openhealth.data.corpus.CorpusRequest
@@ -10,7 +9,6 @@ import app.openhealth.data.repo.RollupRepository
 import app.openhealth.data.repo.TimelineRepository
 import app.openhealth.data.rollup.RollupEngine
 import java.nio.file.Files
-import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
@@ -36,7 +34,7 @@ class QueryBenchmarkTest {
     fun noUiQueryExceedsTheBudgetOnAFiveYearCorpus() {
         val directory = Files.createTempDirectory("openhealth-benchmark")
         val path = directory.resolve("corpus.db").toString()
-        val store = DatabaseOpener().open(JdbcSqliteDriver("jdbc:sqlite:$path", Properties()))
+        val store = DatabaseOpener().open(jdbcFactory("jdbc:sqlite:$path"))
         val generationStarted = System.nanoTime()
         val stats = CorpusGenerator(store.db).generate(
             CorpusRequest(days = FIVE_YEARS, seed = 42L, endDate = endDate),

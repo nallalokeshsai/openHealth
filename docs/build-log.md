@@ -84,7 +84,7 @@ Every gate was exercised on purpose, and the app was checked again from a fresh 
 | Detekt probe: a seven-parameter constructor in `:core` | `:core:detekt` **FAILED** on `LongParameterList`; file removed. |
 | Portability probe in `:data` (`import androidx.annotation.NonNull`) | `:data:checkPortability` **FAILED**, naming the file and line; file removed. |
 | Licence probe in `:integrations` (LGPL `hibernate-core` as `testImplementation`) | `:integrations:checkLicences` **FAILED**; dependency removed. |
-| `:app-android:assembleRelease` | **BUILD SUCCESSFUL**; unsigned release APK produced (release builds through R8's default config). |
+| `:app-android:assembleRelease` | **BUILD SUCCESSFUL**; unsigned release APK produced. (This entry originally said "release builds through R8's default config". That was wrong and is corrected in the B2 follow-up below: no `buildTypes` block is declared anywhere, so `isMinifyEnabled` is AGP's default of **false** and R8 does not run at all.) |
 | CI workflow | `.github/workflows/ci.yml` parses; one job named `check` (the status name branch protection requires), five steps. |
 | Debug APK manifest audit (`apkanalyzer`) | `minSdk 28`, `targetSdk 37`, `debuggable true`, `allowBackup false`, `fullBackupContent` and `dataExtractionRules` present; the only permission is AndroidX's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. No network, storage, location or health permission. |
 | `:app-android:lintDebug` | 0 errors, 1 warning: no application icon yet (design work, B1/B10). |
@@ -617,7 +617,13 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 - SQLCipher's native library must be loaded explicitly (`System.loadLibrary("sqlcipher")`).
   It is a one-line trap and the device test caught it; any future entry point that opens
   the database must go through `AndroidDatabaseFactory`.
-- The release APK is 41 MB unsigned, largely SQLCipher's four ABIs and Bouncy Castle. B10
+- R8 does not run: no `buildTypes` block is declared, so release uses AGP's default
+  `isMinifyEnabled = false`. The APK carries three unshrunk dex files (~170k methods,
+  33 MB) including Bouncy Castle's full certificate-path message bundles for every
+  locale. B10 owns turning it on with the keep rules SQLCipher and SQLDelight need, and
+  measuring the result; it must not be switched on without a device run.
+- The release APK is 41 MB unsigned (15.6 MB estimated download), largely SQLCipher's
+  four ABIs and the unshrunk dex. B10
   owns ABI splits/R8 measurement and the F-Droid flavour.
 - `kotlinx-datetime` 0.8 exposes `kotlin.time.Instant`; a future Kotlin may require an
   explicit opt-in. The build currently needs none.
@@ -637,3 +643,85 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
   loads the native library, sets WAL, foreign keys and the integrity check. A future
   entry point must not construct a driver directly.
 
+
+---
+
+## B2 follow-up — review fixes (2026-11-23)
+
+**Status:** Completed · **Date:** 2026-11-23 · **Branch:** `fix/b2-review-followups`
+**Goal:** close the five findings an audit of the merged B2 raised. Four were asked for
+by the owner; the fifth (R8) was found while auditing the APK and is corrected in the
+documents, not in the build.
+
+### What was found, and what was done
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | The B2 log claimed the sleep dedup fix was "most records first, then greatest duration". `MostDetailedPolicy` only ever sorted by greatest summed duration; `git log -L` shows that comparator was never changed. The log described code that did not exist. | The policy now sorts by record count, then total duration, then priority, then source id — a staged night arrives as many records and a summary figure as one, which is what "most detailed" means. The deterministic source-id tie-break matches every other policy. |
+| 2 | `deleteProfile`, `deleteSource` and `deleteTombstone` survived as generated queries with no caller, although the log said they were removed. Nothing stopped a later phase calling one and bypassing Trash. | Removed from the `.sq` files, each replaced by a comment saying why there is no such query. `TrashService` remains the only delete path. |
+| 3 | `pr.md` §7.6's "nutrition: user-edited entries win over imported ones" was neither implemented nor recorded as deferred. | `SumAllPolicy` now collapses observations that share a `groupKey` — one entry, imported and then corrected — preferring the user-edited one, then the later recording. Observations with no group key still all count, because different foods do add up. |
+| 4 | No table declared a single foreign key, so every link between layers could dangle. | Schema **v3**: 36 `REFERENCES` clauses over 15 tables, `RESTRICT` for structural parents and `SET NULL` for optional provenance links, with `2.sqm` generated from the `.sq` files. Recorded in `docs/adr/0006-referential-integrity.md`. |
+| 5 | The B2 log said "release builds through R8's default config". No `buildTypes` block exists, so `isMinifyEnabled` is `false` and R8 never runs. | The two log entries are corrected. **Not** switched on here: R8 needs keep rules for SQLCipher and SQLDelight and a device run to verify, which is B10's work. Flagged as an open issue. |
+
+### What adding the foreign keys uncovered
+
+The constraints caught four real defects that the no-key schema had hidden. Each is
+described in ADR 0006; in short:
+
+1. **`PRAGMA foreign_keys` never worked.** It is ignored on an established connection.
+   Measured: a driver opened without the property reads back `foreign_keys = 0`, and
+   `execute("PRAGMA foreign_keys = ON")` leaves it at `0`. B2's `DatabaseOpener` issued
+   exactly that statement, so the setting it relied on had never taken effect. Nothing
+   broke only because there were no constraints to enforce. `DatabaseOpener` now takes a
+   `DatabaseDriverFactory`, opens the upgrade on a keys-off connection and the store on a
+   keys-on one, and **reads enforcement back** rather than assuming it.
+2. **`INSERT OR REPLACE` on a parent row deletes it.** Seven parent tables used it;
+   against a foreign key target that trips `RESTRICT`, and under any cascade it would
+   have taken the children with it. They are now `ON CONFLICT(id) DO UPDATE`.
+3. **Twelve tests were relying on dangling links** — observations naming a source that
+   was never created, a set naming a session and exercise that did not exist, a diary
+   entry naming an absent food. The fixtures now create the parents, as the app must.
+4. **Restore order would have mattered.** The restore transaction now sets
+   `PRAGMA defer_foreign_keys = ON`, so a bundle reloads table by table and is checked
+   once at commit; an inconsistent bundle still fails the whole restore.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. 171 JVM tests, 0 failures (66 `:core`, 57 `:data`, 47 `:ui`, 1 benchmark). |
+| `:tools:fixtures:test` in isolation | Corpus 1,825 days; rollups 15,253 rows rebuilt in **701 ms**; slowest UI query `timelinePage50` **5.22 ms** against the 16 ms budget, every other query under 2.1 ms. |
+| The same benchmark during a full parallel `check` | `timelinePage50` read **12.02 ms** — still inside budget, but it shows how load-sensitive the benchmark is. The existing open issue about a query drifting between 3 and 16 ms stands. |
+| `apkanalyzer` on the release APK | `minSdk 28`, `targetSdk 37`, `allowBackup false`, `supportsRtl true`, `extractNativeLibs false`, backup and data-extraction rules present. The **only** permission is AndroidX's internal `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` — no network, storage, location or health permission. No `Gallery` activity in release. 41.3 MB raw, 15.6 MB estimated download; three dex files totalling ~33 MB because R8 does not run. |
+| New test `aV2DatabaseGainsItsForeignKeysAndKeepsEveryRow` | Builds a v2 database by stripping `REFERENCES` from the live schema (so the fixture tracks the schema instead of drifting), migrates it, and asserts every row survives, the keys are declared, a dangling `source_id` is refused and a source with history cannot be deleted. |
+| Live guard probe: `android.util.Log` fully qualified in `:core` | `checkPortability` **FAILED** naming file and line; removed, green. |
+
+### Not verified on hardware
+
+The phone was not attached during this session (`adb devices` listed nothing), so the
+instrumented test did **not** run. `EncryptedDatabaseTest` was extended to assert, on
+device, that `PRAGMA foreign_keys` reads back `1` through SQLCipher's own SQLite and
+Android's connection pool, and that a dangling `source_id` is refused. That assertion is
+the only proof that `setForeignKeyConstraintsEnabled` in the open-helper callback works;
+**B3 must run `:app-android:connectedDebugAndroidTest` on the phone before relying on
+it.**
+
+### Documents touched
+
+- `prompts.md`, `BUILD-ROADMAP.md` §B0 and `AGENTS.md`: the Windows + OneDrive premises
+  are gone. The repository is on a plain local path on Linux, Gradle is the wrapper, the
+  PowerShell fallbacks are now shell, and B0 is recorded as having no questions.
+- `docs/adr/0006-referential-integrity.md`: new.
+- Two corrected B2 claims (R8, and the sleep dedup row in the findings table).
+
+### Open issues added
+
+- **R8 is off.** Turning it on is B10's, and needs SQLCipher/SQLDelight keep rules plus a
+  device run. Until then every release APK ships unshrunk.
+- **The device assertion is unrun.** See "Not verified on hardware" above.
+- **`defer_foreign_keys` on restore** means a bad bundle fails at commit with a generic
+  constraint error rather than naming the offending row. If restore diagnostics matter to
+  the user, B10 should run `PRAGMA foreign_key_check` before committing and report it.
+- **`RESTRICT`, not `CASCADE`, is deliberate.** B3/B5 cannot delete a session, routine or
+  programme that has children until they write the children's tombstones first. That is
+  the point, but it is work those phases must now plan for.

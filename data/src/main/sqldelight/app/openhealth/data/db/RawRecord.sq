@@ -5,7 +5,7 @@
 
 CREATE TABLE raw_record (
     id TEXT NOT NULL PRIMARY KEY,
-    source_id TEXT NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
     source_kind TEXT NOT NULL,
     device TEXT,
     app_version TEXT,

@@ -6,12 +6,17 @@ import app.openhealth.core.ids.SourceId
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.Provenance
+import app.openhealth.core.observation.SourceKind
+import app.openhealth.core.source.Source
 import app.openhealth.core.time.TimeProvenance
 import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
+import app.openhealth.data.db.DatabaseDriverFactory
 import app.openhealth.data.db.DatabaseOpener
 import app.openhealth.data.db.MigrationBackup
 import app.openhealth.data.db.OpenHealthStore
+import app.openhealth.data.db.openHealthDatabase
+import app.openhealth.data.repo.SourceRepository
 import java.util.Properties
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
@@ -19,12 +24,37 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 
-fun inMemoryStore(backup: MigrationBackup? = null): OpenHealthStore =
-    DatabaseOpener(backup).open(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY))
+/**
+ * Foreign keys are a connection property for sqlite-jdbc; `PRAGMA foreign_keys` on an
+ * open connection is ignored. Tests therefore build drivers the same way the app does.
+ */
+fun jdbcFactory(url: String): DatabaseDriverFactory = DatabaseDriverFactory { foreignKeys ->
+    JdbcSqliteDriver(
+        url,
+        Properties().apply { setProperty("foreign_keys", foreignKeys.toString()) },
+    )
+}
 
-fun fileStore(path: String): OpenHealthStore = DatabaseOpener().open(
-    JdbcSqliteDriver("jdbc:sqlite:$path", Properties()),
+fun inMemoryStore(backup: MigrationBackup? = null): OpenHealthStore =
+    DatabaseOpener(backup).open(jdbcFactory(JdbcSqliteDriver.IN_MEMORY)).also(::seedSources)
+
+fun fileStore(path: String): OpenHealthStore =
+    DatabaseOpener().open(jdbcFactory("jdbc:sqlite:$path")).also(::seedSources)
+
+/**
+ * The sources the fixtures write against. `observation.source_id` and every domain row's
+ * source is a real foreign key, so a test that writes a value needs the source that
+ * produced it to exist, exactly as the app does.
+ */
+val TEST_SOURCES: List<Source> = listOf(
+    Source(id = SourceId("manual"), kind = SourceKind.MANUAL, label = "Manual entry"),
+    Source(id = SourceId("garmin"), kind = SourceKind.GARMIN, label = "Garmin"),
+    Source(id = SourceId("fitbit"), kind = SourceKind.FITBIT, label = "Fitbit"),
 )
+
+fun seedSources(store: OpenHealthStore, sources: List<Source> = TEST_SOURCES) {
+    SourceRepository(openHealthDatabase(store.driver)).upsertAll(sources)
+}
 
 val TEST_ZONE: TimeZone = TimeZone.of("Europe/Berlin")
 
@@ -68,5 +98,82 @@ fun hourlySteps(
         start = dayStart(date).plus(hour.hours),
         end = dayStart(date).plus((hour + 1).hours),
         sourceId = sourceId,
+    )
+}
+
+/**
+ * The parent rows a layer-4 value now needs. `entry.food_id`, `work_set.session_id` and
+ * `work_set.exercise_id` are real foreign keys, so a fixture that writes a set or a diary
+ * entry must first write the session, exercise or food it names, as the app does.
+ */
+fun seedFood(store: OpenHealthStore, id: String, name: String = "Oats") {
+    val now = Instant.fromEpochMilliseconds(0).toEpochMilliseconds()
+    app.openhealth.data.repo.NutritionRepository(store.db).upsertFood(
+        app.openhealth.data.db.Food(
+            id = id,
+            name = name,
+            brand = null,
+            barcode = null,
+            source_kind = "manual",
+            source_ref = null,
+            energy_kcal_per_100g = 379.0,
+            protein_g_per_100g = 13.0,
+            carbs_g_per_100g = 68.0,
+            fat_g_per_100g = 6.5,
+            fibre_g_per_100g = 10.1,
+            serving_json = null,
+            verified = false,
+            created_at = now,
+            updated_at = now,
+            revision = 1L,
+        ),
+    )
+}
+
+fun seedSessionAndExercise(
+    store: OpenHealthStore,
+    sessionId: String,
+    exerciseId: String,
+    happenedAt: Instant,
+    date: LocalDate,
+) {
+    val training = app.openhealth.data.repo.TrainingRepository(store.db)
+    training.upsertExercise(
+        app.openhealth.data.db.Exercise(
+            id = exerciseId,
+            name = exerciseId,
+            primary_muscles = "quadriceps",
+            secondary_muscles = "glutes",
+            equipment = "barbell",
+            instructions = null,
+            met_activity = null,
+            is_custom = false,
+            source_id = null,
+            created_at = happenedAt.toEpochMilliseconds(),
+            updated_at = happenedAt.toEpochMilliseconds(),
+            revision = 1L,
+        ),
+    )
+    training.upsertSession(
+        app.openhealth.data.db.Session(
+            id = sessionId,
+            started_at = happenedAt.toEpochMilliseconds(),
+            ended_at = null,
+            local_date = date.toString(),
+            zone_id = TEST_ZONE.id,
+            happened_at = happenedAt.toEpochMilliseconds(),
+            recorded_at = happenedAt.toEpochMilliseconds(),
+            routine_id = null,
+            programme_id = null,
+            notes = null,
+            source_id = "manual",
+            idempotency_key = "session-$sessionId",
+            observation_id = null,
+            raw_record_id = null,
+            device = "manual",
+            app_version = "test",
+            revision = 1L,
+            updated_at = happenedAt.toEpochMilliseconds(),
+        ),
     )
 }

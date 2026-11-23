@@ -48,8 +48,8 @@ UPDATE tombstone SET payload = NULL WHERE id = :id;
 markRestored:
 UPDATE tombstone SET restored_at = :restoredAt, payload = NULL WHERE id = :id;
 
-deleteTombstone:
-DELETE FROM tombstone WHERE id = :id;
+-- No deleteTombstone. A tombstone is the permanent deletion marker sync replays
+-- against; purging only clears its payload (pr.md §6.29, §7.7).
 
 countActiveTombstones:
 SELECT count(*) FROM tombstone WHERE restored_at IS NULL AND payload IS NOT NULL;
