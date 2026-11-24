@@ -1,4 +1,4 @@
-# 0011 — Nutrition: the food index, the two barcode decoders and the diary's layers
+# 0011 — Nutrition: the food index, the telemetry-free barcode decoder and the diary's layers
 
 **Date:** 2026-11-25 · **Phase:** B6 · **Status:** accepted
 **Context:** `BUILD-ROADMAP.md` §B6, `pr.md` §6.3–6.4, §12.2, `DESIGN.md` §14.2.
