@@ -108,7 +108,11 @@ fun SessionSummaryScreen(
         } else {
             OhInsetGroup {
                 model.prs.forEachIndexed { index, pr ->
-                    OhRow(title = personalRecordLabel(pr), showDivider = index > 0)
+                    OhRow(
+                        title = personalRecordLabel(pr.kind),
+                        value = pr.value,
+                        showDivider = index > 0,
+                    )
                 }
             }
         }
@@ -205,11 +209,20 @@ fun SessionSummaryScreen(
                 value = model.zoneId,
                 showDivider = true,
             )
+            val zone = runCatching {
+                kotlinx.datetime.TimeZone.of(model.zoneId)
+            }.getOrDefault(kotlinx.datetime.TimeZone.currentSystemDefault())
+            OhRow(
+                title = stringResource(R.string.train_summary_happened),
+                value = app.openhealth.ui.screens.common.timeOf(model.happenedAt, zone),
+                showDivider = true,
+            )
             OhRow(
                 title = stringResource(R.string.train_summary_recorded),
-                value = app.openhealth.ui.screens.common.timeOf(
+                value = app.openhealth.ui.screens.common.timeOf(model.recordedAt, zone),
+                subtitle = app.openhealth.ui.screens.common.recordingDelay(
+                    model.happenedAt,
                     model.recordedAt,
-                    kotlinx.datetime.TimeZone.currentSystemDefault(),
                 ),
                 showDivider = true,
             )

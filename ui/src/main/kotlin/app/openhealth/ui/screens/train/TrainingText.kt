@@ -104,5 +104,27 @@ fun equipmentLabel(key: String): String = stringResource(
     },
 )
 
+/** A bar's label is UI copy, not a stored string (`Tech-Stack.md` §3). */
+@Composable
+fun barLabel(key: String): String = stringResource(
+    when (key) {
+        "barbell" -> R.string.equipment_barbell
+        "ez" -> R.string.equipment_ez_bar
+        "trap" -> R.string.equipment_trap_bar
+        "smith" -> R.string.equipment_smith
+        else -> R.string.train_plates_custom
+    },
+)
+
+/** The glyph a piece of equipment carries in a media slot. */
+fun equipmentIcon(key: String): androidx.compose.ui.graphics.vector.ImageVector = when (key) {
+    "barbell", "ez-bar", "trap" -> app.openhealth.ui.icons.OhObjectIcons.barbell
+    "dumbbell" -> app.openhealth.ui.icons.OhObjectIcons.dumbbell
+    "kettlebell" -> app.openhealth.ui.icons.OhObjectIcons.kettlebell
+    "machine", "cable", "smith" -> app.openhealth.ui.icons.OhObjectIcons.machine
+    "bands" -> app.openhealth.ui.icons.OhObjectIcons.band
+    else -> app.openhealth.ui.icons.OhModuleIcons.workout
+}
+
 /** The policies a routine can choose, in the order the editor offers them. */
 val PROGRESSION_KEYS: List<String> = ProgressionPolicy.all.map { it.key }

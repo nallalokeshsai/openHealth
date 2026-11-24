@@ -33,6 +33,11 @@ ALTER TABLE work_set ADD COLUMN is_assisted INTEGER AS kotlin.Boolean NOT NULL D
 ALTER TABLE work_set ADD COLUMN assistance_kg REAL;
 ALTER TABLE work_set ADD COLUMN band_kg REAL;
 ALTER TABLE work_set ADD COLUMN notes TEXT;
+ALTER TABLE work_set ADD COLUMN original_weight_kg REAL;
+ALTER TABLE work_set ADD COLUMN original_reps INTEGER;
+ALTER TABLE work_set ADD COLUMN edit_reason TEXT;
+ALTER TABLE work_set ADD COLUMN edited_at INTEGER;
+ALTER TABLE work_set ADD COLUMN user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS session_ended ON session(ended_at);
 CREATE INDEX IF NOT EXISTS session_routine ON session(routine_id);

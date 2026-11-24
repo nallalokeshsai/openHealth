@@ -155,7 +155,12 @@ CREATE TABLE work_set (
     is_drop INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     is_assisted INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     assistance_kg REAL,
-    band_kg REAL
+    band_kg REAL,
+    original_weight_kg REAL,
+    original_reps INTEGER,
+    edit_reason TEXT,
+    edited_at INTEGER,
+    user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
 );
 
 CREATE INDEX work_set_session ON work_set(session_id, position);
@@ -432,6 +437,11 @@ SET started_at = :startedAt, ended_at = :endedAt, local_date = :localDate,
     happened_at = :happenedAt, updated_at = :updatedAt, revision = revision + 1
 WHERE id = :id;
 
+updateSessionNotes:
+UPDATE session
+SET notes = :notes, updated_at = :updatedAt, revision = revision + 1
+WHERE id = :id;
+
 updateSessionDetails:
 UPDATE session
 SET title = coalesce(:title, title), notes = :notes, feeling = :feeling,
@@ -445,7 +455,11 @@ SET weight_kg = :weightKg, reps = :reps, rir = :rir, rpe = :rpe,
     is_warmup = :isWarmup, is_backoff = :isBackoff, is_failure = :isFailure,
     is_bodyweight = :isBodyweight, is_drop = :isDrop, is_assisted = :isAssisted,
     assistance_kg = :assistanceKg, band_kg = :bandKg, tempo = :tempo,
-    rest_seconds = :restSeconds, notes = :notes, revision = revision + 1
+    rest_seconds = :restSeconds, notes = :notes,
+    original_weight_kg = coalesce(original_weight_kg, weight_kg),
+    original_reps = coalesce(original_reps, reps),
+    edit_reason = :reason, edited_at = :editedAt, user_edited = 1,
+    revision = revision + 1
 WHERE id = :id;
 
 updateWorkSetTiming:

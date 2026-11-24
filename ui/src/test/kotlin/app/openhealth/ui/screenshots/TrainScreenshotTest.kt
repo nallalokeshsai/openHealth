@@ -180,7 +180,7 @@ class TrainScreenshotTest {
                 title = "Leg day",
                 date = today.minusDays(3),
                 sets = 12,
-                volumeKg = 5_400.0,
+                volumeLabel = "5,400 kg",
                 map = plan,
             ),
         ),
@@ -211,6 +211,7 @@ class TrainScreenshotTest {
                 nextReps = "8",
                 notes = "Belt on for the last set.",
                 groupIndex = null,
+                remainingSets = 2,
                 sets = listOf(
                     LiveSetRow(
                         id = "set1",
@@ -233,6 +234,8 @@ class TrainScreenshotTest {
                 ),
             ),
         ),
+        weightUnit = "kg",
+        map = plan,
         rest = RestDisplay(remainingSeconds = 72, totalSeconds = 120, paused = false),
         editing = false,
         note = "",
@@ -244,11 +247,19 @@ class TrainScreenshotTest {
         title = "Leg day",
         date = today,
         duration = "58:00",
+        durationSeconds = 3_480,
         volume = "5,400 kg",
+        weightUnit = "kg",
         sets = "12",
         prs = listOf(
-            app.openhealth.core.training.PersonalRecordKind.HEAVIEST_WEIGHT,
-            app.openhealth.core.training.PersonalRecordKind.ESTIMATED_ONE_REP_MAX,
+            app.openhealth.ui.screens.train.SummaryRecord(
+                app.openhealth.core.training.PersonalRecordKind.HEAVIEST_WEIGHT,
+                "82.5 kg × 5",
+            ),
+            app.openhealth.ui.screens.train.SummaryRecord(
+                app.openhealth.core.training.PersonalRecordKind.ESTIMATED_ONE_REP_MAX,
+                "82.5 kg × 5",
+            ),
         ),
         map = plan,
         topMuscles = listOf(Muscle.QUADS to 9.0, Muscle.GLUTES to 6.0),
@@ -274,6 +285,7 @@ class TrainScreenshotTest {
         favourite = true,
         map = plan,
         weeklySets = 12.0,
+        weightUnit = "kg",
         exercises = listOf(
             RoutineExerciseRow(
                 entryId = "r1",
@@ -312,6 +324,7 @@ class TrainScreenshotTest {
             ),
         ),
         library = emptyList(),
+        weightUnit = "kg",
     )
 
     private val exerciseHistory = ExerciseHistoryModel(
@@ -321,8 +334,9 @@ class TrainScreenshotTest {
         bestOneRepMax = "112.5 kg",
         progressionKey = "linear",
         incrementKg = 2.5,
-        nextWeight = 82.5,
+        nextWeight = "82.5",
         nextReps = 8,
+        weightUnit = "kg",
         rows = listOf(
             ExerciseHistoryRow(
                 date = today.minusDays(3),
@@ -391,13 +405,14 @@ class TrainScreenshotTest {
             onStart = {},
             onEdit = {},
             onFavourite = { _, _ -> },
+            onArchive = {},
             onExercise = {},
         )
     }
 
     @Test
     fun routineEditor() = shot("train-editor") {
-        RoutineEditorScreen(model = editor, onBack = {}, onSave = {})
+        RoutineEditorScreen(model = editor, onBack = {}, onSave = {}, onCreateCustom = {})
     }
 
     @Test

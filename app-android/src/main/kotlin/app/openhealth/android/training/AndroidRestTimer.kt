@@ -12,7 +12,7 @@ import app.openhealth.core.seam.RestTimerSnapshot
 class RestTimerStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    fun start(seconds: Int, label: String, nowMillis: Long) {
+    fun start(seconds: Int, nowMillis: Long) {
         val total = seconds.coerceIn(0, MAX_SECONDS.toInt()).toLong()
         prefs.edit()
             .putBoolean(ACTIVE, total > 0L)
@@ -20,7 +20,6 @@ class RestTimerStore(context: Context) {
             .putLong(TOTAL, total)
             .putBoolean(PAUSED, false)
             .putLong(PAUSED_REMAINING, 0L)
-            .putString(LABEL, label)
             .apply()
     }
 
@@ -66,7 +65,9 @@ class RestTimerStore(context: Context) {
             remainingSeconds = remaining,
             totalSeconds = total,
             paused = paused,
-            label = prefs.getString(LABEL, "").orEmpty(),
+            // No exercise name is stored: the prefs file is outside SQLCipher, and the
+            // notification only needs to say that a rest is running.
+            label = "",
         )
     }
 
@@ -77,7 +78,6 @@ class RestTimerStore(context: Context) {
         private const val TOTAL = "total"
         private const val PAUSED = "paused"
         private const val PAUSED_REMAINING = "paused_remaining"
-        private const val LABEL = "label"
         private const val MAX_SECONDS = 600L
         private const val MILLIS_PER_SECOND = 1_000L
     }
@@ -87,8 +87,11 @@ class RestTimerStore(context: Context) {
 class AndroidRestTimer(private val context: Context) : RestTimerSeam {
     private val store = RestTimerStore(context)
 
+    @Suppress("UnusedParameter")
     override fun start(seconds: Int, label: String) {
-        store.start(seconds, label, System.currentTimeMillis())
+        // The label is deliberately not stored outside SQLCipher; the notification says
+        // "Rest" and the live screen already names the exercise.
+        store.start(seconds, System.currentTimeMillis())
         RestTimerService.start(context)
     }
 

@@ -125,4 +125,5 @@ private fun TrashKind.labelRes(): Int = when (this) {
     TrashKind.ENTRY -> R.string.trash_kind_entry
     TrashKind.SET -> R.string.trash_kind_set
     TrashKind.SESSION -> R.string.trash_kind_session
+    TrashKind.ROUTINE_EXERCISE -> R.string.trash_kind_routine_exercise
 }

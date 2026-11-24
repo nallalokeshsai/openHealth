@@ -38,9 +38,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,6 +54,7 @@ import app.openhealth.core.training.BarType
 import app.openhealth.core.training.PlateMath
 import app.openhealth.core.training.clockText
 import app.openhealth.ui.R
+import app.openhealth.ui.body.OhBodyMap
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhCard
@@ -63,7 +67,6 @@ import app.openhealth.ui.components.OhSegmentedControl
 import app.openhealth.ui.components.OhSwitch
 import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.components.OhTimerBar
-import app.openhealth.ui.components.OhToast
 import app.openhealth.ui.components.ohClickable
 import app.openhealth.ui.components.rememberInteraction
 import app.openhealth.ui.icons.OhIcon
@@ -120,7 +123,6 @@ fun LiveSessionScreen(
     var notesFor by rememberSaveable { mutableStateOf<String?>(null) }
     var platesFor by rememberSaveable { mutableStateOf<String?>(null) }
     var equipmentOpen by rememberSaveable { mutableStateOf(false) }
-    var error by rememberSaveable { mutableStateOf(false) }
     var sessionNote by rememberSaveable(model.sessionId) { mutableStateOf(model.note) }
     var chosenPlate by remember { mutableStateOf<Pair<String, Double>?>(null) }
     val setBeingEdited = model.exercises.flatMap { exercise ->
@@ -138,13 +140,40 @@ fun LiveSessionScreen(
         LiveHeader(
             title = model.title,
             elapsed = if (model.backdated) {
-                stringResource(R.string.train_backdated) + " · " + shortDate(model.localDate)
+                stringResource(
+                    R.string.train_backdated_on,
+                    stringResource(R.string.train_backdated),
+                    shortDate(model.localDate),
+                )
             } else {
                 clockText(elapsed)
             },
             onClose = onBack,
             onFinish = { showFinish = true },
         )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = OhTheme.space.s6, vertical = OhTheme.space.s2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.train_exercises,
+                    model.exercises.size,
+                    model.exercises.size,
+                ),
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
+            Spacer(Modifier.weight(1f))
+            Box(modifier = Modifier.width(OhTheme.dims.bodyMapEventMini * 2)) {
+                OhBodyMap(
+                    model = model.map,
+                    variant = app.openhealth.ui.body.BodyMapVariant.EVENT_MINI,
+                )
+            }
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -199,15 +228,8 @@ fun LiveSessionScreen(
                     chosenWeight = chosenPlate
                         ?.takeIf { it.first == exercise.exerciseId }
                         ?.second,
-                    onLog = { logged ->
-                        if (logged.weight.replace(',', '.').toDoubleOrNull() == null ||
-                            logged.reps.toIntOrNull() == null
-                        ) {
-                            error = true
-                        } else {
-                            onLogSet(logged)
-                        }
-                    },
+                    weightUnit = model.weightUnit,
+                    onLog = onLogSet,
                     onEditSet = { editingSet = it },
                     onNotes = { notesFor = exercise.id },
                     onPlates = { platesFor = exercise.id },
@@ -239,6 +261,7 @@ fun LiveSessionScreen(
         model.rest?.let { rest ->
             OhTimerBar(
                 time = clockText(rest.remainingSeconds),
+                remainingSeconds = rest.remainingSeconds,
                 progress = if (rest.totalSeconds > 0) {
                     rest.remainingSeconds.toFloat() / rest.totalSeconds
                 } else {
@@ -301,6 +324,8 @@ fun LiveSessionScreen(
         val pair = setBeingEdited
         if (pair != null) {
             SetEditSheet(
+                sourceLabel = pair.second.sourceLabel,
+                recordedAt = pair.second.recordedAt,
                 edit = LiveSetEdit(
                     weight = pair.second.weight,
                     reps = pair.second.reps,
@@ -312,6 +337,7 @@ fun LiveSessionScreen(
                     isAssisted = pair.second.isAssisted,
                     assistanceKg = pair.second.assistanceKg,
                     bandKg = pair.second.bandKg,
+                    reason = "",
                 ),
                 onSave = { edit ->
                     editingSet = null
@@ -355,6 +381,7 @@ fun LiveSessionScreen(
             PlateSheet(
                 initial = exercise.nextWeight,
                 equipment = model.equipment,
+                weightUnit = model.weightUnit,
                 onEditEquipment = {
                     platesFor = null
                     equipmentOpen = true
@@ -374,25 +401,12 @@ fun LiveSessionScreen(
     ) {
         EquipmentSheet(
             equipment = model.equipment,
+            weightUnit = model.weightUnit,
             onSave = { profile ->
                 equipmentOpen = false
                 onSaveEquipment(profile)
             },
         )
-    }
-
-    if (error) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = OhTheme.space.s8),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            OhToast(
-                message = stringResource(R.string.train_live_unknown),
-                onDismiss = { error = false },
-            )
-        }
     }
 }
 
@@ -402,7 +416,7 @@ private fun LiveHeader(title: String, elapsed: String, onClose: () -> Unit, onFi
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = OhTheme.space.s6)
-            .height(OhTheme.dims.touchTarget),
+            .heightIn(min = OhTheme.dims.touchTarget),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         OhIconButton(
@@ -439,6 +453,7 @@ private fun ExerciseBlock(
     exercise: LiveExerciseModel,
     next: LiveExerciseModel?,
     chosenWeight: Double?,
+    weightUnit: String,
     onLog: (LoggedSet) -> Unit,
     onEditSet: (String) -> Unit,
     onNotes: () -> Unit,
@@ -456,6 +471,7 @@ private fun ExerciseBlock(
     }
     var rir by rememberSaveable(exercise.id, exercise.sets.size) { mutableStateOf<String?>(null) }
     var showEffort by rememberSaveable { mutableStateOf(false) }
+    var error by rememberSaveable { mutableStateOf<Int?>(null) }
     var note by rememberSaveable(exercise.id) { mutableStateOf("") }
     LaunchedEffect(chosenWeight) {
         chosenWeight?.let { weight = decimalText(it, 2) }
@@ -463,6 +479,21 @@ private fun ExerciseBlock(
 
     OhCard(modifier = Modifier.padding(top = OhTheme.space.s5)) {
         Row(verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier
+                    .size(OhTheme.dims.mediaThumb)
+                    .clip(RoundedCornerShape(OhTheme.radius.sm))
+                    .background(OhTheme.colors.surface2),
+                contentAlignment = Alignment.Center,
+            ) {
+                OhIcon(
+                    icon = equipmentIcon(exercise.equipmentKey),
+                    contentDescription = null,
+                    size = OhTheme.dims.iconButtonGlyph,
+                    tint = OhTheme.colors.label2,
+                )
+            }
+            Spacer(Modifier.width(OhTheme.space.s3))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = exercise.name,
@@ -503,7 +534,7 @@ private fun ExerciseBlock(
             color = OhTheme.colors.label2,
         )
         Spacer(Modifier.height(OhTheme.space.s3))
-        SetTableHeader()
+        SetTableHeader(weightUnit)
         exercise.sets.forEach { set ->
             if (set.done) {
                 DoneSetRow(set = set, onClick = { set.id?.let(onEditSet) })
@@ -518,21 +549,41 @@ private fun ExerciseBlock(
             onReps = { reps = it },
             onEffort = { showEffort = true },
             onDone = {
-                onLog(
-                    LoggedSet(
-                        exerciseId = exercise.exerciseId,
-                        weight = weight,
-                        reps = reps,
-                        rir = rir,
-                        kind = kind,
-                        notes = note.ifBlank { null },
-                    ),
-                )
-                kind = LiveSetKind.WORK
-                rir = null
-                note = ""
+                error = when {
+                    weight.replace(',', '.').toDoubleOrNull() == null ->
+                        R.string.train_live_invalid_weight
+                    reps.toIntOrNull() == null -> R.string.train_live_invalid_reps
+                    else -> null
+                }
+                if (error == null) {
+                    onLog(
+                        LoggedSet(
+                            exerciseId = exercise.exerciseId,
+                            weight = weight,
+                            reps = reps,
+                            rir = rir,
+                            kind = kind,
+                            notes = note.ifBlank { null },
+                        ),
+                    )
+                    kind = LiveSetKind.WORK
+                    rir = null
+                    note = ""
+                }
             },
         )
+        if (error != null) {
+            Spacer(Modifier.height(OhTheme.space.s1))
+            FieldError(stringResource(error!!))
+        }
+        repeat(exercise.remainingSets) { offset ->
+            FutureSetRow(
+                label = (
+                    (exercise.sets.count { it.done && it.kind != LiveSetKind.WARMUP }) +
+                        offset + 2
+                    ).toString(),
+            )
+        }
         Spacer(Modifier.height(OhTheme.space.s2))
         Row(
             horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2),
@@ -599,7 +650,29 @@ private fun ExerciseBlock(
 }
 
 @Composable
-private fun SetTableHeader() {
+private fun FieldError(message: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OhIcon(
+            icon = OhIcons.warning,
+            contentDescription = null,
+            size = OhTheme.dims.glyphInline,
+            tint = OhTheme.colors.redInk,
+        )
+        Spacer(Modifier.width(OhTheme.space.s1))
+        Text(
+            text = message,
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.redInk,
+            modifier = Modifier.semantics {
+                liveRegion =
+                    androidx.compose.ui.semantics.LiveRegionMode.Polite
+            },
+        )
+    }
+}
+
+@Composable
+private fun SetTableHeader(weightUnit: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -607,7 +680,10 @@ private fun SetTableHeader() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.width(OhTheme.dims.setColumn))
-        HeaderCell(stringResource(R.string.train_live_weight), Modifier.weight(1f))
+        HeaderCell(
+            stringResource(R.string.train_live_weight) + " (" + weightUnit + ")",
+            Modifier.weight(1f),
+        )
         HeaderCell(stringResource(R.string.train_live_reps), Modifier.weight(1f))
         HeaderCell(stringResource(R.string.train_live_rir), Modifier.width(OhTheme.dims.setRir))
         Spacer(Modifier.width(OhTheme.dims.touchTarget))
@@ -622,7 +698,7 @@ private fun HeaderCell(text: String, modifier: Modifier) {
         color = OhTheme.colors.label2,
         textAlign = TextAlign.Center,
         modifier = modifier,
-        maxLines = 1,
+        maxLines = 2,
     )
 }
 
@@ -803,6 +879,46 @@ private fun ActiveSetRow(
     }
 }
 
+/** A planned but not yet reached row: `label-3`, no fields (`DESIGN.md` §14.2). */
+@Composable
+private fun FutureSetRow(label: String) {
+    val large = LocalDensity.current.fontScale >= OhTheme.dims.largeFontScale
+    val setWidth = if (large) OhTheme.dims.touchTarget else OhTheme.dims.setColumn
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = OhTheme.dims.touchTarget),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = OhTheme.type.subhead,
+            color = OhTheme.colors.label3,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(setWidth),
+        )
+        Text(
+            text = "",
+            style = OhTheme.type.body,
+            color = OhTheme.colors.label3,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "",
+            style = OhTheme.type.body,
+            color = OhTheme.colors.label3,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "",
+            style = OhTheme.type.subhead,
+            color = OhTheme.colors.label3,
+            modifier = Modifier.width(OhTheme.dims.setRir),
+        )
+        Spacer(Modifier.width(OhTheme.dims.touchTarget))
+    }
+}
+
 @Composable
 private fun SetField(
     value: String,
@@ -817,8 +933,7 @@ private fun SetField(
     Box(
         modifier = modifier
             .padding(horizontal = OhTheme.space.s1)
-            .height(OhTheme.dims.touchTarget)
-            .semantics { contentDescription = label },
+            .height(OhTheme.dims.touchTarget),
         contentAlignment = Alignment.Center,
     ) {
         BasicTextField(
@@ -836,6 +951,7 @@ private fun SetField(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier
                 .fillMaxWidth()
+                .semantics { contentDescription = label }
                 .onFocusChanged {
                     if (it.isFocused) {
                         field = field.copy(selection = TextRange(0, field.text.length))
@@ -922,6 +1038,8 @@ private fun AddExerciseSheet(library: List<ExerciseChoice>, onPick: (String) -> 
 @Composable
 private fun SetEditSheet(
     edit: LiveSetEdit,
+    sourceLabel: String?,
+    recordedAt: Long?,
     onSave: (LiveSetEdit) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
@@ -935,6 +1053,7 @@ private fun SetEditSheet(
     var assisted by rememberSaveable { mutableStateOf(edit.isAssisted) }
     var assistance by rememberSaveable { mutableStateOf(edit.assistanceKg) }
     var band by rememberSaveable { mutableStateOf(edit.bandKg) }
+    var reason by rememberSaveable { mutableStateOf(edit.reason) }
     Column(verticalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
         OhTextField(weight, {
             weight = it
@@ -977,6 +1096,26 @@ private fun SetEditSheet(
         OhTextField(notes, {
             notes = it
         }, placeholder = stringResource(R.string.train_live_set_notes))
+        OhTextField(
+            reason,
+            { reason = it },
+            placeholder = stringResource(R.string.train_live_edit_reason),
+        )
+        if (sourceLabel != null || recordedAt != null) {
+            Spacer(Modifier.height(OhTheme.space.s2))
+            sourceLabel?.let {
+                OhRow(title = stringResource(R.string.train_summary_provenance), value = it)
+            }
+            recordedAt?.let {
+                OhRow(
+                    title = stringResource(R.string.train_summary_recorded),
+                    value = app.openhealth.ui.screens.common.timeOf(
+                        kotlin.time.Instant.fromEpochMilliseconds(it),
+                        kotlinx.datetime.TimeZone.currentSystemDefault(),
+                    ),
+                )
+            }
+        }
         Spacer(Modifier.height(OhTheme.space.s3))
         OhButton(
             text = stringResource(R.string.train_editor_done),
@@ -993,6 +1132,7 @@ private fun SetEditSheet(
                         isAssisted = assisted,
                         assistanceKg = assistance,
                         bandKg = band,
+                        reason = reason,
                     ),
                 )
             },
@@ -1048,14 +1188,20 @@ private fun NoteSheet(initial: String, placeholder: String, onSave: (String) -> 
 private fun PlateSheet(
     initial: String,
     equipment: app.openhealth.core.training.EquipmentProfile,
+    weightUnit: String,
     onEditEquipment: () -> Unit,
     onPlateChosen: (Double) -> Unit,
 ) {
     var target by rememberSaveable { mutableStateOf(initial) }
     var barKey by rememberSaveable { mutableStateOf(equipment.defaultBarKey) }
     val bar = equipment.bar(barKey)
+    val imperial = weightUnit == "lb"
     val solution = target.replace(',', '.').toDoubleOrNull()?.let { value ->
-        PlateMath.solve(value, bar.weightKg, equipment.platesKg)
+        PlateMath.solve(
+            app.openhealth.core.training.TrainingUnits.toKilograms(value, imperial),
+            bar.weightKg,
+            equipment.platesKg,
+        )
     }
     OhTextField(
         value = target,
@@ -1072,7 +1218,7 @@ private fun PlateSheet(
     Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s1)) {
         equipment.bars.forEach { option ->
             OhChip(
-                text = option.label,
+                text = barLabel(option.key),
                 selected = barKey == option.key,
                 neutralSelected = true,
                 onClick = { barKey = option.key },
@@ -1088,19 +1234,48 @@ private fun PlateSheet(
         )
     } else {
         Text(
-            text = stringResource(R.string.train_plates_per_side) + " · " +
-                solution.perSideKg.joinToString(" + ") { decimalText(it, 2) } + " kg",
+            text = stringResource(
+                R.string.train_plates_per_side_value,
+                stringResource(R.string.train_plates_per_side),
+                solution.perSideKg.joinToString(" + ") {
+                    decimalText(
+                        app.openhealth.core.training.TrainingUnits.toDisplay(it, imperial),
+                        2,
+                    )
+                } + " " + weightUnit,
+            ),
             style = OhTheme.type.body,
             color = OhTheme.colors.label,
         )
         Text(
             text = if (solution.exact) {
-                stringResource(R.string.train_plates_achieved, number(solution.achievedKg, 2))
+                stringResource(
+                    R.string.train_plates_achieved,
+                    number(
+                        app.openhealth.core.training.TrainingUnits.toDisplay(
+                            solution.achievedKg,
+                            imperial,
+                        ),
+                        2,
+                    ) + " " + weightUnit,
+                )
             } else {
                 stringResource(
                     R.string.train_plates_gap,
-                    number(solution.achievedKg, 2),
-                    number(solution.perSideGapKg, 2),
+                    number(
+                        app.openhealth.core.training.TrainingUnits.toDisplay(
+                            solution.achievedKg,
+                            imperial,
+                        ),
+                        2,
+                    ),
+                    number(
+                        app.openhealth.core.training.TrainingUnits.toDisplay(
+                            solution.perSideGapKg,
+                            imperial,
+                        ),
+                        2,
+                    ) + " " + weightUnit,
                 )
             },
             style = OhTheme.type.footnote,
@@ -1108,8 +1283,24 @@ private fun PlateSheet(
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         OhButton(
-            text = stringResource(R.string.train_plates_use, number(solution.achievedKg, 2)),
-            onClick = { onPlateChosen(solution.achievedKg) },
+            text = stringResource(
+                R.string.train_plates_use,
+                number(
+                    app.openhealth.core.training.TrainingUnits.toDisplay(
+                        solution.achievedKg,
+                        imperial,
+                    ),
+                    2,
+                ) + " " + weightUnit,
+            ),
+            onClick = {
+                onPlateChosen(
+                    app.openhealth.core.training.TrainingUnits.toDisplay(
+                        solution.achievedKg,
+                        imperial,
+                    ),
+                )
+            },
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -1125,25 +1316,29 @@ private fun PlateSheet(
 @Composable
 private fun EquipmentSheet(
     equipment: app.openhealth.core.training.EquipmentProfile,
+    weightUnit: String,
     onSave: (app.openhealth.core.training.EquipmentProfile) -> Unit,
 ) {
+    val imperial = weightUnit == "lb"
+    fun shown(kg: Double) = app.openhealth.core.training.TrainingUnits.toDisplay(kg, imperial)
+    fun entered(value: Double) =
+        app.openhealth.core.training.TrainingUnits.toKilograms(value, imperial)
     var plates by rememberSaveable {
-        mutableStateOf(equipment.platesKg.joinToString(", ") { decimalText(it, 2) })
+        mutableStateOf(equipment.platesKg.joinToString(", ") { decimalText(shown(it), 2) })
     }
     var dumbbell by rememberSaveable {
-        mutableStateOf(decimalText(equipment.dumbbellIncrementKg, 2))
+        mutableStateOf(decimalText(shown(equipment.dumbbellIncrementKg), 2))
     }
-    val customLabel = stringResource(R.string.train_plates_custom)
     var customBar by rememberSaveable {
         mutableStateOf(
-            equipment.bars.firstOrNull { it.key == "custom" }?.weightKg?.let { decimalText(it, 2) }
-                .orEmpty(),
+            equipment.bars.firstOrNull { it.key == "custom" }?.weightKg
+                ?.let { decimalText(shown(it), 2) }.orEmpty(),
         )
     }
     OhTextField(
         value = plates,
         onValueChange = { plates = it },
-        placeholder = stringResource(R.string.train_plates_plates),
+        placeholder = stringResource(R.string.train_plates_plates) + " (" + weightUnit + ")",
     )
     Spacer(Modifier.height(OhTheme.space.s2))
     OhTextField(
@@ -1155,7 +1350,8 @@ private fun EquipmentSheet(
     OhTextField(
         value = customBar,
         onValueChange = { customBar = it },
-        placeholder = stringResource(R.string.train_plates_custom_weight),
+        placeholder = stringResource(R.string.train_plates_custom_weight) +
+            " (" + weightUnit + ")",
     )
     Spacer(Modifier.height(OhTheme.space.s2))
     OhButton(
@@ -1166,15 +1362,16 @@ private fun EquipmentSheet(
                 .filter { it > 0.0 }
             val bars = equipment.bars.filterNot { it.key == "custom" } + listOfNotNull(
                 customBar.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0.0 }?.let {
-                    BarType("custom", customLabel, it)
+                    BarType("custom", entered(it))
                 },
             )
             if (parsed.isNotEmpty()) {
                 onSave(
                     equipment.copy(
-                        platesKg = parsed.sortedDescending(),
+                        platesKg = parsed.map(::entered).sortedDescending(),
                         dumbbellIncrementKg = dumbbell.replace(',', '.').toDoubleOrNull()
-                            ?.takeIf { it > 0.0 } ?: equipment.dumbbellIncrementKg,
+                            ?.takeIf { it > 0.0 }
+                            ?.let(::entered) ?: equipment.dumbbellIncrementKg,
                         bars = bars,
                     ),
                 )

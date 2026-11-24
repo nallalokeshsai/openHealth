@@ -143,6 +143,11 @@ class TrainingRepositoryTest {
                     is_assisted = false,
                     assistance_kg = null,
                     band_kg = null,
+                    original_weight_kg = null,
+                    original_reps = null,
+                    edit_reason = null,
+                    edited_at = null,
+                    user_edited = false,
                 ),
             )
         }
@@ -241,6 +246,43 @@ class TrainingRepositoryTest {
     }
 
     @Test
+    fun editingASetKeepsTheOriginalValueAndReason() {
+        val store = localStore()
+        seedExercise(store.training)
+        val id = session(store, "squat", midday(day))
+        val set = store.training.setsForSession(id).first { !it.is_warmup }
+        store.training.updateSet(
+            set.id,
+            app.openhealth.data.repo.SetValues(
+                weightKg = 110.0,
+                reps = 6,
+                rir = 1.0,
+                rpe = null,
+                isWarmup = false,
+                isBackoff = false,
+                isFailure = false,
+                isBodyweight = false,
+                isDrop = false,
+                isAssisted = false,
+                assistanceKg = null,
+                bandKg = null,
+                tempo = null,
+                restSeconds = null,
+                notes = null,
+                reason = "misload",
+                editedAt = 1L,
+            ),
+        )
+        val edited = store.training.setById(set.id)!!
+        assertEquals(110.0, edited.weight_kg)
+        assertEquals(100.0, edited.original_weight_kg)
+        assertEquals(5L, edited.original_reps)
+        assertEquals("misload", edited.edit_reason)
+        assertTrue(edited.user_edited)
+        store.close()
+    }
+
+    @Test
     fun deletingOneSetRebuildsTheSessionsDay() {
         val store = localStore()
         seedExercise(store.training)
@@ -269,6 +311,8 @@ class TrainingRepositoryTest {
         val kinds = store.timeline.page(50).map { it.kind }.toSet()
         assertTrue("session" in kinds)
         assertTrue("work_set" in kinds)
+        // The fresh schema's view must carry a set too, not only the migrated one.
+        assertTrue(store.timeline.forDay(day).any { it.kind == "work_set" })
         store.close()
     }
 
@@ -295,6 +339,57 @@ class TrainingRepositoryTest {
         store.training.finishSession(id, start.toEpochMilliseconds() + 999_000L, 1L)
         assertEquals(ended, store.training.sessionById(id)!!.ended_at)
         assertEquals(recorded, store.training.sessionById(id)!!.recorded_at)
+        store.close()
+    }
+
+    @Test
+    fun deletingARoutineExerciseIsUndoableWithItsTarget() {
+        val store = localStore()
+        seedExercise(store.training)
+        val routineId = id("routine")
+        store.training.upsertRoutine(
+            app.openhealth.data.db.Routine(
+                id = routineId,
+                name = "Legs",
+                folder = null,
+                notes = null,
+                archived_at = null,
+                created_at = 0L,
+                updated_at = 0L,
+                source_id = "manual",
+                revision = 1L,
+                weekday = 1L,
+                rotation_index = null,
+                favourite = false,
+                progression = "linear",
+                target_rest_seconds = 120L,
+            ),
+        )
+        val entryId = id("entry")
+        store.training.upsertRoutineExercise(
+            app.openhealth.data.db.Routine_exercise(
+                id = entryId,
+                routine_id = routineId,
+                exercise_id = "squat",
+                position = 0L,
+                target_sets = 4L,
+                target_reps = 5L,
+                target_reps_high = 8L,
+                target_weight_kg = 100.0,
+                notes = "pause",
+                target_rir = 2.0,
+                rest_seconds = 120L,
+                progression = "linear",
+                group_index = null,
+            ),
+        )
+        val tombstone = assertNotNull(store.trash.deleteRoutineExercise(entryId))
+        assertNull(store.training.routineEntryById(entryId))
+        assertTrue(store.trash.undo(tombstone))
+        val restored = assertNotNull(store.training.routineEntryById(entryId))
+        assertEquals(4L, restored.target_sets)
+        assertEquals(8L, restored.target_reps_high)
+        assertEquals("pause", restored.notes)
         store.close()
     }
 

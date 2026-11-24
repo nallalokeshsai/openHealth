@@ -16,6 +16,7 @@ import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.SourceId
 import app.openhealth.core.ids.TombstoneId
 import app.openhealth.core.preferences.HealthModule
+import app.openhealth.core.preferences.UnitSystem
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.RestTimerSeam
 import app.openhealth.core.training.EquipmentProfile
@@ -31,6 +32,7 @@ import app.openhealth.core.training.RoutinePlanner
 import app.openhealth.core.training.RoutineSchedule
 import app.openhealth.core.training.SessionLoads
 import app.openhealth.core.training.TrainingSetRecord
+import app.openhealth.core.training.TrainingUnits
 import app.openhealth.core.training.clockText
 import app.openhealth.data.LocalStore
 import app.openhealth.data.db.Profile
@@ -100,6 +102,36 @@ class TrainingPresenter(
 
     fun equipment(): EquipmentProfile =
         EquipmentProfile.decode(store.settings.get(SettingKeys.TRAINING_EQUIPMENT))
+
+    fun createCustomExercise(
+        draft: app.openhealth.ui.screens.train.CustomExerciseDraft,
+    ): ExerciseChoice {
+        val primary = app.openhealth.core.body.Muscle.fromKey(draft.primary)
+            ?: app.openhealth.core.body.Muscle.CHEST
+        val id = "custom-${ids.newId()}"
+        val at = now().toEpochMilliseconds()
+        store.training.upsertExercise(
+            app.openhealth.data.db.Exercise(
+                id = id,
+                name = draft.name.trim(),
+                primary_muscles = primary.key,
+                secondary_muscles = "",
+                equipment = draft.equipment,
+                instructions = draft.instructions.trim().ifBlank { null },
+                level = "beginner",
+                mechanic = "compound",
+                force = null,
+                met_activity = null,
+                is_custom = true,
+                source_id = manualSource.value,
+                created_at = at,
+                updated_at = at,
+                revision = 1L,
+            ),
+        )
+        catalogueCache = null
+        return ExerciseChoice(id, draft.name.trim(), muscleLabel(primary))
+    }
 
     fun saveEquipment(profile: EquipmentProfile) {
         store.settings.put(SettingKeys.TRAINING_EQUIPMENT, EquipmentProfile.encode(profile))
@@ -248,7 +280,9 @@ class TrainingPresenter(
                 title = session.title,
                 date = LocalDate.parse(session.local_date),
                 sets = sets.count { !it.is_warmup },
-                volumeKg = volumeOrNull(sets, profile),
+                volumeLabel = volumeOrNull(sets, profile)?.let { volume ->
+                    "${shown(volume, profile)} ${unit(profile)}"
+                },
                 map = BodyMapModel.plan(sex(profile), loads),
             )
         }
@@ -270,6 +304,7 @@ class TrainingPresenter(
                     entry.target_reps,
                     entry.target_reps_high,
                     entry.target_weight_kg,
+                    profile,
                 ),
                 rest = entry.rest_seconds?.let { "$it s" },
                 groupIndex = entry.group_index?.toInt(),
@@ -290,12 +325,13 @@ class TrainingPresenter(
             favourite = routine.favourite,
             map = BodyMapModel.plan(sex(profile), coverage(entriesOf(id), catalogue)),
             weeklySets = entriesOf(id).sumOf { it.target_sets ?: DEFAULT_SETS.toLong() }.toDouble(),
+            weightUnit = unit(profile),
             exercises = rows,
             lastTrained = lastTrained,
         )
     }
 
-    fun editor(id: String?): RoutineEditorModel {
+    fun editor(id: String?, profile: Profile?): RoutineEditorModel {
         val routine = id?.let { store.training.routineById(it) }
         val catalogue = catalogue()
         val rows = id?.let { routineId ->
@@ -308,7 +344,7 @@ class TrainingPresenter(
                     muscles = muscleNames(exercise),
                     sets = (entry.target_sets ?: DEFAULT_SETS.toLong()).toString(),
                     reps = repsLabel(entry.target_reps, entry.target_reps_high),
-                    weight = entry.target_weight_kg?.let { trimNumber(it) }.orEmpty(),
+                    weight = entry.target_weight_kg?.let { shown(it, profile) }.orEmpty(),
                     rest = entry.rest_seconds?.toString().orEmpty(),
                 )
             }
@@ -325,6 +361,7 @@ class TrainingPresenter(
             notes = routine?.notes.orEmpty(),
             exercises = rows,
             library = catalogue.values.map { ExerciseChoice(it.id, it.name, muscleNames(it)) },
+            weightUnit = unit(profile),
         )
     }
 
@@ -376,7 +413,8 @@ class TrainingPresenter(
                             ?: DEFAULT_SETS.toLong(),
                         target_reps = low.toLong(),
                         target_reps_high = high.toLong(),
-                        target_weight_kg = row.weight.replace(',', '.').toDoubleOrNull(),
+                        target_weight_kg = row.weight.replace(',', '.').toDoubleOrNull()
+                            ?.let { entered(it, store.profile.active()) },
                         notes = null,
                         target_rir = null,
                         rest_seconds = row.rest.toLongOrNull(),
@@ -386,11 +424,22 @@ class TrainingPresenter(
                 )
             }
             entriesOf(id).filterNot { it.id in keep }.forEach {
-                store.training.deleteRoutineEntry(it.id)
+                store.trash.deleteRoutineExercise(it.id)
             }
         }
         catalogueCache = null
         return id
+    }
+
+    fun archiveRoutine(id: String) {
+        val routine = store.training.routineById(id) ?: return
+        store.training.upsertRoutine(
+            routine.copy(
+                archived_at = now().toEpochMilliseconds(),
+                updated_at = now().toEpochMilliseconds(),
+                revision = routine.revision + 1,
+            ),
+        )
     }
 
     fun toggleFavourite(id: String) {
@@ -531,12 +580,22 @@ class TrainingPresenter(
         val exerciseId = logged.exerciseId
         val session = store.training.sessionById(sessionId) ?: return emptyList()
         val entry = ensureSessionExercise(session, exerciseId) ?: return emptyList()
-        val kg = logged.weight.replace(',', '.').toDoubleOrNull() ?: 0.0
+        val profile = store.profile.active()
+        val kg = logged.weight.replace(',', '.').toDoubleOrNull()
+            ?.let { entered(it, profile) } ?: 0.0
         val count = logged.reps.toIntOrNull() ?: return emptyList()
         val bodyweight = store.training.exerciseById(exerciseId)?.equipment == "bodyweight"
-        val at = now()
+        val recorded = now()
         val position =
             (store.training.setsForSession(sessionId).maxOfOrNull { it.position } ?: -1) + 1
+        val sessionDate = LocalDate.parse(session.local_date)
+        val happened = if (sessionDate != today()) {
+            Instant.fromEpochMilliseconds(
+                session.started_at + position * PAST_SET_SPACING_MILLIS,
+            )
+        } else {
+            recorded
+        }
         val history = store.training.setsForExercise(exerciseId)
             .filterNot { it.is_warmup }
             .map { set ->
@@ -572,9 +631,9 @@ class TrainingPresenter(
                 tempo = null,
                 rest_seconds = entry.rest_seconds,
                 notes = logged.notes,
-                completed_at = at.toEpochMilliseconds(),
-                happened_at = at.toEpochMilliseconds(),
-                recorded_at = at.toEpochMilliseconds(),
+                completed_at = happened.toEpochMilliseconds(),
+                happened_at = happened.toEpochMilliseconds(),
+                recorded_at = recorded.toEpochMilliseconds(),
                 source_id = manualSource.value,
                 idempotency_key = "set-${ids.newId()}",
                 observation_id = null,
@@ -586,6 +645,11 @@ class TrainingPresenter(
                 is_assisted = false,
                 assistance_kg = null,
                 band_kg = null,
+                original_weight_kg = null,
+                original_reps = null,
+                edit_reason = null,
+                edited_at = null,
+                user_edited = false,
             ),
         )
         startRestIfDue(sessionId, entry)
@@ -593,7 +657,9 @@ class TrainingPresenter(
     }
 
     fun updateSet(setId: String, edit: LiveSetEdit) {
-        val kg = edit.weight.replace(',', '.').toDoubleOrNull() ?: return
+        val profile = store.profile.active()
+        val kg = edit.weight.replace(',', '.').toDoubleOrNull()
+            ?.let { entered(it, profile) } ?: return
         val reps = edit.reps.toLongOrNull() ?: return
         store.training.updateSet(
             setId,
@@ -613,6 +679,8 @@ class TrainingPresenter(
                 tempo = edit.tempo.ifBlank { null },
                 restSeconds = null,
                 notes = edit.notes.ifBlank { null },
+                reason = edit.reason.ifBlank { null },
+                editedAt = now().toEpochMilliseconds(),
             ),
         )
     }
@@ -680,6 +748,14 @@ class TrainingPresenter(
         return store.trash.deleteSession(sessionId)
     }
 
+    fun setSessionNote(sessionId: String, note: String) {
+        store.training.updateSessionNotes(
+            sessionId,
+            note.ifBlank { null },
+            now().toEpochMilliseconds(),
+        )
+    }
+
     fun saveSummary(sessionId: String, feeling: String, note: String) {
         store.training.updateSessionDetails(
             sessionId,
@@ -697,7 +773,7 @@ class TrainingPresenter(
     // ------------------------------------------------------------------ the live model
 
     @Suppress("LongMethod", "CyclomaticComplexMethod")
-    fun live(sessionId: String): LiveSessionModel? {
+    fun live(sessionId: String, profile: Profile): LiveSessionModel? {
         val session = store.training.sessionById(sessionId) ?: return null
         val catalogue = catalogue()
         val equipment = equipment()
@@ -707,6 +783,8 @@ class TrainingPresenter(
             val sets = store.training.setsForSession(sessionId)
                 .filter { it.exercise_id == entry.exercise_id }
                 .sortedBy { it.position }
+            val allSets = store.training.setsForExercise(entry.exercise_id)
+                .sortedBy { it.completed_at }
             val targetLow = entry.target_reps?.toInt() ?: DEFAULT_REPS
             val targetHigh = entry.target_reps_high?.toInt() ?: targetLow
             val decision = decision(
@@ -737,7 +815,7 @@ class TrainingPresenter(
                     work += 1
                     work.toString()
                 }
-                val before = store.training.setsForExercise(entry.exercise_id)
+                val before = allSets
                     .filter { it.completed_at < set.completed_at }
                     .map {
                         TrainingSetRecord(
@@ -759,7 +837,7 @@ class TrainingPresenter(
                 LiveSetRow(
                     id = set.id,
                     label = label,
-                    weight = trimNumber(set.weight_kg),
+                    weight = shown(set.weight_kg, profile),
                     reps = set.reps.toString(),
                     rir = set.rir?.let { trimNumber(it) },
                     kind = kindOf(set),
@@ -769,13 +847,16 @@ class TrainingPresenter(
                     notes = set.notes,
                     isBodyweight = set.is_bodyweight,
                     isAssisted = set.is_assisted,
-                    assistanceKg = set.assistance_kg?.let { trimNumber(it) }.orEmpty(),
-                    bandKg = set.band_kg?.let { trimNumber(it) }.orEmpty(),
+                    assistanceKg = set.assistance_kg?.let { shown(it, profile) }.orEmpty(),
+                    bandKg = set.band_kg?.let { shown(it, profile) }.orEmpty(),
+                    sourceLabel = store.sources
+                        .byId(app.openhealth.core.ids.SourceId(set.source_id))?.label,
+                    recordedAt = set.recorded_at,
                 )
             } + LiveSetRow(
                 id = null,
                 label = if (work == 0 && warmup == 0) "1" else (work + 1).toString(),
-                weight = trimNumber(prefillWeight),
+                weight = shown(prefillWeight, profile),
                 reps = prefillReps.toString(),
                 rir = null,
                 kind = LiveSetKind.WORK,
@@ -789,19 +870,42 @@ class TrainingPresenter(
                 muscles = muscleNames(exercise),
                 target = (entry.target_sets ?: DEFAULT_SETS.toLong()).toString() + " × " +
                     repsLabel(entry.target_reps, entry.target_reps_high),
-                lastTime = last?.let { "${trimNumber(it.weight_kg)} kg × ${it.reps}" },
+                lastTime = last?.let {
+                    "${shown(it.weight_kg, profile)} ${unit(profile)} × ${it.reps}"
+                },
                 progressionKey = ProgressionPolicy.fromKey(entry.progression).key,
                 incrementKg = incrementFor(exercise, equipment),
                 action = decision.action,
                 progressionReason = decision.reason,
-                nextWeight = trimNumber(decision.weightKg ?: prefillWeight),
+                nextWeight = shown(decision.weightKg ?: prefillWeight, profile),
                 nextReps = decision.repsLow.toString(),
                 notes = entry.notes,
                 groupIndex = entry.group_index?.toInt(),
+                remainingSets = (
+                    (entry.target_sets ?: DEFAULT_SETS.toLong()).toInt() -
+                        rows.count { it.done && it.kind != LiveSetKind.WARMUP } - 1
+                    )
+                    .coerceAtLeast(0),
                 sets = rows,
             )
         }
         val rest = restTimer.snapshot(now().toEpochMilliseconds())
+        val performed = exercises.flatMap { exercise ->
+            val catalogueExercise = catalogue[exercise.exerciseId]
+            if (catalogueExercise == null) {
+                emptyList()
+            } else {
+                exercise.sets.filter { it.done }.map { set ->
+                    PerformedSet(
+                        primary = catalogueExercise.primary,
+                        secondary = catalogueExercise.secondary,
+                        weightKg = set.weight.replace(',', '.').toDoubleOrNull() ?: 0.0,
+                        reps = set.reps.toIntOrNull() ?: 0,
+                        isWarmup = set.kind == LiveSetKind.WARMUP,
+                    )
+                }
+            }
+        }
         return LiveSessionModel(
             sessionId = session.id,
             title = session.title ?: freestyleTitle,
@@ -809,6 +913,8 @@ class TrainingPresenter(
             localDate = LocalDate.parse(session.local_date),
             backdated = LocalDate.parse(session.local_date) != today(),
             exercises = exercises,
+            weightUnit = unit(profile),
+            map = BodyMapModel.plan(sex(profile), SessionLoads.byMuscle(performed)),
             rest = rest?.let {
                 RestDisplay(
                     remainingSeconds = it.remainingSeconds,
@@ -824,6 +930,7 @@ class TrainingPresenter(
         )
     }
 
+    @Suppress("LongMethod")
     fun summary(sessionId: String, profile: Profile): SessionSummaryModel? {
         val session = store.training.sessionById(sessionId) ?: return null
         val sets = store.training.setsForSession(sessionId)
@@ -841,7 +948,7 @@ class TrainingPresenter(
         }
         val loads = SessionLoads.byMuscle(performed)
         val top = SessionLoads.topMuscles(performed)
-        val prs = mutableListOf<PersonalRecordKind>()
+        val prs = mutableListOf<app.openhealth.ui.screens.train.SummaryRecord>()
         sets.forEach { set ->
             val before = store.training.setsForExercise(set.exercise_id)
                 .filter { it.completed_at < set.completed_at }
@@ -856,7 +963,17 @@ class TrainingPresenter(
                     set.is_warmup,
                     set.is_bodyweight,
                 ),
-            ).map { it.kind }.forEach { if (it !in prs) prs += it }
+            ).forEach { record ->
+                if (prs.none { it.kind == record.kind }) {
+                    prs += app.openhealth.ui.screens.train.SummaryRecord(
+                        kind = record.kind,
+                        value = "${shown(
+                            record.weightKg,
+                            profile,
+                        )} ${unit(profile)} × ${record.reps}",
+                    )
+                }
+            }
         }
         val volume = volumeOrNull(sets, profile)
         return SessionSummaryModel(
@@ -867,7 +984,10 @@ class TrainingPresenter(
                 ((session.ended_at ?: session.started_at) - session.started_at) /
                     MILLIS_PER_SECOND,
             ),
-            volume = volume?.let { "${trimNumber(it)} kg" },
+            durationSeconds = ((session.ended_at ?: session.started_at) - session.started_at) /
+                MILLIS_PER_SECOND,
+            volume = volume?.let { "${shown(it, profile)} ${unit(profile)}" },
+            weightUnit = unit(profile),
             sets = sets.count { !it.is_warmup }.toString(),
             prs = prs,
             map = BodyMapModel.plan(sex(profile), loads),
@@ -912,23 +1032,29 @@ class TrainingPresenter(
             val sets = store.training.setsForSession(item.sessionId).filter {
                 it.exercise_id == exerciseId && !it.is_warmup
             }
+            val top = sets.maxByOrNull { it.weight_kg }
             ExerciseHistoryRow(
                 date = LocalDate.parse(session.local_date),
                 sets = sets.size.toString(),
-                topSet = "${trimNumber(item.topWeightKg)} kg × ${item.topReps}",
-                volume = volumeOrNull(sets, profile)?.let { "${trimNumber(it)} kg" },
+                topSet = top?.let {
+                    "${shown(it.weight_kg, profile)} ${unit(profile)} × ${it.reps}"
+                },
+                volume = volumeOrNull(sets, profile)?.let {
+                    "${shown(it, profile)} ${unit(profile)}"
+                },
                 estimatedOneRepMax = sets.mapNotNull { oneRepMax(it) }.maxOrNull()
-                    ?.let { "${trimNumber(it)} kg" },
+                    ?.let { "${shown(it, profile)} ${unit(profile)}" },
             )
         }
         return ExerciseHistoryModel(
             exerciseId = exerciseId,
             name = exercise?.name ?: exerciseName(exerciseId),
             muscles = muscleNames(exercise),
-            bestOneRepMax = best?.let { "${trimNumber(it)} kg" },
+            bestOneRepMax = best?.let { "${shown(it, profile)} ${unit(profile)}" },
             progressionKey = target?.progression ?: LinearProgression.key,
             incrementKg = incrementFor(exercise, equipment()),
-            nextWeight = decision.weightKg,
+            nextWeight = decision.weightKg?.let { shown(it, profile) },
+            weightUnit = unit(profile),
             nextReps = decision.repsLow,
             rows = rows,
         )
@@ -966,45 +1092,28 @@ class TrainingPresenter(
     }
 
     private fun decision(request: DecisionRequest): ProgressionDecision {
-        val exerciseId = request.exerciseId
-        val sessionId = request.sessionId
-        val targetSets = request.targetSets
-        val targetLow = request.targetLow
-        val targetHigh = request.targetHigh
-        val policyKey = request.policyKey
-        val incrementKg = request.incrementKg
-        val policy = ProgressionPolicy.fromKey(policyKey)
-        val history = store.training.setsForExercise(exerciseId)
-            .filterNot { it.is_warmup }
-        val priorSets = history.filter { set ->
-            val setSession = set.session_id
-            setSession != sessionId
+        val policy = ProgressionPolicy.fromKey(request.policyKey)
+        val sets = store.training.setsForExercise(request.exerciseId).map { set ->
+            app.openhealth.core.training.ProgressionSet(
+                sessionId = set.session_id,
+                weightKg = set.weight_kg,
+                reps = set.reps.toInt(),
+                isWarmup = set.is_warmup,
+                isBackoff = set.is_backoff,
+                isDrop = set.is_drop,
+                completedAt = set.completed_at,
+            )
         }
-        val lastWeight = priorSets.maxByOrNull { it.completed_at }?.weight_kg
-            ?: history.maxByOrNull { it.completed_at }?.weight_kg
-        val lastReps = priorSets.maxByOrNull { it.completed_at }?.reps?.toInt()
-            ?: history.maxByOrNull { it.completed_at }?.reps?.toInt()
-        val lastSessionSets = priorSets
-            .filter { it.session_id == (priorSets.maxByOrNull { s -> s.completed_at }?.session_id) }
-        val completed = lastSessionSets.size
-        val missed = lastSessionSets.any { it.reps.toInt() < targetLow }
-        val sessionsAtLoad = priorSets
-            .groupBy { it.session_id }
-            .values
-            .sortedByDescending { group -> group.maxOf { it.completed_at } }
-            .takeWhile { group -> group.maxOf { it.weight_kg } == lastWeight }
-            .size
         return policy.next(
-            ProgressionInput(
-                lastWeightKg = lastWeight,
-                lastReps = lastReps,
-                targetRepsLow = targetLow,
-                targetRepsHigh = targetHigh,
-                targetSets = targetSets,
-                completedSets = completed,
-                missedReps = missed,
-                sessionsAtLoad = sessionsAtLoad,
-                incrementKg = incrementKg,
+            app.openhealth.core.training.ProgressionPlanner.input(
+                app.openhealth.core.training.ProgressionRequest(
+                    sets = sets,
+                    currentSessionId = request.sessionId,
+                    targetSets = request.targetSets,
+                    targetRepsLow = request.targetLow,
+                    targetRepsHigh = request.targetHigh,
+                    incrementKg = request.incrementKg,
+                ),
             ),
         )
     }
@@ -1097,10 +1206,20 @@ class TrainingPresenter(
         else -> LiveSetKind.WORK
     }
 
-    private fun targetLabel(sets: Long, reps: Long?, high: Long?, weight: Double?): String {
+    private fun targetLabel(
+        sets: Long,
+        reps: Long?,
+        high: Long?,
+        weight: Double?,
+        profile: Profile,
+    ): String {
         val repsText = repsLabel(reps, high)
         val base = "$sets × $repsText"
-        return if (weight != null) "$base @ ${trimNumber(weight)} kg" else base
+        return if (weight != null) {
+            "$base @ ${shown(weight, profile)} ${unit(profile)}"
+        } else {
+            base
+        }
     }
 
     private fun repsLabel(reps: Long?, high: Long?): String {
@@ -1116,6 +1235,17 @@ class TrainingPresenter(
         val high = numbers.getOrNull(1)?.coerceIn(low, REP_LIMIT) ?: low
         return low to high
     }
+
+    private fun shown(kilograms: Double, profile: Profile?): String =
+        trimNumber(TrainingUnits.toDisplay(kilograms, imperial(profile)))
+
+    private fun entered(display: Double, profile: Profile?): Double =
+        TrainingUnits.toKilograms(display, imperial(profile))
+
+    private fun imperial(profile: Profile?): Boolean =
+        UnitSystem.fromKey(profile?.units) == UnitSystem.IMPERIAL
+
+    private fun unit(profile: Profile?): String = TrainingUnits.label(imperial(profile))
 
     private fun trimNumber(value: Double): String {
         val whole = value.toLong()

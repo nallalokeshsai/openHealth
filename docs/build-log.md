@@ -1360,12 +1360,13 @@ old path output, which is how the regression was confirmed.
 
 | Command | Result |
 |---|---|
-| `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint, **323 JVM tests** (146 `:core`, 83 `:data`, 91 `:ui`, 1 fixtures, 2 exerciseindex) and **198 goldens**. |
-| `:core:test :data:test :ui:testDebugUnitTest` | 320 tests, no failures (after one rerun of the documented `QueryBenchmarkTest` flake; the budget is unchanged and the rerun passed). |
+| `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint, **336 JVM tests** (153 `:core`, 89 `:data`, 91 `:ui`, 1 fixtures, 2 exerciseindex) and **198 goldens**. |
+| `:core:test :data:test :ui:testDebugUnitTest` | 333 tests, no failures (after one rerun of the documented `QueryBenchmarkTest` flake; the budget is unchanged and the rerun passed). |
 | `:app-android:connectedDebugAndroidTest` on the phone | **BUILD SUCCESSFUL, 15/15**: 11 B3 scenarios, B2's encrypted-database test, B4's library test and B5's two scenarios. |
-| One-tap set timing | `TrainingExitTest` measured **220 ms** from the Done tap to the encrypted row, with weight `80` and reps `8` prefilled from the last session and the plan. |
+| One-tap set timing | `TrainingExitTest` measured **295 ms** from the Done tap to the encrypted row, with weight `80` and reps `8` prefilled from the last session and the plan. |
 | Process death | Logged a set, force-stopped the app, relaunched: Train offered **Resume … 1 set in progress**; the set was intact and the rest notification came back while the deadline was still in the future. |
 | Rotation | Rotated the live session to landscape on the phone: the session, exercise and set table stayed; no `AndroidRuntime` entry. |
+| Cold start | `force-stop`, `am start -W`: `LaunchState: COLD`, **1 038 ms** in the debug build. |
 | Notification | `dumpsys notification` showed the ongoing `rest_timer` notification (id 1001) with **4 actions** and category `stopwatch`; the shade showed "Barbell squat" and the countdown. |
 | 200 % and RTL | The 24 new goldens plus the screen walk; the week strip, set-kind chips and set label were fixed after the first goldens clipped them. |
 
@@ -1375,7 +1376,7 @@ No device identity (serial, model, build) is recorded in this repository.
 
 | Exit test | Evidence | Result |
 |---|---|---|
-| A set is logged in under 2 s with one hand (weight and reps prefilled; Maestro plus timing) | `TrainingExitTest.aSetIsLoggedInUnderTwoSecondsWithTheFieldsPrefilled`: a previous 80×5 session, a new freestyle session, prefill asserted, Done tapped; **220 ms** to the stored row. Maestro is not installed; this is the Compose substitute, as recorded in B3/B4. | **pass** |
+| A set is logged in under 2 s with one hand (weight and reps prefilled; Maestro plus timing) | `TrainingExitTest.aSetIsLoggedInUnderTwoSecondsWithTheFieldsPrefilled`: a previous 80×5 session, a new freestyle session, prefill asserted, Done tapped; **295 ms** to the stored row. Maestro is not installed; this is the Compose substitute, as recorded in B3/B4. | **pass** |
 | Kill the app mid-session and resume without loss | Manual on the phone: log a set, `am force-stop`, relaunch, Train shows Resume with 1 set; reopening restores the set and the rest timer. The session is a database row, not memory. | **pass** |
 | A leg session turns quads red, the next simulated day orange, the third green | `TrainingRepositoryTest.aLegSessionTurnsQuadsRedThenOrangeThenGreen`: the squat's quads are `RECOVERING` at load, `EASING` at +26 h and `READY` at +50 h, computed through `RecoveryMap` from the stored sets. | **pass** |
 | Moving a past workout recomputes rollups without changing `recorded_at` | `TrainingRepositoryTest.movingASessionRebuildsBothDaysAndKeepsRecordedAt`: the old day has no volume, the new day has 1 000 kg, every session and set `recorded_at` is unchanged, and `editingAFinishedSessionKeepsTheMomentItEnded` covers the edit path. | **pass** |
@@ -1399,8 +1400,9 @@ No device identity (serial, model, build) is recorded in this repository.
 
 ### QA sweep on the phone (section 4.2)
 
-Eighteen issues were found and fixed; `issues.md` and its screenshots lived outside the
-repository and were deleted when every entry was fixed. The largest were: a `health`
+The QA sweep found eighteen issues and the independent reviews found a further fifteen;
+`issues.md` and its screenshots lived outside the repository and were deleted when every
+entry was fixed. The largest QA ones were: a `health`
 foreground service that Android 16 refused (now `specialUse`), a Skip that could tear
 the service down before its first `startForeground` (now clears state and lets the
 service stop itself), a status-bar overlap on every pushed Train page, clipped 200 %
@@ -1410,9 +1412,21 @@ the surviving fixes are covered by the tests and goldens above.
 
 ### Independent review and the fixes it produced
 
-Three fresh reviewers saw only the B5 diff and the contract (correctness and tests;
-`AGENTS.md` invariants and licences; `DESIGN.md` conformance). Findings and their fixes
-are recorded in the commit that follows this entry.
+Three fresh reviewers and a headless Claude audit saw only the B5 diff and the contract
+(correctness and tests; `AGENTS.md` invariants and licences; `DESIGN.md` conformance).
+Confirmed findings were fixed here: the layer-3 training volume now uses the same
+bodyweight/assistance formula as the summary (`TrainingVolumeRollupTest`); a restored
+session keeps its exercise targets; a set edit keeps the original weight/reps, reason and
+time; training loads follow the profile's kg/lb unit and plate math converts at the
+boundary; the rest notification no longer stores an exercise name outside SQLCipher; the
+summary provenance shows happened, recorded and the delay in the session's zone; a stall
+of failed sessions now deloads; "top set" is one real set; the timer announces 10/3/2/1
+and Ready; the set fields are named for TalkBack; the 200 % live header and segmented
+track no longer clip; set errors sit under the row; Save routine explains itself; the
+plan table is titled by segment; the favourite status is text, not a chip; the live
+session has its 30 dp mini map, future rows and a media glyph; custom exercises can be
+created; and deleting a routine exercise leaves a tombstone. The headless audit also
+added `RestTimerStoreTest` and the fresh-schema/migrated-schema timeline parity.
 
 ### Invariant audit (`AGENTS.md`)
 
@@ -1433,7 +1447,7 @@ are recorded in the commit that follows this entry.
 | Chart has a table and a sentence | Every recovery and plan map, on Train, the routine and the summary, opens a table; each map has its one-sentence TalkBack description. **Holds.** |
 | Closed design tokens | The set table's 34/56/38/1.5 dp values are quoted in `OhDims` from §14.2; no new token, component or hex; `checkDesignTokens` green. **Holds.** |
 | Closed cut list | No programme builder, no form-check AI, no VBT, no photo composition. Programmes are cut exactly as `pr.md` §6.5 permits. **Holds.** |
-| Quality bars | One-tap set **220 ms**; cold start not re-measured after the service (the debug app still launches under the 1.5 s budget in B4 and the service starts only from a set). The release number is B14's. **Holds.** |
+| Quality bars | One-tap set **295 ms**; debug cold start **1 038 ms**, inside the 1.5 s budget (the release number is B14's). **Holds.** |
 
 iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 
@@ -1441,11 +1455,19 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 
 - **Programmes** are cut per `pr.md` §6.5; `PlanCoverage` and the programme tables remain
   for a later builder.
+- **Routines can be archived, not permanently deleted.** The archive action keeps every
+  session; a true delete with a tombstone is a later data-management task.
+- **The history type is text, not the §14.2 type chip.** B5 has one type (gym); the chip
+  and the activity types arrive with B11's yoga/cardio.
+- **Custom exercises have text only**; photo/video media arrive with B7, which owns the
+  encrypted media store.
 - **Training rows speak English muscle names** (exercise content) while the map uses the
   `muscle_*` resources; a translation pass should share one label path.
 - **The plan map uses the accent ramp**, so a Red or Orange accent preset can make a
   plan shade and a recovery shade the same hue. The contract asks for both; this needs an
   owner/design decision, not an agent change.
+- **The summary's KPI figures are explained by a footer and a Source row**, not five
+  separate provenance sheets; every set opens its own source/recorded row.
 - **`TrainingPresenter` is an aggregation point** and carries a scoped Detekt suppression
   for `LargeClass`, `TooManyFunctions` and `LongParameterList`; splitting it per surface
   is the same later step as `AppViewModel`.

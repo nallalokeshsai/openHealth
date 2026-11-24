@@ -154,6 +154,7 @@ data class AppState(
     val routine: RoutineDetailModel? = null,
     val editor: RoutineEditorModel? = null,
     val live: LiveSessionModel? = null,
+    val liveMissing: Boolean = false,
     val summary: SessionSummaryModel? = null,
     val exerciseHistory: ExerciseHistoryModel? = null,
 )
@@ -301,9 +302,11 @@ class AppViewModel(
     fun openLive(sessionId: String) {
         liveTicker?.cancel()
         launchGuarded {
-            val model = withContext(Dispatchers.IO) { training.live(sessionId) }
-            _state.update { it.copy(live = model) }
-            container.restTimer.resume()
+            val model = withContext(Dispatchers.IO) {
+                state.value.profile?.let { training.live(sessionId, it) }
+            }
+            _state.update { it.copy(live = model, liveMissing = model == null) }
+            if (model != null) container.restTimer.resume()
             liveTicker = viewModelScope.launch {
                 while (true) {
                     delay(LIVE_TICK_MILLIS)
@@ -382,7 +385,23 @@ class AppViewModel(
     }
 
     fun setLiveNote(note: String) {
+        val id = state.value.live?.sessionId ?: return
         _state.update { it.copy(live = it.live?.copy(note = note)) }
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.setSessionNote(id, note) }
+        }
+    }
+
+    /** Resolves a restored live route whose session id was not carried in the back stack. */
+    fun openOpenSession() {
+        launchGuarded {
+            val id = withContext(Dispatchers.IO) { store.training.openSession()?.id }
+            if (id == null) {
+                _state.update { it.copy(live = null, liveMissing = true) }
+            } else {
+                openLive(id)
+            }
+        }
     }
 
     fun superset(sessionId: String, exerciseId: String, withNext: Boolean) {
@@ -473,7 +492,7 @@ class AppViewModel(
     fun openEditor(id: String?) {
         launchGuarded {
             val editor = withContext(Dispatchers.IO) {
-                if (id == null) training.editor(null) else id.let { training.editor(it) }
+                training.editor(id, state.value.profile)
             }
             _state.update { it.copy(editor = editor) }
         }
@@ -488,6 +507,14 @@ class AppViewModel(
             val id = withContext(Dispatchers.IO) { training.saveRoutine(draft) }
             _state.update { it.copy(editor = null) }
             openRoutine(id)
+            rebuild()
+        }
+    }
+
+    fun archiveRoutine(id: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.archiveRoutine(id) }
+            _state.update { it.copy(routine = null) }
             rebuild()
         }
     }
@@ -511,6 +538,16 @@ class AppViewModel(
 
     fun closeExerciseHistory() {
         _state.update { it.copy(exerciseHistory = null) }
+    }
+
+    fun createCustomExercise(draft: app.openhealth.ui.screens.train.CustomExerciseDraft) {
+        launchGuarded {
+            val choice = withContext(Dispatchers.IO) { training.createCustomExercise(draft) }
+            _state.update { current ->
+                val editor = current.editor ?: return@update current
+                current.copy(editor = editor.copy(library = editor.library + choice))
+            }
+        }
     }
 
     fun saveEquipment(profile: app.openhealth.core.training.EquipmentProfile) {
@@ -538,7 +575,9 @@ class AppViewModel(
 
     private suspend fun refreshLive(sessionId: String?) {
         val id = sessionId ?: return
-        val model = withContext(Dispatchers.IO) { training.live(id) }
+        val model = withContext(Dispatchers.IO) {
+            state.value.profile?.let { training.live(id, it) }
+        }
         _state.update { it.copy(live = model) }
     }
 
@@ -2085,7 +2124,7 @@ class AppViewModel(
                 recordedAt = Instant.fromEpochMilliseconds(set.recorded_at),
                 method = null,
                 device = set.device,
-                edited = set.revision > 1,
+                edited = set.user_edited,
                 localDay = LocalDate.parse(
                     store.training.sessionById(set.session_id)?.local_date
                         ?: item.localDate.toString(),
@@ -2137,6 +2176,7 @@ class AppViewModel(
                 TrashEntity.ENTRY.table -> TrashKind.ENTRY
                 TrashEntity.WORK_SET.table -> TrashKind.SET
                 TrashEntity.SESSION.table -> TrashKind.SESSION
+                TrashEntity.ROUTINE_EXERCISE.table -> TrashKind.ROUTINE_EXERCISE
                 else -> TrashKind.OBSERVATION
             }
             TrashItemModel(

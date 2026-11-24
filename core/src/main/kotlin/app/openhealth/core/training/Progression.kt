@@ -90,16 +90,16 @@ object LinearProgression : ProgressionPolicy {
         return when {
             last == null || input.completedSets == 0 ->
                 decision(null, input, ProgressionAction.START, ProgressionReason.FIRST_TIME)
-            input.missedReps ->
-                decision(last, input, ProgressionAction.HOLD, ProgressionReason.MISSED_REP)
-            input.completedSets < input.targetSets ->
-                decision(last, input, ProgressionAction.HOLD, ProgressionReason.INCOMPLETE_SESSION)
             input.sessionsAtLoad >= STALL_SESSIONS -> decision(
                 deload(last, input.incrementKg),
                 input,
                 ProgressionAction.DELOAD,
                 ProgressionReason.STALLED,
             )
+            input.missedReps ->
+                decision(last, input, ProgressionAction.HOLD, ProgressionReason.MISSED_REP)
+            input.completedSets < input.targetSets ->
+                decision(last, input, ProgressionAction.HOLD, ProgressionReason.INCOMPLETE_SESSION)
             else -> decision(
                 last + input.incrementKg,
                 input,
@@ -124,16 +124,16 @@ object DoubleProgression : ProgressionPolicy {
         return when {
             last == null || reps == null || input.completedSets == 0 ->
                 decision(null, input, ProgressionAction.START, ProgressionReason.FIRST_TIME)
-            input.missedReps ->
-                decision(last, input, ProgressionAction.HOLD, ProgressionReason.MISSED_REP)
-            input.completedSets < input.targetSets ->
-                decision(last, input, ProgressionAction.HOLD, ProgressionReason.INCOMPLETE_SESSION)
             input.sessionsAtLoad >= LinearProgression.STALL_SESSIONS -> decision(
                 deload(last, input.incrementKg),
                 input,
                 ProgressionAction.DELOAD,
                 ProgressionReason.STALLED,
             )
+            input.missedReps ->
+                decision(last, input, ProgressionAction.HOLD, ProgressionReason.MISSED_REP)
+            input.completedSets < input.targetSets ->
+                decision(last, input, ProgressionAction.HOLD, ProgressionReason.INCOMPLETE_SESSION)
             reps < input.targetRepsHigh -> decision(
                 last,
                 input,

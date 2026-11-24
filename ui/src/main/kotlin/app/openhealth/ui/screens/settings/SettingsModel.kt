@@ -74,7 +74,16 @@ data class ProfileEdit(
 )
 
 /** What kind of row a tombstone holds; the screen owns its label. */
-enum class TrashKind { NOTE, OBSERVATION, MEASUREMENT, VITAL, ENTRY, SET, SESSION }
+enum class TrashKind {
+    NOTE,
+    OBSERVATION,
+    MEASUREMENT,
+    VITAL,
+    ENTRY,
+    SET,
+    SESSION,
+    ROUTINE_EXERCISE,
+}
 
 /** One row of the Trash (`pr.md` §6.29). */
 data class TrashItemModel(

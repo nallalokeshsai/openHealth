@@ -110,6 +110,11 @@ class ExerciseRepositoryTest {
                 is_assisted = false,
                 assistance_kg = null,
                 band_kg = null,
+                original_weight_kg = null,
+                original_reps = null,
+                edit_reason = null,
+                edited_at = null,
+                user_edited = false,
             ),
         )
         val loads = training.loadedSets(now.minus(4.hours).toEpochMilliseconds())
@@ -156,6 +161,11 @@ class ExerciseRepositoryTest {
                 is_assisted = false,
                 assistance_kg = null,
                 band_kg = null,
+                original_weight_kg = null,
+                original_reps = null,
+                edit_reason = null,
+                edited_at = null,
+                user_edited = false,
             ),
         )
         val states = RecoveryMap.compute(now, training.loadedSets(0L))

@@ -480,7 +480,11 @@ class DatabaseTest {
                 "progression",
                 "rest_seconds",
             ),
-            "work_set" to listOf("is_drop", "is_assisted", "assistance_kg", "band_kg", "notes"),
+            "work_set" to listOf(
+                "is_drop", "is_assisted", "assistance_kg", "band_kg", "notes",
+                "original_weight_kg", "original_reps", "edit_reason", "edited_at",
+                "user_edited",
+            ),
         ).forEach { (table, columns) ->
             columns.forEach { column ->
                 driver.execute(null, "ALTER TABLE $table DROP COLUMN $column", 0)

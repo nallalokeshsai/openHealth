@@ -28,6 +28,7 @@ import kotlinx.serialization.json.Json
 /** The tables Trash can restore today. A leaf entity is restorable on its own. */
 enum class TrashEntity(val table: String) {
     SESSION("session"),
+    ROUTINE_EXERCISE("routine_exercise"),
     WORK_SET("work_set"),
     ENTRY("entry"),
     MEASUREMENT("measurement"),
@@ -96,6 +97,23 @@ data class SessionRowPayload(
     val title: String? = null,
     val feeling: String? = null,
     val perceivedEffort: Double? = null,
+)
+
+@Serializable
+data class RoutineExercisePayload(
+    val id: String,
+    val routineId: String,
+    val exerciseId: String,
+    val position: Long,
+    val targetSets: Long?,
+    val targetReps: Long?,
+    val targetRepsHigh: Long?,
+    val targetWeightKg: Double?,
+    val notes: String?,
+    val targetRir: Double?,
+    val restSeconds: Long?,
+    val progression: String?,
+    val groupIndex: Long?,
 )
 
 @Serializable
@@ -278,6 +296,35 @@ class TrashService(
      * Deletes a whole workout with undo (`pr.md` §6.5, §6.29). The tombstone carries the
      * session, its exercise rows and its sets, so one restore puts the workout back whole.
      */
+    /** Removes one routine exercise with a tombstone; a routine edit is undoable. */
+    fun deleteRoutineExercise(id: String): TombstoneId? =
+        db.trainingQueries.routineEntryById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.ROUTINE_EXERCISE,
+                entityId = id,
+                payload = json.encodeToString(
+                    RoutineExercisePayload.serializer(),
+                    RoutineExercisePayload(
+                        id = row.id,
+                        routineId = row.routine_id,
+                        exerciseId = row.exercise_id,
+                        position = row.position,
+                        targetSets = row.target_sets,
+                        targetReps = row.target_reps,
+                        targetRepsHigh = row.target_reps_high,
+                        targetWeightKg = row.target_weight_kg,
+                        notes = row.notes,
+                        targetRir = row.target_rir,
+                        restSeconds = row.rest_seconds,
+                        progression = row.progression,
+                        groupIndex = row.group_index,
+                    ),
+                ),
+            ) {
+                db.trainingQueries.deleteRoutineExercise(row.id)
+            }
+        }
+
     fun deleteSession(id: String): TombstoneId? = session(id)?.let { row ->
         val exercises = db.trainingQueries.sessionExercises(row.id).executeAsList()
         val sets = db.trainingQueries.setsForSession(row.id).executeAsList()
@@ -365,6 +412,7 @@ class TrashService(
         db.transaction {
             when (entity) {
                 TrashEntity.SESSION -> restoreSession(payload)
+                TrashEntity.ROUTINE_EXERCISE -> restoreRoutineExercise(payload)
                 TrashEntity.WORK_SET -> restoreWorkSet(payload)
                 TrashEntity.ENTRY -> restoreEntry(payload)
                 TrashEntity.MEASUREMENT -> restoreMeasurement(payload)
@@ -450,6 +498,10 @@ class TrashService(
                 val s = json.decodeFromString(SessionPayload.serializer(), payload)
                 s.session.title ?: "Workout"
             }
+            TrashEntity.ROUTINE_EXERCISE.table -> {
+                val e = json.decodeFromString(RoutineExercisePayload.serializer(), payload)
+                "routine exercise ${e.position + 1}"
+            }
             else -> row.entity_id
         }
     }.getOrElse { row.entity_id.take(TRASH_PREVIEW_FALLBACK) }
@@ -487,6 +539,8 @@ class TrashService(
 
     private fun rowExists(entity: TrashEntity, id: String): Boolean = when (entity) {
         TrashEntity.SESSION -> db.trainingQueries.sessionById(id).executeAsOneOrNull() != null
+        TrashEntity.ROUTINE_EXERCISE ->
+            db.trainingQueries.routineEntryById(id).executeAsOneOrNull() != null
         TrashEntity.WORK_SET -> db.trainingQueries.workSetById(id).executeAsOneOrNull() != null
         TrashEntity.ENTRY -> db.nutritionQueries.entryById(id).executeAsOneOrNull() != null
         TrashEntity.MEASUREMENT -> db.bodyQueries.measurementById(id).executeAsOneOrNull() != null
@@ -510,7 +564,7 @@ class TrashService(
                 json.decodeFromString(SessionPayload.serializer(), payload).session.localDate
             TrashEntity.WORK_SET ->
                 json.decodeFromString(WorkSetPayload.serializer(), payload).localDate
-            TrashEntity.NOTE -> null
+            TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE -> null
         }
         date?.let { rollupInvalidator?.invoke(LocalDate.parse(it)) }
     }
@@ -630,6 +684,25 @@ class TrashService(
         row.sets.forEach { set ->
             restoreWorkSet(json.encodeToString(WorkSetPayload.serializer(), set))
         }
+    }
+
+    private fun restoreRoutineExercise(payload: String) {
+        val row = json.decodeFromString(RoutineExercisePayload.serializer(), payload)
+        db.trainingQueries.insertRoutineExercise(
+            id = row.id,
+            routineId = row.routineId,
+            exerciseId = row.exerciseId,
+            position = row.position,
+            targetSets = row.targetSets,
+            targetReps = row.targetReps,
+            targetRepsHigh = row.targetRepsHigh,
+            targetWeightKg = row.targetWeightKg,
+            notes = row.notes,
+            targetRir = row.targetRir,
+            restSeconds = row.restSeconds,
+            progression = row.progression,
+            groupIndex = row.groupIndex,
+        )
     }
 
     private fun restoreEntry(payload: String) {
@@ -777,12 +850,18 @@ class TrashService(
     )
 
     private fun Session_exercise.toPayload(): SessionExercisePayload = SessionExercisePayload(
-        id,
-        session_id,
-        exercise_id,
-        position,
-        notes,
-        group_index,
+        id = id,
+        sessionId = session_id,
+        exerciseId = exercise_id,
+        position = position,
+        notes = notes,
+        groupIndex = group_index,
+        targetSets = target_sets,
+        targetReps = target_reps,
+        targetRepsHigh = target_reps_high,
+        targetWeightKg = target_weight_kg,
+        progression = progression,
+        restSeconds = rest_seconds,
     )
 
     private fun Entry.toPayload(): EntryPayload = EntryPayload(

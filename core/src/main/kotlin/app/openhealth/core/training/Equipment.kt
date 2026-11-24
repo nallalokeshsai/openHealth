@@ -1,7 +1,7 @@
 package app.openhealth.core.training
 
 /** One bar the person owns: a barbell, an EZ bar, a trap bar, a Smith machine or a custom bar. */
-data class BarType(val key: String, val label: String, val weightKg: Double)
+data class BarType(val key: String, val weightKg: Double)
 
 /**
  * The one equipment profile the MVP ships (`pr.md` §6.5: plates, dumbbells, bars). Per-gym
@@ -20,10 +20,10 @@ data class EquipmentProfile(
 
     companion object {
         val DEFAULT_BARS: List<BarType> = listOf(
-            BarType("barbell", "Barbell", 20.0),
-            BarType("ez", "EZ bar", 10.0),
-            BarType("trap", "Trap bar", 25.0),
-            BarType("smith", "Smith machine", 15.0),
+            BarType("barbell", 20.0),
+            BarType("ez", 10.0),
+            BarType("trap", 25.0),
+            BarType("smith", 15.0),
         )
         val DEFAULT_PLATES_KG: List<Double> =
             listOf(25.0, 20.0, 15.0, 10.0, 5.0, 2.5, 1.25)
@@ -32,7 +32,7 @@ data class EquipmentProfile(
         private const val FIELD = ";"
         private const val LIST = ","
         private const val BAR_FIELD = ":"
-        private const val BAR_PARTS = 3
+        private const val LEGACY_BAR_PARTS = 3
 
         /** A stable, human-readable encoding; an unreadable value falls back to the defaults. */
         fun encode(profile: EquipmentProfile): String = listOf(
@@ -42,7 +42,7 @@ data class EquipmentProfile(
             "plates=${profile.platesKg.joinToString(LIST)}",
             "bars=" +
                 profile.bars.joinToString(LIST) {
-                    "${it.key}$BAR_FIELD${it.label}$BAR_FIELD${it.weightKg}"
+                    "${it.key}$BAR_FIELD${it.weightKg}"
                 },
         ).joinToString(FIELD)
 
@@ -55,8 +55,13 @@ data class EquipmentProfile(
                 }
                 val bars = fields["bars"]?.split(LIST)?.mapNotNull { entry ->
                     val parts = entry.split(BAR_FIELD)
-                    if (parts.size != BAR_PARTS) return@mapNotNull null
-                    BarType(parts[0], parts[1], parts[2].toDouble())
+                    when (parts.size) {
+                        2 -> BarType(parts[0], parts[1].toDouble())
+                        // A profile written before the label moved to the UI carried
+                        // key:label:weight; keep it readable rather than reset the plates.
+                        LEGACY_BAR_PARTS -> BarType(parts[0], parts[2].toDouble())
+                        else -> null
+                    }
                 }?.takeIf { it.isNotEmpty() } ?: DEFAULT_BARS
                 val plates = fields["plates"]?.split(LIST)?.mapNotNull { it.toDoubleOrNull() }
                     ?.takeIf { it.isNotEmpty() } ?: DEFAULT_PLATES_KG

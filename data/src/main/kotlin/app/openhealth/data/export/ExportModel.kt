@@ -132,6 +132,8 @@ object ExportTables {
                 text("observation_id"), text("raw_record_id"), text("device"),
                 text("app_version"), long("revision"), bool("is_drop"), bool("is_assisted"),
                 double("assistance_kg"), double("band_kg"), text("notes"),
+                double("original_weight_kg"), long("original_reps"), text("edit_reason"),
+                long("edited_at"), bool("user_edited"),
             ),
         ),
         ExportTable(

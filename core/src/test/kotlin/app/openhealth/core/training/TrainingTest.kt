@@ -166,6 +166,13 @@ class ProgressionTest {
     }
 
     @Test
+    fun aStallOfFailedSessionsStillDeloads() {
+        val decision = LinearProgression.next(input(stall = 3, missed = true))
+        assertEquals(ProgressionAction.DELOAD, decision.action)
+        assertTrue(decision.weightKg!! < 80.0)
+    }
+
+    @Test
     fun offNeverChangesTheTarget() {
         val decision = OffProgression.next(input())
         assertEquals(ProgressionAction.OFF, decision.action)
@@ -346,4 +353,129 @@ private fun <T> FormulaOutcome<T>.value(): T {
     assertTrue(this is FormulaOutcome.Computed, "expected a computed value")
     @Suppress("UNCHECKED_CAST")
     return (this as FormulaOutcome.Computed<T>).value
+}
+
+class ProgressionPlannerTest {
+    private fun set(
+        session: String,
+        weight: Double,
+        reps: Int,
+        at: Long,
+        warmup: Boolean = false,
+        backoff: Boolean = false,
+        drop: Boolean = false,
+    ) = ProgressionSet(session, weight, reps, warmup, backoff, drop, at)
+
+    @Test
+    fun aBackoffSetNeverLowersTheNextTarget() {
+        val input = ProgressionPlanner.input(
+            ProgressionRequest(
+                sets = listOf(
+                    set("s1", 100.0, 5, 3, backoff = false),
+                    set("s1", 100.0, 5, 2),
+                    set("s1", 100.0, 5, 1),
+                    set("s1", 80.0, 8, 4, backoff = true),
+                    set("s1", 60.0, 5, 5, drop = true),
+                ),
+                currentSessionId = "s2",
+                targetSets = 3,
+                targetRepsLow = 5,
+                targetRepsHigh = 8,
+            ),
+        )
+        assertEquals(100.0, input.lastWeightKg)
+        assertEquals(5, input.lastReps)
+        assertEquals(3, input.completedSets)
+        assertEquals(false, input.missedReps)
+        assertEquals(102.5, LinearProgression.next(input).weightKg)
+    }
+
+    @Test
+    fun aHeavyWorkSetIsTheLastPerformanceEvenWhenItWasNotLast() {
+        val input = ProgressionPlanner.input(
+            ProgressionRequest(
+                sets = listOf(
+                    set("s1", 100.0, 5, 1),
+                    set("s1", 95.0, 5, 2),
+                    set("s1", 90.0, 6, 3),
+                ),
+                currentSessionId = "s2",
+                targetSets = 3,
+                targetRepsLow = 5,
+                targetRepsHigh = 8,
+            ),
+        )
+        assertEquals(100.0, input.lastWeightKg)
+        assertEquals(100.0, LinearProgression.next(input).weightKg?.minus(2.5))
+    }
+
+    @Test
+    fun aMissedWorkSetHoldsEvenWhenABackoffRepIsHigh() {
+        val input = ProgressionPlanner.input(
+            ProgressionRequest(
+                sets = listOf(
+                    set("s1", 100.0, 4, 1),
+                    set("s1", 80.0, 12, 2, backoff = true),
+                ),
+                currentSessionId = "s2",
+                targetSets = 3,
+                targetRepsLow = 5,
+                targetRepsHigh = 8,
+            ),
+        )
+        assertEquals(true, input.missedReps)
+        assertEquals(100.0, LinearProgression.next(input).weightKg)
+    }
+
+    @Test
+    fun threeSessionsAtOneLoadStallAndDeload() {
+        val input = ProgressionPlanner.input(
+            ProgressionRequest(
+                sets = listOf(
+                    set("s3", 100.0, 5, 3),
+                    set("s3", 100.0, 5, 3),
+                    set("s3", 100.0, 5, 3),
+                    set("s2", 100.0, 5, 2),
+                    set("s2", 100.0, 5, 2),
+                    set("s2", 100.0, 5, 2),
+                    set("s1", 100.0, 5, 1),
+                    set("s1", 100.0, 5, 1),
+                    set("s1", 100.0, 5, 1),
+                ),
+                currentSessionId = "s4",
+                targetSets = 3,
+                targetRepsLow = 5,
+                targetRepsHigh = 8,
+            ),
+        )
+        assertEquals(3, input.sessionsAtLoad)
+        assertEquals(ProgressionAction.DELOAD, LinearProgression.next(input).action)
+    }
+
+    @Test
+    fun aFirstSessionUsesItsOwnEarlierSetOnlyForThePrefill() {
+        val input = ProgressionPlanner.input(
+            ProgressionRequest(
+                sets = listOf(set("s1", 80.0, 5, 1)),
+                currentSessionId = "s1",
+                targetSets = 3,
+                targetRepsLow = 5,
+                targetRepsHigh = 8,
+            ),
+        )
+        assertEquals(80.0, input.lastWeightKg)
+        assertEquals(1, input.completedSets)
+        assertEquals(ProgressionAction.HOLD, LinearProgression.next(input).action)
+    }
+}
+
+class TrainingUnitsTest {
+    @Test
+    fun poundsRoundTripAndMetricIsUnchanged() {
+        assertEquals(100.0, TrainingUnits.toDisplay(100.0, false))
+        assertEquals(220.462, TrainingUnits.toDisplay(100.0, true), 0.001)
+        assertEquals(100.0, TrainingUnits.toKilograms(220.462, true), 0.001)
+        assertEquals("kg", TrainingUnits.label(false))
+        assertEquals("lb", TrainingUnits.label(true))
+    }
 }

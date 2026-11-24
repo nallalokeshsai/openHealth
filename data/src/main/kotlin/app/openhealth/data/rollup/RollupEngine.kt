@@ -1,5 +1,6 @@
 package app.openhealth.data.rollup
 
+import app.openhealth.core.formula.VolumeSet
 import app.openhealth.core.ids.SourceId
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
@@ -228,8 +229,20 @@ class RollupEngine(
             ((session.ended_at ?: session.started_at) - session.started_at)
                 .coerceAtLeast(0L) / MILLIS_PER_SECOND
         }
+        // The layer-3 volume is the same number the session summary shows, so it uses the
+        // one formula in `:core` rather than a second sum here: a bodyweight set moves the
+        // person's own mass less any assistance, plus any band (`pr.md` §6.5, §7.3).
+        val bodyweightKg = bodyweightFor(date)
         val volumeKg = work.sumOf { set ->
-            (set.weight_kg.coerceAtLeast(0.0) + (set.band_kg ?: 0.0)) * set.reps
+            VolumeSet(
+                weightKg = set.weight_kg,
+                reps = set.reps.toInt(),
+                isWarmup = false,
+                isBodyweight = set.is_bodyweight,
+                bandKg = set.band_kg ?: 0.0,
+                assistanceKg = set.assistance_kg ?: 0.0,
+                bodyweightKg = bodyweightKg,
+            ).externalLoadKg * set.reps
         }
         return if (sessions.isEmpty()) {
             emptyList()
@@ -262,6 +275,17 @@ class RollupEngine(
             }
         }
     }
+
+    /**
+     * The bodyweight a bodyweight set moved on [date]: that day's weight rollup when the
+     * person weighed in, otherwise the profile's recorded weight. Null means unknown, and
+     * an unknown bodyweight contributes no kilograms rather than an invented number.
+     */
+    private fun bodyweightFor(date: LocalDate): Double? =
+        rollups.forDayAndType(date, ObservationType.WEIGHT)?.let { rollup ->
+            runCatching { rollup.value.convertTo(UcumUnit.KILOGRAM).value }
+                .getOrDefault(rollup.value.value)
+        } ?: db.profileQueries.activeProfile().executeAsOneOrNull()?.weight_kg
 
     /**
      * A tape or scale measurement that names an observation type (weight, body fat, lean

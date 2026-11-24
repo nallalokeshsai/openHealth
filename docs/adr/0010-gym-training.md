@@ -90,3 +90,20 @@ surfaces. This record keeps the implementation choices that went beyond either t
     equipment labels are resources in `:ui`; the presenter returns numbers, enum keys and
     muscles. Exercise names and instructions remain English content with their own
     translation path (`DESIGN.md` §11.4).
+
+## Follow-ups from the review
+
+18. **Loads are stored in kilograms and shown in the profile's unit.** `TrainingUnits`
+    owns the pound conversion; every prefill, target, set row, volume, PR, plate target
+    and equipment field crosses the boundary once. A profile created before B5 opens
+    without a migration because the stored unit never changed.
+19. **Custom exercises are created in the routine editor.** Name, one primary muscle,
+    equipment and instructions; `is_custom` and the manual source are set, and the
+    exercise appears in the library immediately. Photos and videos wait for B7.
+20. **A routine exercise is removed with a tombstone**, and a routine is archived rather
+    than deleted, so its sessions and targets survive (`pr.md` §6.5, §6.29).
+21. **The layer-3 training volume uses the session formula.** A bodyweight set moves the
+    day's weigh-in (or the profile weight) less assistance, plus bands, so the rollup and
+    the summary cannot disagree (`pr.md` §7.3).
+22. **The rest timer stores no exercise name.** Its preferences file is outside
+    SQLCipher; the notification says "Rest" and the live screen names the exercise.

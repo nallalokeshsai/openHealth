@@ -41,7 +41,7 @@ data class TrainingHistoryRow(
     val title: String?,
     val date: LocalDate,
     val sets: Int,
-    val volumeKg: Double?,
+    val volumeLabel: String?,
     val map: BodyMapModel,
 )
 
@@ -92,6 +92,7 @@ data class RoutineDetailModel(
     val favourite: Boolean,
     val map: BodyMapModel,
     val weeklySets: Double,
+    val weightUnit: String,
     val exercises: List<RoutineExerciseRow>,
     val lastTrained: LocalDate?,
 )
@@ -125,6 +126,8 @@ data class LiveSetRow(
     val isAssisted: Boolean = false,
     val assistanceKg: String = "",
     val bandKg: String = "",
+    val sourceLabel: String? = null,
+    val recordedAt: Long? = null,
 )
 
 /** The editable values of a saved set, opened from its row. */
@@ -139,6 +142,7 @@ data class LiveSetEdit(
     val isAssisted: Boolean,
     val assistanceKg: String,
     val bandKg: String,
+    val reason: String,
 )
 
 /** One exercise block on the live surface, with its prefill and its explanation line. */
@@ -158,6 +162,7 @@ data class LiveExerciseModel(
     val nextReps: String,
     val notes: String?,
     val groupIndex: Int?,
+    val remainingSets: Int,
     val sets: List<LiveSetRow>,
 )
 
@@ -165,6 +170,14 @@ data class RestDisplay(val remainingSeconds: Long, val totalSeconds: Long, val p
 
 /** One library exercise offered by the live session's add sheet. */
 data class ExerciseChoice(val id: String, val name: String, val muscles: String)
+
+/** The fields a person types for an exercise that is not in the bundled library. */
+data class CustomExerciseDraft(
+    val name: String,
+    val primary: String,
+    val equipment: String,
+    val instructions: String,
+)
 
 /** The live session (`DESIGN.md` §14.2): focused, no tab bar, a set table and a timer. */
 data class LiveSessionModel(
@@ -174,6 +187,8 @@ data class LiveSessionModel(
     val localDate: LocalDate,
     val backdated: Boolean,
     val exercises: List<LiveExerciseModel>,
+    val weightUnit: String,
+    val map: BodyMapModel,
     val rest: RestDisplay?,
     val editing: Boolean,
     val note: String,
@@ -182,15 +197,20 @@ data class LiveSessionModel(
     val equipment: EquipmentProfile = EquipmentProfile(),
 )
 
+/** One record in the summary list, with the set that earned it. */
+data class SummaryRecord(val kind: PersonalRecordKind, val value: String)
+
 /** A session summary (`DESIGN.md` §14.2): KPIs, PRs, the loaded muscles and the note. */
 data class SessionSummaryModel(
     val sessionId: String,
     val title: String,
     val date: LocalDate,
     val duration: String,
+    val durationSeconds: Long,
     val volume: String?,
+    val weightUnit: String,
     val sets: String,
-    val prs: List<PersonalRecordKind>,
+    val prs: List<SummaryRecord>,
     val map: BodyMapModel,
     val topMuscles: List<Pair<Muscle, Double>>,
     val feeling: String,
@@ -207,7 +227,7 @@ data class SessionSummaryModel(
 data class ExerciseHistoryRow(
     val date: LocalDate,
     val sets: String,
-    val topSet: String,
+    val topSet: String?,
     val volume: String?,
     val estimatedOneRepMax: String?,
 )
@@ -219,8 +239,9 @@ data class ExerciseHistoryModel(
     val bestOneRepMax: String?,
     val progressionKey: String,
     val incrementKg: Double,
-    val nextWeight: Double?,
+    val nextWeight: String?,
     val nextReps: Int,
+    val weightUnit: String,
     val rows: List<ExerciseHistoryRow>,
 )
 
@@ -249,6 +270,7 @@ data class RoutineEditorModel(
     val notes: String,
     val exercises: List<EditorExerciseRow>,
     val library: List<ExerciseChoice>,
+    val weightUnit: String,
 )
 
 /** What the editor saves in one action; its fields are local until Save. */

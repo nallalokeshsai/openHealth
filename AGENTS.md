@@ -218,8 +218,8 @@ Non-negotiables in the visual contract:
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
 - Last completed phase: **B5 Gym training** (2026-11-24); next is **B6 Nutrition**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **323 JVM tests**
-  (146 `:core`, 83 `:data`, 91 `:ui`, 1 fixtures, 2 exerciseindex) and **15 instrumented
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **336 JVM tests**
+  (153 `:core`, 89 `:data`, 91 `:ui`, 1 fixtures, 2 exerciseindex) and **21 instrumented
   tests** pass on the owner's phone. `:ui` holds the B1 design system, the B3 screens,
   the B4 body map and the B5 Train surfaces: **198 goldens** (174 before + 24 for Train,
   live session, summary, routine, editor and exercise history) in dark, light, 200 %
@@ -237,7 +237,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   summary with a loaded-muscle map and table, and per-exercise history. `app-android` adds
   a `specialUse` foreground rest-timer service with an ongoing notification and actions,
   on-disk state that survives process death, notification-permission-at-use, and the
-  training presenter/state wiring. One-tap set: **220 ms**.
+  training presenter/state wiring. One-tap set: **295 ms**; debug cold start **1 038 ms**.
 - Versions are in `docs/adr/0003-pinned-versions.md`; B1's decisions are
   `0004-design-system.md`, B2's `0005-core-and-data.md` and `0006-referential-integrity.md`,
   B3's `0007-shell-and-onboarding.md`, B4's `0008-body-model-and-exercises.md` and

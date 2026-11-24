@@ -325,6 +325,10 @@ class TrainingRepository(private val db: OpenHealthDb) {
         return true
     }
 
+    fun updateSessionNotes(id: String, notes: String?, nowMillis: Long) {
+        db.trainingQueries.updateSessionNotes(notes, nowMillis, id)
+    }
+
     fun updateSessionDetails(
         id: String,
         details: SessionDetails,
@@ -464,6 +468,8 @@ class TrainingRepository(private val db: OpenHealthDb) {
             tempo = values.tempo,
             restSeconds = values.restSeconds,
             notes = values.notes,
+            reason = values.reason,
+            editedAt = values.editedAt,
         )
         sessionDate(set.session_id)?.let(::invalidate)
         return true
@@ -506,6 +512,8 @@ data class SetValues(
     val tempo: String?,
     val restSeconds: Long?,
     val notes: String?,
+    val reason: String?,
+    val editedAt: Long,
 )
 
 /** One exercise's result in one session, for the per-exercise history list. */

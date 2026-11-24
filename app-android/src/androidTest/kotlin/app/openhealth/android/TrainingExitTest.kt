@@ -141,7 +141,17 @@ class TrainingExitTest {
         waitFor("past summary") { viewModel.state.value.summary != null }
         val summary = viewModel.state.value.summary!!
         assertEquals(date, summary.date)
-        assertTrue(summary.duration != "0:00", "the backfilled session has a duration")
+        assertTrue(
+            summary.durationSeconds in 1..7_200,
+            "the backfilled session has a short duration (${summary.durationSeconds} s)",
+        )
+        val set = container.store.training.setsForSession(id).single()
+        assertEquals(
+            date.toString(),
+            kotlinx.datetime.Instant
+                .fromEpochMilliseconds(set.happened_at)
+                .toLocalDateTime(container.zone).date.toString(),
+        )
         assertTrue(
             container.store.rollups.forDayAndType(
                 date,
@@ -231,6 +241,11 @@ class TrainingExitTest {
                     is_assisted = false,
                     assistance_kg = null,
                     band_kg = null,
+                    original_weight_kg = null,
+                    original_reps = null,
+                    edit_reason = null,
+                    edited_at = null,
+                    user_edited = false,
                 ),
             )
         }

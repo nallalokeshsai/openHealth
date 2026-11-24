@@ -38,7 +38,6 @@ import app.openhealth.ui.body.muscleLabel
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhCardHeader
-import app.openhealth.ui.components.OhChip
 import app.openhealth.ui.components.OhMediaRow
 import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhSegmentedControl
@@ -173,6 +172,11 @@ fun TrainRootScreen(
                     OhMediaRow(
                         title = routine.name,
                         subtitle = listOfNotNull(
+                            if (routine.favourite) {
+                                stringResource(R.string.train_routine_favourite)
+                            } else {
+                                null
+                            },
                             routine.folder,
                             scheduleLabel(
                                 routine.schedule,
@@ -190,15 +194,6 @@ fun TrainRootScreen(
                                 model = routine.map,
                                 variant = app.openhealth.ui.body.BodyMapVariant.MINI,
                             )
-                        },
-                        trailing = {
-                            if (routine.favourite) {
-                                OhChip(
-                                    text = stringResource(R.string.train_routine_favourite),
-                                    selected = true,
-                                    onClick = { onOpenRoutine(routine.id) },
-                                )
-                            }
                         },
                         onClick = { onOpenRoutine(routine.id) },
                         showChevron = true,
@@ -225,12 +220,12 @@ fun TrainRootScreen(
                 model.history.forEach { row ->
                     OhMediaRow(
                         title = row.title ?: stringResource(R.string.train_summary_title),
-                        subtitle = stringResource(R.string.train_type_strength) + " · " +
-                            shortDate(row.date) + " · " + pluralStringResource(
-                                R.plurals.train_sets,
-                                row.sets,
-                                row.sets,
-                            ),
+                        subtitle = stringResource(
+                            R.string.train_history_row,
+                            stringResource(R.string.train_type_strength),
+                            shortDate(row.date),
+                            pluralStringResource(R.plurals.train_sets, row.sets, row.sets),
+                        ),
                         thumbnail = {
                             OhBodyMap(
                                 model = row.map,
@@ -239,7 +234,7 @@ fun TrainRootScreen(
                         },
                         trailing = {
                             HistoryValue(
-                                row.volumeKg?.let { number(it) + " kg" }
+                                row.volumeLabel
                                     ?: stringResource(R.string.train_not_available),
                             )
                         },
@@ -287,7 +282,12 @@ fun TrainRootScreen(
     OhModalSheet(
         visible = showTable,
         onDismiss = { showTable = false },
-        title = stringResource(R.string.train_map_recovery),
+        // The table names the map it belongs to; the segment chooses which one is shown.
+        title = if (segment == 0) {
+            stringResource(R.string.train_map_recovery)
+        } else {
+            stringResource(R.string.train_map_plan)
+        },
         cancelLabel = stringResource(R.string.train_close),
         onCancel = { showTable = false },
     ) {

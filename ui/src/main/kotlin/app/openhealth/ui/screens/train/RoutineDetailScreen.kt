@@ -43,10 +43,12 @@ fun RoutineDetailScreen(
     onStart: (String) -> Unit,
     onEdit: (String) -> Unit,
     onFavourite: (String, Boolean) -> Unit,
+    onArchive: (String) -> Unit,
     onExercise: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showTable by rememberSaveable { mutableStateOf(false) }
+    var archiving by rememberSaveable { mutableStateOf(false) }
     if (model == null) {
         OhScreen(modifier = modifier.windowInsetsPadding(WindowInsets.statusBars)) {
             OhPageHeader(title = stringResource(R.string.train_routines), onBack = onBack)
@@ -176,8 +178,29 @@ fun RoutineDetailScreen(
                 variant = OhButtonVariant.Ghost,
                 modifier = Modifier.fillMaxWidth(),
             )
+            OhButton(
+                text = stringResource(R.string.train_routine_archive),
+                onClick = { archiving = true },
+                variant = OhButtonVariant.Quiet,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         Spacer(Modifier.height(OhTheme.space.s7))
+    }
+    if (archiving) {
+        app.openhealth.ui.components.OhDialog(
+            visible = true,
+            onDismiss = { archiving = false },
+            title = stringResource(R.string.train_routine_archive),
+            message = stringResource(R.string.train_routine_archive_body),
+            primaryLabel = stringResource(R.string.train_routine_archive),
+            onPrimary = {
+                archiving = false
+                onArchive(model.id)
+            },
+            cancelLabel = stringResource(R.string.train_editor_cancel),
+            onCancel = { archiving = false },
+        )
     }
     OhModalSheet(
         visible = showTable,

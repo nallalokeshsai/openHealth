@@ -2,6 +2,7 @@ package app.openhealth.ui.screens.train
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,6 +46,7 @@ fun RoutineEditorScreen(
     model: RoutineEditorModel,
     onBack: () -> Unit,
     onSave: (RoutineDraft) -> Unit,
+    onCreateCustom: (CustomExerciseDraft) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var name by rememberSaveable(model.id) { mutableStateOf(model.name) }
@@ -59,10 +61,10 @@ fun RoutineEditorScreen(
         mutableStateOf(model.exercises)
     }
     var adding by rememberSaveable { mutableStateOf(false) }
+    var customOpen by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var issue by rememberSaveable { mutableStateOf<Int?>(null) }
     val editingRow = exercises.firstOrNull { it.id == editing }
-    val canSave = name.isNotBlank() && exercises.isNotEmpty()
 
     OhScreen(modifier = modifier.windowInsetsPadding(WindowInsets.statusBars)) {
         OhPageHeader(
@@ -158,12 +160,20 @@ fun RoutineEditorScreen(
             }
         }
         Spacer(Modifier.height(OhTheme.space.s3))
-        OhButton(
-            text = stringResource(R.string.train_editor_add),
-            onClick = { adding = true },
-            variant = OhButtonVariant.Secondary,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
+            OhButton(
+                text = stringResource(R.string.train_editor_add),
+                onClick = { adding = true },
+                variant = OhButtonVariant.Secondary,
+                modifier = Modifier.weight(1f),
+            )
+            OhButton(
+                text = stringResource(R.string.train_editor_new_exercise),
+                onClick = { customOpen = true },
+                variant = OhButtonVariant.Ghost,
+                modifier = Modifier.weight(1f),
+            )
+        }
         OhSectionTitle(stringResource(R.string.train_editor_notes))
         OhTextField(
             value = notes,
@@ -197,7 +207,6 @@ fun RoutineEditorScreen(
                     )
                 }
             },
-            enabled = canSave,
             modifier = Modifier.fillMaxWidth(),
         )
         issue?.let {
@@ -235,6 +244,19 @@ fun RoutineEditorScreen(
     }
 
     OhModalSheet(
+        visible = customOpen,
+        onDismiss = { customOpen = false },
+        title = stringResource(R.string.train_editor_new_exercise),
+    ) {
+        CustomExerciseSheet(
+            onSave = { draft ->
+                customOpen = false
+                onCreateCustom(draft)
+            },
+        )
+    }
+
+    OhModalSheet(
         visible = editingRow != null,
         onDismiss = { editing = null },
         title = editingRow?.name ?: stringResource(R.string.train_editor_exercise_target),
@@ -243,6 +265,7 @@ fun RoutineEditorScreen(
         if (row != null) {
             ExerciseTargetSheet(
                 row = row,
+                weightUnit = model.weightUnit,
                 onSave = { updated ->
                     exercises = exercises.map { if (it.id == updated.id) updated else it }
                     editing = null
@@ -254,6 +277,88 @@ fun RoutineEditorScreen(
             )
         }
     }
+}
+
+@Composable
+private fun CustomExerciseSheet(onSave: (CustomExerciseDraft) -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var instructions by rememberSaveable { mutableStateOf("") }
+    var primary by rememberSaveable { mutableStateOf(app.openhealth.core.body.Muscle.CHEST.key) }
+    var equipment by rememberSaveable { mutableStateOf("barbell") }
+    var invalid by rememberSaveable { mutableStateOf(false) }
+    OhTextField(
+        value = name,
+        onValueChange = {
+            name = it
+            invalid = false
+        },
+        placeholder = stringResource(R.string.train_editor_custom_name),
+    )
+    Spacer(Modifier.height(OhTheme.space.s2))
+    Text(
+        text = stringResource(R.string.train_editor_custom_primary),
+        style = OhTheme.type.footnote,
+        color = OhTheme.colors.label2,
+    )
+    Spacer(Modifier.height(OhTheme.space.s1))
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s1),
+    ) {
+        app.openhealth.core.body.Muscle.entries.forEach { muscle ->
+            OhChip(
+                text = app.openhealth.ui.body.muscleLabel(muscle),
+                selected = primary == muscle.key,
+                neutralSelected = true,
+                onClick = { primary = muscle.key },
+            )
+        }
+    }
+    Spacer(Modifier.height(OhTheme.space.s2))
+    Text(
+        text = stringResource(R.string.train_editor_custom_equipment),
+        style = OhTheme.type.footnote,
+        color = OhTheme.colors.label2,
+    )
+    Spacer(Modifier.height(OhTheme.space.s1))
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s1),
+    ) {
+        app.openhealth.core.exercise.Equipment.entries.forEach { item ->
+            OhChip(
+                text = equipmentLabel(item.key),
+                selected = equipment == item.key,
+                neutralSelected = true,
+                onClick = { equipment = item.key },
+            )
+        }
+    }
+    Spacer(Modifier.height(OhTheme.space.s2))
+    OhTextField(
+        value = instructions,
+        onValueChange = { instructions = it },
+        placeholder = stringResource(R.string.train_editor_custom_instructions),
+        singleLine = false,
+    )
+    if (invalid) {
+        Spacer(Modifier.height(OhTheme.space.s1))
+        Text(
+            text = stringResource(R.string.train_editor_custom_invalid),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.redInk,
+        )
+    }
+    Spacer(Modifier.height(OhTheme.space.s3))
+    OhButton(
+        text = stringResource(R.string.train_editor_custom_save),
+        onClick = {
+            if (name.isBlank()) {
+                invalid = true
+            } else {
+                onSave(CustomExerciseDraft(name, primary, equipment, instructions))
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -286,6 +391,7 @@ private fun AddExercisePicker(library: List<ExerciseChoice>, onPick: (ExerciseCh
 @Composable
 private fun ExerciseTargetSheet(
     row: EditorExerciseRow,
+    weightUnit: String,
     onSave: (EditorExerciseRow) -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -307,7 +413,8 @@ private fun ExerciseTargetSheet(
         OhTextField(
             value = weight,
             onValueChange = { weight = it },
-            placeholder = stringResource(R.string.train_editor_weight),
+            placeholder = stringResource(R.string.train_editor_weight) +
+                " (" + weightUnit + ")",
         )
         OhTextField(
             value = rest,

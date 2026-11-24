@@ -744,11 +744,11 @@
     <string name="train_plates_none">That is below the bar.</string>
     <string name="train_plates_edit">Edit equipment</string>
     <string name="train_plates_equipment_title">Equipment</string>
-    <string name="train_plates_plates">Plates per side (kg)</string>
+    <string name="train_plates_plates">Plates per side</string>
     <string name="train_plates_save">Save equipment</string>
     <string name="train_plates_invalid">Use comma-separated weights.</string>
     <string name="train_plates_custom">Custom bar</string>
-    <string name="train_plates_custom_weight">Bar weight (kg)</string>
+    <string name="train_plates_custom_weight">Bar weight</string>
     <string name="train_plates_empty">No plates to show.</string>
 
     <!-- Train: effort -->
@@ -809,7 +809,43 @@
     <string name="train_summary_save">Save note</string>
     <string name="train_summary_feeling_hint">How did the session feel?</string>
     <string name="train_routine_sets_cycle">%1$s sets per rotation</string>
-    <string name="train_plates_use">Use %1$s kg</string>
+    <string name="train_plates_use">Use %1$s</string>
     <string name="train_session_open_note">Finish the open session to start another.</string>
     <string name="train_backdated">Backdated</string>
+    <string name="train_no_open_title">This session has ended</string>
+    <string name="train_no_open_body">There is no open workout. Your saved workouts are in History.</string>
+    <string name="train_no_open_action">Back to Train</string>
+    <string name="train_live_invalid_weight">Enter a weight.</string>
+    <string name="train_live_invalid_reps">Enter the reps.</string>
+    <string name="train_live_edit_reason">Reason for the change</string>
+    <string name="equipment_trap_bar">Trap bar</string>
+    <string name="equipment_smith">Smith machine</string>
+    <string name="train_summary_happened">Happened</string>
+    <string name="train_history_how">How these numbers are calculated</string>
+    <string name="train_history_how_body">Estimated 1RM uses the Epley equation on sets of 1 to 15 reps. Volume is weight × reps over completed work sets. The next target comes from the policy, the last session and its target range.</string>
+    <string name="train_history_citation">Epley, B. (1997). Weight training and the one-rep max.</string>
+    <string name="oh_timer_ten">10 seconds remaining</string>
+    <string name="oh_timer_three">3 seconds remaining</string>
+    <string name="oh_timer_two">2 seconds remaining</string>
+    <string name="oh_timer_one">1 second remaining</string>
+    <string name="oh_timer_ready">Rest is over</string>
+    <string name="trash_kind_routine_exercise">Routine exercise</string>
+    <string name="train_history_row">%1$s · %2$s · %3$s</string>
+    <string name="train_history_policy_value">%1$s · %2$s</string>
+    <string name="train_history_next_value">%1$s · %2$s</string>
+    <string name="train_backdated_on">%1$s · %2$s</string>
+    <string name="train_plates_per_side_value">%1$s · %2$s</string>
+    <plurals name="train_exercises">
+        <item quantity="one">%1$d exercise</item>
+        <item quantity="other">%1$d exercises</item>
+    </plurals>
+    <string name="train_routine_archive">Archive routine</string>
+    <string name="train_routine_archive_body">The routine leaves the list and its saved sessions stay in History.</string>
+    <string name="train_editor_new_exercise">New exercise</string>
+    <string name="train_editor_custom_name">Exercise name</string>
+    <string name="train_editor_custom_primary">Primary muscle</string>
+    <string name="train_editor_custom_equipment">Equipment</string>
+    <string name="train_editor_custom_instructions">Instructions</string>
+    <string name="train_editor_custom_save">Save exercise</string>
+    <string name="train_editor_custom_invalid">Give the exercise a name and a primary muscle.</string>
 </resources>

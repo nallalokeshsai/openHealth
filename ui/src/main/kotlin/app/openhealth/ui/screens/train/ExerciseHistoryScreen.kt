@@ -7,11 +7,16 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhInsetGroup
+import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.screens.common.OhEmptyState
 import app.openhealth.ui.screens.common.OhPageHeader
@@ -28,6 +33,7 @@ fun ExerciseHistoryScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showHow by rememberSaveable { mutableStateOf(false) }
     OhScreen(modifier = modifier.windowInsetsPadding(WindowInsets.statusBars)) {
         OhPageHeader(title = model.name, onBack = onBack)
         Text(
@@ -49,17 +55,20 @@ fun ExerciseHistoryScreen(
             )
             Spacer(Modifier.height(OhTheme.space.s3))
             Text(
-                text = stringResource(R.string.train_history_policy) + " · " +
+                text = stringResource(
+                    R.string.train_history_policy_value,
+                    stringResource(R.string.train_history_policy),
                     progressionPolicyLabel(model.progressionKey, model.incrementKg),
+                ),
                 style = OhTheme.type.footnote,
                 color = OhTheme.colors.label2,
             )
             Text(
                 text = stringResource(R.string.train_history_next) + " · " +
                     listOfNotNull(
-                        model.nextWeight?.let { number(it, 2) },
+                        model.nextWeight,
                         number(model.nextReps.toDouble()),
-                    ).joinToString(" × "),
+                    ).joinToString(" × ") + " " + model.weightUnit,
                 style = OhTheme.type.footnote,
                 color = OhTheme.colors.accInk,
             )
@@ -77,13 +86,40 @@ fun ExerciseHistoryScreen(
                 model.rows.forEachIndexed { index, row ->
                     OhRow(
                         title = app.openhealth.ui.screens.common.shortDate(row.date),
-                        subtitle = row.topSet,
+                        subtitle = row.topSet ?: stringResource(R.string.train_not_available),
                         value = row.volume ?: stringResource(R.string.train_not_available),
                         showDivider = index > 0,
                     )
                 }
             }
         }
+        Spacer(Modifier.height(OhTheme.space.s5))
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.train_history_how),
+                showChevron = true,
+                onClick = { showHow = true },
+            )
+        }
         Spacer(Modifier.height(OhTheme.space.s7))
+    }
+    OhModalSheet(
+        visible = showHow,
+        onDismiss = { showHow = false },
+        title = stringResource(R.string.train_history_how),
+        cancelLabel = stringResource(R.string.train_close),
+        onCancel = { showHow = false },
+    ) {
+        Text(
+            text = stringResource(R.string.train_history_how_body),
+            style = OhTheme.type.body,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s3))
+        Text(
+            text = stringResource(R.string.train_history_citation),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
     }
 }

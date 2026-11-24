@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -312,6 +314,10 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     },
                     onEdit = { routineId -> nav.navigate(RoutineEditorRoute(routineId)) },
                     onFavourite = { routineId, _ -> viewModel.toggleFavourite(routineId) },
+                    onArchive = { routineId ->
+                        viewModel.archiveRoutine(routineId)
+                        nav.popBackStack()
+                    },
                     onExercise = { exerciseId -> nav.navigate(ExerciseHistoryRoute(exerciseId)) },
                 )
             }
@@ -333,16 +339,26 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         viewModel.saveRoutine(draft)
                         nav.popBackStack()
                     },
+                    onCreateCustom = viewModel::createCustomExercise,
                 )
             }
         }
         composable<LiveSessionRoute> { entry ->
             val id = entry.toRoute<LiveSessionRoute>().sessionId
             AskNotificationPermission()
-            LaunchedEffect(id) { if (id != null) viewModel.openLive(id) }
+            LaunchedEffect(id) {
+                if (id != null) viewModel.openLive(id) else viewModel.openOpenSession()
+            }
             val live = state.live
             if (live == null) {
-                Loading()
+                if (state.liveMissing) {
+                    SessionEnded(onBack = {
+                        viewModel.closeLive()
+                        nav.popBackStack()
+                    })
+                } else {
+                    Loading()
+                }
             } else {
                 LiveSessionScreen(
                     model = live,
@@ -628,6 +644,29 @@ private val TAB_ROUTES = listOf(
     NutritionRoute,
     StatsRoute,
 )
+
+/** A restored live route with no open session: say so and leave, rather than spin. */
+@Composable
+private fun SessionEnded(onBack: () -> Unit) {
+    app.openhealth.ui.screens.common.OhScreen(
+        modifier = Modifier.windowInsetsPadding(
+            androidx.compose.foundation.layout.WindowInsets.statusBars,
+        ),
+    ) {
+        app.openhealth.ui.screens.common.OhSectionTitle(
+            stringResource(UiR.string.train_no_open_title),
+        )
+        Text(
+            text = stringResource(UiR.string.train_no_open_body),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        app.openhealth.ui.components.OhButton(
+            text = stringResource(UiR.string.train_no_open_action),
+            onClick = onBack,
+        )
+    }
+}
 
 /**
  * `POST_NOTIFICATIONS` at the point of use (`Tech-Stack.md` §8): the rest timer's
