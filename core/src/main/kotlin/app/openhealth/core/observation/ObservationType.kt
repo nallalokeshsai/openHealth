@@ -78,6 +78,11 @@ enum class ObservationType(
     WATER(UcumUnit.MILLILITRE, TemporalShape.DAILY_TOTAL, ObservationCategory.NUTRITION),
     CAFFEINE(UcumUnit.MILLIGRAM, TemporalShape.DAILY_TOTAL, ObservationCategory.NUTRITION),
 
+    /** `pr.md` §7.3: training volume, sets and duration, summed from a day's sessions. */
+    TRAINING_VOLUME(UcumUnit.KILOGRAM, TemporalShape.DAILY_TOTAL, ObservationCategory.TRAINING),
+    TRAINING_SETS(UcumUnit.COUNT, TemporalShape.DAILY_TOTAL, ObservationCategory.TRAINING),
+    TRAINING_DURATION(UcumUnit.SECOND, TemporalShape.DAILY_TOTAL, ObservationCategory.TRAINING),
+
     MOOD(UcumUnit.SCORE, TemporalShape.INSTANT, ObservationCategory.WELLBEING),
     STRESS(UcumUnit.SCORE, TemporalShape.INSTANT, ObservationCategory.WELLBEING),
     ;

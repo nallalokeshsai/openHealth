@@ -63,6 +63,9 @@ object PlausibilityRanges {
         PlausibleRange(type = ObservationType.NUTRITION_FIBRE, min = 0.0, max = 500.0),
         PlausibleRange(type = ObservationType.WATER, min = 0.0, max = 20_000.0),
         PlausibleRange(type = ObservationType.CAFFEINE, min = 0.0, max = 5_000.0),
+        PlausibleRange(type = ObservationType.TRAINING_VOLUME, min = 0.0, max = 200_000.0),
+        PlausibleRange(type = ObservationType.TRAINING_SETS, min = 0.0, max = 500.0),
+        PlausibleRange(ObservationType.TRAINING_DURATION, 0.0, DAY_SECONDS),
         PlausibleRange(type = ObservationType.MOOD, min = 1.0, max = 5.0),
         PlausibleRange(type = ObservationType.STRESS, min = 1.0, max = 5.0),
     ).associateBy(PlausibleRange::type)

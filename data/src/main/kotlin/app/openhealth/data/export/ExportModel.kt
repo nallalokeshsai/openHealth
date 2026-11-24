@@ -55,6 +55,8 @@ object ExportTables {
             listOf(
                 text("id"), text("name"), text("folder"), text("notes"), long("archived_at"),
                 long("created_at"), long("updated_at"), text("source_id"), long("revision"),
+                long("weekday"), long("rotation_index"), bool("favourite"),
+                text("progression"), long("target_rest_seconds"),
             ),
         ),
         ExportTable(
@@ -68,6 +70,8 @@ object ExportTables {
                 long("target_reps"),
                 double("target_weight_kg"),
                 text("notes"),
+                double("target_rir"), long("rest_seconds"), text("progression"),
+                long("group_index"),
             ),
         ),
         ExportTable(
@@ -95,6 +99,7 @@ object ExportTables {
                 text("programme_id"), text("notes"), text("source_id"),
                 text("idempotency_key"), text("observation_id"), text("raw_record_id"),
                 text("device"), text("app_version"), long("revision"), long("updated_at"),
+                text("title"), text("feeling"), double("perceived_effort"),
             ),
         ),
         ExportTable(
@@ -105,6 +110,7 @@ object ExportTables {
                 text("exercise_id"),
                 long("position"),
                 text("notes"),
+                long("group_index"),
             ),
         ),
         ExportTable(
@@ -117,7 +123,8 @@ object ExportTables {
                 long("rest_seconds"), long("completed_at"), long("happened_at"),
                 long("recorded_at"), text("source_id"), text("idempotency_key"),
                 text("observation_id"), text("raw_record_id"), text("device"),
-                text("app_version"), long("revision"),
+                text("app_version"), long("revision"), bool("is_drop"), bool("is_assisted"),
+                double("assistance_kg"), double("band_kg"),
             ),
         ),
         ExportTable(

@@ -98,6 +98,9 @@ object DedupPolicies {
         ObservationType.NUTRITION_FIBRE,
         ObservationType.WATER,
         ObservationType.CAFFEINE,
+        ObservationType.TRAINING_VOLUME,
+        ObservationType.TRAINING_SETS,
+        ObservationType.TRAINING_DURATION,
         -> sumAll
     }
 
@@ -165,6 +168,9 @@ object DedupPolicies {
         ObservationType.NUTRITION_FIBRE,
         ObservationType.WATER,
         ObservationType.CAFFEINE,
+        ObservationType.TRAINING_VOLUME,
+        ObservationType.TRAINING_SETS,
+        ObservationType.TRAINING_DURATION,
         -> RollupAggregation.SUM
     }
 }

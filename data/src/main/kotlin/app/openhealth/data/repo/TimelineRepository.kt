@@ -126,6 +126,12 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                 "happened_at",
             ),
             Branch(
+                "SELECT 'work_set', work_set.id, session.local_date, work_set.happened_at, " +
+                    "work_set.recorded_at, work_set.source_id, work_set.exercise_id, 0 " +
+                    "FROM work_set JOIN session ON session.id = work_set.session_id",
+                "work_set.happened_at",
+            ),
+            Branch(
                 "SELECT 'entry', id, local_date, happened_at, recorded_at, source_kind, " +
                     "meal_id, user_edited FROM entry",
                 "happened_at",

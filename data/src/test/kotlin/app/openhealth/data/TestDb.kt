@@ -177,6 +177,9 @@ fun seedSessionAndExercise(
             app_version = "test",
             revision = 1L,
             updated_at = happenedAt.toEpochMilliseconds(),
+            title = null,
+            feeling = null,
+            perceived_effort = null,
         ),
     )
 }

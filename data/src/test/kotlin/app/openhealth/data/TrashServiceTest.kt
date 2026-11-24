@@ -265,6 +265,10 @@ class TrashServiceTest {
             device = "manual",
             app_version = "test",
             revision = 2L,
+            is_drop = false,
+            is_assisted = false,
+            assistance_kg = null,
+            band_kg = null,
         )
         app.openhealth.data.repo.TrainingRepository(store.db).upsertSet(set)
         val tombstone = trash.deleteWorkSet(SetId("s-1"))!!

@@ -31,7 +31,12 @@ CREATE TABLE routine (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
-    revision INTEGER NOT NULL DEFAULT 1
+    revision INTEGER NOT NULL DEFAULT 1,
+    weekday INTEGER,
+    rotation_index INTEGER,
+    favourite INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    progression TEXT,
+    target_rest_seconds INTEGER
 );
 
 CREATE TABLE routine_exercise (
@@ -42,7 +47,11 @@ CREATE TABLE routine_exercise (
     target_sets INTEGER,
     target_reps INTEGER,
     target_weight_kg REAL,
-    notes TEXT
+    notes TEXT,
+    target_rir REAL,
+    rest_seconds INTEGER,
+    progression TEXT,
+    group_index INTEGER
 );
 
 CREATE INDEX routine_exercise_routine ON routine_exercise(routine_id);
@@ -87,10 +96,15 @@ CREATE TABLE session (
     device TEXT,
     app_version TEXT,
     revision INTEGER NOT NULL DEFAULT 1,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    title TEXT,
+    feeling TEXT,
+    perceived_effort REAL
 );
 
 CREATE INDEX session_local_date ON session(local_date);
+CREATE INDEX session_ended ON session(ended_at);
+CREATE INDEX session_routine ON session(routine_id);
 CREATE INDEX session_happened ON session(happened_at);
 
 CREATE TABLE session_exercise (
@@ -98,7 +112,8 @@ CREATE TABLE session_exercise (
     session_id TEXT NOT NULL REFERENCES session(id) ON DELETE RESTRICT,
     exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
     position INTEGER NOT NULL,
-    notes TEXT
+    notes TEXT,
+    group_index INTEGER
 );
 
 CREATE INDEX session_exercise_session ON session_exercise(session_id);
@@ -128,7 +143,11 @@ CREATE TABLE work_set (
     raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
     device TEXT,
     app_version TEXT,
-    revision INTEGER NOT NULL DEFAULT 1
+    revision INTEGER NOT NULL DEFAULT 1,
+    is_drop INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    is_assisted INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    assistance_kg REAL,
+    band_kg REAL
 );
 
 CREATE INDEX work_set_session ON work_set(session_id, position);
@@ -170,9 +189,11 @@ SELECT count(*) FROM exercise;
 
 insertRoutine:
 INSERT INTO routine(
-    id, name, folder, notes, archived_at, created_at, updated_at, source_id, revision
+    id, name, folder, notes, archived_at, created_at, updated_at, source_id, revision,
+    weekday, rotation_index, favourite, progression, target_rest_seconds
 ) VALUES (
-    :id, :name, :folder, :notes, :archivedAt, :createdAt, :updatedAt, :sourceId, :revision
+    :id, :name, :folder, :notes, :archivedAt, :createdAt, :updatedAt, :sourceId, :revision,
+    :weekday, :rotationIndex, :favourite, :progression, :targetRestSeconds
 )
 -- A real upsert, not INSERT OR REPLACE: routine is referenced by a foreign
 -- key, and replacing the row would delete it and its children with it.
@@ -183,7 +204,12 @@ ON CONFLICT(id) DO UPDATE SET
     archived_at = excluded.archived_at,
     updated_at = excluded.updated_at,
     source_id = excluded.source_id,
-    revision = excluded.revision;
+    revision = excluded.revision,
+    weekday = excluded.weekday,
+    rotation_index = excluded.rotation_index,
+    favourite = excluded.favourite,
+    progression = excluded.progression,
+    target_rest_seconds = excluded.target_rest_seconds;
 
 routineById:
 SELECT * FROM routine WHERE id = :id;
@@ -194,10 +220,10 @@ SELECT * FROM routine ORDER BY name;
 insertRoutineExercise:
 INSERT OR REPLACE INTO routine_exercise(
     id, routine_id, exercise_id, position, target_sets, target_reps,
-    target_weight_kg, notes
+    target_weight_kg, notes, target_rir, rest_seconds, progression, group_index
 ) VALUES (
     :id, :routineId, :exerciseId, :position, :targetSets, :targetReps,
-    :targetWeightKg, :notes
+    :targetWeightKg, :notes, :targetRir, :restSeconds, :progression, :groupIndex
 );
 
 allRoutineExercises:
@@ -252,11 +278,13 @@ insertSession:
 INSERT OR IGNORE INTO session(
     id, started_at, ended_at, local_date, zone_id, happened_at, recorded_at,
     routine_id, programme_id, notes, source_id, idempotency_key, observation_id,
-    raw_record_id, device, app_version, revision, updated_at
+    raw_record_id, device, app_version, revision, updated_at, title, feeling,
+    perceived_effort
 ) VALUES (
     :id, :startedAt, :endedAt, :localDate, :zoneId, :happenedAt, :recordedAt,
     :routineId, :programmeId, :notes, :sourceId, :idempotencyKey, :observationId,
-    :rawRecordId, :device, :appVersion, :revision, :updatedAt
+    :rawRecordId, :device, :appVersion, :revision, :updatedAt, :title, :feeling,
+    :perceivedEffort
 );
 
 sessionById:
@@ -276,9 +304,9 @@ SELECT * FROM session ORDER BY started_at;
 
 insertSessionExercise:
 INSERT INTO session_exercise(
-    id, session_id, exercise_id, position, notes
+    id, session_id, exercise_id, position, notes, group_index
 ) VALUES (
-    :id, :sessionId, :exerciseId, :position, :notes
+    :id, :sessionId, :exerciseId, :position, :notes, :groupIndex
 )
 -- A real upsert, not INSERT OR REPLACE: session_exercise is referenced by a foreign
 -- key, and replacing the row would delete it and its children with it.
@@ -286,7 +314,8 @@ ON CONFLICT(id) DO UPDATE SET
     session_id = excluded.session_id,
     exercise_id = excluded.exercise_id,
     position = excluded.position,
-    notes = excluded.notes;
+    notes = excluded.notes,
+    group_index = excluded.group_index;
 
 sessionExercises:
 SELECT * FROM session_exercise WHERE session_id = :sessionId ORDER BY position;
@@ -299,12 +328,14 @@ INSERT OR IGNORE INTO work_set(
     id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps,
     rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds,
     completed_at, happened_at, recorded_at, source_id, idempotency_key, observation_id,
-    raw_record_id, device, app_version, revision
+    raw_record_id, device, app_version, revision, is_drop, is_assisted, assistance_kg,
+    band_kg
 ) VALUES (
     :id, :sessionId, :sessionExerciseId, :exerciseId, :position, :weightKg, :reps,
     :rir, :rpe, :isWarmup, :isBackoff, :isFailure, :isBodyweight, :tempo, :restSeconds,
     :completedAt, :happenedAt, :recordedAt, :sourceId, :idempotencyKey, :observationId,
-    :rawRecordId, :device, :appVersion, :revision
+    :rawRecordId, :device, :appVersion, :revision, :isDrop, :isAssisted, :assistanceKg,
+    :bandKg
 );
 
 workSetById:
@@ -348,3 +379,107 @@ SELECT * FROM work_set ORDER BY session_id, position;
 
 deleteWorkSet:
 DELETE FROM work_set WHERE id = :id;
+
+-- B5: the live session, history and the training rollups.
+
+routineEntries:
+SELECT * FROM routine_exercise WHERE routine_id = :routineId ORDER BY position;
+
+routineEntryById:
+SELECT * FROM routine_exercise WHERE id = :id;
+
+deleteRoutineExercise:
+DELETE FROM routine_exercise WHERE id = :id;
+
+openSession:
+SELECT * FROM session WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1;
+
+finishedSessions:
+SELECT * FROM session WHERE ended_at >= 0 ORDER BY happened_at DESC LIMIT :limit;
+
+sessionsBetween:
+SELECT * FROM session
+WHERE local_date >= :from AND local_date < :to
+ORDER BY happened_at;
+
+sessionDays:
+SELECT DISTINCT local_date FROM session ORDER BY local_date;
+
+countSetsForSession:
+SELECT count(*) FROM work_set WHERE session_id = :sessionId;
+
+updateSessionTiming:
+UPDATE session
+SET started_at = :startedAt, ended_at = :endedAt, local_date = :localDate,
+    happened_at = :happenedAt, updated_at = :updatedAt, revision = revision + 1
+WHERE id = :id;
+
+updateSessionDetails:
+UPDATE session
+SET title = :title, notes = :notes, feeling = :feeling,
+    perceived_effort = :perceivedEffort, ended_at = :endedAt, updated_at = :updatedAt,
+    revision = revision + 1
+WHERE id = :id;
+
+updateWorkSet:
+UPDATE work_set
+SET weight_kg = :weightKg, reps = :reps, rir = :rir, rpe = :rpe,
+    is_warmup = :isWarmup, is_backoff = :isBackoff, is_failure = :isFailure,
+    is_bodyweight = :isBodyweight, is_drop = :isDrop, is_assisted = :isAssisted,
+    assistance_kg = :assistanceKg, band_kg = :bandKg, tempo = :tempo,
+    rest_seconds = :restSeconds, revision = revision + 1
+WHERE id = :id;
+
+updateWorkSetTiming:
+UPDATE work_set SET completed_at = :completedAt, happened_at = :happenedAt
+WHERE id = :id;
+
+setsForExercise:
+SELECT * FROM work_set WHERE exercise_id = :exerciseId ORDER BY completed_at;
+
+finishedSetsForExercise:
+SELECT * FROM work_set
+WHERE exercise_id = :exerciseId AND is_warmup = 0
+ORDER BY completed_at DESC;
+
+lastWorkSetForExercise:
+SELECT * FROM work_set
+WHERE exercise_id = :exerciseId AND is_warmup = 0
+ORDER BY completed_at DESC LIMIT 1;
+
+-- One row per session that trained an exercise, for per-exercise history and the
+-- stall counter. The heaviest work set and the best rep count are the session's summary.
+exerciseSessionSummary:
+SELECT
+    session_id,
+    max(completed_at) AS last_at,
+    count(*) AS set_count,
+    max(weight_kg) AS top_weight_kg,
+    max(reps) AS top_reps
+FROM work_set
+WHERE exercise_id = :exerciseId AND is_warmup = 0
+GROUP BY session_id
+ORDER BY last_at DESC;
+
+deleteSessionExercise:
+DELETE FROM session_exercise WHERE id = :id;
+
+deleteSessionExercises:
+DELETE FROM session_exercise WHERE session_id = :sessionId;
+
+deleteSession:
+DELETE FROM session WHERE id = :id;
+
+sessionByIdempotencyKey:
+SELECT * FROM session WHERE idempotency_key = :key;
+
+sessionsForRoutine:
+SELECT * FROM session WHERE routine_id = :routineId ORDER BY happened_at DESC;
+
+lastFinishedSession:
+SELECT * FROM session
+WHERE ended_at >= 0
+ORDER BY happened_at DESC LIMIT 1;
+
+allWorkSetsForSession:
+SELECT * FROM work_set WHERE session_id = :sessionId ORDER BY position;

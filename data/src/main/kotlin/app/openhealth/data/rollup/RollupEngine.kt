@@ -59,7 +59,12 @@ class RollupEngine(
         val entryDays = db.nutritionQueries.entryDays().executeAsList().map(LocalDate::parse)
         val vitalDays = db.bodyQueries.vitalDays().executeAsList().map(LocalDate::parse)
         val measurementDays = db.bodyQueries.measurementDays().executeAsList().map(LocalDate::parse)
-        (observations.daysWithObservations() + entryDays + vitalDays + measurementDays)
+        val sessionDays = db.trainingQueries.sessionDays().executeAsList()
+            .map(LocalDate::parse)
+        (
+            observations.daysWithObservations() + entryDays + vitalDays + measurementDays +
+                sessionDays
+            )
             .distinct()
             .sumOf { rebuildDayInternal(it) }
     }
@@ -98,6 +103,10 @@ class RollupEngine(
             written += 1
         }
         measurementRollups(date, writtenTypes).forEach {
+            rollups.upsert(it)
+            written += 1
+        }
+        trainingRollups(date, writtenTypes).forEach {
             rollups.upsert(it)
             written += 1
         }
@@ -197,6 +206,60 @@ class RollupEngine(
                 computedAt = clock.now(),
                 detail = null,
             )
+        }
+    }
+
+    /**
+     * Layer 4 sessions are the source of truth for training (`pr.md` §7.3, §7.4): a day's
+     * volume, set count and duration are summed here, never stored twice. Only a finished
+     * session counts; an open session is still being recorded and is rolled up when it is
+     * finished. Moving a session rebuilds both the old and the new day.
+     */
+    private fun trainingRollups(date: LocalDate, skip: Set<ObservationType>): List<DailyRollup> {
+        val sessions = db.trainingQueries.sessionsForDay(date.toString()).executeAsList()
+            .filter { it.ended_at != null }
+        val sets = sessions.flatMap { session ->
+            db.trainingQueries.setsForSession(session.id).executeAsList()
+        }
+        val work = sets.filterNot { it.is_warmup }
+        val sources = (sessions.map { it.source_id } + sets.map { it.source_id })
+            .distinct()
+        val durationSeconds = sessions.sumOf { session ->
+            ((session.ended_at ?: session.started_at) - session.started_at)
+                .coerceAtLeast(0L) / MILLIS_PER_SECOND
+        }
+        val volumeKg = work.sumOf { set ->
+            (set.weight_kg.coerceAtLeast(0.0) + (set.band_kg ?: 0.0)) * set.reps
+        }
+        return if (sessions.isEmpty()) {
+            emptyList()
+        } else {
+            listOf(
+                ObservationType.TRAINING_VOLUME to volumeKg,
+                ObservationType.TRAINING_SETS to work.size.toDouble(),
+                ObservationType.TRAINING_DURATION to durationSeconds.toDouble(),
+            ).mapNotNull { (type, value) ->
+                if (type in skip) return@mapNotNull null
+                DailyRollup(
+                    localDate = date,
+                    type = type,
+                    value = Measure(value, type.canonicalUnit),
+                    secondaryValue = sessions.size.toDouble(),
+                    sourceId = sources.singleOrNull()?.let(::SourceId),
+                    contributingSources = sources.size,
+                    dedupReason = if (sources.size == 1) {
+                        DedupReason.ONE_SOURCE_WINS.name
+                    } else {
+                        DedupReason.NO_DEDUP.name
+                    },
+                    watermark = Instant.fromEpochMilliseconds(
+                        (sessions.map { it.recorded_at } + sets.map { it.recorded_at })
+                            .maxOrNull() ?: 0L,
+                    ),
+                    computedAt = clock.now(),
+                    detail = null,
+                )
+            }
         }
     }
 
@@ -305,5 +368,6 @@ class RollupEngine(
 
     private companion object {
         const val LAST_DAY_OF_WEEK = 6
+        const val MILLIS_PER_SECOND = 1_000L
     }
 }

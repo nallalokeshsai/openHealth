@@ -20,7 +20,7 @@ class DatabaseTest {
     fun aNewDatabaseIsCreatedAtTheCurrentSchemaVersion() {
         val store = inMemoryStore()
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
-        assertEquals(5L, store.schemaVersion)
+        assertEquals(6L, store.schemaVersion)
         assertEquals(0L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(0L, store.db.trainingQueries.countWorkSets().executeAsOne())
         store.close()
@@ -50,6 +50,7 @@ class DatabaseTest {
         // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
         // every view on a schema change and the view names note.
         stripV5Columns(first)
+        stripV6Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
@@ -64,9 +65,9 @@ class DatabaseTest {
         val store = DatabaseOpener(backup).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals("v1-to-v5", backupLabel)
-        assertEquals(5L, store.schemaVersion)
-        assertEquals(5L, userVersion(store.driver))
+        assertEquals("v1-to-v6", backupLabel)
+        assertEquals(6L, store.schemaVersion)
+        assertEquals(6L, userVersion(store.driver))
         V2_INDEXES.forEach { assertEquals(1L, indexCount(store.driver, it), "index $it") }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
@@ -132,6 +133,7 @@ class DatabaseTest {
         // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
         // every view on a schema change and the view names note.
         stripV5Columns(first)
+        stripV6Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
@@ -153,6 +155,7 @@ class DatabaseTest {
         // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
         // every view on a schema change and the view names note.
         stripV5Columns(first)
+        stripV6Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
@@ -183,13 +186,14 @@ class DatabaseTest {
             0,
         )
         stripV5Columns(first)
+        stripV6Columns(first)
         first.execute(null, "PRAGMA user_version = 3", 0)
         first.close()
 
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(5L, store.schemaVersion)
+        assertEquals(6L, store.schemaVersion)
         val view = store.driver.executeQuery(
             null,
             "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
@@ -245,6 +249,7 @@ class DatabaseTest {
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
         stripV5Columns(first)
+        stripV6Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         val ddl = tableDdl(first)
@@ -281,7 +286,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(5L, store.schemaVersion)
+        assertEquals(6L, store.schemaVersion)
         assertEquals(1L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(3, store.db.sourceQueries.allSources().executeAsList().size)
 
@@ -316,6 +321,7 @@ class DatabaseTest {
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
         stripV5Columns(first)
+        stripV6Columns(first)
         first.execute(
             null,
             "INSERT INTO exercise(id, name, primary_muscles, secondary_muscles, is_custom, " +
@@ -340,7 +346,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(5L, store.schemaVersion)
+        assertEquals(6L, store.schemaVersion)
         val columns = store.driver.executeQuery(
             null,
             "PRAGMA table_info(exercise)",
@@ -443,6 +449,36 @@ class DatabaseTest {
         ).value
 
     /** v5 added three nullable exercise columns; a pre-v5 fixture must not have them. */
+    private fun stripV6Columns(driver: JdbcSqliteDriver) {
+        // v5 is this schema without the B5 training columns. Dropping them (after their
+        // indexes) reproduces a genuine pre-B5 database without drifting from the schema.
+        listOf("session_ended", "session_routine").forEach {
+            driver.execute(null, "DROP INDEX IF EXISTS $it", 0)
+        }
+        mapOf(
+            "routine" to listOf(
+                "weekday",
+                "rotation_index",
+                "favourite",
+                "progression",
+                "target_rest_seconds",
+            ),
+            "routine_exercise" to listOf(
+                "target_rir",
+                "rest_seconds",
+                "progression",
+                "group_index",
+            ),
+            "session" to listOf("title", "feeling", "perceived_effort"),
+            "session_exercise" to listOf("group_index"),
+            "work_set" to listOf("is_drop", "is_assisted", "assistance_kg", "band_kg"),
+        ).forEach { (table, columns) ->
+            columns.forEach { column ->
+                driver.execute(null, "ALTER TABLE $table DROP COLUMN $column", 0)
+            }
+        }
+    }
+
     private fun stripV5Columns(driver: app.cash.sqldelight.db.SqlDriver) {
         listOf("level", "mechanic", "force").forEach {
             driver.execute(null, "ALTER TABLE exercise DROP COLUMN $it", 0)

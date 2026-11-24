@@ -411,6 +411,11 @@ class CorpusGenerator(
                 updated_at = now,
                 source_id = "manual",
                 revision = 1L,
+                weekday = null,
+                rotation_index = 1L,
+                favourite = true,
+                progression = "linear",
+                target_rest_seconds = 120L,
             ),
         )
         seeds.forEachIndexed { index, seed ->
@@ -424,6 +429,10 @@ class CorpusGenerator(
                     target_reps = 5L,
                     target_weight_kg = seed.baseWeightKg,
                     notes = null,
+                    target_rir = 2.0,
+                    rest_seconds = 120L,
+                    progression = null,
+                    group_index = null,
                 ),
             )
         }
@@ -474,6 +483,9 @@ class CorpusGenerator(
                 app_version = "fixture",
                 revision = 1L,
                 updated_at = started.plus(1.hours).toEpochMilliseconds(),
+                title = "Full body",
+                feeling = null,
+                perceived_effort = null,
             ),
         )
         var position = 0L
@@ -487,6 +499,7 @@ class CorpusGenerator(
                     exercise_id = context.exerciseIds[exerciseIndex],
                     position = exerciseIndex.toLong(),
                     notes = null,
+                    group_index = null,
                 ),
             )
             repeat(3) { setIndex ->
@@ -519,6 +532,10 @@ class CorpusGenerator(
                         device = "manual",
                         app_version = "fixture",
                         revision = 1L,
+                        is_drop = false,
+                        is_assisted = false,
+                        assistance_kg = null,
+                        band_kg = null,
                     ),
                 )
                 sets += 1

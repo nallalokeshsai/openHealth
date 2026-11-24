@@ -1,0 +1,76 @@
+-- Migration 5 -> 6 (2026-11-24, B5). Gym training adds the facts the live session records
+-- beyond the first cut of the tables (pr.md §6.5): how a routine is scheduled, which
+-- progression policy it follows, superset grouping, drop and assisted sets, band
+-- resistance, and the session's own title and felt effort. Every column is nullable or
+-- has a default, so an upgraded database keeps every row.
+
+ALTER TABLE routine ADD COLUMN weekday INTEGER;
+ALTER TABLE routine ADD COLUMN rotation_index INTEGER;
+ALTER TABLE routine ADD COLUMN favourite INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
+ALTER TABLE routine ADD COLUMN progression TEXT;
+ALTER TABLE routine ADD COLUMN target_rest_seconds INTEGER;
+
+ALTER TABLE routine_exercise ADD COLUMN target_rir REAL;
+ALTER TABLE routine_exercise ADD COLUMN rest_seconds INTEGER;
+ALTER TABLE routine_exercise ADD COLUMN progression TEXT;
+ALTER TABLE routine_exercise ADD COLUMN group_index INTEGER;
+
+ALTER TABLE session ADD COLUMN title TEXT;
+ALTER TABLE session ADD COLUMN feeling TEXT;
+ALTER TABLE session ADD COLUMN perceived_effort REAL;
+
+ALTER TABLE session_exercise ADD COLUMN group_index INTEGER;
+
+ALTER TABLE work_set ADD COLUMN is_drop INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
+ALTER TABLE work_set ADD COLUMN is_assisted INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
+ALTER TABLE work_set ADD COLUMN assistance_kg REAL;
+ALTER TABLE work_set ADD COLUMN band_kg REAL;
+
+CREATE INDEX IF NOT EXISTS session_ended ON session(ended_at);
+CREATE INDEX IF NOT EXISTS session_routine ON session(routine_id);
+
+-- The timeline must carry every stored event (pr.md §6.27). B3's view omitted a set, so a
+-- logged set was invisible in the one place that promises nothing is. The view is part of
+-- the schema and has to be recreated by the migration, not only by a new database.
+DROP VIEW timeline;
+CREATE VIEW timeline AS
+SELECT
+    'observation' AS kind,
+    id AS entity_id,
+    local_date AS local_date,
+    happened_at AS happened_at,
+    recorded_at AS recorded_at,
+    source_id AS source_id,
+    type AS detail,
+    user_edited AS edited
+FROM observation
+UNION ALL
+SELECT
+    'session', id, local_date, happened_at, recorded_at, source_id, routine_id, 0
+FROM session
+UNION ALL
+SELECT
+    'work_set', work_set.id, session.local_date, work_set.happened_at,
+    work_set.recorded_at, work_set.source_id, work_set.exercise_id, 0
+FROM work_set
+JOIN session ON session.id = work_set.session_id
+UNION ALL
+SELECT
+    'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
+FROM entry
+UNION ALL
+SELECT
+    'measurement', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM measurement
+UNION ALL
+SELECT
+    'vital', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM vital
+UNION ALL
+SELECT
+    'meal', id, local_date, created_at, created_at, 'manual', kind, 0
+FROM meal
+UNION ALL
+SELECT
+    'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM note;

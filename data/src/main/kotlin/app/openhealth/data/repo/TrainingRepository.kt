@@ -19,12 +19,22 @@ import app.openhealth.data.db.Work_set
 import app.openhealth.data.mapping.requireConsistentDay
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
- * Layer 4 training objects. A set is written once; a correction keeps the original in
- * the change log rather than overwriting history. Deletes go through [TrashService].
+ * Layer 4 training objects (`pr.md` §6.5, §7.4). A set is written once; a correction keeps
+ * the original in the change log rather than overwriting history. Deletes go through
+ * [TrashService]. Every session write rebuilds the days it can affect, so a backfilled or
+ * moved workout recomputes the rollups without touching `recorded_at` (`pr.md` §7.3).
  */
 class TrainingRepository(private val db: OpenHealthDb) {
+    private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+
+    fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
+        rollupInvalidator = invalidator
+    }
+
     fun upsertExercise(exercise: Exercise) {
         db.trainingQueries.insertExercise(
             id = exercise.id,
@@ -135,6 +145,8 @@ class TrainingRepository(private val db: OpenHealthDb) {
         .mapNotNull { Muscle.fromKey(it) }
         .distinct()
 
+    // ------------------------------------------------------------------ routines
+
     fun upsertRoutine(routine: Routine) {
         db.trainingQueries.insertRoutine(
             id = routine.id,
@@ -146,10 +158,17 @@ class TrainingRepository(private val db: OpenHealthDb) {
             updatedAt = routine.updated_at,
             sourceId = routine.source_id,
             revision = routine.revision,
+            weekday = routine.weekday,
+            rotationIndex = routine.rotation_index,
+            favourite = routine.favourite,
+            progression = routine.progression,
+            targetRestSeconds = routine.target_rest_seconds,
         )
     }
 
     fun routines(): List<Routine> = db.trainingQueries.allRoutines().executeAsList()
+
+    fun routineById(id: String): Routine? = db.trainingQueries.routineById(id).executeAsOneOrNull()
 
     fun upsertRoutineExercise(entry: Routine_exercise) {
         db.trainingQueries.insertRoutineExercise(
@@ -161,7 +180,21 @@ class TrainingRepository(private val db: OpenHealthDb) {
             targetReps = entry.target_reps,
             targetWeightKg = entry.target_weight_kg,
             notes = entry.notes,
+            targetRir = entry.target_rir,
+            restSeconds = entry.rest_seconds,
+            progression = entry.progression,
+            groupIndex = entry.group_index,
         )
+    }
+
+    fun routineEntries(routineId: String): List<Routine_exercise> =
+        db.trainingQueries.routineEntries(routineId).executeAsList()
+
+    fun routineEntryById(id: String): Routine_exercise? =
+        db.trainingQueries.routineEntryById(id).executeAsOneOrNull()
+
+    fun deleteRoutineEntry(id: String) {
+        db.trainingQueries.deleteRoutineExercise(id)
     }
 
     fun exercisesInRoutine(routineId: String): List<Exercise> =
@@ -196,6 +229,8 @@ class TrainingRepository(private val db: OpenHealthDb) {
     fun routinesInProgramme(programmeId: String): List<Routine> =
         db.trainingQueries.routinesInProgramme(programmeId).executeAsList()
 
+    // ------------------------------------------------------------------ sessions
+
     fun upsertSession(session: Session) {
         requireConsistentDay(session.local_date, session.zone_id, session.happened_at)
         db.trainingQueries.insertSession(
@@ -217,16 +252,32 @@ class TrainingRepository(private val db: OpenHealthDb) {
             appVersion = session.app_version,
             revision = session.revision,
             updatedAt = session.updated_at,
+            title = session.title,
+            feeling = session.feeling,
+            perceivedEffort = session.perceived_effort,
         )
+        invalidate(LocalDate.parse(session.local_date))
     }
 
     fun sessionById(id: String): Session? = db.trainingQueries.sessionById(id).executeAsOneOrNull()
+
+    fun openSession(): Session? = db.trainingQueries.openSession().executeAsOneOrNull()
 
     fun sessionsForDay(date: LocalDate): List<Session> =
         db.trainingQueries.sessionsForDay(date.toString()).executeAsList()
 
     fun recentSessions(limit: Long): List<Session> =
         db.trainingQueries.recentSessions(limit).executeAsList()
+
+    fun finishedSessions(limit: Long): List<Session> =
+        db.trainingQueries.finishedSessions(limit).executeAsList()
+
+    fun sessionsBetween(from: LocalDate, toExclusive: LocalDate): List<Session> =
+        db.trainingQueries.sessionsBetween(from.toString(), toExclusive.toString())
+            .executeAsList()
+
+    fun lastFinishedSession(): Session? =
+        db.trainingQueries.lastFinishedSession().executeAsOneOrNull()
 
     fun upsertSessionExercise(entry: Session_exercise) {
         db.trainingQueries.insertSessionExercise(
@@ -235,11 +286,112 @@ class TrainingRepository(private val db: OpenHealthDb) {
             exerciseId = entry.exercise_id,
             position = entry.position,
             notes = entry.notes,
+            groupIndex = entry.group_index,
         )
     }
 
     fun sessionExercises(sessionId: String): List<Session_exercise> =
         db.trainingQueries.sessionExercises(sessionId).executeAsList()
+
+    fun deleteSessionExercise(id: String) {
+        db.trainingQueries.deleteSessionExercise(id)
+    }
+
+    /** Finishes an open session; the day's training rollups then include it. */
+    fun finishSession(id: String, endedAt: Long, nowMillis: Long): Boolean {
+        val session = sessionById(id) ?: return false
+        db.trainingQueries.updateSessionTiming(
+            id = id,
+            startedAt = session.started_at,
+            endedAt = endedAt,
+            localDate = session.local_date,
+            happenedAt = session.happened_at,
+            updatedAt = nowMillis,
+        )
+        invalidate(LocalDate.parse(session.local_date))
+        return true
+    }
+
+    fun updateSessionDetails(
+        id: String,
+        details: SessionDetails,
+        endedAt: Long?,
+        nowMillis: Long,
+    ): Boolean {
+        val session = sessionById(id) ?: return false
+        db.trainingQueries.updateSessionDetails(
+            id = id,
+            title = details.title,
+            notes = details.notes,
+            feeling = details.feeling,
+            perceivedEffort = details.perceivedEffort,
+            endedAt = endedAt,
+            updatedAt = nowMillis,
+        )
+        invalidate(LocalDate.parse(session.local_date))
+        return true
+    }
+
+    /**
+     * Moves a saved workout to another day (`pr.md` §6.5, §7.3). The session and every set
+     * keep their `recorded_at`; only `happened_at`, `completed_at` and the session's start
+     * and end move. Both days' rollups are rebuilt.
+     */
+    fun moveSession(id: String, newStartMillis: Long, zone: TimeZone, nowMillis: Long): Boolean {
+        val session = sessionById(id) ?: return false
+        val oldDate = LocalDate.parse(session.local_date)
+        val newDate = Instant.fromEpochMilliseconds(newStartMillis)
+            .toLocalDateTime(zone)
+            .date
+        val delta = newStartMillis - session.started_at
+        db.transaction {
+            db.trainingQueries.updateSessionTiming(
+                id = id,
+                startedAt = newStartMillis,
+                endedAt = session.ended_at?.plus(delta),
+                localDate = newDate.toString(),
+                happenedAt = newStartMillis,
+                updatedAt = nowMillis,
+            )
+            db.trainingQueries.setsForSession(id).executeAsList().forEach { set ->
+                db.trainingQueries.updateWorkSetTiming(
+                    id = set.id,
+                    completedAt = set.completed_at + delta,
+                    happenedAt = set.happened_at + delta,
+                )
+            }
+        }
+        invalidate(oldDate)
+        invalidate(newDate)
+        return true
+    }
+
+    fun setsForSession(sessionId: String): List<Work_set> =
+        db.trainingQueries.setsForSession(sessionId).executeAsList()
+
+    fun countSetsForSession(sessionId: String): Long =
+        db.trainingQueries.countSetsForSession(sessionId).executeAsOne()
+
+    fun setsForExercise(exerciseId: String): List<Work_set> =
+        db.trainingQueries.setsForExercise(exerciseId).executeAsList()
+
+    fun lastWorkSetForExercise(exerciseId: String): Work_set? =
+        db.trainingQueries.lastWorkSetForExercise(exerciseId).executeAsOneOrNull()
+
+    /** One row per session that trained an exercise, newest first. */
+    fun exerciseSessionSummary(exerciseId: String): List<ExerciseSessionRow> =
+        db.trainingQueries.exerciseSessionSummary(exerciseId).executeAsList().map { row ->
+            ExerciseSessionRow(
+                sessionId = row.session_id,
+                lastAt = row.last_at ?: 0L,
+                setCount = row.set_count,
+                topWeightKg = row.top_weight_kg ?: 0.0,
+                topReps = row.top_reps ?: 0L,
+            )
+        }
+
+    fun setsForExerciseBetween(exerciseId: String, from: Long, to: Long): List<Work_set> =
+        db.trainingQueries.setsForExerciseBetween(exerciseId, from, to).executeAsList()
 
     fun upsertSet(set: Work_set) {
         db.trainingQueries.insertWorkSet(
@@ -268,18 +420,83 @@ class TrainingRepository(private val db: OpenHealthDb) {
             device = set.device,
             appVersion = set.app_version,
             revision = set.revision,
+            isDrop = set.is_drop,
+            isAssisted = set.is_assisted,
+            assistanceKg = set.assistance_kg,
+            bandKg = set.band_kg,
         )
+        sessionDate(set.session_id)?.let(::invalidate)
     }
 
     fun setById(id: String): Work_set? = db.trainingQueries.workSetById(id).executeAsOneOrNull()
 
-    fun setsForSession(sessionId: String): List<Work_set> =
-        db.trainingQueries.setsForSession(sessionId).executeAsList()
-
-    fun setsForExerciseBetween(exerciseId: String, from: Long, to: Long): List<Work_set> =
-        db.trainingQueries.setsForExerciseBetween(exerciseId, from, to).executeAsList()
+    /** Corrects a set's values; `recorded_at` and the original stay where they were. */
+    fun updateSet(id: String, values: SetValues): Boolean {
+        val set = setById(id) ?: return false
+        db.trainingQueries.updateWorkSet(
+            id = id,
+            weightKg = values.weightKg,
+            reps = values.reps,
+            rir = values.rir,
+            rpe = values.rpe,
+            isWarmup = values.isWarmup,
+            isBackoff = values.isBackoff,
+            isFailure = values.isFailure,
+            isBodyweight = values.isBodyweight,
+            isDrop = values.isDrop,
+            isAssisted = values.isAssisted,
+            assistanceKg = values.assistanceKg,
+            bandKg = values.bandKg,
+            tempo = values.tempo,
+            restSeconds = values.restSeconds,
+        )
+        sessionDate(set.session_id)?.let(::invalidate)
+        return true
+    }
 
     fun countSets(): Long = db.trainingQueries.countWorkSets().executeAsOne()
 
     fun countExercises(): Long = db.trainingQueries.countExercises().executeAsOne()
+
+    private fun sessionDate(sessionId: String): LocalDate? =
+        sessionById(sessionId)?.local_date?.let(LocalDate::parse)
+
+    private fun invalidate(date: LocalDate) {
+        rollupInvalidator?.invoke(date)
+    }
 }
+
+/** The editable fields of a session, kept together so the update has one parameter. */
+data class SessionDetails(
+    val title: String?,
+    val notes: String?,
+    val feeling: String?,
+    val perceivedEffort: Double?,
+)
+
+/** The editable values of a set; `recorded_at` and the original are never among them. */
+data class SetValues(
+    val weightKg: Double,
+    val reps: Long,
+    val rir: Double?,
+    val rpe: Double?,
+    val isWarmup: Boolean,
+    val isBackoff: Boolean,
+    val isFailure: Boolean,
+    val isBodyweight: Boolean,
+    val isDrop: Boolean,
+    val isAssisted: Boolean,
+    val assistanceKg: Double?,
+    val bandKg: Double?,
+    val tempo: String?,
+    val restSeconds: Long?,
+)
+
+/** One exercise's result in one session, for the per-exercise history list. */
+data class ExerciseSessionRow(
+    val sessionId: String,
+    val lastAt: Long,
+    val setCount: Long,
+    val topWeightKg: Double,
+    val topReps: Long,
+)
