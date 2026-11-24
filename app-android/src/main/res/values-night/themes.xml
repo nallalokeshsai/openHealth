@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The dark sibling of the window frame (DESIGN.md §12). Only the system bar icons
+      differ; the colours themselves come from values-night/colors.xml.
+    -->
+    <style name="Theme.OpenHealth" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/oh_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

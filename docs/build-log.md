@@ -793,9 +793,9 @@ hollow (`BUILD-ROADMAP.md` §B3).
 
 | Command | Result |
 |---|---|
-| `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL** from a cleaned tree: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint, 195 JVM tests (78 `:core`, 61 `:data`, 55 `:ui`, 1 benchmark) and the debug APK. |
-| `./gradlew :core:test :data:test :ui:testDebugUnitTest :tools:fixtures:test --rerun-tasks` | **BUILD SUCCESSFUL**, 195 tests, no failures. `:ui` verifies 136 goldens (104 B1 + 32 B3). |
-| `./gradlew :app-android:connectedDebugAndroidTest` on the physical phone | **BUILD SUCCESSFUL**: 7 tests, 6 B3 scenarios (the four exits plus the under-16 block and the quick-add weight replacement) and B2's `EncryptedDatabaseTest` (persistence, encryption, reopen, and the foreign-key assertion B2 could not run). |
+| `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL** from a cleaned tree: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint, 197 JVM tests (78 `:core`, 63 `:data`, 55 `:ui`, 1 benchmark) and the debug APK. |
+| `./gradlew :core:test :data:test :ui:testDebugUnitTest :tools:fixtures:test --rerun-tasks` | **BUILD SUCCESSFUL**, 197 tests, no failures. `:ui` verifies 136 goldens (104 B1 + 32 B3). |
+| `./gradlew :app-android:connectedDebugAndroidTest` on the physical phone | **BUILD SUCCESSFUL**: 11 tests, 10 B3 scenarios (the four exits plus the under-16 block and the quick-add weight replacement) and B2's `EncryptedDatabaseTest` (persistence, encryption, reopen, and the foreign-key assertion B2 could not run). |
 | `./gradlew :app-android:installDebug` and cold launch | `Status: ok`, `LaunchState: COLD`, onboarding renders; no `AndroidRuntime` entry from this build. |
 | `adb shell am start -W` after `force-stop`, three runs | `TotalTime` **1008–1043 ms** in the **debug** build, inside the 1.5 s budget. The store opens lazily on IO after the first frame, so the launch path is Compose + Koin only. |
 | Demo mode on the phone ("Try with sample data") | 90 days from the corpus; Today shows the sample-data line, readiness/steps/energy empty states and the demo profile; no crash. |
@@ -836,7 +836,7 @@ confirmed in the code or a golden, then fixed in this phase and re-verified.
 | Finding | Fix |
 |---|---|
 | Quick-add weight wrote a layer-4 measurement, which the rollup skips when the day already has a weight observation, so a second weigh-in was silently ignored | Weight is written as a `WEIGHT` observation (LAST wins). The new `quickAddWeightReplacesTheDaysWeight` test proves 81 then 82 replace the day's value |
-| Water was a zero-length interval while `WATER` is declared `DAILY_TOTAL`; a later source with a total would drop every glass | A glass adds to the day's manual total and writes that total, so `last total wins` keeps every drink and undo reverts one |
+| Water was a zero-length interval while `WATER` is declared `DAILY_TOTAL`; a later source with a total would drop every glass | Each glass is one `end = start` part of the manual source; the rollup sums that source's parts and a daily total from any one source replaces only that source's intervals (tested in `RollupEngineTest`) |
 | Tapping a recent weight row converted canonical kg through the imperial converter again, storing 36.3 kg for 80 kg | The recent value is parsed as canonical kg; the weight form labels the profile's unit |
 | The encrypted store opened during composition on the main thread, and a Keystore failure crashed out of `viewModel` | `AppViewModel` no longer touches the store in its constructor; the store opens on IO in `rebuild`, failures set `fatal` and show the startup screen. Cold start is now 1008–1043 ms |
 | 16–17 could select Lose fat in Settings and could set a goal weight/target date | Settings filters the goal and rejects it in the save; `visibleSteps` hides GoalWeight while under 18 |
@@ -855,6 +855,23 @@ confirmed in the code or a golden, then fixed in this phase and re-verified.
 
 **Review fixes shipped in `2864314`.** The goldens were re-recorded after the fixes and
 verify in `check`; the instrumented suite was re-run on the phone (7/7).
+
+**Independent Claude audit (same day).** A headless `claude -p` pass read the contract and
+the B3 diff, fixed 20 more defects in code and tests, and left three owner decisions and
+five known gaps. Its fixes were: water as per-glass parts with a per-source total rule;
+the 16–17 rule in `saveProfile`; out-of-range tape values and comma-decimal body fat/RHR/BP;
+undo/restore engine refresh and double-tap repeat; the profile sheet reading the display
+policy; Vitals/module and units-vs-weight-neutral leaks; empty export passphrases and
+passphrase zeroing; export/restore busy feedback; the startup retry and light window;
+timeline §7.3 tags and "Entered by you"; locale number formatting; and the timeline
+provenance copy. Reports: **197 JVM tests**, **11/11 connected**. Owner decisions: the
+`indigo` Edited tag's contrast against §11.1 (rendered neutral), the raised Train disc's
+selected state (now a stroke-weight change, no outside border), and the contract wording
+for the water shape recorded in ADR 0007 §9. Known gaps: the `timeline` view/repository
+put `entry.source_kind` in the source column and omit `work_set` (B5/B6 migration);
+`TrashService.preview` has untranslated type names (data has no resources); export/restore
+have no time budget; `rebuild()` refreshes every model; Today's demo numbers have no
+provenance sheet.
 
 **Deliberately not changed, and why:** Today's demo numbers do not open a provenance
 sheet yet; the real cards replace them in B5–B9 and the timeline already exposes their

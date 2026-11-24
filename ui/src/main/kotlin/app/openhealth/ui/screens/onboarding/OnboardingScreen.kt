@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -24,6 +25,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import app.openhealth.core.formula.ActivityLevel
 import app.openhealth.core.formula.SexAtBirth
@@ -65,6 +73,7 @@ fun OnboardingScreen(
     issue: OnboardingIssue?,
     ageBlocked: Boolean,
     weightLossAllowed: Boolean,
+    saving: Boolean = false,
     onChange: (OnboardingAnswers) -> Unit,
     onBack: () -> Unit,
     onNext: () -> Unit,
@@ -115,7 +124,8 @@ fun OnboardingScreen(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = OhTheme.space.s6),
+                .padding(horizontal = OhTheme.space.s6)
+                .padding(bottom = OhTheme.dims.screenBottomReserve),
         ) {
             Spacer(Modifier.height(OhTheme.space.s7))
             when (step) {
@@ -134,6 +144,7 @@ fun OnboardingScreen(
                     },
                     onChange = { onChange(answers.copy(height = it)) },
                     issue = issue,
+                    header = true,
                 )
                 OnboardingStep.Weight -> MeasureStep(
                     title = stringResource(R.string.onb_weight_title),
@@ -146,6 +157,7 @@ fun OnboardingScreen(
                     },
                     onChange = { onChange(answers.copy(weight = it)) },
                     issue = issue,
+                    header = true,
                 )
                 OnboardingStep.Units -> UnitsStep(answers, onChange)
                 OnboardingStep.Goal -> GoalStep(answers, onChange, weightLossAllowed)
@@ -178,6 +190,7 @@ fun OnboardingScreen(
                     unit = stringResource(R.string.unit_bpm),
                     onChange = { onChange(answers.copy(restingHeartRate = it)) },
                     issue = issue,
+                    header = true,
                 )
                 OnboardingStep.BloodPressure -> BloodPressureStep(answers, onChange, issue)
                 OnboardingStep.Measurements -> MeasurementsStep(answers, onChange, issue)
@@ -199,7 +212,7 @@ fun OnboardingScreen(
                 OnboardingStep.GoalWeight -> GoalWeightStep(answers, onChange, issue)
                 OnboardingStep.Finish -> FinishStep()
             }
-            if (issue == OnboardingIssue.REQUIRED) {
+            if (issue == OnboardingIssue.REQUIRED || issue == OnboardingIssue.GOAL_REQUIRED) {
                 Spacer(Modifier.height(OhTheme.space.s5))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OhIcon(
@@ -210,9 +223,18 @@ fun OnboardingScreen(
                     )
                     Spacer(Modifier.width(OhTheme.space.s1))
                     Text(
-                        text = stringResource(R.string.onb_required),
+                        text = stringResource(
+                            if (issue == OnboardingIssue.GOAL_REQUIRED) {
+                                R.string.onb_goal_required
+                            } else {
+                                R.string.onb_required
+                            },
+                        ),
                         style = OhTheme.type.footnote,
                         color = OhTheme.colors.redInk,
+                        modifier = Modifier.semantics {
+                            liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                        },
                     )
                 }
             }
@@ -231,6 +253,7 @@ fun OnboardingScreen(
                         stringResource(R.string.onb_continue)
                     },
                     onClick = onNext,
+                    enabled = !saving,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -295,6 +318,7 @@ private fun NameStep(
         value = answers.name,
         onValueChange = { onChange(answers.copy(name = it)) },
         placeholder = stringResource(R.string.onb_name_placeholder),
+        contentDescription = stringResource(R.string.onb_name_title),
         error = if (issue == OnboardingIssue.NAME_REQUIRED) {
             stringResource(R.string.onb_name_required)
         } else {
@@ -318,6 +342,7 @@ private fun BirthDateStep(
         value = answers.birthDate,
         onValueChange = { onChange(answers.copy(birthDate = it)) },
         placeholder = stringResource(R.string.onb_birth_placeholder),
+        contentDescription = stringResource(R.string.onb_birth_title),
         error = when (issue) {
             OnboardingIssue.DATE_INVALID -> stringResource(R.string.onb_birth_invalid)
             OnboardingIssue.DATE_UNDER_SIXTEEN -> stringResource(R.string.onb_birth_under_sixteen)
@@ -570,7 +595,9 @@ private fun ModulesStep(answers: OnboardingAnswers, onChange: (OnboardingAnswers
     )
     Spacer(Modifier.height(OhTheme.space.s7))
     ChoiceGroup(
-        choices = ModulePreset.entries.map { Choice(it.key, it.label(), it.body()) },
+        choices = ModulePreset.entries
+            .filterNot { it == ModulePreset.CUSTOM }
+            .map { Choice(it.key, it.label(), it.body()) },
         selectedKey = answers.preset.key,
         onSelect = { key ->
             ModulePreset.fromKey(key)?.let { onChange(answers.copy(preset = it)) }
@@ -597,6 +624,7 @@ private fun BodyFatStep(
         unit = stringResource(R.string.unit_percent),
         onChange = { onChange(answers.copy(bodyFat = it)) },
         issue = issue,
+        header = true,
     )
     Spacer(Modifier.height(OhTheme.space.s5))
     Text(
@@ -775,6 +803,7 @@ private fun GoalWeightStep(
         value = answers.goalDate,
         onValueChange = { onChange(answers.copy(goalDate = it)) },
         placeholder = stringResource(R.string.onb_goal_date_placeholder),
+        contentDescription = stringResource(R.string.onb_goal_date_title),
         error = if (issue == OnboardingIssue.DATE_INVALID) {
             stringResource(R.string.onb_birth_invalid)
         } else {
@@ -834,6 +863,7 @@ private fun QuestionHeader(title: String, body: String?) {
         text = title,
         style = OhTheme.type.large.copy(fontWeight = OhWeight.bold),
         color = OhTheme.colors.label,
+        modifier = Modifier.semantics { heading() },
     )
     if (body != null) {
         Spacer(Modifier.height(OhTheme.space.s5))
@@ -845,13 +875,17 @@ private data class Choice(val key: String, val label: String, val body: String?)
 
 @Composable
 private fun ChoiceGroup(choices: List<Choice>, selectedKey: String?, onSelect: (String) -> Unit) {
-    OhInsetGroup {
+    OhInsetGroup(modifier = Modifier.selectableGroup()) {
         choices.forEachIndexed { index, choice ->
             Box(modifier = Modifier.fillMaxWidth()) {
                 OhRow(
                     title = choice.label,
                     subtitle = choice.body,
                     showDivider = index > 0,
+                    modifier = Modifier.semantics {
+                        selected = choice.key == selectedKey
+                        role = androidx.compose.ui.semantics.Role.RadioButton
+                    },
                     onClick = { onSelect(choice.key) },
                 )
                 if (choice.key == selectedKey) {
@@ -882,13 +916,23 @@ private fun MeasureStep(
     unit: String,
     onChange: (String) -> Unit,
     issue: OnboardingIssue?,
+    header: Boolean = false,
 ) {
-    Text(text = title, style = OhTheme.type.subhead, color = OhTheme.colors.label2)
+    Text(
+        text = title,
+        style = if (header) {
+            OhTheme.type.large.copy(fontWeight = OhWeight.bold)
+        } else {
+            OhTheme.type.subhead
+        },
+        color = if (header) OhTheme.colors.label else OhTheme.colors.label2,
+    )
     Spacer(Modifier.height(OhTheme.space.s1))
     OhTextField(
         value = value,
         onValueChange = onChange,
-        placeholder = unit,
+        placeholder = "",
+        contentDescription = title,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         trailing = {
             Text(text = unit, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
@@ -919,6 +963,7 @@ private fun TextStep(
         value = value,
         onValueChange = onChange,
         singleLine = !multiline,
+        contentDescription = title,
     )
 }
 

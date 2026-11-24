@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -95,6 +96,7 @@ fun OhSheet(
             .clip(RoundedCornerShape(topStart = OhTheme.radius.xl, topEnd = OhTheme.radius.xl))
             .background(colors.bgEl)
             .windowInsetsPadding(WindowInsets.navigationBars)
+            .imePadding()
             .padding(
                 start = OhTheme.space.s6,
                 end = OhTheme.space.s6,
@@ -395,7 +397,7 @@ fun OhToast(
             Spacer(Modifier.width(OhTheme.space.s2))
             Box(
                 modifier = Modifier
-                    .size(dims.iconButton)
+                    .size(dims.touchTarget)
                     .ohClickable(
                         rememberInteraction(),
                         role = androidx.compose.ui.semantics.Role.Button,
@@ -422,7 +424,7 @@ private fun ToastAction(label: String, onClick: () -> Unit, accent: Boolean) {
     val type = OhTheme.type
     Box(
         modifier = Modifier
-            .height(OhTheme.dims.iconButton)
+            .height(OhTheme.dims.touchTarget)
             .ohClickable(
                 rememberInteraction(),
                 role = androidx.compose.ui.semantics.Role.Button,

@@ -43,6 +43,8 @@ data class TimelineRowModel(
     val sensitive: Boolean = false,
     val excludable: Boolean = false,
     val imported: Boolean = false,
+    val sourceId: String = "",
+    val excluded: Boolean = false,
 )
 
 data class TimelineDayModel(val date: LocalDate, val rows: List<TimelineRowModel>)

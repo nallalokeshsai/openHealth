@@ -11,6 +11,8 @@ enum class ThemeChoice { SYSTEM, DARK, LIGHT }
 
 /** A transient result the settings screen states in one line, never a toast alone. */
 enum class SettingsMessage {
+    /** A long local operation is running: encryption, not the network. */
+    WORKING,
     EXPORT_SAVED,
     EXPORT_FAILED,
     RESTORE_DONE,
@@ -45,7 +47,11 @@ data class SettingsState(
     val hasRestoreSnapshot: Boolean,
     val modules: Set<HealthModule>,
     val preset: ModulePreset,
+    /** The switch's own state; it is the control, not a display decision. */
     val weightNeutral: Boolean,
+
+    /** What may be shown. No screen asks the switch instead (`pr.md` §6.25). */
+    val displayPolicy: app.openhealth.core.preferences.DisplayPolicy,
     val theme: ThemeChoice,
     val accent: OhAccent,
     val appLock: Boolean,

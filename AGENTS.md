@@ -215,8 +215,8 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B3 Shell and onboarding** (2026-11-23); next is **B4 Body
   model and exercise data**.
 - Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `build/b3-shell-and-onboarding`; **195 JVM tests** (78 `:core`, 61 `:data`, 55 `:ui`,
-  1 benchmark) and **7 instrumented tests** pass on the owner's physical phone,
+  `build/b3-shell-and-onboarding`; **197 JVM tests** (78 `:core`, 63 `:data`, 55 `:ui`,
+  1 benchmark) and **11 instrumented tests** pass on the owner's physical phone,
   including B2's foreign-key assertion. `:ui` holds the B1 design system plus the B3
   screens and **136 goldens** (104 component, 32 screen) in dark, light, 200 % text and
   RTL. `:core` adds the closed 13-module set and presets, the one `DisplayPolicy`, the

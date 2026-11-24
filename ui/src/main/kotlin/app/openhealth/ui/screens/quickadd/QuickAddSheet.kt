@@ -44,7 +44,13 @@ import kotlinx.datetime.toLocalDateTime
 enum class QuickAddMode { TILES, NOTE, WATER, WEIGHT, FOOD, SET, VITALS }
 
 /** A recently logged item, offered first (`pr.md` §6.27). */
-data class QuickAddRecent(val action: QuickAction, val title: String, val detail: String)
+data class QuickAddRecent(
+    val action: QuickAction,
+    val title: String,
+    val detail: String,
+    val value: Double,
+    val unit: app.openhealth.core.units.UcumUnit,
+)
 
 /**
  * The global quick-add sheet of `DESIGN.md` §14.2: a 3 × 2 grid of 84 dp tiles, then
@@ -210,7 +216,6 @@ private fun Tiles(
                     title = item.title,
                     subtitle = item.detail,
                     showDivider = index > 0,
-                    showChevron = true,
                     onClick = { onRepeat(item) },
                 )
             }
@@ -241,6 +246,7 @@ private fun NoteForm(
         value = note,
         onValueChange = onNoteChange,
         placeholder = stringResource(R.string.quick_note_placeholder),
+        contentDescription = stringResource(R.string.quick_note),
         singleLine = false,
     )
     Spacer(Modifier.height(OhTheme.space.s5))
@@ -290,6 +296,7 @@ private fun WeightForm(
         value = weight,
         onValueChange = onWeightChange,
         placeholder = stringResource(R.string.quick_weight_value),
+        contentDescription = stringResource(R.string.quick_weight),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         error = if (invalid) stringResource(R.string.quick_weight_invalid) else null,
         trailing = {
@@ -341,8 +348,10 @@ private fun WhenSection(
     if (expanded) {
         Spacer(Modifier.height(OhTheme.space.s3))
         OhChipStrip {
+            val today = kotlin.time.Clock.System.now()
+                .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
             for (offset in 0 until WHEN_DAYS) {
-                val day = date.minusDays(offset)
+                val day = today.minusDays(offset)
                 OhChip(
                     text = shortDate(day),
                     selected = day == date,
@@ -387,9 +396,11 @@ private fun whenLabel(date: LocalDate, hour: Int): String {
 private fun LocalDate.minusDays(days: Int): LocalDate =
     this + kotlinx.datetime.DatePeriod(days = -days)
 
-private fun previousHour(hour: Int): Int = (hour + HOURS_PER_DAY - 1) % HOURS_PER_DAY
+// The backdate hour does not wrap: stepping past midnight would move the entry to
+// another day silently, and the holder caps today at the current hour.
+private fun previousHour(hour: Int): Int = (hour - 1).coerceAtLeast(0)
 
-private fun nextHour(hour: Int): Int = (hour + 1) % HOURS_PER_DAY
+private fun nextHour(hour: Int): Int = (hour + 1).coerceAtMost(HOURS_PER_DAY - 1)
 
 private val WATER_AMOUNTS = listOf(GLASS_SMALL, GLASS_CUP, GLASS_BOTTLE, GLASS_LARGE)
 private const val WHEN_DAYS = 7

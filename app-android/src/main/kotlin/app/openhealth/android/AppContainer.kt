@@ -46,6 +46,7 @@ class AppContainer(
     private val storeLazy = lazy {
         val local = LocalStore(opened.value.driver, opened.value.db)
         ensureManualSource(local)
+        local.trash.purgeExpired()
         local
     }
     val store: LocalStore get() = storeLazy.value
@@ -123,6 +124,7 @@ class AppContainer(
     fun restorePreRestoreSnapshot(): Boolean = runCatching {
         val bytes = snapshotFile().readBytes()
         export.restore(bytes, snapshotPassphrase())
+        snapshotFile().delete()
         true
     }.getOrDefault(false)
 

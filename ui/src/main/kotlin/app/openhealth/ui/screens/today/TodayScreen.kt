@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,12 +20,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.SensitiveMetric
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhCardHeader
+import app.openhealth.ui.components.OhInsetGroup
+import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhStatTile
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
@@ -33,9 +38,12 @@ import app.openhealth.ui.screens.common.OhEmptyState
 import app.openhealth.ui.screens.common.OhQuickTile
 import app.openhealth.ui.screens.common.OhScreen
 import app.openhealth.ui.screens.common.OhSectionTitle
+import app.openhealth.ui.screens.common.number
+import app.openhealth.ui.screens.common.observedLocale
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
-import kotlin.math.roundToLong
+import app.openhealth.ui.theme.ltrFigures
+import app.openhealth.ui.theme.tabular
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
@@ -52,6 +60,7 @@ fun TodayScreen(
     model: TodayModel,
     displayPolicy: app.openhealth.core.preferences.DisplayPolicy,
     onQuickAdd: (QuickAction) -> Unit,
+    onOpenTimeline: () -> Unit,
     onOpenTrain: () -> Unit,
     onOpenNutrition: () -> Unit,
     modifier: Modifier = Modifier,
@@ -100,6 +109,16 @@ fun TodayScreen(
             onQuickAdd = onQuickAdd,
         )
         Spacer(Modifier.height(OhTheme.space.s7))
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.timeline_title),
+                subtitle = stringResource(R.string.today_timeline_body),
+                leadingIcon = OhIcons.timer,
+                showChevron = true,
+                onClick = onOpenTimeline,
+            )
+        }
+        Spacer(Modifier.height(OhTheme.space.s7))
     }
 }
 
@@ -117,6 +136,7 @@ private fun TodayHeader(model: TodayModel) {
             Text(
                 text = stringResource(
                     when (model.greeting) {
+                        Greeting.NIGHT -> R.string.today_greeting_night
                         Greeting.MORNING -> R.string.today_greeting_morning
                         Greeting.AFTERNOON -> R.string.today_greeting_afternoon
                         Greeting.EVENING -> R.string.today_greeting_evening
@@ -124,6 +144,7 @@ private fun TodayHeader(model: TodayModel) {
                 ),
                 style = type.large.copy(fontWeight = OhWeight.bold),
                 color = colors.label,
+                modifier = Modifier.semantics { heading() },
             )
             Spacer(Modifier.height(OhTheme.space.s1))
             Text(
@@ -146,7 +167,7 @@ private fun TodayHeader(model: TodayModel) {
 private fun DemoLabel() {
     Text(
         text = stringResource(R.string.today_sample_data),
-        style = OhTheme.type.caption,
+        style = OhTheme.type.footnote,
         color = OhTheme.colors.label2,
         modifier = Modifier.padding(bottom = OhTheme.space.s3),
     )
@@ -186,8 +207,9 @@ private fun ReadinessCard(score: Int?) {
         } else {
             Spacer(Modifier.height(OhTheme.space.s5))
             Text(
-                text = score.toString(),
-                style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold),
+                text = number(score.toDouble()),
+                style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold)
+                    .tabular().ltrFigures(),
                 color = OhTheme.colors.label,
             )
         }
@@ -202,14 +224,16 @@ private fun WeekStrip(today: LocalDate, onStart: () -> Unit) {
             title = stringResource(R.string.today_week_title),
         )
         Spacer(Modifier.height(OhTheme.space.s5))
-        val monday = today - kotlinx.datetime.DatePeriod(days = today.dayOfWeek.isoDayNumber - 1)
+        val firstDay = java.time.temporal.WeekFields.of(observedLocale()).firstDayOfWeek.value
+        val offset = (today.dayOfWeek.isoDayNumber - firstDay + DAYS_IN_WEEK) % DAYS_IN_WEEK
+        val weekStart = today - kotlinx.datetime.DatePeriod(days = offset)
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 repeat(DAYS_IN_WEEK) { index ->
-                    val day = monday.plusDays(index)
+                    val day = weekStart.plusDays(index)
                     WeekDay(day = day, isToday = day == today)
                 }
             }
@@ -229,7 +253,7 @@ private fun WeekDay(day: LocalDate, isToday: Boolean) {
     val colors = OhTheme.colors
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = weekdayInitial(day),
+            text = weekdayLabel(day),
             style = OhTheme.type.caption2,
             color = colors.label2,
         )
@@ -276,7 +300,7 @@ private fun EnergyCard(energyKcal: Double?, onLogFood: () -> Unit) {
             Spacer(Modifier.height(OhTheme.space.s5))
             OhStatTile(
                 label = stringResource(R.string.today_energy_in),
-                value = energyKcal.roundToInt().toString(),
+                value = number(energyKcal),
                 unit = stringResource(R.string.unit_kcal),
             )
         }
@@ -299,8 +323,9 @@ private fun StepsCard(steps: Int?) {
         } else {
             Spacer(Modifier.height(OhTheme.space.s5))
             Text(
-                text = steps.toString(),
-                style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold),
+                text = number(steps.toDouble()),
+                style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold)
+                    .tabular().ltrFigures(),
                 color = OhTheme.colors.label,
             )
         }
@@ -337,13 +362,23 @@ private fun WeightCard(
             } else {
                 weightKg
             }
-            Text(
-                text = shown.oneDecimal() + " " + stringResource(
-                    if (imperial) R.string.unit_pounds else R.string.unit_kg,
-                ),
-                style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold),
-                color = OhTheme.colors.label,
-            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = number(shown, decimals = 1),
+                    style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold)
+                        .tabular()
+                        .ltrFigures(),
+                    color = OhTheme.colors.label,
+                )
+                Spacer(Modifier.width(OhTheme.space.s0))
+                Text(
+                    text = stringResource(
+                        if (imperial) R.string.unit_pounds else R.string.unit_kg,
+                    ),
+                    style = OhTheme.type.subhead,
+                    color = OhTheme.colors.label2,
+                )
+            }
         }
     }
 }
@@ -405,16 +440,18 @@ private fun QuickActions(
 private fun LocalDate.plusDays(days: Int): LocalDate =
     this + kotlinx.datetime.DatePeriod(days = days)
 
-private fun weekdayInitial(day: LocalDate): String {
-    val symbols = java.text.DateFormatSymbols(java.util.Locale.getDefault())
-    val index = day.dayOfWeek.isoDayNumber % DAYS_IN_WEEK + SUNDAY_INDEX
-    return symbols.shortWeekdays.getOrNull(index)?.take(1).orEmpty()
+@Composable
+private fun weekdayLabel(day: LocalDate): String {
+    val javaDate = java.time.LocalDate.of(
+        day.year,
+        day.month.ordinal + MONTH_OFFSET,
+        day.dayOfMonth,
+    )
+    return javaDate.format(
+        java.time.format.DateTimeFormatter.ofPattern("EE", observedLocale()),
+    )
 }
 
-private fun Double.oneDecimal(): String = String.format(java.util.Locale.getDefault(), "%.1f", this)
-
-private fun Double.roundToInt(): Long = this.roundToLong()
-
 private const val DAYS_IN_WEEK = 7
-private const val SUNDAY_INDEX = 1
+private const val MONTH_OFFSET = 1
 private const val QUICK_COLUMNS = 3

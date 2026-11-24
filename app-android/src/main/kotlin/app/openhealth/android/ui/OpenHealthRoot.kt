@@ -6,7 +6,10 @@ import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -20,6 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -40,7 +46,6 @@ import app.openhealth.ui.components.OhToast
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.screens.lock.LockScreen
 import app.openhealth.ui.screens.onboarding.OnboardingScreen
-import app.openhealth.ui.screens.quickadd.QuickAddRecent
 import app.openhealth.ui.screens.quickadd.QuickAddSheet
 import app.openhealth.ui.screens.roots.NutritionRoot
 import app.openhealth.ui.screens.roots.StatsRoot
@@ -82,13 +87,14 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
         SystemBars(dark = dark)
         Box(modifier = Modifier.fillMaxSize().background(OhTheme.colors.bg)) {
             when {
-                state.fatal -> StartupErrorScreen()
+                state.fatal -> StartupErrorScreen(onRetry = viewModel::retry)
                 !state.loaded -> Loading()
                 state.locked -> {
                     val activity = LocalContext.current.findActivity()
                     LockScreen(
                         message = state.lockMessage,
                         onUnlock = { activity?.let(viewModel::unlock) },
+                        onDisableLock = viewModel::disableAppLock,
                     )
                 }
                 !state.onboardingComplete -> OnboardingScreen(
@@ -97,6 +103,7 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
                     issue = state.onboarding.issue,
                     ageBlocked = state.onboarding.ageBlocked,
                     weightLossAllowed = state.onboarding.weightLossAllowed,
+                    saving = state.onboarding.saving,
                     onChange = viewModel::onOnboardingChange,
                     onBack = viewModel::onOnboardingBack,
                     onNext = viewModel::onOnboardingNext,
@@ -175,6 +182,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         model = today,
                         displayPolicy = state.preferences.displayPolicy,
                         onQuickAdd = viewModel::openQuickAdd,
+                        onOpenTimeline = { nav.navigate(TimelineRoute) },
                         onOpenTrain = { goTab(2) },
                         onOpenNutrition = { viewModel.openQuickAdd(QuickAction.FOOD) },
                     )
@@ -189,12 +197,14 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
+                // The Body module hides its surfaces, and weight-neutral hides the
+                // value: both gates, exactly as Today applies them.
+                val weightOffered = HealthModule.BODY in state.preferences.modules &&
+                    state.preferences.displayPolicy.shows(
+                        app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+                    )
                 VitalsRoot(
-                    onLogWeight = if (
-                        state.preferences.displayPolicy.shows(
-                            app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
-                        )
-                    ) {
+                    onLogWeight = if (weightOffered) {
                         { viewModel.openQuickAdd(QuickAction.WEIGHT) }
                     } else {
                         null
@@ -258,6 +268,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onRestore = viewModel::restore,
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
+                    onExternalActivity = viewModel::suppressLockForExternalActivity,
                     onDeleteAllNotes = viewModel::deleteAllNotes,
                     onEmptyTrash = viewModel::emptyTrash,
                     onUndoRestore = viewModel::undoLastRestore,
@@ -294,7 +305,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
         allowWeight = state.preferences.displayPolicy.shows(
             app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
         ),
-        recent = recentItems(state),
+        recent = state.recent,
         note = state.quickAdd.note,
         waterMl = state.quickAdd.waterMl,
         weight = state.quickAdd.weight,
@@ -324,31 +335,6 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
 }
 
 @Composable
-private fun recentItems(state: AppState): List<QuickAddRecent> {
-    val rows = state.timeline?.days?.flatMap { it.rows }.orEmpty()
-    val showWeight = state.preferences.displayPolicy.shows(
-        app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
-    )
-    return rows
-        .filter {
-            it.kind == app.openhealth.ui.screens.timeline.TimelineKind.WATER ||
-                (showWeight && it.kind == app.openhealth.ui.screens.timeline.TimelineKind.WEIGHT)
-        }
-        .take(RECENT_LIMIT)
-        .map { row ->
-            QuickAddRecent(
-                action = if (row.kind == app.openhealth.ui.screens.timeline.TimelineKind.WATER) {
-                    QuickAction.WATER
-                } else {
-                    QuickAction.WEIGHT
-                },
-                title = row.title,
-                detail = row.valueText.orEmpty(),
-            )
-        }
-}
-
-@Composable
 private fun RootFrame(
     index: Int,
     date: LocalDate,
@@ -370,6 +356,7 @@ private fun RootFrame(
         onQuickAdd = onQuickAdd,
         onSettings = onSettings,
         onDateClick = onDateClick,
+        dateActionLabel = stringResource(UiR.string.timeline_title),
     ) {
         content()
     }
@@ -395,9 +382,14 @@ private fun Loading() {
     }
 }
 
+/**
+ * The startup error. It stands on its own (the activity shows it before the container
+ * exists), so it brings its own theme, and that theme follows the system rather than
+ * pinning dark over a light device (`DESIGN.md` §12).
+ */
 @Composable
-fun StartupErrorScreen() {
-    OhTheme(dark = true) {
+fun StartupErrorScreen(onRetry: () -> Unit = {}) {
+    OhTheme(dark = isSystemInDarkTheme()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -405,11 +397,25 @@ fun StartupErrorScreen() {
                 .padding(OhTheme.space.s7),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = stringResource(R.string.startup_error_body),
-                style = OhTheme.type.footnote,
-                color = OhTheme.colors.label2,
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = stringResource(R.string.startup_error_title),
+                    style = OhTheme.type.title3,
+                    color = OhTheme.colors.label,
+                )
+                Spacer(Modifier.height(OhTheme.space.s3))
+                Text(
+                    text = stringResource(R.string.startup_error_body),
+                    style = OhTheme.type.footnote,
+                    color = OhTheme.colors.label2,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                Spacer(Modifier.height(OhTheme.space.s7))
+                app.openhealth.ui.components.OhButton(
+                    text = stringResource(R.string.startup_error_retry),
+                    onClick = onRetry,
+                )
+            }
         }
     }
 }
@@ -436,8 +442,6 @@ private fun Context.findActivity(): Activity? {
     }
     return null
 }
-
-private const val RECENT_LIMIT = 3
 
 private val TAB_ROUTES = listOf(
     TodayRoute,

@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -638,7 +639,7 @@ fun OhTextField(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .ohFocusRing(focused, radius)
+                .ohFocusRing(focused && error == null, radius)
                 .heightIn(min = dims.fieldHeight)
                 .alpha(if (enabled) OhAlpha.full else OhAlpha.disabled)
                 .clip(shape)
@@ -648,7 +649,8 @@ fun OhTextField(
                     color = if (error != null) colors.red else Color.Transparent,
                     shape = shape,
                 )
-                .padding(horizontal = dims.fieldPadH),
+                .padding(horizontal = dims.fieldPadH)
+                .semantics { error?.let { this.error(it) } },
             contentAlignment = Alignment.CenterStart,
         ) {
             BasicTextField(

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -235,6 +236,7 @@ fun OhChip(
     modifier: Modifier = Modifier,
     neutralSelected: Boolean = false,
     enabled: Boolean = true,
+    swatch: Color? = null,
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
@@ -273,6 +275,15 @@ fun OhChip(
                 .padding(horizontal = dims.chipPadH, vertical = dims.chipPadV),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (swatch != null) {
+                Box(
+                    modifier = Modifier
+                        .size(OhTheme.space.s5)
+                        .clip(CircleShape)
+                        .background(swatch),
+                )
+                Spacer(Modifier.width(OhTheme.space.s2))
+            }
             Text(
                 text = text,
                 style = type.subhead.copy(
@@ -291,7 +302,7 @@ fun OhChipStrip(modifier: Modifier = Modifier, content: @Composable RowScope.() 
     Row(
         modifier = modifier
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = OhTheme.space.none),
+            .padding(end = OhTheme.space.s6),
         horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2),
         verticalAlignment = Alignment.CenterVertically,
         content = content,

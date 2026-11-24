@@ -134,6 +134,7 @@ class ScreenScreenshotTest {
         modules = HealthModule.entries.toSet(),
         preset = ModulePreset.EVERYTHING,
         weightNeutral = false,
+        displayPolicy = app.openhealth.core.preferences.DisplayPolicy.of(false),
         theme = ThemeChoice.SYSTEM,
         accent = OhAccent.Brand,
         appLock = false,
@@ -160,6 +161,7 @@ class ScreenScreenshotTest {
         onRestore = { _, _ -> },
         onOpenTimeline = {},
         onOpenTrash = {},
+        onExternalActivity = {},
         onDeleteAllNotes = {},
         onEmptyTrash = {},
         onUndoRestore = {},
@@ -172,6 +174,7 @@ class ScreenScreenshotTest {
                 model = today,
                 displayPolicy = DisplayPolicy.Standard,
                 onQuickAdd = {},
+                onOpenTimeline = {},
                 onOpenTrain = {},
                 onOpenNutrition = {},
             )
@@ -185,6 +188,7 @@ class ScreenScreenshotTest {
                 model = today.copy(status = TodayStatus.WEIGHT_NEUTRAL),
                 displayPolicy = DisplayPolicy.WeightNeutral,
                 onQuickAdd = {},
+                onOpenTimeline = {},
                 onOpenTrain = {},
                 onOpenNutrition = {},
             )

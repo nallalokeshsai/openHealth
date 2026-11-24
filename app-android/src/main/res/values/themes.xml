@@ -9,8 +9,10 @@
         <item name="android:windowBackground">@color/oh_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
+        <!-- Light is the default; values-night pins the dark sibling. The runtime
+             controller follows the chosen theme from the first frame (DESIGN.md §12). -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>

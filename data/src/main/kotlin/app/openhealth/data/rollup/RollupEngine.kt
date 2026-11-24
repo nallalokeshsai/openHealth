@@ -263,10 +263,14 @@ class RollupEngine(
         val aggregation = DedupPolicies.aggregation(type)
         val ordered = resolution.observations.sortedBy { it.provenance.happenedAt }
         // A source that reports a daily total must not also have its intervals summed
-        // into it: a total is the day, the intervals are its parts.
-        val dailyTotals = ordered.filter { it.end == null }
-        val used = if (aggregation == RollupAggregation.SUM && dailyTotals.isNotEmpty()) {
-            listOf(dailyTotals.last())
+        // into it: a total is the day, the intervals are its parts. The rule is per
+        // source: one source's total never discards another source's parts, which is
+        // what a `SumAllPolicy` type (water, nutrition) keeps on purpose.
+        val used = if (aggregation == RollupAggregation.SUM) {
+            ordered.groupBy { it.provenance.sourceId }.values.flatMap { perSource ->
+                val totals = perSource.filter { it.end == null }
+                if (totals.isNotEmpty()) listOf(totals.last()) else perSource
+            }
         } else {
             ordered
         }

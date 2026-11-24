@@ -155,10 +155,12 @@ fun OhRow(
     leadingIcon: ImageVector? = null,
     leading: (@Composable () -> Unit)? = null,
     leadingTint: Color = OhTheme.colors.acc,
+    leadingInk: Color = OhTheme.colors.onAcc,
     destructive: Boolean = false,
     showChevron: Boolean = false,
     showDivider: Boolean = false,
     enabled: Boolean = true,
+    mergeSemantics: Boolean = true,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
@@ -171,7 +173,7 @@ fun OhRow(
     val wordsValue = value != null && narrow && value.count { it.isLetter() } > SHORT_UNIT_LETTERS
     var row = modifier
         .fillMaxWidth()
-        .semantics(mergeDescendants = true) {}
+        .semantics(mergeDescendants = mergeSemantics) {}
     if (!enabled) {
         row = row.alpha(OhAlpha.disabledRow)
     }
@@ -208,7 +210,7 @@ fun OhRow(
                     icon = leadingIcon,
                     contentDescription = null,
                     size = dims.iconButtonGlyph,
-                    tint = if (destructive) colors.redInk else colors.onAcc,
+                    tint = if (destructive) colors.redInk else leadingInk,
                 )
             }
             Spacer(Modifier.width(dims.rowGap))
@@ -389,6 +391,8 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
     val colors = OhTheme.colors
     val type = OhTheme.type
     require(figures.size == KPI_FIGURES) { "A KPI band shows three figures (DESIGN.md §5.6)." }
+    val stack = androidx.compose.ui.platform.LocalDensity.current.fontScale >=
+        OhTheme.dims.largeFontScale
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -396,44 +400,70 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
             .background(colors.surface)
             .padding(horizontal = OhTheme.dims.cardPad, vertical = OhTheme.space.s5),
     ) {
-        Row(
-            modifier = Modifier.height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        if (stack) {
             figures.forEachIndexed { index, figure ->
                 if (index > 0) {
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
-                            .width(OhTheme.dims.hairline)
+                            .fillMaxWidth()
+                            .height(OhTheme.dims.hairline)
                             .background(colors.sep),
                     )
+                    Spacer(Modifier.height(OhTheme.space.s3))
                 }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = figure.value,
-                            style = type.display.copy(fontWeight = OhWeight.semibold)
-                                .tabular()
-                                .ltrFigures(),
-                            color = figure.ink ?: colors.label,
-                            maxLines = 1,
+                Text(text = figure.label, style = type.footnote, color = colors.label2)
+                Text(
+                    text = figure.value,
+                    style = type.display.copy(fontWeight = OhWeight.semibold)
+                        .tabular()
+                        .ltrFigures(),
+                    color = figure.ink ?: colors.label,
+                )
+                figure.unit?.let {
+                    Text(text = it, style = type.caption, color = colors.label2)
+                }
+                Spacer(Modifier.height(OhTheme.space.s3))
+            }
+        } else {
+            Row(
+                modifier = Modifier.height(IntrinsicSize.Min),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                figures.forEachIndexed { index, figure ->
+                    if (index > 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(OhTheme.dims.hairline)
+                                .background(colors.sep),
                         )
-                        if (figure.unit != null) {
-                            Spacer(Modifier.width(OhTheme.space.s0))
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.Bottom) {
                             Text(
-                                text = figure.unit,
-                                style = type.caption.ltrFigures(),
-                                color = colors.label2,
+                                text = figure.value,
+                                style = type.display.copy(fontWeight = OhWeight.semibold)
+                                    .tabular()
+                                    .ltrFigures(),
+                                color = figure.ink ?: colors.label,
                                 maxLines = 1,
                             )
+                            if (figure.unit != null) {
+                                Spacer(Modifier.width(OhTheme.space.s0))
+                                Text(
+                                    text = figure.unit,
+                                    style = type.caption.ltrFigures(),
+                                    color = colors.label2,
+                                    maxLines = 1,
+                                )
+                            }
                         }
+                        Text(text = figure.label, style = type.footnote, color = colors.label2)
                     }
-                    Text(text = figure.label, style = type.footnote, color = colors.label2)
                 }
             }
         }

@@ -79,7 +79,7 @@ fun OhPageHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifie
             text = title,
             style = OhTheme.type.title3.copy(fontWeight = OhWeight.semibold),
             color = OhTheme.colors.label,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
         )
     }
     Spacer(Modifier.height(OhTheme.space.s3))

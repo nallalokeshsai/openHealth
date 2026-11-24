@@ -5,10 +5,12 @@
     <string name="toast_water_added">Water added.</string>
     <string name="toast_weight_added">Weight added.</string>
     <string name="toast_saved">Saved.</string>
+    <string name="toast_not_saved">Could not save that.</string>
     <string name="toast_deleted">Deleted. It is in Trash for 30 days.</string>
     <string name="lock_prompt_title">Unlock openHealth</string>
     <string name="lock_prompt_body">Your health record is private to this phone.</string>
     <string name="lock_prompt_cancel">Cancel</string>
     <string name="startup_error_title">openHealth could not open its database</string>
+    <string name="startup_error_retry">Try again</string>
     <string name="startup_error_body">The encrypted store is unavailable. Nothing was changed. Restart the app, or restore a backup on a working install.</string>
 </resources>

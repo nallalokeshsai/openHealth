@@ -20,8 +20,11 @@ import kotlinx.datetime.toLocalDateTime
  * clock.
  */
 @Composable
-fun shortDate(date: LocalDate): String = javaDate(date)
-    .format(DateTimeFormatter.ofPattern("d MMM", observedLocale()))
+fun shortDate(date: LocalDate): String {
+    val locale = observedLocale()
+    val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "MMMd")
+    return javaDate(date).format(DateTimeFormatter.ofPattern(pattern, locale))
+}
 
 @Composable
 fun mediumDate(date: LocalDate): String = javaDate(date)
@@ -42,6 +45,19 @@ fun hourOf(hour: Int): String {
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(observedLocale()),
     )
 }
+
+/**
+ * A number in the person's locale: its separators, at most [decimals] decimal places, no
+ * trailing zero, and a true minus sign rather than a hyphen (`DESIGN.md` §8.1, §11.7).
+ */
+@Composable
+fun number(value: Double, decimals: Int = 0): String = java.text.NumberFormat
+    .getNumberInstance(observedLocale())
+    .apply { maximumFractionDigits = decimals }
+    .format(value)
+    .replace('-', MINUS)
+
+private const val MINUS = '\u2212'
 
 /** "1 h 28 m later", or null when the recording happened at the same moment. */
 @Composable
