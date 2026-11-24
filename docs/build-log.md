@@ -1307,3 +1307,158 @@ old path output, which is how the regression was confirmed.
 
 - `fatProvenanceLine` has no caller; `synchronousLayers` is test-shaped API; hours are
   always spoken in hours ("672 h ago"). All three stay as recorded above.
+
+## B5 — Gym training
+
+**Status:** Completed · **Date:** 2026-11-24 · **Branch:** `build/b5-gym-training`
+**Goal:** the best strength log: a set in under two seconds (`BUILD-ROADMAP.md` §B5).
+
+### Environment and decisions taken at the start
+
+- Workstation unchanged: Linux, JDK 21, the wrapper. Test target: the owner's **physical
+  phone**, attached and authorised before the device steps. It dropped off USB twice
+  during the long QA walk; `adb devices` showed it again each time, and every step was
+  re-run.
+- **Questions asked (one batched dialog):** none. `pr.md` §6.5 and `DESIGN.md` §14.2
+  answer the product questions, and B5's "Ask the owner" line is empty.
+- **Maestro is still not installed.** The exit tests are Compose instrumented tests, as
+  B3 and B4 recorded, plus one manual process-death walk.
+- ADR `0010-gym-training.md` records seventeen implementation decisions: programmes cut
+  per `pr.md` §6.5, one weekday or one rotation position, append-only sets, the set-kind
+  enum and flags, bodyweight/assistance/band, group-index supersets, copied targets,
+  the three progression policies, record definitions, schema v6, training rollups,
+  timeline sets, the `specialUse` rest-timer service, on-disk timer state and the
+  presenter/state-holder split.
+
+### Milestones
+
+1. **The training domain** — commit `1cd430d`. `:core` gained `RoutinePlanner` (weekday,
+  rotation, A/B/C), the progression interface with linear, double and off, PR detection
+  (heaviest, Epley 1RM, reps at a weight), plate math and the one equipment profile,
+  session loads, clock text and the rest-timer arithmetic. Bodyweight, assistance and
+  band resistance joined `VolumeSet`. 33 core training tests.
+2. **Storage, rollups and undo** — commit `0d1b590`. Schema **v6** (`5.sqm`) adds routine
+  schedule/favourite/progression/rest, routine and session targets, session title/felt
+  effort, set drop/assisted/band/notes and `target_reps_high`; the timeline view and the
+  indexed page now carry `work_set`. `TrainingRepository` starts, finishes, edits, moves
+  and reads sessions; `TrashService` restores a whole session; `RollupEngine` derives
+  `TRAINING_VOLUME`, `TRAINING_SETS` and `TRAINING_DURATION` from finished sessions.
+  10 data tests, including the move/rebuild and leg-session recovery evidence.
+3. **Train root and the live session** — commit `69b6824`. The Train root (week strip,
+  today's plan with Start/freestyle/past, Recovery/Plan segmented map pair, routines
+  with mini maps, history), routine detail and editor, the focused live session (set
+  table, prefill, one-tap Done, RIR sheet, plate math, equipment sheet, superset groups,
+  notes, rest bar), summary (KPIs, PRs, loaded-muscle map with table, provenance), and
+  exercise history. Six screen families × dark/light/200 %/RTL = 24 goldens.
+4. **The rest timer service** — in `69b6824`. A `specialUse` foreground service with an
+  ongoing notification (−15 s, +15 s, pause, skip), sound and one vibration at zero, and
+  its state on disk so `resume()` rebuilds it after a process kill.
+5. **Verification, QA and the documents** — this entry, ADR 0010, the QA fixes, the
+  instrumented exit tests and the AGENTS update.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint, **323 JVM tests** (146 `:core`, 83 `:data`, 91 `:ui`, 1 fixtures, 2 exerciseindex) and **198 goldens**. |
+| `:core:test :data:test :ui:testDebugUnitTest` | 320 tests, no failures (after one rerun of the documented `QueryBenchmarkTest` flake; the budget is unchanged and the rerun passed). |
+| `:app-android:connectedDebugAndroidTest` on the phone | **BUILD SUCCESSFUL, 15/15**: 11 B3 scenarios, B2's encrypted-database test, B4's library test and B5's two scenarios. |
+| One-tap set timing | `TrainingExitTest` measured **220 ms** from the Done tap to the encrypted row, with weight `80` and reps `8` prefilled from the last session and the plan. |
+| Process death | Logged a set, force-stopped the app, relaunched: Train offered **Resume … 1 set in progress**; the set was intact and the rest notification came back while the deadline was still in the future. |
+| Rotation | Rotated the live session to landscape on the phone: the session, exercise and set table stayed; no `AndroidRuntime` entry. |
+| Notification | `dumpsys notification` showed the ongoing `rest_timer` notification (id 1001) with **4 actions** and category `stopwatch`; the shade showed "Barbell squat" and the countdown. |
+| 200 % and RTL | The 24 new goldens plus the screen walk; the week strip, set-kind chips and set label were fixed after the first goldens clipped them. |
+
+No device identity (serial, model, build) is recorded in this repository.
+
+### Exit tests (`BUILD-ROADMAP.md` §B5)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| A set is logged in under 2 s with one hand (weight and reps prefilled; Maestro plus timing) | `TrainingExitTest.aSetIsLoggedInUnderTwoSecondsWithTheFieldsPrefilled`: a previous 80×5 session, a new freestyle session, prefill asserted, Done tapped; **220 ms** to the stored row. Maestro is not installed; this is the Compose substitute, as recorded in B3/B4. | **pass** |
+| Kill the app mid-session and resume without loss | Manual on the phone: log a set, `am force-stop`, relaunch, Train shows Resume with 1 set; reopening restores the set and the rest timer. The session is a database row, not memory. | **pass** |
+| A leg session turns quads red, the next simulated day orange, the third green | `TrainingRepositoryTest.aLegSessionTurnsQuadsRedThenOrangeThenGreen`: the squat's quads are `RECOVERING` at load, `EASING` at +26 h and `READY` at +50 h, computed through `RecoveryMap` from the stored sets. | **pass** |
+| Moving a past workout recomputes rollups without changing `recorded_at` | `TrainingRepositoryTest.movingASessionRebuildsBothDaysAndKeepsRecordedAt`: the old day has no volume, the new day has 1 000 kg, every session and set `recorded_at` is unchanged, and `editingAFinishedSessionKeepsTheMomentItEnded` covers the edit path. | **pass** |
+
+### Regression over earlier phases
+
+- **B0 build, guards and launch** — clean `check`/`assembleDebug`; `checkPortability`
+  and `checkLicences` run in every module; the app installs and launches on the phone.
+- **B1 design system** — all 174 earlier goldens still verify; the new screens use the
+  existing 19 components and the component gallery is unchanged.
+- **B2 rollups, dedup and export** — the 83 `:data` tests pass; `ExportTables` gained
+  the v6 columns and `theExportRegistryMatchesEveryTableAndColumn` passes; the
+  16 ms benchmark passed (once re-run after the known flake).
+- **B3 shell, onboarding, settings, timeline** — the 11 `ShellExitTest` scenarios ran on
+  the phone. The heavier Train model exposed a race in the water/timeline test; the
+  rebuild now updates the shell first and the Train model second, and the catalogue is
+  cached. The first-note test's IME settle was made explicit.
+- **B4 body model and exercises** — the body map goldens, recovery tests and Today card
+  pass; the plan-map description was made grammatical for one muscle ("1 muscle", "1 set
+  a week") and the new goldens verify.
+
+### QA sweep on the phone (section 4.2)
+
+Eighteen issues were found and fixed; `issues.md` and its screenshots lived outside the
+repository and were deleted when every entry was fixed. The largest were: a `health`
+foreground service that Android 16 refused (now `specialUse`), a Skip that could tear
+the service down before its first `startForeground` (now clears state and lets the
+service stop itself), a status-bar overlap on every pushed Train page, clipped 200 %
+week/chip labels, a summary that renamed the workout to "Freestyle", a timeline that
+hid sets, and no way to log a past workout. The full list is in the deleted QA record;
+the surviving fixes are covered by the tests and goldens above.
+
+### Independent review and the fixes it produced
+
+Three fresh reviewers saw only the B5 diff and the contract (correctness and tests;
+`AGENTS.md` invariants and licences; `DESIGN.md` conformance). Findings and their fixes
+are recorded in the commit that follows this entry.
+
+### Invariant audit (`AGENTS.md`)
+
+| Invariant | This phase |
+|---|---|
+| Provenance on every value | Every session and set carries source, device, `happened_at`, `recorded_at`, local date, zone and idempotency key; the summary opens a Source sheet with day, zone, recorded time and device. **Holds.** |
+| `happened_at` ≠ `recorded_at` | A past workout is filed on its day with `recorded_at` now; moving a workout shifts `happened_at`/`completed_at` and never `recorded_at` (tested). **Holds.** |
+| Five layers, rebuildable rollups | Training rollups are derived from finished sessions and rebuilt by the engine; incremental and full rebuilds agree in a test. **Holds.** |
+| One source wins a day | Sessions write one manual source; the rollup names it when all sets agree and null otherwise. **Holds.** |
+| Local-first | No network call, permission or dependency was added. The rest timer is local. **Holds.** |
+| Not a medical device | "Recovering / Easing / Ready", "heavy", "failure" and "deload" are training terms; no diagnosis, warning or shame. **Holds.** |
+| No telemetry | No analytics or third-party SDK; the notification is local. **Holds.** |
+| Portability | Routines, progression, records, plates, recovery and timer arithmetic are in `:core`; the service and the presenter are in `app-android`; `checkPortability` green. **Holds.** |
+| Licence split | No new dependency or asset; the rest icon is drawn in this repository. **Holds.** |
+| Tombstone undo | A set and a whole session delete through `TrashService`, restore whole, and keep 30 days; the timeline delete uses the same path. **Holds.** |
+| Modules hide, never delete | Training off shows the module-off root and keeps every session. **Holds.** |
+| Weight-neutral first-class | No body weight, body fat or calorie value is rendered in the training surfaces; the exercise load is not a body value. **Holds.** |
+| Chart has a table and a sentence | Every recovery and plan map, on Train, the routine and the summary, opens a table; each map has its one-sentence TalkBack description. **Holds.** |
+| Closed design tokens | The set table's 34/56/38/1.5 dp values are quoted in `OhDims` from §14.2; no new token, component or hex; `checkDesignTokens` green. **Holds.** |
+| Closed cut list | No programme builder, no form-check AI, no VBT, no photo composition. Programmes are cut exactly as `pr.md` §6.5 permits. **Holds.** |
+| Quality bars | One-tap set **220 ms**; cold start not re-measured after the service (the debug app still launches under the 1.5 s budget in B4 and the service starts only from a set). The release number is B14's. **Holds.** |
+
+iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
+
+### Placeholders and deferred work
+
+- **Programmes** are cut per `pr.md` §6.5; `PlanCoverage` and the programme tables remain
+  for a later builder.
+- **Training rows speak English muscle names** (exercise content) while the map uses the
+  `muscle_*` resources; a translation pass should share one label path.
+- **The plan map uses the accent ramp**, so a Red or Orange accent preset can make a
+  plan shade and a recovery shade the same hue. The contract asks for both; this needs an
+  owner/design decision, not an agent change.
+- **`TrainingPresenter` is an aggregation point** and carries a scoped Detekt suppression
+  for `LargeClass`, `TooManyFunctions` and `LongParameterList`; splitting it per surface
+  is the same later step as `AppViewModel`.
+- **Process death is manual**, because Android cannot kill the instrumentation process
+  from inside it; the timer and session evidence is on the phone.
+
+### Open issues
+
+- The `specialUse` foreground-service justification must be checked against Play policy
+  at B10; F-Droid does not care.
+- The summary's mini map is 46 dp; a muscle that only trains the legs reads as a small
+  colour block. It is correct and has a table, but a larger summary map is a design
+  question for B9/B10.
+- The equipment profile is one per install; per-gym profiles stay V1 (`pr.md` §6.5).
+- The rest timer's sound uses the system notification tone, not a bundled asset; B10 can
+  make it a preference.

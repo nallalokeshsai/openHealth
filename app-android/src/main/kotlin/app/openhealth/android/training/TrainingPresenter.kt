@@ -141,10 +141,6 @@ class TrainingPresenter(
                 map = BodyMapModel.plan(sex(profile), coverage),
             )
         }
-        val planRoutine = plan?.let { chosen -> routines.firstOrNull { it.id == chosen.routineId } }
-        val planMap = planRoutine?.let { routine ->
-            BodyMapModel.plan(sex(profile), coverage(entriesOf(routine.id), catalogue))
-        }
         val weekdayPlan = routines.any { it.weekday != null }
         val showcase = if (weekdayPlan) {
             routines.filter { it.weekday != null }

@@ -19,6 +19,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -152,6 +153,8 @@ class TrainingExitTest {
 
     private fun seedPreviousSession(exerciseId: String) {
         val now = container.clock.now()
+        val happened = now - 2.hours
+        val localDay = happened.toLocalDateTime(container.zone).date
         val sessionId = "previous-session"
         val entryId = "previous-entry"
         runBlocking {
@@ -160,7 +163,7 @@ class TrainingExitTest {
                     id = sessionId,
                     started_at = (now - 2.hours).toEpochMilliseconds(),
                     ended_at = (now - 1.hours).toEpochMilliseconds(),
-                    local_date = container.today.toString(),
+                    local_date = localDay.toString(),
                     zone_id = container.zone.id,
                     happened_at = (now - 2.hours).toEpochMilliseconds(),
                     recorded_at = (now - 1.hours).toEpochMilliseconds(),

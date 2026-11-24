@@ -217,38 +217,34 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B4 Body model and exercise data** (2026-11-24); next is **B5
-  Gym training**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **274 JVM tests**
-  (113 `:core`, 73 `:data`, 85 `:ui`, 1 fixtures, 2 exerciseindex) and **13 instrumented
-  tests** pass, the instrumented suite most recently on an Android 16 emulator. `:ui` holds the B1 design system, the B3 screens
-  and **174 goldens** (136 B1/B3 + 34 for the body map and Today's map card + 4 for the
-  map's table alternative) in dark, light, 200 % text and RTL.
-- `:core` adds the 19 whole muscles and their regions/body parts, the recovery engine
-  (primary 1, secondary 0.5, 28-day window, hard session against earlier medians), the
-  adipose thickness model, the exercise catalogue (871 exercises from Free Exercise DB,
-  Unlicense, text only), plan coverage and ranked alternatives. `:ui` adds
-  `OhBodyMap`/`AdiposeMask` — MuscleMap geometry (MIT) as a generated TSV, the recovery
-  hatch, the accent-ramp plan map, the fat layer as a raster mask (`docs/adr/0009`), the
-  mini variants, one accessibility node per muscle and no mirroring in RTL. `:data` is schema
-  **v5** (exercise level/mechanic/force, `4.sqm`), seeds the library once behind a settings
-  key, and reads the four-week set loads for the map. `app-android` replaces Today's empty
-  body card with the real map, the muscle and table sheets, the fat provenance sheet and a
-  generic-figure note, and adds the debug-only `BodyLabActivity`.
+- Last completed phase: **B5 Gym training** (2026-11-24); next is **B6 Nutrition**.
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **323 JVM tests**
+  (146 `:core`, 83 `:data`, 91 `:ui`, 1 fixtures, 2 exerciseindex) and **15 instrumented
+  tests** pass on the owner's phone. `:ui` holds the B1 design system, the B3 screens,
+  the B4 body map and the B5 Train surfaces: **198 goldens** (174 before + 24 for Train,
+  live session, summary, routine, editor and exercise history) in dark, light, 200 %
+  text and RTL.
+- `:core` adds the training domain: routine weekday/rotation planning, the progression
+  interface (linear, double, off, deloads and stalls), PR detection, Epley 1RM, plate
+  math and the one equipment profile, session loads, clock text and the rest-timer
+  arithmetic. `:data` is schema **v6** (`5.sqm`): routine schedule/favourite/progression,
+  routine and session targets, session title/feeling, set drop/assisted/band/notes, and
+  the timeline carries every set. Training volume, sets and duration are layer-3 rollups
+  rebuilt from finished sessions; moving a workout rebuilds both days and never touches
+  `recorded_at`.
+- `:ui` adds the Train root, routine detail and editor, the focused live session (set
+  table, prefill, RPE/RIR, plate math, supersets/circuits, notes, rest bar), the session
+  summary with a loaded-muscle map and table, and per-exercise history. `app-android` adds
+  a `specialUse` foreground rest-timer service with an ongoing notification and actions,
+  on-disk state that survives process death, notification-permission-at-use, and the
+  training presenter/state wiring. One-tap set: **220 ms**.
 - Versions are in `docs/adr/0003-pinned-versions.md`; B1's decisions are
   `0004-design-system.md`, B2's `0005-core-and-data.md` and `0006-referential-integrity.md`,
-  B3's `0007-shell-and-onboarding.md`, B4's `0008-body-model-and-exercises.md`.
-  `DatabaseOpener` takes a `DatabaseDriverFactory`, not a driver. R8 is **off** in release;
-  turning it on is B10's. Cold start in the debug build is **1 058 ms**, inside the 1.5 s
-  budget; the release number is B14's. The first store open seeds 871 exercises in
-  **1 717 ms** on IO, after the first frame.
-- A phase-wise audit of B0-B4 (2026-11-24, commits `2d2d913` and `f3da2c0` on `main`)
-  fixed seven defects with
-  tests: the table alternative's hairline rule, the fat-layer exit test asserting only
-  the seams, an unbounded adipose-band cache, a band built for mini maps that never draw
-  one, the debug harness's inert waist slider, no provenance on an estimated fat layer,
-  and the untested v4 muscle-name migration. B3's first-note instrumented test was
-  flaky (the Save tap could land on the animating keyboard) and now dismisses the IME
-  first: 10 of 10 runs pass. Three items stay with the owner (the module-off root
-  surface, the light fat opacity, the hours-only duration copy).
+  B3's `0007-shell-and-onboarding.md`, B4's `0008-body-model-and-exercises.md` and
+  `0009-adipose-mask.md`, B5's `0010-gym-training.md`. R8 is **off** in release; turning
+  it on is B10's.
+- B4's live QA fixes remain in force (the adipose mask, the module-off root, the light
+  fat token). B5's clean-up is the QA sweep in `docs/build-log.md`; the remaining open
+  items (programmes cut, the TrainingPresenter split, the English muscle-content labels
+  and the accent-vs-recovery colour question) are recorded there.
 - Open issues: see `docs/build-log.md`.
