@@ -311,7 +311,7 @@ fun OhMediaRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(text = title, style = type.callout, color = colors.label, maxLines = 2)
             if (subtitle != null) {
-                Text(text = subtitle, style = type.footnote, color = colors.label2, maxLines = 1)
+                Text(text = subtitle, style = type.footnote, color = colors.label2, maxLines = 2)
             }
         }
         if (trailing != null) {

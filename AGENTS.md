@@ -217,34 +217,35 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B5 Gym training** (2026-11-24); next is **B6 Nutrition**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **336 JVM tests**
-  (153 `:core`, 89 `:data`, 91 `:ui`, 1 fixtures, 2 exerciseindex) and **21 instrumented
-  tests** pass on the owner's phone. `:ui` holds the B1 design system, the B3 screens,
-  the B4 body map and the B5 Train surfaces: **198 goldens** (174 before + 24 for Train,
-  live session, summary, routine, editor and exercise history) in dark, light, 200 %
-  text and RTL.
-- `:core` adds the training domain: routine weekday/rotation planning, the progression
-  interface (linear, double, off, deloads and stalls), PR detection, Epley 1RM, plate
-  math and the one equipment profile, session loads, clock text and the rest-timer
-  arithmetic. `:data` is schema **v6** (`5.sqm`): routine schedule/favourite/progression,
-  routine and session targets, session title/feeling, set drop/assisted/band/notes, and
-  the timeline carries every set. Training volume, sets and duration are layer-3 rollups
-  rebuilt from finished sessions; moving a workout rebuilds both days and never touches
-  `recorded_at`.
-- `:ui` adds the Train root, routine detail and editor, the focused live session (set
-  table, prefill, RPE/RIR, plate math, supersets/circuits, notes, rest bar), the session
-  summary with a loaded-muscle map and table, and per-exercise history. `app-android` adds
-  a `specialUse` foreground rest-timer service with an ongoing notification and actions,
-  on-disk state that survives process death, notification-permission-at-use, and the
-  training presenter/state wiring. One-tap set: **295 ms**; debug cold start **1 038 ms**.
+- Last completed phase: **B6 Nutrition** (2026-11-25); next is **B7 Body and vitals**.
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **393 JVM tests**
+  (179 `:core`, 97 `:data`, 10 `:integrations`, 97 `:ui`, 7 tools:foodindex, 1 fixtures,
+  2 exerciseindex) and **27 instrumented tests** pass on the owner's phone. `:ui` holds
+  the B1 design system, the B3 screens, the B4 body map, the B5 Train surfaces and the B6
+  Nutrition surfaces: **222 goldens** (198 before + 24 for the Nutrition root, neutral
+  root, micros, barcode found/disclosure and the recipe editor) in dark, light, 200 % text
+  and RTL. Both the `play` and `fdroid` debug APKs build.
+- `:core` adds the nutrition domain: the nutrient set and FDA Daily Values, portion and
+  recipe arithmetic, exact day totals, target suggestions from the IOM report, the
+  fasting window and the shared food-query normaliser. `:data` is schema **v7** (`6.sqm`):
+  per-100 g micronutrients, entry serving metadata, meal provenance, recipes, meal
+  templates, water containers, dated targets and fasting windows; the diary's micro
+  totals ride on the rebuilt day rollup's `detail`, and the timeline includes fasting.
+- `tools/foodindex` builds the committed 8,262-food USDA index (Foundation Foods
+  2026-04-30 + SR Legacy 2018-04, CC0) as a 9.4 MB asset. `:integrations` parses Open
+  Food Facts with an explicit, disclosed lookup and a local cache. `:ui` adds the
+  Nutrition root, search, portion, entry provenance, water, targets, fasting, micros,
+  barcode and food/recipe editor; `app-android` adds the CameraX scanner with the bundled
+  ML Kit decoder in the Play flavour and ZXing in the F-Droid flavour, the OFF HTTP
+  transport and the nutrition presenter/state wiring. Debug cold start **1 112 ms**.
 - Versions are in `docs/adr/0003-pinned-versions.md`; B1's decisions are
   `0004-design-system.md`, B2's `0005-core-and-data.md` and `0006-referential-integrity.md`,
   B3's `0007-shell-and-onboarding.md`, B4's `0008-body-model-and-exercises.md` and
-  `0009-adipose-mask.md`, B5's `0010-gym-training.md`. R8 is **off** in release; turning
-  it on is B10's.
+  `0009-adipose-mask.md`, B5's `0010-gym-training.md`, B6's `0011-nutrition.md`. R8 is
+  **off** in release; turning it on is B10's.
 - B4's live QA fixes remain in force (the adipose mask, the module-off root, the light
-  fat token). B5's clean-up is the QA sweep in `docs/build-log.md`; the remaining open
-  items (programmes cut, the TrainingPresenter split, the English muscle-content labels
-  and the accent-vs-recovery colour question) are recorded there.
+  fat token). B5's and B6's clean-ups are the QA sweeps in `docs/build-log.md`; the
+  remaining open items (recipes sharing, meal-template editing, the camera-capture manual
+  check, the OFF rate-limit question) are recorded there.
 - Open issues: see `docs/build-log.md`.
+

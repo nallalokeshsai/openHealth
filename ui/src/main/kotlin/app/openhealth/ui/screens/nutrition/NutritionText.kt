@@ -96,6 +96,17 @@ fun allergenLabel(allergen: Allergen): String = stringResource(
     },
 )
 
+/** An Open Food Facts allergen tag as words: "en:milk" becomes "Milk". */
+@Composable
+fun offAllergenLabel(tag: String): String {
+    val known = Allergen.entries.firstOrNull { tag in it.offTags }
+    return if (known != null) {
+        allergenLabel(known)
+    } else {
+        tag.removePrefix("en:").replace('-', ' ')
+    }
+}
+
 @Composable
 fun dietPatternLabel(key: String?): String = when (DietaryPattern.fromKey(key)) {
     DietaryPattern.VEGAN -> stringResource(R.string.diet_vegan)

@@ -277,8 +277,22 @@ class NutritionPresenter(
     private fun waterTotal(date: LocalDate): Double =
         store.rollups.forDayAndType(date, ObservationType.WATER)?.value?.value ?: 0.0
 
-    private fun fastCard(): FastCardModel? {
-        if (store.settings.get(SettingKeys.NUTRITION_FASTING) != "true") return null
+    private fun fastCard(): FastCardModel {
+        // The row is always present so the optional timer can be turned on; the setting
+        // only decides whether the card shows a running/starting state (`pr.md` §6.3).
+        if (store.settings.get(SettingKeys.NUTRITION_FASTING) != "true") {
+            val now = clock.now().toEpochMilliseconds()
+            return FastCardModel(
+                open = false,
+                startAtMillis = null,
+                nowMillis = now,
+                elapsedMillis = 0,
+                remainingMillis = null,
+                targetHours = store.settings.get(SettingKeys.NUTRITION_FASTING_HOURS)
+                    ?.toDoubleOrNull() ?: 16.0,
+                progress = 0f,
+            )
+        }
         val now = clock.now().toEpochMilliseconds()
         val open = store.nutrition.openFast()
         val start = open?.window?.startEpochMillis
@@ -304,12 +318,12 @@ class NutritionPresenter(
         val suggestion = suggestedTargets()
         return TargetsModel(
             date = date,
-            kcal = existing?.kcal?.plain() ?: "",
-            proteinG = existing?.proteinG?.plain() ?: "",
-            carbsG = existing?.carbsG?.plain() ?: "",
-            fatG = existing?.fatG?.plain() ?: "",
-            fibreG = existing?.fibreG?.plain() ?: "",
-            waterMl = existing?.waterMl?.plain() ?: "",
+            kcal = existing?.kcal?.targetText(0) ?: "",
+            proteinG = existing?.proteinG?.targetText(1) ?: "",
+            carbsG = existing?.carbsG?.targetText(1) ?: "",
+            fatG = existing?.fatG?.targetText(1) ?: "",
+            fibreG = existing?.fibreG?.targetText(1) ?: "",
+            waterMl = existing?.waterMl?.targetText(0) ?: "",
             suggestionAvailable = suggestion != null,
             suggested = suggestion,
             weightNeutral = preferences.displayPolicy.hidesSomething,
@@ -365,11 +379,11 @@ class NutritionPresenter(
             ?: return null
         return TargetsSaveModel(
             kcal = targets.value.kcal,
-            proteinG = targets.value.proteinG,
-            carbsG = targets.value.carbsG,
-            fatG = targets.value.fatG,
-            fibreG = targets.value.fibreG,
-            waterMl = targets.value.waterMl,
+            proteinG = targets.value.proteinG?.roundTo(1),
+            carbsG = targets.value.carbsG?.roundTo(1),
+            fatG = targets.value.fatG?.roundTo(1),
+            fibreG = targets.value.fibreG?.roundTo(1),
+            waterMl = targets.value.waterMl?.roundTo(0),
         )
     }
 
@@ -1394,6 +1408,14 @@ class NutritionPresenter(
 
     private fun Double.plain(): String =
         if (this == toLong().toDouble()) toLong().toString() else toString()
+
+    private fun Double.targetText(decimals: Int): String = roundTo(decimals).plain()
+
+    private fun Double.roundTo(decimals: Int): Double {
+        var factor = 1.0
+        repeat(decimals) { factor *= 10.0 }
+        return kotlin.math.round(this * factor) / factor
+    }
 
     private companion object {
         const val RECENT_LIMIT = 8L

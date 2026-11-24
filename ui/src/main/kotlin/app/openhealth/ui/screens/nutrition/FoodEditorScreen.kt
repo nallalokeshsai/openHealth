@@ -96,18 +96,21 @@ fun FoodEditorScreen(
             ),
             onBack = onBack,
         )
+        FieldLabel(stringResource(R.string.nutrition_food_name))
         OhTextField(
             value = name,
             onValueChange = { name = it },
             placeholder = stringResource(R.string.nutrition_food_name),
         )
         Spacer(Modifier.height(OhTheme.space.s2))
+        FieldLabel(stringResource(R.string.nutrition_food_brand))
         OhTextField(
             value = brand,
             onValueChange = { brand = it },
             placeholder = stringResource(R.string.nutrition_food_brand),
         )
         Spacer(Modifier.height(OhTheme.space.s2))
+        FieldLabel(stringResource(R.string.nutrition_food_barcode))
         OhTextField(
             value = barcode,
             onValueChange = { barcode = it.filter(Char::isDigit) },
@@ -115,6 +118,16 @@ fun FoodEditorScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
         Spacer(Modifier.height(OhTheme.space.s3))
+        Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
+            FieldLabel(
+                text = stringResource(R.string.nutrition_food_serving_label),
+                modifier = Modifier.weight(1f),
+            )
+            FieldLabel(
+                text = stringResource(R.string.nutrition_food_serving_grams),
+                modifier = Modifier.weight(1f),
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
             OhTextField(
                 value = servingLabel,
@@ -132,6 +145,7 @@ fun FoodEditorScreen(
         }
         if (model.isRecipe) {
             Spacer(Modifier.height(OhTheme.space.s4))
+            FieldLabel(stringResource(R.string.nutrition_food_recipe_servings))
             OhTextField(
                 value = servings,
                 onValueChange = { servings = it.filter(Char::isDigit) },
@@ -157,14 +171,6 @@ fun FoodEditorScreen(
                             text = ingredient.name,
                             style = OhTheme.type.body,
                             color = OhTheme.colors.label,
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.nutrition_macro_value,
-                                number(ingredient.grams),
-                            ),
-                            style = OhTheme.type.footnote,
-                            color = OhTheme.colors.label2,
                         )
                     }
                     OhStepper(
@@ -305,6 +311,7 @@ fun FoodEditorScreen(
         Spacer(Modifier.height(OhTheme.space.s5))
         OhButton(
             text = stringResource(R.string.nutrition_food_save),
+            modifier = Modifier.fillMaxWidth(),
             onClick = {
                 val nutrients = parseNutrients(nutrientValues)
                 when {
@@ -365,3 +372,13 @@ private fun parseNutrients(values: Map<Nutrient, String>): Map<Nutrient, Double>
     values.mapNotNull { (nutrient, text) ->
         text.toDoubleOrNull()?.takeIf { it >= 0.0 }?.let { nutrient to it }
     }.toMap()
+
+@Composable
+private fun FieldLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = OhTheme.type.footnote,
+        color = OhTheme.colors.label2,
+        modifier = modifier,
+    )
+}

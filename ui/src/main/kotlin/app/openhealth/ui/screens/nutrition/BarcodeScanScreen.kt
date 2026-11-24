@@ -181,7 +181,9 @@ fun BarcodeScanScreen(
                         Text(
                             text = stringResource(
                                 R.string.nutrition_portion_allergen,
-                                product.allergens.joinToString(", "),
+                                product.allergens
+                                    .map { offAllergenLabel(it) }
+                                    .joinToString(", "),
                             ),
                             style = OhTheme.type.footnote,
                             color = OhTheme.colors.orangeInk,
@@ -250,6 +252,7 @@ fun BarcodeScanScreen(
                     onValueChange = { barcode = it.filter(Char::isDigit) },
                     placeholder = stringResource(R.string.nutrition_scan_manual_field),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    contentDescription = stringResource(R.string.nutrition_scan_manual_field),
                 )
                 Spacer(Modifier.height(OhTheme.space.s3))
                 val valid = barcode.length in MIN_BARCODE..MAX_BARCODE

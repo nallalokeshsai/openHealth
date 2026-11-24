@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.openhealth.android.ui.AppViewModel
@@ -86,7 +87,7 @@ class TrainingExitTest {
         seedPreviousSession(exerciseId)
 
         compose.onNodeWithContentDescription("Train").performClick()
-        compose.onNodeWithText("Start").performClick()
+        compose.onNodeWithText("Start").performScrollTo().performClick()
         waitFor("second live") { viewModel.state.value.live != null }
         val second = viewModel.state.value.live!!.sessionId
         viewModel.addLiveExercise(second, exerciseId)

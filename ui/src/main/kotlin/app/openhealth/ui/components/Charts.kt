@@ -121,12 +121,10 @@ fun OhBarRow(
     modifier: Modifier = Modifier,
 ) {
     val colors = OhTheme.colors
+    val stack = androidx.compose.ui.platform.LocalDensity.current.fontScale >=
+        OhTheme.dims.largeFontScale
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        if (stack) {
             Text(text = label, style = OhTheme.type.footnote, color = colors.label2)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -141,6 +139,29 @@ fun OhBarRow(
                         style = OhTheme.type.footnote.tabular(),
                         color = colors.label3,
                     )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = label, style = OhTheme.type.footnote, color = colors.label2)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = value,
+                        style = OhTheme.type.footnote.tabular(),
+                        color = colors.label,
+                    )
+                    if (target != null) {
+                        Spacer(Modifier.width(OhTheme.space.s1))
+                        Text(
+                            text = target,
+                            style = OhTheme.type.footnote.tabular(),
+                            color = colors.label3,
+                        )
+                    }
                 }
             }
         }

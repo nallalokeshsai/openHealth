@@ -41,6 +41,9 @@ class AppContainer(
      */
     databaseName: String = AndroidDatabaseFactory.DEFAULT_DATABASE,
     vaultPreferences: String = DEFAULT_VAULT,
+    /** Test seams: the bundled index and the one explicit network client. */
+    foodIndexOverride: app.openhealth.core.nutrition.BundledFoodIndex? = null,
+    offClientOverride: app.openhealth.integrations.food.OpenFoodFactsClient? = null,
 ) {
     val context: Context = context.applicationContext
     private val appContext = this.context
@@ -60,6 +63,12 @@ class AppContainer(
         local
     }
     val store: LocalStore get() = storeLazy.value
+    val foodIndex: app.openhealth.core.nutrition.BundledFoodIndex =
+        foodIndexOverride ?: app.openhealth.android.nutrition.AssetFoodIndex(appContext)
+    val offClient: app.openhealth.integrations.food.OpenFoodFactsClient =
+        offClientOverride ?: app.openhealth.integrations.food.OpenFoodFactsClient(
+            app.openhealth.android.nutrition.HttpUrlConnectionTransport(),
+        )
     val clock: ClockSeam = SystemClock
     val ids: IdGenerator = RandomIdGenerator()
     val preferences: PreferencesStore by lazy { PreferencesStore(store.settings, store.profile) }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -128,11 +129,6 @@ fun NutritionRootScreen(
         } else {
             model.water?.let { water ->
                 OhCard {
-                    OhCardHeader(
-                        eyebrow = dateEyebrow(model),
-                        title = stringResource(R.string.nutrition_water),
-                        glyph = OhObjectIcons.water,
-                    )
                     WaterRow(water, onWater, onLogWater)
                 }
             }
@@ -300,7 +296,7 @@ private fun DateStrip(model: NutritionModel, onSelectDay: (LocalDate) -> Unit) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .height(OhTheme.dims.nutritionDayCell)
+                    .heightIn(min = OhTheme.dims.nutritionDayCell)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(OhTheme.radius.base))
                     .background(
                         when {
@@ -327,7 +323,11 @@ private fun DateStrip(model: NutritionModel, onSelectDay: (LocalDate) -> Unit) {
                 Text(
                     text = day.date.dayOfMonth.toString(),
                     style = OhTheme.type.subhead.tabular(),
-                    color = if (selected) OhTheme.colors.accInk else OhTheme.colors.label,
+                    color = when {
+                        day.isToday -> OhTheme.colors.onAcc
+                        selected -> OhTheme.colors.accInk
+                        else -> OhTheme.colors.label
+                    },
                     modifier = Modifier
                         .clip(CircleShape)
                         .then(
@@ -389,23 +389,34 @@ private fun EnergyCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val remaining = energy.remainingKcal
-            OhRing(
-                progress = if (energy.kcalTarget != null && energy.kcalTarget > 0.0) {
-                    (energy.kcalIn / energy.kcalTarget).toFloat()
-                } else {
-                    0f
-                },
-                centre = number(remaining ?: energy.kcalIn),
-                contentDescription = when {
-                    remaining != null && remaining >= 0.0 ->
-                        stringResource(R.string.nutrition_energy_remaining, number(remaining))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                OhRing(
+                    progress = if (energy.kcalTarget != null && energy.kcalTarget > 0.0) {
+                        (energy.kcalIn / energy.kcalTarget).toFloat()
+                    } else {
+                        0f
+                    },
+                    centre = number(remaining ?: energy.kcalIn),
+                    contentDescription = when {
+                        remaining != null && remaining >= 0.0 ->
+                            stringResource(R.string.nutrition_energy_remaining, number(remaining))
 
-                    remaining != null ->
-                        stringResource(R.string.nutrition_energy_over, number(-remaining))
+                        remaining != null ->
+                            stringResource(R.string.nutrition_energy_over, number(-remaining))
 
-                    else -> energyText(energy.kcalIn)
-                },
-            )
+                        else -> energyText(energy.kcalIn)
+                    },
+                )
+                Text(
+                    text = when {
+                        remaining == null -> stringResource(R.string.nutrition_energy_in_label)
+                        remaining < 0.0 -> stringResource(R.string.nutrition_energy_over_label)
+                        else -> stringResource(R.string.nutrition_energy_left)
+                    },
+                    style = OhTheme.type.caption,
+                    color = OhTheme.colors.label2,
+                )
+            }
             Spacer(Modifier.width(OhTheme.space.s6))
             Column(
                 modifier = Modifier.weight(1f),
@@ -459,11 +470,11 @@ private fun WaterRow(water: WaterCardModel, onWater: () -> Unit, onLogWater: (St
         subtitle = if (water.targetMl != null) {
             stringResource(
                 R.string.nutrition_water_total,
-                stringResource(R.string.quick_water_ml, number(water.totalMl)),
-                stringResource(R.string.quick_water_ml, number(water.targetMl)),
+                stringResource(R.string.nutrition_ml, number(water.totalMl)),
+                stringResource(R.string.nutrition_ml, number(water.targetMl)),
             )
         } else {
-            stringResource(R.string.quick_water_ml, number(water.totalMl))
+            stringResource(R.string.nutrition_ml, number(water.totalMl))
         },
         leadingIcon = OhObjectIcons.water,
         showChevron = true,
@@ -473,7 +484,7 @@ private fun WaterRow(water: WaterCardModel, onWater: () -> Unit, onLogWater: (St
                 OhButton(
                     text = stringResource(
                         R.string.nutrition_water_one_tap,
-                        stringResource(R.string.quick_water_ml, number(container.millilitres)),
+                        stringResource(R.string.nutrition_ml, number(container.millilitres)),
                     ),
                     onClick = { onLogWater(container.id) },
                     variant = OhButtonVariant.Secondary,
@@ -625,7 +636,9 @@ private fun SwipeToDelete(onDelete: () -> Unit, content: @Composable () -> Unit)
             modifier = Modifier
                 .matchParentSize()
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(OhTheme.radius.base))
-                .background(OhTheme.colors.dangerFill),
+                .background(
+                    if (offset < 0f) OhTheme.colors.dangerFill else OhTheme.colors.surface,
+                ),
             contentAlignment = Alignment.CenterEnd,
         ) {
             Text(
@@ -639,6 +652,7 @@ private fun SwipeToDelete(onDelete: () -> Unit, content: @Composable () -> Unit)
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer { translationX = offset }
+                .background(OhTheme.colors.surface)
                 .draggable(
                     state = state,
                     orientation = Orientation.Horizontal,

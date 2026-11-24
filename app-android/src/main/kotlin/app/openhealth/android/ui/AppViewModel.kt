@@ -7,8 +7,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import app.openhealth.R
 import app.openhealth.android.AppContainer
-import app.openhealth.android.nutrition.AssetFoodIndex
-import app.openhealth.android.nutrition.HttpUrlConnectionTransport
 import app.openhealth.android.nutrition.NutritionPresenter
 import app.openhealth.android.security.LockError
 import app.openhealth.android.training.TrainingPresenter
@@ -228,10 +226,8 @@ class AppViewModel(
             ids = container.ids,
             manualSource = AppContainer.MANUAL_SOURCE,
             appVersion = container.versionName,
-            foodIndex = AssetFoodIndex(container.context),
-            off = app.openhealth.integrations.food.OpenFoodFactsClient(
-                HttpUrlConnectionTransport(),
-            ),
+            foodIndex = container.foodIndex,
+            off = container.offClient,
         )
     }
 

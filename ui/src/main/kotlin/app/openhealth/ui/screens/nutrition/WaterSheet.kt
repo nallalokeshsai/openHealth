@@ -45,11 +45,11 @@ fun WaterSheet(
             text = if (model.targetMl != null) {
                 stringResource(
                     R.string.nutrition_water_total,
-                    stringResource(R.string.quick_water_ml, number(model.totalMl)),
-                    stringResource(R.string.quick_water_ml, number(model.targetMl)),
+                    stringResource(R.string.nutrition_ml, number(model.totalMl)),
+                    stringResource(R.string.nutrition_ml, number(model.targetMl)),
                 )
             } else {
-                stringResource(R.string.quick_water_ml, number(model.totalMl))
+                stringResource(R.string.nutrition_ml, number(model.totalMl))
             },
             style = OhTheme.type.title3,
             color = OhTheme.colors.label,
@@ -58,7 +58,7 @@ fun WaterSheet(
         model.containers.forEach { container ->
             OhRow(
                 title = container.label,
-                value = stringResource(R.string.quick_water_ml, number(container.millilitres)),
+                value = stringResource(R.string.nutrition_ml, number(container.millilitres)),
                 leadingIcon = OhIcons.add,
                 showDivider = true,
                 onClick = { onLog(container.id, container.millilitres) },

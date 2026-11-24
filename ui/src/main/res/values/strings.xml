@@ -885,6 +885,9 @@
 
     <string name="nutrition_energy_remaining">%1$s kcal left</string>
     <string name="nutrition_energy_over">%1$s kcal over</string>
+    <string name="nutrition_energy_left">kcal left</string>
+    <string name="nutrition_energy_in_label">kcal in</string>
+    <string name="nutrition_energy_over_label">kcal over</string>
     <string name="nutrition_energy_target">%1$s of %2$s kcal</string>
     <string name="nutrition_energy_no_target">No target set</string>
     <string name="nutrition_macro_protein">Protein</string>
@@ -970,6 +973,7 @@
 
     <string name="nutrition_entry_title">Entry</string>
     <string name="nutrition_entry_amount">%1$s g</string>
+    <string name="nutrition_entry_amount_label">Amount</string>
     <string name="nutrition_entry_servings">%1$s × %2$s</string>
     <string name="nutrition_entry_provenance">Source</string>
     <string name="nutrition_entry_happened">Happened</string>
@@ -1098,6 +1102,7 @@
     <string name="nutrient_water">Water</string>
 
     <string name="unit_kcal">kcal</string>
+    <string name="nutrition_ml">%1$s ml</string>
     <string name="unit_ml">ml</string>
     <string name="unit_g">g</string>
     <string name="unit_mg">mg</string>

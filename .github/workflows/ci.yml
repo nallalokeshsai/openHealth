@@ -36,3 +36,8 @@ jobs:
 
       - name: Assemble debug APK
         run: ./gradlew :app-android:assembleDebug --no-daemon
+
+      # B6 introduced two store flavours: the Play build with the bundled ML Kit barcode
+      # model and the Play-Services-free F-Droid build with ZXing. Both must compile.
+      - name: Assemble the F-Droid flavour
+        run: ./gradlew :app-android:assembleFdroidDebug --no-daemon

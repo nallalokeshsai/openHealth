@@ -72,7 +72,7 @@ class AssetFoodIndex(private val context: Context) : BundledFoodIndex {
             WHERE t.token IN ($placeholders)
             GROUP BY f.fdc_id
             HAVING count(DISTINCT t.token) = ?
-            ORDER BY f.sort_name
+            ORDER BY length(f.name), f.sort_name
             LIMIT ?
         """.trimIndent()
         val args = (tokens + tokens.size.toString() + limit.toString()).toTypedArray()
@@ -90,7 +90,7 @@ class AssetFoodIndex(private val context: Context) : BundledFoodIndex {
             JOIN token t ON t.fdc_id = f.fdc_id
             WHERE t.token LIKE ? || '%'
             GROUP BY f.fdc_id
-            ORDER BY f.sort_name
+            ORDER BY length(f.name), f.sort_name
             LIMIT ?
         """.trimIndent()
         return read(db.rawQuery(sql, arrayOf(token, limit.toString())))
@@ -101,7 +101,7 @@ class AssetFoodIndex(private val context: Context) : BundledFoodIndex {
             SELECT fdc_id, name, category, nutrients, portions
             FROM food
             WHERE sort_name LIKE '%' || ? || '%'
-            ORDER BY sort_name
+            ORDER BY length(name), sort_name
             LIMIT ?
         """.trimIndent()
         return read(db.rawQuery(sql, arrayOf(normalized, limit.toString())))

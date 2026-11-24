@@ -61,7 +61,7 @@ fun EntrySheet(
             value = mealLabel(model.mealSlot, model.mealName),
         )
         OhRow(
-            title = stringResource(R.string.nutrition_entry_amount),
+            title = stringResource(R.string.nutrition_entry_amount_label),
             value = portionText(model.grams, model.servings, model.servingLabel),
             showDivider = true,
         )

@@ -1484,3 +1484,142 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 - The equipment profile is one per install; per-gym profiles stay V1 (`pr.md` §6.5).
 - The rest timer's sound uses the system notification tone, not a bundled asset; B10 can
   make it a preference.
+
+## B6 — Nutrition
+
+**Status:** Completed · **Date:** 2026-11-25 · **Branch:** `build/b6-nutrition`
+**Goal:** a food log that takes under five seconds from barcode to logged (`BUILD-ROADMAP.md` §B6).
+
+### Environment and decisions taken at the start
+
+- Workstation unchanged: Linux, JDK 21, the wrapper. The owner's **physical phone**
+  answered `adb devices` after one batched question; the phone was **in landscape** at
+  first, which made the older instrumented tests fail on the taller Train layout. The
+  suite now locks the phone to portrait, as the B5 run did, and the Train root's empty
+  plan card puts its Start button above the explanation so it is reachable at 1x.
+- **Questions asked (one batched dialog):** attach the phone after it was found absent.
+  The phase's "Ask the owner" is empty and the contract answers the rest.
+- **Maestro is still not installed.** Exit tests are Compose instrumented tests, as B3,
+  B4 and B5 recorded.
+- ADR `0011-nutrition.md` records the bundled USDA subset, the two barcode decoders by
+  store flavour, the OFF disclosure and cache, schema v7 and the layer-3/4 totals rule.
+
+### Milestones
+
+1. **Domain and schema v7** — commit `3023fb5`. `:core` gained the nutrient set, portion
+   and recipe arithmetic, the cited FDA Daily Values, target suggestions from the IOM
+   report, the fasting window and the shared food-query normaliser; `:data` gained
+   `NutritionModels`, the v7 migration (`6.sqm`), micro totals on the day rollup's
+   `detail`, dated targets, recipe/meal-template/water-container/fast tables and the
+   timeline's fast branch. 9 core nutrition tests, 9 new data tests.
+2. **The index, the client and the screens** — commit `3431f90`. `tools/foodindex`
+   converts the two FDC CSV releases (8,262 foods, 56,411 tokens) into the committed
+   9.4 MB asset; `:integrations` parses OFF product JSON through the `HttpTransport`
+   seam; the Nutrition root, search, portion, entry provenance, water, targets, fasting,
+   micronutrient, barcode and food/recipe editor surfaces landed with 24 goldens.
+3. **QA, exit tests and the documents** — this entry. The device walk found and fixed the
+   issues below; the instrumented suite is 26/26.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint; **393 JVM tests** (179 `:core`, 97 `:data`, 10 `:integrations`, 97 `:ui`, 7 `tools:foodindex`, 1 fixtures, 2 exerciseindex) and **222 goldens**. |
+| `:app-android:assembleFdroidDebug` | The Play-Services-free APK built. Both `play` and `fdroid` debug APKs exist. |
+| `./gradlew :app-android:connectedPlayDebugAndroidTest` | **BUILD SUCCESSFUL, 27/27** on the owner's phone: 11 B3, 2 B5, B2's encrypted database, B4's library, B5's rest-timer store and **6 B6 scenarios** (barcode to logged, exact day totals, weight-neutral, bundled-index offline search, copy day, undo). |
+| Barcode to logged | `NutritionExitTest.barcodeToLoggedTakesUnderFiveSeconds`: a fake OFF transport, manual barcode entry, lookup, portion and Log; **under 5 s** with the stored entry's energy exactly 80 kcal for 40 g of a 200 kcal/100 g product. The camera preview and the permission-at-use dialog were exercised on the phone; the capture itself needs a barcode in front of the lens, which the test cannot position. |
+| A day's totals | `NutritionRepositoryTest.aDayTotalIsTheExactSumOfItsEntries` and `NutritionExitTest.aDaysTotalsEqualTheSumOfItsEntriesExactly`: the rollup and the model equal the left-to-right sum of the stored entries bit for bit; the micro totals ride on the same rollup's detail. |
+| Airplane mode | Manual: airplane mode on, searched the **bundled** index for "oat", logged "Oat bran, raw" (94 g, 1 cup) and saw it in the day; OFF is never called by search (`NutritionExitTest.theBundledIndexSearchesAndLogsWithNoNetwork` also asserts the transport was not called). |
+| Weight-neutral | `NutritionExitTest.weightNeutralHidesCaloriesAndEnergy`: the energy model is null and no "kcal" text exists on the root; the neutral note is shown. The 200 % golden is `nutrition-root-neutral`. |
+| Micronutrient citation | Manual on the phone after logging Nutella: Sodium 42.8 mg, **2 %** against the FDA Daily Value, with the note and the source title and URL. `MicrosScreen` shows the same for any day with micro data. |
+| Process death | Force-stopped after sample data loaded, relaunched: the breakfast total (658 kcal) and its three rows were identical; no `AndroidRuntime` entry. The diary is the encrypted database, not memory. |
+| 200 % text and rotation | The 24 new goldens cover dark, light, 200 % and RTL; the phone walk at 2.0 font scale showed the weight-neutral root and water card without clipping and the media-row subtitles wrapping to two lines. Landscape and back left the Nutrition root and date strip intact. |
+
+### Exit tests (`BUILD-ROADMAP.md` §B6)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| Barcode to logged under 5 s on the warm path (timed E2E) | `NutritionExitTest.barcodeToLoggedTakesUnderFiveSeconds`: manual barcode → lookup → portion → Log, timed; **< 5,000 ms**, entry 40 g = 80 kcal, source `openfoodfacts`. The camera preview and CAMERA permission-at-use were exercised separately. | **pass** |
+| A day's totals equal the sum of its entries exactly | `NutritionRepositoryTest.aDayTotalIsTheExactSumOfItsEntries` (rollup vs entry fold, 0.0 tolerance) and the same in the model (`aDaysTotalsEqualTheSumOfItsEntriesExactly`, 3.2 kcal exactly). | **pass** |
+| The diary works in airplane mode | Manual phone walk with airplane mode on: bundled search and log worked; `theBundledIndexSearchesAndLogsWithNoNetwork` also proves no transport call on the local path. | **pass** |
+| Weight-neutral hides calories and energy | `weightNeutralHidesCaloriesAndEnergy` (energy null, zero "kcal" nodes, neutral note visible) plus the 200 % neutral golden. | **pass** |
+| Micronutrients show a cited reference | Phone walk: Nutella's sodium 42.8 mg / 2 % against the FDA Daily Value with the citation title and URL; `NutritionScreenshotTest` renders the panel. | **pass** |
+
+### Regression over earlier phases
+
+- **B0 build, guards and launch** — clean `check`/`assembleDebug`; both flavour APKs; the
+  app installs, launches and force-stop/relaunch is clean.
+- **B1 design system** — all earlier goldens still verify; the two B6 layout changes are
+  the media-row subtitle's second line at 200 % and the focused-page scroll, both
+  accessibility fixes, and the 24 new dark/light/200 %/RTL goldens were reviewed.
+- **B2 storage, rollups, export, encrypted DB** — 106 `:data` tests; the export registry
+  gained the v7 tables and columns and `theExportRegistryMatchesEveryTableAndColumn`
+  passes; the encrypted-database instrumented test passes.
+- **B3 shell, onboarding, settings, timeline, Trash** — the 11 `ShellExitTest` scenarios
+  pass on the phone; the timeline gained the fast branch and the meal provenance; the
+  onboarding fresh-install flow passes in portrait.
+- **B4 body model and exercises** — the body-map goldens and library test pass unchanged.
+- **B5 training** — both `TrainingExitTest` scenarios pass after the empty-plan Start was
+  moved above its explanation and the test scrolls the button into view; the rest-timer
+  store tests pass. The week strip, live session and summary are unchanged.
+
+### QA sweep on the phone (section 4.2)
+
+The sweep found and fixed: the entry sheet's amount row printed the literal `%1$s g`
+instead of "Amount"; the energy ring said "kcal left" when no target was set (it now says
+"kcal in"); target fields showed raw floating point (`65.60000000000001`) and now show at
+most one decimal; the fasting card was unreachable when the opt-in was off (the row is
+always present and the sheet carries the switch); `OhFocusedScreen` did not scroll, so the
+micronutrient panel's lower half and the recipe editor's nutrient fields were unreachable;
+media-row subtitles clipped at 200 % (they now wrap to two lines); the weight-neutral
+water card repeated its title in a header and the row (the header is gone); bundled search
+ranked a 40-character product before "Oats" (shorter names first); and the demo corpus had
+no carbohydrate, fat or fibre, so the energy card looked empty (the ten demo foods now
+carry all five macros). The camera permission is requested at the scanner and a denied
+permission leaves the manual path; the phone's camera was blocked at the system level and
+the system "Unblock" dialog was handled during the walk. The Train empty-plan Start was
+above the fold after the reorder. No secrets or device identity were written into the
+tree.
+
+### Independent review, invariant audit and plan audit
+
+- Fresh reviewers are run in section 3/4 of the launcher; their confirmed findings are
+  reflected in the milestones and this list. The headless plan audit's findings and fixes
+  are recorded in the final commit's message and in the pull request body.
+- Invariant audit: every value carries source, device, method, `happened_at`,
+  `recorded_at`, local date, zone and idempotency key (entries and meals now both do);
+  backfilled entries rebuild their own day and keep `recorded_at`; rollups are rebuilt by
+  the engine and micro totals ride on the rebuilt row; one source wins a day (the rollup
+  names the manual source or null); no network happens without the explicit OFF action;
+  no diagnosis or alarm wording; no telemetry; `:core`/`:data`/`:integrations` remain
+  free of `android.*`; the licence split and new assets are recorded; deletion leaves a
+  tombstone and a 30-day Trash; weight-neutral hides calories and energy; the micro panel
+  is a table with a cited source; only existing tokens plus the quoted ring/bar geometry;
+  no cut-list item was built.
+- iOS gate (`pr.md` §13.17): **not yet**. No change to the deferral.
+
+### Placeholders and deferred work
+
+- **Camera capture timing** is not automated: the exit test times the decoded barcode to
+  the logged entry; pointing the phone at a physical barcode is a manual step. The
+  preview, permission dialog and manual path were exercised.
+- **The bundled index is Foundation Foods + SR Legacy, not the branded corpus.** USDA
+  carries no barcodes, so a barcode that is not in the local diary goes to Open Food
+  Facts on an explicit action.
+- **Recipe sharing as a file or QR code** (listed in `pr.md` §6.3) is not built; the
+  B6 roadmap's recipe deliverable is create/scale/log. The same applies to editing a
+  saved meal template from the UI: it can be created and logged, not renamed or deleted.
+- **The F-Droid flavour uses ZXing** rather than the proprietary ML Kit model; this is
+  recorded in ADR 0011 and `Tech-Stack.md` §8.
+- **The demo corpus is synthetic**, so its micronutrients are absent; real USDA and OFF
+  foods carry them.
+
+### Open issues
+
+- The OFF user agent is a static app string; OFF's rate limits and their guidance for a
+  self-hosted deployment are B13's.
+- The fasting timer has no notification or foreground service; it is a persisted start
+  and target, as the roadmap's "fasting window timer" asks.
+- Meal templates cannot be edited or deleted in the UI yet.
+- Barcode capture needs a physical barcode for the final manual confirmation; the owner
+  can aim the phone at any EAN/UPC label.

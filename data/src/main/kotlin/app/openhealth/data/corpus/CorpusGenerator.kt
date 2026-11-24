@@ -621,27 +621,32 @@ class CorpusGenerator(
 
     private fun createFoods(): List<app.openhealth.data.repo.FoodRecord> {
         val nutrition = NutritionRepository(db)
+        // Energy, protein, carbohydrate, fat and fibre per 100 g; approximate values for
+        // a demo day, never presented as a measured food.
         val items = listOf(
-            Triple("Oats", 379.0, 13.0),
-            Triple("Milk", 42.0, 3.4),
-            Triple("Banana", 89.0, 1.1),
-            Triple("Chicken breast", 165.0, 31.0),
-            Triple("Rice", 130.0, 2.7),
-            Triple("Broccoli", 34.0, 2.8),
-            Triple("Salmon", 208.0, 20.0),
-            Triple("Potato", 77.0, 2.0),
-            Triple("Yoghurt", 59.0, 10.0),
-            Triple("Apple", 52.0, 0.3),
+            DemoFood("Oats", 379.0, 13.0, 68.0, 6.5, 10.1),
+            DemoFood("Milk", 42.0, 3.4, 5.0, 1.0, 0.0),
+            DemoFood("Banana", 89.0, 1.1, 22.8, 0.3, 2.6),
+            DemoFood("Chicken breast", 165.0, 31.0, 0.0, 3.6, 0.0),
+            DemoFood("Rice", 130.0, 2.7, 28.2, 0.3, 0.4),
+            DemoFood("Broccoli", 34.0, 2.8, 6.6, 0.4, 2.6),
+            DemoFood("Salmon", 208.0, 20.0, 0.0, 13.0, 0.0),
+            DemoFood("Potato", 77.0, 2.0, 17.0, 0.1, 2.2),
+            DemoFood("Yoghurt", 59.0, 10.0, 3.6, 0.4, 0.0),
+            DemoFood("Apple", 52.0, 0.3, 13.8, 0.2, 2.4),
         )
-        val base = items.map { (name, energy, protein) ->
+        val base = items.map { food ->
             app.openhealth.data.repo.FoodDraft(
-                id = "food-$name",
-                name = name,
+                id = "food-${food.name}",
+                name = food.name,
                 sourceKind = "bundled",
                 foodType = app.openhealth.data.repo.FoodType.BUNDLED,
                 per100g = mapOf(
-                    app.openhealth.core.nutrition.Nutrient.ENERGY to energy,
-                    app.openhealth.core.nutrition.Nutrient.PROTEIN to protein,
+                    app.openhealth.core.nutrition.Nutrient.ENERGY to food.energy,
+                    app.openhealth.core.nutrition.Nutrient.PROTEIN to food.protein,
+                    app.openhealth.core.nutrition.Nutrient.CARBS to food.carbs,
+                    app.openhealth.core.nutrition.Nutrient.FAT to food.fat,
+                    app.openhealth.core.nutrition.Nutrient.FIBRE to food.fibre,
                 ),
                 verified = true,
             )
@@ -768,3 +773,12 @@ private fun seedCorpusExercises(
     )
     id
 }
+
+private data class DemoFood(
+    val name: String,
+    val energy: Double,
+    val protein: Double,
+    val carbs: Double,
+    val fat: Double,
+    val fibre: Double,
+)
