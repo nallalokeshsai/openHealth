@@ -55,6 +55,7 @@ fun OhTopBar(
     modifier: Modifier = Modifier,
     settingsDot: Boolean = false,
     onDateClick: (() -> Unit)? = null,
+    dateActionLabel: String? = null,
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
@@ -78,13 +79,18 @@ fun OhTopBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val leadingInteraction = rememberInteraction()
-            var leading = Modifier.weight(1f)
+            var leading = Modifier
+                .weight(1f)
+                .heightIn(min = OhTheme.dims.touchTarget)
             if (onDateClick != null) {
                 leading = leading.ohClickable(
                     leadingInteraction,
                     role = Role.Button,
                     onClick = onDateClick,
                 )
+                if (dateActionLabel != null) {
+                    leading = leading.semantics { contentDescription = dateActionLabel }
+                }
             }
             Column(modifier = leading) {
                 // The wordmark: "openHealth" in the UI font at 17/600 (§10.5).
@@ -286,9 +292,12 @@ private fun RaisedDisc(
             },
         contentAlignment = Alignment.Center,
     ) {
+        val glyph = remember(tab.icon, selected) {
+            tab.icon.withStrokeWidth(if (selected) TRAIN_STROKE_SELECTED else TRAIN_STROKE_REST)
+        }
         OhIcon(
-            icon = tab.icon,
-            contentDescription = tab.label,
+            icon = glyph,
+            contentDescription = null,
             size = dims.tabIcon,
             tint = colors.onAcc,
         )
@@ -300,3 +309,5 @@ private const val LABEL_DROP_FONT_SCALE = 1.75f
 
 /** The five destinations of DESIGN.md §5.15. */
 private const val TAB_COUNT = 5
+private const val TRAIN_STROKE_SELECTED = 2.4f
+private const val TRAIN_STROKE_REST = 1.7f

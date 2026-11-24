@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import app.openhealth.ui.R
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.screens.common.OhEmptyState
 import app.openhealth.ui.screens.common.OhScreen
@@ -30,7 +34,15 @@ fun RootStubScreen(
             text = title,
             style = OhTheme.type.large.copy(fontWeight = OhWeight.bold),
             color = OhTheme.colors.label,
-            modifier = Modifier.padding(top = OhTheme.space.s6),
+            modifier = Modifier
+                .padding(top = OhTheme.space.s6)
+                .semantics { heading() },
+        )
+        Spacer(Modifier.height(OhTheme.space.s1))
+        Text(
+            text = stringResource(R.string.root_subtitle),
+            style = OhTheme.type.subhead,
+            color = OhTheme.colors.label2,
         )
         Spacer(Modifier.height(OhTheme.space.s7))
         OhCard {

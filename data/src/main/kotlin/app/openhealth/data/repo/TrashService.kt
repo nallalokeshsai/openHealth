@@ -313,22 +313,42 @@ class TrashService(
         return due.size
     }
 
+    /** True when the tombstoned row carries weight, body fat or calorie values. */
+    fun isSensitive(row: app.openhealth.data.db.ActiveTombstones): Boolean = runCatching {
+        val payload = row.payload ?: return false
+        when (row.entity_table) {
+            TrashEntity.OBSERVATION.table -> json.decodeFromString(
+                ObservationPayload.serializer(),
+                payload,
+            ).type in SENSITIVE_TYPES
+            TrashEntity.MEASUREMENT.table -> json.decodeFromString(
+                MeasurementPayload.serializer(),
+                payload,
+            ).type in SENSITIVE_TYPES
+            TrashEntity.ENTRY.table -> true
+            else -> false
+        }
+    }.getOrDefault(false)
+
     /** A short, human summary of a tombstoned row for the Trash list. */
     fun preview(row: app.openhealth.data.db.ActiveTombstones): String = runCatching {
         val payload = row.payload ?: return ""
         when (row.entity_table) {
-            TrashEntity.NOTE.table -> json.decodeFromString(NotePayload.serializer(), payload).body
+            TrashEntity.NOTE.table -> json.decodeFromString(
+                NotePayload.serializer(),
+                payload,
+            ).body.take(TRASH_PREVIEW_CHARS)
             TrashEntity.OBSERVATION.table -> {
                 val o = json.decodeFromString(ObservationPayload.serializer(), payload)
-                "${o.type.lowercase()} ${o.value} ${o.unit}"
+                "${o.type.lowercase()} ${o.value} ${unitLabel(o.unit)}"
             }
             TrashEntity.MEASUREMENT.table -> {
                 val m = json.decodeFromString(MeasurementPayload.serializer(), payload)
-                "${m.type.lowercase()} ${m.value} ${m.unit}"
+                "${m.type.lowercase()} ${m.value} ${unitLabel(m.unit)}"
             }
             TrashEntity.VITAL.table -> {
                 val v = json.decodeFromString(VitalPayload.serializer(), payload)
-                "${v.type.lowercase()} ${v.value} ${v.unit}"
+                "${v.type.lowercase()} ${v.value} ${unitLabel(v.unit)}"
             }
             TrashEntity.ENTRY.table -> {
                 val e = json.decodeFromString(EntryPayload.serializer(), payload)
@@ -410,6 +430,16 @@ class TrashService(
         db.bodyQueries.measurementById(id).executeAsOneOrNull()
 
     private fun vital(id: String): Vital? = db.bodyQueries.vitalById(id).executeAsOneOrNull()
+
+    private fun unitLabel(unit: String): String = when (unit) {
+        "[lb_av]" -> "lb"
+        "[in_i]" -> "in"
+        "mm[Hg]" -> "mmHg"
+        "{step}" -> "steps"
+        "{score}" -> ""
+        "/min" -> "bpm"
+        else -> unit
+    }
 
     private fun note(id: String): Note? = db.noteQueries.noteById(id).executeAsOneOrNull()
 
@@ -617,6 +647,17 @@ class TrashService(
 
     companion object {
         const val DEFAULT_RETENTION_DAYS = 30L
+        private val SENSITIVE_TYPES = setOf(
+            "WEIGHT",
+            "BODY_FAT_PERCENT",
+            "LEAN_MASS",
+            "NUTRITION_ENERGY",
+            "NUTRITION_PROTEIN",
+            "NUTRITION_CARBS",
+            "NUTRITION_FAT",
+            "NUTRITION_FIBRE",
+        )
         private const val TRASH_PREVIEW_FALLBACK = 18
+        private const val TRASH_PREVIEW_CHARS = 60
     }
 }

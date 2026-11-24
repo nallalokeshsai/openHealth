@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ModulePreset
 import app.openhealth.core.preferences.ProfileGoal
+import app.openhealth.core.preferences.SensitiveMetric
 import app.openhealth.core.preferences.UnitSystem
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhChip
@@ -92,6 +93,7 @@ fun SettingsScreen(
     onRestore: (Uri, CharArray) -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
+    onExternalActivity: () -> Unit,
     onDeleteAllNotes: () -> Unit,
     onEmptyTrash: () -> Unit,
     onUndoRestore: () -> Unit,
@@ -156,6 +158,7 @@ fun SettingsScreen(
                     onClick = { sheet = SettingsSheet.DATA },
                 )
             }
+            Spacer(Modifier.height(OhTheme.space.s7))
             OhInsetGroup {
                 GroupRow(
                     title = stringResource(R.string.settings_appearance),
@@ -164,7 +167,7 @@ fun SettingsScreen(
                         themeLabel(state.theme),
                         state.accent.label(),
                     ),
-                    icon = OhIcons.info,
+                    icon = OhIcons.more,
                     onClick = { sheet = SettingsSheet.APPEARANCE },
                 )
                 GroupRow(
@@ -235,10 +238,12 @@ fun SettingsScreen(
         onOpenTrash = onOpenTrash,
         onExport = {
             sheet = SettingsSheet.NONE
+            onExternalActivity()
             createDocument.launch("openHealth-export.ohe")
         },
         onRestore = {
             sheet = SettingsSheet.NONE
+            onExternalActivity()
             openDocument.launch(arrayOf("application/octet-stream", "*/*"))
         },
         onUndoRestore = onUndoRestore,
@@ -277,7 +282,9 @@ fun SettingsScreen(
     )
     OhDialog(
         visible = confirmRestore != null,
-        onDismiss = { confirmRestore = null },
+        onDismiss = {
+            confirmRestore = confirmRestore.cleared()
+        },
         title = stringResource(R.string.settings_restore_confirm_title),
         message = stringResource(R.string.settings_restore_confirm_message),
         primaryLabel = stringResource(R.string.settings_restore_confirm_action),
@@ -290,7 +297,7 @@ fun SettingsScreen(
         },
         cancelLabel = stringResource(R.string.settings_cancel),
         onCancel = {
-            confirmRestore = null
+            confirmRestore = confirmRestore.cleared()
             restoreUri = null
         },
     )
@@ -343,6 +350,7 @@ private fun MessageLine(message: SettingsMessage) {
         Text(
             text = stringResource(
                 when (message) {
+                    SettingsMessage.WORKING -> R.string.settings_working
                     SettingsMessage.EXPORT_SAVED -> R.string.settings_export_saved
                     SettingsMessage.EXPORT_FAILED -> R.string.settings_export_failed
                     SettingsMessage.RESTORE_DONE -> R.string.settings_restore_done
@@ -422,6 +430,8 @@ private fun GroupRow(
         title = title,
         subtitle = detail,
         leadingIcon = icon,
+        leadingTint = OhTheme.colors.surface2,
+        leadingInk = OhTheme.colors.label,
         showDivider = showDivider,
         showChevron = true,
         onClick = onClick,
@@ -442,6 +452,10 @@ private fun ProfileSheet(
     var height by remember(state.profileName) { mutableStateOf(state.profileHeight) }
     var weight by remember(state.profileName) { mutableStateOf(state.profileWeight) }
     var units by remember(state.profileName) { mutableStateOf(state.profileUnits) }
+    // Switching units converts what is shown; it is not a new measurement. Only a
+    // typed value is sent back, so a units change never writes a weigh-in.
+    var heightTyped by remember(state.profileName) { mutableStateOf(false) }
+    var weightTyped by remember(state.profileName) { mutableStateOf(false) }
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
@@ -453,8 +467,8 @@ private fun ProfileSheet(
                     name = name,
                     birthDate = birthDate,
                     goal = goal,
-                    height = height,
-                    weight = weight,
+                    height = if (heightTyped) height else "",
+                    weight = if (weightTyped) weight else "",
                     units = units,
                 ),
             )
@@ -466,6 +480,7 @@ private fun ProfileSheet(
             value = name,
             onValueChange = { name = it },
             placeholder = stringResource(R.string.onb_name_placeholder),
+            contentDescription = stringResource(R.string.onb_name_title),
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
@@ -477,6 +492,7 @@ private fun ProfileSheet(
             value = birthDate,
             onValueChange = { birthDate = it },
             placeholder = stringResource(R.string.onb_birth_placeholder),
+            contentDescription = stringResource(R.string.onb_birth_title),
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
@@ -499,23 +515,25 @@ private fun ProfileSheet(
         Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3)) {
             OhTextField(
                 value = height,
-                onValueChange = { height = it },
+                onValueChange = {
+                    height = it
+                    heightTyped = true
+                },
                 placeholder = stringResource(
-                    if (state.profileUnits == UnitSystem.IMPERIAL) {
-                        R.string.unit_inches
-                    } else {
-                        R.string.unit_cm
-                    },
+                    if (units == UnitSystem.IMPERIAL) R.string.unit_inches else R.string.unit_cm,
                 ),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.weight(1f),
             )
-            if (!state.weightNeutral) {
+            if (state.displayPolicy.shows(SensitiveMetric.WEIGHT)) {
                 OhTextField(
                     value = weight,
-                    onValueChange = { weight = it },
+                    onValueChange = {
+                        weight = it
+                        weightTyped = true
+                    },
                     placeholder = stringResource(
-                        if (state.profileUnits == UnitSystem.IMPERIAL) {
+                        if (units == UnitSystem.IMPERIAL) {
                             R.string.unit_pounds
                         } else {
                             R.string.unit_kg
@@ -584,6 +602,7 @@ private fun ModulesSheet(
                 OhRow(
                     title = module.label(),
                     showDivider = index > 0,
+                    mergeSemantics = false,
                     trailing = {
                         OhSwitch(
                             checked = module in state.modules,
@@ -665,18 +684,28 @@ private fun DataSheet(
         OhInsetGroup {
             OhRow(
                 title = stringResource(R.string.settings_export),
-                subtitle = stringResource(R.string.settings_export_body),
+                subtitle = if (state.busy) {
+                    stringResource(R.string.settings_working)
+                } else {
+                    stringResource(R.string.settings_export_body)
+                },
                 leadingIcon = OhIcons.export,
                 showChevron = true,
-                onClick = onExport,
+                enabled = !state.busy,
+                onClick = if (state.busy) null else onExport,
             )
             OhRow(
                 title = stringResource(R.string.settings_restore),
-                subtitle = stringResource(R.string.settings_restore_body),
+                subtitle = if (state.busy) {
+                    stringResource(R.string.settings_working)
+                } else {
+                    stringResource(R.string.settings_restore_body)
+                },
                 leadingIcon = OhIcons.refresh,
                 showDivider = true,
                 showChevron = true,
-                onClick = onRestore,
+                enabled = !state.busy,
+                onClick = if (state.busy) null else onRestore,
             )
         }
         if (state.hasRestoreSnapshot) {
@@ -762,6 +791,7 @@ private fun AppearanceSheet(
                     text = accent.label(),
                     selected = state.accent == accent,
                     onClick = { onAccent(accent) },
+                    swatch = if (OhTheme.colors.dark) accent.darkAcc else accent.lightAcc,
                 )
             }
         }
@@ -806,6 +836,7 @@ private fun PrivacySheet(
                     stringResource(R.string.settings_lock_unavailable)
                 },
                 enabled = state.appLockAvailable,
+                mergeSemantics = false,
                 trailing = {
                     OhSwitch(
                         checked = state.appLock,
@@ -885,6 +916,8 @@ private fun PassphraseSheet(
         } else {
             stringResource(R.string.settings_restore_action)
         },
+        // An export sealed with an empty passphrase is not protected at all.
+        primaryEnabled = first.isNotEmpty() && (!export || second.isNotEmpty()),
         onPrimary = {
             if (export && first != second) {
                 error = true
@@ -912,6 +945,7 @@ private fun PassphraseSheet(
                 error = false
             },
             placeholder = stringResource(R.string.settings_passphrase),
+            contentDescription = stringResource(R.string.settings_passphrase),
             visualTransformation = PasswordVisualTransformation(),
             error = if (error) stringResource(R.string.settings_passwords_differ) else null,
         )
@@ -924,6 +958,7 @@ private fun PassphraseSheet(
                     error = false
                 },
                 placeholder = stringResource(R.string.settings_passphrase_repeat),
+                contentDescription = stringResource(R.string.settings_passphrase_repeat),
                 visualTransformation = PasswordVisualTransformation(),
             )
         }
@@ -994,6 +1029,12 @@ private fun ProfileGoal.label(): String = stringResource(
         ProfileGoal.JUST_TRACK -> R.string.goal_just_track
     },
 )
+
+/** A passphrase that is not going to be used leaves no copy behind in memory. */
+private fun CharArray?.cleared(): CharArray? {
+    this?.fill('\u0000')
+    return null
+}
 
 private fun convertLength(text: String, from: UnitSystem, to: UnitSystem): String {
     val value = text.replace(',', '.').toDoubleOrNull() ?: return text

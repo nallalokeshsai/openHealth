@@ -33,9 +33,12 @@ import app.openhealth.data.db.Profile
 import app.openhealth.ui.screens.onboarding.OnboardingStep
 import app.openhealth.ui.screens.today.QuickAction
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -115,12 +118,31 @@ class ShellExitTest {
         compose.onNodeWithContentDescription("Quick add").performClick()
         compose.onAllNodesWithText("Note").onLast().performClick()
         compose.onNode(hasSetTextAction()).performTextInput("Knee felt fine today")
+        waitFor("note typed") { viewModel.state.value.quickAdd.note.isNotBlank() }
         compose.onNodeWithText("Save").performClick()
         waitFor("note stored") { container.store.notes.count() == 1L }
 
         val elapsed = (System.nanoTime() - started).toDouble()
         val minutes = elapsed / 1_000_000_000.0 / 60.0
         assertTrue(minutes < 3.0, "first note took %.2f minutes".format(minutes))
+    }
+
+    @Test
+    fun seventeenYearOldIsNotOfferedAWeightLossGoal() {
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        compose.onNodeWithText("Start").performClick()
+        typeAndContinue("Ana")
+        typeAndContinue("2009-06-15")
+        compose.onNodeWithText("Female").performClick()
+        advance()
+        typeAndContinue("170")
+        typeAndContinue("70")
+        advance()
+        waitFor("goal") { viewModel.state.value.onboarding.step == OnboardingStep.Goal }
+        assertFalse(viewModel.state.value.onboarding.weightLossAllowed)
+        compose.onNodeWithText("Lose fat").assertDoesNotExist()
+        compose.onNodeWithText("Just track").assertExists()
     }
 
     @Test
@@ -168,6 +190,51 @@ class ShellExitTest {
                 ?.value?.value == 82.0
         }
     }
+
+    @Test
+    fun waterGlassesAddUpAndABackdatedGlassIsNotLost() {
+        seedProfile()
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        waitFor("shell") { viewModel.state.value.onboardingComplete }
+
+        viewModel.openQuickAdd(QuickAction.WATER)
+        waitFor("water form") {
+            viewModel.state.value.quickAdd.mode ==
+                app.openhealth.ui.screens.quickadd.QuickAddMode.WATER
+        }
+        compose.onNodeWithText("Save").performClick()
+        waitFor("first glass") { waterToday() == 250.0 }
+        waitFor("sheet closed") { !viewModel.state.value.quickAdd.visible }
+
+        // The backdate strip never offers a moment that has not happened yet.
+        viewModel.openQuickAdd(QuickAction.WATER)
+        waitFor("water form again") {
+            viewModel.state.value.quickAdd.mode ==
+                app.openhealth.ui.screens.quickadd.QuickAddMode.WATER
+        }
+        viewModel.onQuickAddWhen(container.today, LAST_HOUR)
+        val nowHour = container.clock.now().toLocalDateTime(container.zone).hour
+        waitFor("hour clamped to now") {
+            viewModel.state.value.quickAdd.whenHour == nowHour
+        }
+
+        // A glass logged for an earlier hour of the same day adds to the day.
+        viewModel.onQuickAddWhen(container.today, 0)
+        waitFor("backdated") { viewModel.state.value.quickAdd.whenHour == 0 }
+        compose.onNodeWithText("Save").performClick()
+        waitFor("two glasses") { waterToday() == 500.0 }
+
+        // Deleting one glass takes exactly that glass off the day.
+        val glass = viewModel.state.value.timeline?.days.orEmpty()
+            .flatMap { it.rows }
+            .first { it.kind == app.openhealth.ui.screens.timeline.TimelineKind.WATER }
+        viewModel.deleteTimelineRow(glass)
+        waitFor("one glass left") { waterToday() == 250.0 }
+    }
+
+    private fun waterToday(): Double? = container.store.rollups
+        .forDayAndType(container.today, ObservationType.WATER)?.value?.value
 
     @Test
     fun turningAModuleOffHidesItAndReenablingRestoresItsData() {
@@ -238,6 +305,11 @@ class ShellExitTest {
         waitFor("loaded") { viewModel.state.value.loaded }
         compose.onNodeWithText("Trend").assertDoesNotExist()
         compose.onNodeWithText("Log weight").assertDoesNotExist()
+        assertTrue(
+            viewModel.state.value.timeline?.days.orEmpty()
+                .flatMap { it.rows }
+                .none { it.kind == app.openhealth.ui.screens.timeline.TimelineKind.WEIGHT },
+        )
 
         viewModel.setWeightNeutral(false)
         waitFor("weight back") { !viewModel.state.value.preferences.weightNeutral }
@@ -309,6 +381,86 @@ class ShellExitTest {
         assertEquals(2L, container.store.notes.count())
     }
 
+    @Test
+    fun theSettingsRestorePathRebuildsTheRecordAndCanBeUndone() {
+        seedProfile()
+        TempDocumentStore.bytes = null
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        waitFor("shell") { viewModel.state.value.onboardingComplete }
+
+        // One note and one weight, so the restore has both a row and a rollup to rebuild.
+        viewModel.openQuickAdd(QuickAction.WEIGHT)
+        waitFor("weight form") {
+            viewModel.state.value.quickAdd.mode ==
+                app.openhealth.ui.screens.quickadd.QuickAddMode.WEIGHT
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("77")
+        closeKeyboard()
+        compose.onNodeWithText("Save").performClick()
+        waitFor("weight stored") {
+            container.store.rollups
+                .forDayAndType(container.today, ObservationType.WEIGHT)?.value?.value == 77.0
+        }
+        waitFor("sheet closed") { !viewModel.state.value.quickAdd.visible }
+
+        // The Settings seams, in the order the screen calls them.
+        viewModel.export(Uri.EMPTY, "correct horse battery staple".toCharArray())
+        waitFor("exported", timeoutMillis = CIPHER_TIMEOUT_MS) {
+            TempDocumentStore.bytes != null
+        }
+
+        viewModel.openQuickAdd(QuickAction.WEIGHT)
+        waitFor("weight form again") {
+            viewModel.state.value.quickAdd.mode ==
+                app.openhealth.ui.screens.quickadd.QuickAddMode.WEIGHT
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("90")
+        closeKeyboard()
+        compose.onNodeWithText("Save").performClick()
+        waitFor("weight replaced") {
+            container.store.rollups
+                .forDayAndType(container.today, ObservationType.WEIGHT)?.value?.value == 90.0
+        }
+        waitFor("sheet closed again") { !viewModel.state.value.quickAdd.visible }
+
+        viewModel.restore(Uri.EMPTY, "correct horse battery staple".toCharArray())
+        waitFor("restored, rollups rebuilt", timeoutMillis = CIPHER_TIMEOUT_MS) {
+            container.store.rollups
+                .forDayAndType(container.today, ObservationType.WEIGHT)?.value?.value == 77.0
+        }
+        assertTrue(container.hasPreRestoreSnapshot())
+
+        viewModel.undoLastRestore()
+        waitFor("restore undone", timeoutMillis = CIPHER_TIMEOUT_MS) {
+            container.store.rollups
+                .forDayAndType(container.today, ObservationType.WEIGHT)?.value?.value == 90.0
+        }
+        assertFalse(container.hasPreRestoreSnapshot())
+    }
+
+    @Test
+    fun aSeventeenYearOldProfileCannotBeSavedWithAWeightLossGoal() {
+        seedProfile()
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        waitFor("shell") { viewModel.state.value.onboardingComplete }
+        val seventeen = container.today.minus(kotlinx.datetime.DatePeriod(years = 17))
+        viewModel.saveProfile(
+            app.openhealth.ui.screens.settings.ProfileEdit(
+                name = "Ana",
+                birthDate = seventeen.toString(),
+                goal = app.openhealth.core.preferences.ProfileGoal.LOSE_FAT,
+                height = "170",
+                weight = "70",
+                units = UnitSystem.METRIC,
+            ),
+        )
+        waitFor("saved") { viewModel.state.value.profile?.name == "Ana" }
+        assertEquals(null, viewModel.state.value.profile?.goal)
+        assertFalse(viewModel.state.value.settings?.profileMayLoseWeight ?: true)
+    }
+
     private fun seedProfile() {
         val now = container.clock.now()
         runBlocking {
@@ -361,9 +513,9 @@ class ShellExitTest {
         Thread.sleep(500)
     }
 
-    private fun waitFor(what: String, condition: () -> Boolean) {
+    private fun waitFor(what: String, timeoutMillis: Long = 30_000, condition: () -> Boolean) {
         val reached = runCatching {
-            compose.waitUntil(timeoutMillis = 15_000, condition = condition)
+            compose.waitUntil(timeoutMillis = timeoutMillis, condition = condition)
         }.isSuccess
         assertTrue(
             reached,
@@ -372,6 +524,11 @@ class ShellExitTest {
         )
     }
 }
+
+private const val LAST_HOUR = 23
+
+/** Argon2id is deliberately slow; an encrypted round trip is several derivations. */
+private const val CIPHER_TIMEOUT_MS = 180_000L
 
 /** A document store that keeps the bytes in memory, so no system picker is needed. */
 private object TempDocumentStore : DocumentStore {

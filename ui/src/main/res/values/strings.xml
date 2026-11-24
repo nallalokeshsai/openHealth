@@ -205,10 +205,12 @@
     <string name="onb_age_blocked_body">The app is built around goals and records that need adult consent. Nothing has been saved.</string>
     <string name="onb_age_blocked_action">Change date of birth</string>
     <string name="onb_required">This one sets up your profile. Answer it to continue.</string>
+    <string name="onb_goal_required">Choose a goal to continue.</string>
     <string name="onb_value_required">Add a value to continue.</string>
     <string name="onb_value_range">That value is outside the range this app accepts.</string>
 
     <!-- Today -->
+    <string name="today_greeting_night">Good night</string>
     <string name="today_greeting_morning">Good morning</string>
     <string name="today_greeting_afternoon">Good afternoon</string>
     <string name="today_greeting_evening">Good evening</string>
@@ -216,6 +218,7 @@
     <string name="today_status_logged">Logged today. Add the next thing when it happens.</string>
     <string name="today_status_weight_neutral">Weight-neutral mode is on. Weight and calories stay hidden.</string>
     <string name="today_timeline">Timeline</string>
+    <string name="today_timeline_body">Every stored event, newest first.</string>
     <string name="today_sample_data">Showing sample data. Nothing here came from a device.</string>
     <string name="today_body_eyebrow">Recovery</string>
     <string name="today_body_title">Body</string>
@@ -266,7 +269,7 @@
     <string name="quick_note_placeholder">What happened?</string>
     <string name="quick_recent">Recent</string>
     <string name="quick_backdate">Backdate an entry</string>
-    <string name="quick_backdate_body">Choose a past date and time. The recorded time never moves.</string>
+    <string name="quick_backdate_body">Open the note form and choose a past date and time.</string>
     <string name="quick_water_amount">Amount</string>
     <string name="quick_weight_value">Weight</string>
     <string name="quick_weight_invalid">That weight is outside the range this app accepts.</string>
@@ -285,6 +288,17 @@
 
     <!-- Timeline -->
     <string name="timeline_title">Timeline</string>
+    <string name="timeline_unknown_source">Unknown source</string>
+    <!-- DESIGN.md 7.2: a manual entry says this, never the stored source label. -->
+    <string name="timeline_source_manual">Entered by you</string>
+    <!-- DESIGN.md 7.3: the neutral 12 sp tags a row may carry. -->
+    <string name="timeline_tag_imported">Imported</string>
+    <string name="timeline_tag_late">Late</string>
+    <string name="timeline_tag_edited">Edited</string>
+    <string name="timeline_tag_excluded">Excluded</string>
+    <string name="timeline_not_recorded">Not recorded</string>
+    <string name="timeline_diary_entry">Diary entry</string>
+    <string name="timeline_workout_session">Workout session</string>
     <string name="timeline_empty_title">Nothing logged yet</string>
     <string name="timeline_empty_action">Log a note</string>
     <string name="timeline_show_older">Show older</string>
@@ -305,15 +319,20 @@
     <string name="timeline_device">Device</string>
     <string name="timeline_local_day">Local day</string>
     <string name="timeline_quality">Quality</string>
+    <string name="timeline_local_day_value">%1$s (%2$s)</string>
+    <string name="timeline_recorded_value">%1$s · %2$s</string>
     <string name="timeline_raw">Raw record</string>
     <string name="timeline_raw_kept">Kept</string>
     <string name="timeline_raw_none">Compacted or entered by hand</string>
     <string name="timeline_exclude">Exclude from trends</string>
+    <string name="timeline_include">Include in trends</string>
     <string name="timeline_edited">Edited</string>
     <string name="timeline_yes">Yes</string>
     <string name="timeline_no">No</string>
-    <string name="timeline_delete_note">This removes the note from the timeline and puts it in Trash for 30 days.</string>
-    <string name="timeline_delete_action">Delete note</string>
+    <string name="timeline_delete_note">This moves the entry to Trash for 30 days.</string>
+    <string name="timeline_delete_action">Move to Trash</string>
+    <string name="timeline_empty_filter_title">Nothing in this filter</string>
+    <string name="timeline_clear_filter">Show everything</string>
     <string name="timeline_today">Today</string>
     <string name="timeline_yesterday">Yesterday</string>
 
@@ -366,7 +385,7 @@
     <string name="settings_delete_notes_message">Each note goes to Trash for 30 days. Nothing is erased straight away.</string>
     <string name="settings_restore_confirm_title">Replace everything on this phone?</string>
     <string name="settings_restore_confirm_message">This file replaces your profile, every logged value and every setting. A local snapshot is kept so you can undo it.</string>
-    <string name="settings_restore_confirm_action">Replace and restore</string>
+    <string name="settings_restore_confirm_action">Replace</string>
     <string name="settings_empty_trash">Empty trash</string>
     <string name="settings_empty_trash_title">Delete everything in Trash?</string>
     <string name="settings_empty_trash_message">Deleted items stop being restorable. The deletion marker stays.</string>
@@ -376,6 +395,7 @@
     <string name="settings_appearance_detail">%1$s · %2$s</string>
     <string name="settings_undo_restore">Undo last restore</string>
     <string name="settings_undo_restore_body">Put back what was on this phone before the last restore.</string>
+    <string name="settings_working">Working on it. Encrypting takes a moment on a phone.</string>
     <string name="settings_export_saved">Export saved. Keep the password; it cannot be recovered.</string>
     <string name="settings_export_failed">The export could not be written.</string>
     <string name="settings_restore_done">Restore finished. Everything on this phone was replaced.</string>
@@ -419,8 +439,10 @@
     <string name="lock_no_enrolment">Set a screen lock or fingerprint on this phone first.</string>
     <string name="lock_locked_out">Too many attempts. Try again in a minute.</string>
     <string name="lock_cancelled">Unlock to continue.</string>
+    <string name="lock_disable">Turn off app lock</string>
 
     <!-- Roots that later phases fill -->
+    <string name="root_subtitle">Your data stays on this phone.</string>
     <string name="root_vitals">Vitals</string>
     <string name="root_vitals_empty_title">No measurements yet</string>
     <string name="root_vitals_empty_body">Weight, tape measurements, composition and lab readings collect here.</string>

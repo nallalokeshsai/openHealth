@@ -8,13 +8,15 @@ import androidx.lifecycle.viewModelScope
 import app.openhealth.R
 import app.openhealth.android.AppContainer
 import app.openhealth.android.security.LockError
+import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.ObservationId
 import app.openhealth.core.ids.TombstoneId
+import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.Provenance
-import app.openhealth.core.observation.Quality
+import app.openhealth.core.observation.SourceKind
 import app.openhealth.core.preferences.AgeRules
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ProfileGoal
@@ -29,6 +31,7 @@ import app.openhealth.data.db.Note
 import app.openhealth.data.db.Profile
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.data.repo.TrashEntity
+import app.openhealth.ui.R as UiR
 import app.openhealth.ui.screens.lock.LockMessage
 import app.openhealth.ui.screens.onboarding.OnboardingAnswers
 import app.openhealth.ui.screens.onboarding.OnboardingIssue
@@ -80,6 +83,7 @@ data class OnboardingUi(
     val ageBlocked: Boolean = false,
     val weightLossAllowed: Boolean = true,
     val tier: Int = 1,
+    val saving: Boolean = false,
 )
 
 /** The one quick-add sheet's state. */
@@ -99,7 +103,8 @@ data class QuickAddUi(
             when (mode) {
                 QuickAddMode.NOTE -> note.isNotBlank()
                 QuickAddMode.WATER -> waterMl > 0
-                QuickAddMode.WEIGHT -> weight.toDoubleOrNull()?.let { it > 0 } == true
+                QuickAddMode.WEIGHT -> weight.replace(',', '.').toDoubleOrNull()?.let { it > 0 } ==
+                    true
                 else -> false
             }
 }
@@ -128,6 +133,7 @@ data class AppState(
     val toast: AppToast? = null,
     val fatal: Boolean = false,
     val sessionUndo: AppToast? = null,
+    val recent: List<QuickAddRecent> = emptyList(),
 )
 
 /**
@@ -167,6 +173,8 @@ class AppViewModel(
     private var message: SettingsMessage? = null
     private var busy = false
     private var undoAction: UndoAction? = null
+    private var suppressNextLock = false
+    private var repeating = false
     private var toastJob: Job? = null
 
     init {
@@ -174,7 +182,7 @@ class AppViewModel(
     }
 
     fun refresh() {
-        viewModelScope.launch {
+        launchGuarded {
             runCatching { rebuild() }.onFailure { failure ->
                 if (failure is kotlinx.coroutines.CancellationException) throw failure
                 _state.update { state -> state.copy(loaded = true, fatal = true) }
@@ -187,16 +195,36 @@ class AppViewModel(
         viewModelScope.cancel()
     }
 
+    /**
+     * Every write runs inside this guard: a storage or constraint failure becomes the
+     * startup error state, never an uncaught coroutine exception that kills the app.
+     */
+    private fun launchGuarded(block: suspend () -> Unit): Job = viewModelScope.launch {
+        runCatching { block() }.onFailure { failure ->
+            if (failure is kotlinx.coroutines.CancellationException) throw failure
+            _state.update { it.copy(loaded = true, fatal = true) }
+        }
+    }
+
+    fun retry() {
+        _state.update { it.copy(fatal = false, loaded = false) }
+        refresh()
+    }
+
     private suspend fun rebuild() = withContext(Dispatchers.IO) {
         val preferences = container.preferences.snapshot()
         val profile = store.profile.active()
         val complete = preferences.onboardingComplete && profile != null
         val today = profile?.let { buildToday(preferences, it) }
         val settings = buildSettings(preferences, profile)
-        val timeline = buildTimeline()
-        val trash = buildTrash()
+        val timeline = buildTimeline(preferences)
+        val trash = buildTrash(preferences)
+        val recent = buildRecent(preferences)
         _state.update { previous ->
-            val lockOnFirstLoad = !previous.loaded && complete && preferences.appLock
+            val lockOnFirstLoad = !previous.loaded &&
+                complete &&
+                preferences.appLock &&
+                app.openhealth.android.security.BiometricGate().available(container.context)
             previous.copy(
                 loaded = true,
                 onboardingComplete = complete,
@@ -206,6 +234,7 @@ class AppViewModel(
                 settings = settings,
                 timeline = timeline,
                 trash = trash,
+                recent = recent,
                 locked = previous.locked || lockOnFirstLoad,
             )
         }
@@ -234,9 +263,16 @@ class AppViewModel(
         weight = convertMass(answers.weight, from, to),
         goalWeight = convertMass(answers.goalWeight, from, to),
         neck = convertLength(answers.neck, from, to),
+        shoulders = convertLength(answers.shoulders, from, to),
         chest = convertLength(answers.chest, from, to),
         waist = convertLength(answers.waist, from, to),
         hips = convertLength(answers.hips, from, to),
+        upperArm = convertLength(answers.upperArm, from, to),
+        forearm = convertLength(answers.forearm, from, to),
+        thigh = convertLength(answers.thigh, from, to),
+        calf = convertLength(answers.calf, from, to),
+        wrist = convertLength(answers.wrist, from, to),
+        ankle = convertLength(answers.ankle, from, to),
     )
 
     private fun convertLength(text: String, from: UnitSystem, to: UnitSystem): String {
@@ -265,36 +301,42 @@ class AppViewModel(
 
     fun onOnboardingNext() {
         val current = _state.value.onboarding
+        if (current.saving || _state.value.onboardingComplete) return
         val validation = validate(current.step, current.answers)
-        if (validation.issue != null || validation.ageBlocked) {
-            _state.update {
-                it.copy(
-                    onboarding = it.onboarding.copy(
-                        issue = validation.issue,
-                        ageBlocked = validation.ageBlocked,
-                        weightLossAllowed = validation.weightLossAllowed,
-                        answers = validation.answers,
-                    ),
-                )
+        val allowed = if (current.step == OnboardingStep.BirthDate) {
+            validation.weightLossAllowed
+        } else {
+            current.weightLossAllowed
+        }
+        when {
+            validation.issue != null || validation.ageBlocked -> {
+                _state.update {
+                    it.copy(
+                        onboarding = it.onboarding.copy(
+                            issue = validation.issue,
+                            ageBlocked = validation.ageBlocked,
+                            weightLossAllowed = allowed,
+                            answers = validation.answers,
+                        ),
+                    )
+                }
             }
-            return
-        }
-        if (current.step == OnboardingStep.Finish) {
-            persistOnboarding(validation.answers)
-            return
-        }
-        val next = nextStep(current.step, validation.answers)
-        _state.update {
-            it.copy(
-                onboarding = it.onboarding.copy(
-                    step = next,
-                    answers = validation.answers,
-                    issue = null,
-                    ageBlocked = false,
-                    weightLossAllowed = validation.weightLossAllowed,
-                    tier = maxOf(it.onboarding.tier, next.tier),
-                ),
-            )
+            current.step == OnboardingStep.Finish -> persistOnboarding(validation.answers)
+            else -> {
+                val next = nextStep(current.step, validation.answers)
+                _state.update {
+                    it.copy(
+                        onboarding = it.onboarding.copy(
+                            step = next,
+                            answers = validation.answers,
+                            issue = null,
+                            ageBlocked = false,
+                            weightLossAllowed = allowed,
+                            tier = maxOf(it.onboarding.tier, next.tier),
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -337,7 +379,9 @@ class AppViewModel(
     }
 
     fun tryDemo() {
-        viewModelScope.launch {
+        if (_state.value.onboarding.saving) return
+        _state.update { it.copy(onboarding = it.onboarding.copy(saving = true)) }
+        launchGuarded {
             runCatching {
                 withContext(Dispatchers.IO) {
                     container.addSampleData(
@@ -357,6 +401,7 @@ class AppViewModel(
                 message = SettingsMessage.DEMO_FAILED
             }
             rebuild()
+            _state.update { it.copy(onboarding = it.onboarding.copy(saving = false)) }
         }
     }
 
@@ -380,9 +425,20 @@ class AppViewModel(
             OnboardingStep.RestingHeartRate ->
                 optionalNumber(answers, answers.restingHeartRate, MIN_HEART_RATE, MAX_HEART_RATE)
             OnboardingStep.BloodPressure -> validateBloodPressure(answers)
+            OnboardingStep.Measurements -> validateMeasurements(answers)
             OnboardingStep.GoalWeight -> validateGoalWeight(answers)
             else -> Validated(answers)
         }
+
+    /**
+     * A tape measurement outside the stored range would be dropped silently at write
+     * time; the question says so instead (`pr.md` §6.1 tier 3).
+     */
+    private fun validateMeasurements(answers: OnboardingAnswers): Validated {
+        val typed = tapeSites(answers).map { (_, text) -> text }.filter { it.isNotBlank() }
+        val bad = typed.any { tape(it, answers.units) == null }
+        return Validated(answers, if (bad) OnboardingIssue.VALUE_OUT_OF_RANGE else null)
+    }
 
     private fun validateSex(answers: OnboardingAnswers): Validated =
         if (answers.sexAtBirth == null && !answers.preferNotToSay) {
@@ -455,8 +511,8 @@ class AppViewModel(
     ): Validated = numberIssue(text, min, max)?.let { Validated(answers, it) } ?: Validated(answers)
 
     private fun validateBloodPressure(answers: OnboardingAnswers): Validated {
-        val systolic = answers.systolic.toDoubleOrNull()
-        val diastolic = answers.diastolic.toDoubleOrNull()
+        val systolic = decimal(answers.systolic)
+        val diastolic = decimal(answers.diastolic)
         val issue = when {
             systolic == null && diastolic == null -> null
             systolic == null || diastolic == null -> OnboardingIssue.VALUE_OUT_OF_RANGE
@@ -480,13 +536,16 @@ class AppViewModel(
 
     private fun numberIssue(text: String, min: Double, max: Double): OnboardingIssue? {
         if (text.isBlank()) return null
-        val value = text.toDoubleOrNull()
+        val value = decimal(text)
         return if (value == null || value !in min..max) {
             OnboardingIssue.VALUE_OUT_OF_RANGE
         } else {
             null
         }
     }
+
+    /** A decimal keyboard writes the locale's separator; both are the same number. */
+    private fun decimal(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()
 
     private fun nextStep(step: OnboardingStep, answers: OnboardingAnswers): OnboardingStep {
         val order = visibleSteps(answers)
@@ -541,13 +600,15 @@ class AppViewModel(
     }
 
     private fun persistOnboarding(answers: OnboardingAnswers) {
-        viewModelScope.launch {
+        _state.update { it.copy(onboarding = it.onboarding.copy(saving = true)) }
+        launchGuarded {
             runCatching {
                 withContext(Dispatchers.IO) { writeOnboarding(answers) }
             }.onFailure {
                 message = SettingsMessage.PROFILE_INVALID
             }
             rebuild()
+            _state.update { it.copy(onboarding = it.onboarding.copy(saving = false)) }
         }
     }
 
@@ -615,8 +676,13 @@ class AppViewModel(
     private fun writeOnboardingMeasurements(answers: OnboardingAnswers, happened: Instant) {
         writeObservation(ObservationType.WEIGHT, weightKgValue(answers), happened)
         if (!answers.weightNeutral) {
-            answers.bodyFat.toDoubleOrNull()?.let {
-                writeObservation(ObservationType.BODY_FAT_PERCENT, it, happened)
+            decimal(answers.bodyFat)?.let {
+                writeObservation(
+                    ObservationType.BODY_FAT_PERCENT,
+                    it,
+                    happened,
+                    method = compositionMethod(answers.compositionSource),
+                )
             }
             kg(answers.goalWeight, answers.units)?.let {
                 store.settings.put(SettingKeys.GOAL_WEIGHT_KG, it.toString())
@@ -630,34 +696,58 @@ class AppViewModel(
     }
 
     private fun writeOnboardingVitals(answers: OnboardingAnswers, happened: Instant) {
-        answers.restingHeartRate.toDoubleOrNull()?.let {
+        decimal(answers.restingHeartRate)?.let {
             writeObservation(ObservationType.RESTING_HEART_RATE, it, happened)
         }
-        answers.systolic.toDoubleOrNull()?.let {
-            writeObservation(ObservationType.BLOOD_PRESSURE_SYSTOLIC, it, happened)
+        decimal(answers.systolic)?.let {
+            writeObservation(
+                ObservationType.BLOOD_PRESSURE_SYSTOLIC,
+                it,
+                happened,
+                method = MeasurementMethod.CUFF,
+            )
         }
-        answers.diastolic.toDoubleOrNull()?.let {
-            writeObservation(ObservationType.BLOOD_PRESSURE_DIASTOLIC, it, happened)
+        decimal(answers.diastolic)?.let {
+            writeObservation(
+                ObservationType.BLOOD_PRESSURE_DIASTOLIC,
+                it,
+                happened,
+                method = MeasurementMethod.CUFF,
+            )
         }
     }
 
     private fun writeOnboardingTape(answers: OnboardingAnswers, happened: Instant) {
-        val sites = listOf(
-            "neck" to answers.neck,
-            "shoulders" to answers.shoulders,
-            "chest" to answers.chest,
-            "waist" to answers.waist,
-            "hips" to answers.hips,
-            "upper_arm" to answers.upperArm,
-            "forearm" to answers.forearm,
-            "thigh" to answers.thigh,
-            "calf" to answers.calf,
-            "wrist" to answers.wrist,
-            "ankle" to answers.ankle,
-        )
-        sites.forEach { (type, text) ->
+        tapeSites(answers).forEach { (type, text) ->
             tape(text, answers.units)?.let { writeMeasurement(type, it, "cm", happened) }
         }
+    }
+
+    /** The eleven tape sites of `pr.md` §6.1 tier 3, named once. */
+    private fun tapeSites(answers: OnboardingAnswers): List<Pair<String, String>> = listOf(
+        "neck" to answers.neck,
+        "shoulders" to answers.shoulders,
+        "chest" to answers.chest,
+        "waist" to answers.waist,
+        "hips" to answers.hips,
+        "upper_arm" to answers.upperArm,
+        "forearm" to answers.forearm,
+        "thigh" to answers.thigh,
+        "calf" to answers.calf,
+        "wrist" to answers.wrist,
+        "ankle" to answers.ankle,
+    )
+
+    private fun compositionMethod(
+        source: app.openhealth.ui.screens.onboarding.CompositionSource?,
+    ): MeasurementMethod = when (source) {
+        app.openhealth.ui.screens.onboarding.CompositionSource.SCALE -> MeasurementMethod.SCALE
+        app.openhealth.ui.screens.onboarding.CompositionSource.BIA -> MeasurementMethod.BIA
+        app.openhealth.ui.screens.onboarding.CompositionSource.DEXA -> MeasurementMethod.DEXA
+        app.openhealth.ui.screens.onboarding.CompositionSource.CALIPERS,
+        app.openhealth.ui.screens.onboarding.CompositionSource.OTHER,
+        -> MeasurementMethod.OTHER
+        null -> MeasurementMethod.MANUAL_ENTRY
     }
 
     private fun weightKgValue(answers: OnboardingAnswers): Double =
@@ -666,6 +756,7 @@ class AppViewModel(
     // -------------------------------------------------------------------- quick add
 
     fun openQuickAdd(action: QuickAction?) {
+        message = null
         val current = _state.value.quickAdd
         val mode = when (action) {
             null -> QuickAddMode.TILES
@@ -676,8 +767,19 @@ class AppViewModel(
             QuickAction.SET -> QuickAddMode.SET
             QuickAction.VITALS -> QuickAddMode.VITALS
         }
+        val local = now().toLocalDateTime(zone)
         _state.update {
-            it.copy(quickAdd = current.copy(visible = true, mode = mode, note = "", weight = ""))
+            it.copy(
+                quickAdd = current.copy(
+                    visible = true,
+                    mode = mode,
+                    note = "",
+                    weight = "",
+                    whenDate = local.date,
+                    whenHour = local.hour,
+                    invalid = false,
+                ),
+            )
         }
     }
 
@@ -703,16 +805,27 @@ class AppViewModel(
         _state.update { it.copy(quickAdd = it.quickAdd.copy(weight = value)) }
     }
 
+    /**
+     * The backdate strip never offers a moment that has not happened: on today the hour
+     * stops at the current one, so the sheet shows exactly the `happened_at` that will
+     * be stored (`pr.md` §6.27).
+     */
     fun onQuickAddWhen(date: LocalDate, hour: Int) {
-        _state.update { it.copy(quickAdd = it.quickAdd.copy(whenDate = date, whenHour = hour)) }
+        val local = now().toLocalDateTime(zone)
+        val safeDate = if (date > local.date) local.date else date
+        val safeHour = hour.coerceIn(0, LAST_HOUR)
+            .let { if (safeDate == local.date) minOf(it, local.hour) else it }
+        _state.update {
+            it.copy(quickAdd = it.quickAdd.copy(whenDate = safeDate, whenHour = safeHour))
+        }
     }
 
     fun saveQuickAdd() {
         val quick = _state.value.quickAdd
         if (!quick.canSave) return
         _state.update { it.copy(quickAdd = it.quickAdd.copy(saving = true, invalid = false)) }
-        viewModelScope.launch {
-            val earned: Pair<UndoAction, Int>? = runCatching<Pair<UndoAction, Int>?> {
+        launchGuarded {
+            val earned = runCatching<Pair<UndoAction, Int>?> {
                 withContext(Dispatchers.IO) { appendQuick(quick) }
             }.getOrNull()
             if (earned != null) {
@@ -745,18 +858,15 @@ class AppViewModel(
         }
         QuickAddMode.WATER -> {
             val id = container.ids.newId()
-            val at = chosenInstant(quick.whenDate, quick.whenHour)
-            // WATER is a daily total in the contract: add to the day's manual total so
-            // the rollup's "last total wins" rule keeps every glass.
-            val date = at.toLocalDateTime(zone).date
-            val existing = store.rollups.forDayAndType(date, ObservationType.WATER)
-                ?.value?.value ?: 0.0
-            writeObservation(
+            // One glass is one part of the day's total: the rollup sums this source's
+            // parts, so a backdated glass adds and a deleted glass subtracts.
+            writeIncrement(
                 type = ObservationType.WATER,
-                value = existing + quick.waterMl,
-                happenedAt = at,
+                value = quick.waterMl.toDouble(),
+                happenedAt = chosenInstant(quick.whenDate, quick.whenHour),
                 id = id,
             )
+            store.settings.put(SettingKeys.LAST_WATER_ML, quick.waterMl.toString())
             UndoAction.Added(TrashEntity.OBSERVATION, id) to R.string.toast_water_added
         }
         QuickAddMode.WEIGHT -> {
@@ -778,32 +888,37 @@ class AppViewModel(
     }
 
     fun repeat(recent: QuickAddRecent) {
-        // A recent row logs in one tap: the same amount, now.
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                when (recent.action) {
-                    QuickAction.WATER -> {
-                        val amount = recent.detail.substringBefore(" ").toDoubleOrNull()
-                            ?: return@withContext
-                        val id = container.ids.newId()
-                        val date = now().toLocalDateTime(zone).date
-                        val existing = store.rollups.forDayAndType(date, ObservationType.WATER)
-                            ?.value?.value ?: 0.0
-                        writeObservation(ObservationType.WATER, existing + amount, now(), id = id)
-                        undoAction = UndoAction.Added(TrashEntity.OBSERVATION, id)
+        // A recent row logs in one tap, so a double tap must not log twice.
+        if (repeating) return
+        repeating = true
+        launchGuarded {
+            val recorded = runCatching {
+                withContext(Dispatchers.IO) {
+                    val id = container.ids.newId()
+                    when (recent.action) {
+                        QuickAction.WATER -> {
+                            writeIncrement(ObservationType.WATER, recent.value, now(), id = id)
+                            store.settings.put(
+                                SettingKeys.LAST_WATER_ML,
+                                recent.value.toInt().toString(),
+                            )
+                            UndoAction.Added(TrashEntity.OBSERVATION, id)
+                        }
+                        QuickAction.WEIGHT -> {
+                            writeObservation(ObservationType.WEIGHT, recent.value, now(), id = id)
+                            UndoAction.Added(TrashEntity.OBSERVATION, id)
+                        }
+                        else -> null
                     }
-                    QuickAction.WEIGHT -> {
-                        // The detail is canonical kg already; never convert it twice.
-                        val amount = recent.detail.substringBefore(" ").toDoubleOrNull()
-                            ?: return@withContext
-                        val id = container.ids.newId()
-                        writeObservation(ObservationType.WEIGHT, amount, now(), id = id)
-                        undoAction = UndoAction.Added(TrashEntity.OBSERVATION, id)
-                    }
-                    else -> return@withContext
                 }
+            }.getOrNull()
+            if (recorded != null) {
+                undoAction = recorded
+                showToast(R.string.toast_saved, undo = true)
+            } else {
+                showToast(R.string.toast_not_saved, undo = false)
             }
-            showToast(R.string.toast_saved, undo = true)
+            repeating = false
             rebuild()
         }
     }
@@ -812,25 +927,32 @@ class AppViewModel(
 
     fun deleteTimelineRow(row: TimelineRowModel) {
         if (!row.deletable) return
-        viewModelScope.launch {
+        launchGuarded {
             val tombstone = withContext(Dispatchers.IO) {
                 when (row.kind) {
                     TimelineKind.NOTE -> store.trash.deleteNote(NoteId(row.entityId))
                     TimelineKind.WATER, TimelineKind.OBSERVATION ->
                         store.trash.deleteObservation(ObservationId(row.entityId))
-                    TimelineKind.WEIGHT, TimelineKind.MEASUREMENT ->
+                    TimelineKind.WEIGHT ->
+                        store.trash.deleteObservation(ObservationId(row.entityId))
+                    TimelineKind.MEASUREMENT ->
                         store.trash.deleteMeasurement(
                             app.openhealth.core.ids.MeasurementId(row.entityId),
                         )
                     TimelineKind.VITAL ->
                         store.trash.deleteVital(app.openhealth.core.ids.VitalId(row.entityId))
+                    TimelineKind.ENTRY -> store.trash.deleteEntry(EntryId(row.entityId))
                     else -> null
                 }
             }
             if (tombstone != null) {
                 undoAction = UndoAction.Deleted(tombstone)
+                toastJob?.cancel()
                 _state.update {
-                    it.copy(sessionUndo = AppToast(R.string.toast_deleted, undo = true))
+                    it.copy(
+                        sessionUndo = AppToast(R.string.toast_deleted, undo = true),
+                        toast = null,
+                    )
                 }
                 rebuild()
             }
@@ -839,10 +961,13 @@ class AppViewModel(
 
     fun excludeFromTrends(row: TimelineRowModel) {
         if (!row.excludable) return
-        viewModelScope.launch {
+        launchGuarded {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    store.observations.excludeFromTrends(ObservationId(row.entityId), true)
+                    store.observations.excludeFromTrends(
+                        ObservationId(row.entityId),
+                        !row.excluded,
+                    )
                 }
             }
             showToast(R.string.toast_saved, undo = false)
@@ -852,7 +977,7 @@ class AppViewModel(
 
     fun undoLast() {
         val action = undoAction ?: return
-        viewModelScope.launch {
+        launchGuarded {
             withContext(Dispatchers.IO) {
                 when (action) {
                     is UndoAction.Added -> when (action.entity) {
@@ -869,7 +994,7 @@ class AppViewModel(
             }
             undoAction = null
             dismissToast()
-            _state.update { it.copy(sessionUndo = null) }
+            _state.update { it.copy(sessionUndo = null, toast = null) }
             rebuild()
         }
     }
@@ -884,7 +1009,8 @@ class AppViewModel(
     }
 
     fun toggleModule(module: HealthModule, enabled: Boolean) {
-        viewModelScope.launch {
+        message = null
+        launchGuarded {
             withContext(Dispatchers.IO) {
                 container.preferences.setModule(module, enabled)
                 container.preferences.setPreset(
@@ -896,7 +1022,8 @@ class AppViewModel(
     }
 
     fun setPreset(preset: app.openhealth.core.preferences.ModulePreset) {
-        viewModelScope.launch {
+        message = null
+        launchGuarded {
             withContext(Dispatchers.IO) {
                 container.preferences.setPreset(preset)
                 container.preferences.setModules(preset.enabled)
@@ -906,14 +1033,15 @@ class AppViewModel(
     }
 
     fun setWeightNeutral(enabled: Boolean) {
-        viewModelScope.launch {
+        message = null
+        launchGuarded {
             withContext(Dispatchers.IO) { container.preferences.setWeightNeutral(enabled) }
             rebuild()
         }
     }
 
     fun setTheme(theme: ThemeChoice) {
-        viewModelScope.launch {
+        launchGuarded {
             withContext(Dispatchers.IO) {
                 container.preferences.setTheme(
                     when (theme) {
@@ -928,7 +1056,7 @@ class AppViewModel(
     }
 
     fun setAccent(accent: OhAccent) {
-        viewModelScope.launch {
+        launchGuarded {
             withContext(Dispatchers.IO) { container.preferences.setAccent(accent) }
             rebuild()
         }
@@ -941,7 +1069,7 @@ class AppViewModel(
             refresh()
             return
         }
-        viewModelScope.launch {
+        launchGuarded {
             withContext(Dispatchers.IO) {
                 container.preferences.setAppLock(enabled)
             }
@@ -951,8 +1079,26 @@ class AppViewModel(
 
     /** Re-arm the lock when the app leaves the foreground (`pr.md` §6.23). */
     fun onAppBackgrounded() {
-        if (_state.value.preferences.appLock && !_state.value.locked) {
+        if (suppressNextLock) {
+            suppressNextLock = false
+            return
+        }
+        val available = app.openhealth.android.security.BiometricGate()
+            .available(container.context)
+        if (_state.value.preferences.appLock && available && !_state.value.locked) {
             _state.update { it.copy(locked = true, lockMessage = null) }
+        }
+    }
+
+    /** A file picker stops the activity; that is not the person leaving the app. */
+    fun suppressLockForExternalActivity() {
+        suppressNextLock = true
+    }
+
+    fun disableAppLock() {
+        launchGuarded {
+            withContext(Dispatchers.IO) { container.preferences.setAppLock(false) }
+            _state.update { it.copy(locked = false, lockMessage = null) }
         }
     }
 
@@ -983,66 +1129,88 @@ class AppViewModel(
     }
 
     fun saveProfile(edit: ProfileEdit) {
-        viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                val current = store.profile.active() ?: return@withContext false
-                val birth = if (edit.birthDate.isBlank()) {
-                    current.date_of_birth?.let(::parseDate)
-                } else {
-                    parseDate(edit.birthDate)
-                }
-                if (birth != null &&
-                    !AgeRules.isSupported(birth, now().toLocalDateTime(zone).date)
-                ) {
-                    return@withContext false
-                }
-                val height = cm(edit.height, edit.units) ?: current.height_cm
-                val weight = kg(edit.weight, edit.units) ?: current.weight_kg
-                store.profile.upsert(
-                    current.copy(
-                        name = edit.name.trim().ifBlank { current.name },
-                        date_of_birth = birth?.toString() ?: current.date_of_birth,
-                        goal = edit.goal?.key ?: current.goal,
-                        height_cm = height,
-                        weight_kg = weight,
-                        units = edit.units.key,
-                        weight_neutral = current.weight_neutral,
-                        updated_at = now().toEpochMilliseconds(),
-                        revision = current.revision + 1L,
-                    ),
-                )
-                store.settings.put(SettingKeys.UNITS, edit.units.key)
-                if (weight != null && weight != current.weight_kg) {
-                    writeObservation(ObservationType.WEIGHT, weight, now())
-                }
-                true
-            }
+        message = null
+        launchGuarded {
+            val ok = withContext(Dispatchers.IO) { writeProfile(edit) }
             message = if (ok) SettingsMessage.PROFILE_SAVED else SettingsMessage.PROFILE_INVALID
             rebuild()
         }
     }
 
+    private fun writeProfile(edit: ProfileEdit): Boolean {
+        val current = store.profile.active()
+        val birth = if (edit.birthDate.isBlank()) {
+            current?.date_of_birth?.let(::parseDate)
+        } else {
+            parseDate(edit.birthDate)
+        }
+        val today = now().toLocalDateTime(zone).date
+        if (current == null || (birth != null && !AgeRules.isSupported(birth, today))) {
+            return false
+        }
+        // 16-17 never carry a weight-loss goal, whichever screen set it and whatever
+        // the birth date was when it was set (`pr.md` §6.1).
+        val mayLoseWeight = birth?.let { AgeRules.mayUseWeightLossGoal(it, today) } ?: true
+        val goal = (edit.goal ?: ProfileGoal.fromKey(current.goal))
+            ?.takeUnless { it == ProfileGoal.LOSE_FAT && !mayLoseWeight }
+        val height = cm(edit.height, edit.units) ?: current.height_cm
+        val weight = kg(edit.weight, edit.units) ?: current.weight_kg
+        store.profile.upsert(
+            current.copy(
+                name = edit.name.trim().ifBlank { current.name },
+                date_of_birth = birth?.toString() ?: current.date_of_birth,
+                goal = goal?.key,
+                height_cm = height,
+                weight_kg = weight,
+                units = edit.units.key,
+                weight_neutral = current.weight_neutral,
+                updated_at = now().toEpochMilliseconds(),
+                revision = current.revision + 1L,
+            ),
+        )
+        writeProfileSettings(edit, goal, mayLoseWeight)
+        if (weight != null && weight != current.weight_kg) {
+            writeObservation(ObservationType.WEIGHT, weight, now())
+        }
+        return true
+    }
+
+    private fun writeProfileSettings(
+        edit: ProfileEdit,
+        goal: ProfileGoal?,
+        mayLoseWeight: Boolean,
+    ) {
+        store.settings.put(SettingKeys.UNITS, edit.units.key)
+        store.settings.put(SettingKeys.GOAL_MODE, goal?.key.orEmpty())
+        if (!mayLoseWeight) {
+            store.settings.put(SettingKeys.GOAL_WEIGHT_KG, "")
+            store.settings.put(SettingKeys.GOAL_TARGET_DATE, "")
+        }
+    }
+
     fun setTimelineFilter(value: TimelineFilter) {
+        message = null
         filter = value
-        viewModelScope.launch { rebuild() }
+        launchGuarded { rebuild() }
     }
 
     fun restoreTombstone(item: TrashItemModel) {
-        viewModelScope.launch {
+        launchGuarded {
             withContext(Dispatchers.IO) { store.trash.undo(TombstoneId(item.id)) }
             rebuild()
         }
     }
 
     fun purgeTombstone(item: TrashItemModel) {
-        viewModelScope.launch {
+        launchGuarded {
             withContext(Dispatchers.IO) { store.trash.purge(TombstoneId(item.id)) }
             rebuild()
         }
     }
 
     fun deleteAllNotes() {
-        viewModelScope.launch {
+        message = null
+        launchGuarded {
             withContext(Dispatchers.IO) {
                 store.notes.all().forEach { store.trash.deleteNote(NoteId(it.id)) }
             }
@@ -1052,7 +1220,8 @@ class AppViewModel(
     }
 
     fun emptyTrash() {
-        viewModelScope.launch {
+        message = null
+        launchGuarded {
             withContext(Dispatchers.IO) {
                 store.trash.active().forEach { store.trash.purge(TombstoneId(it.id)) }
             }
@@ -1061,29 +1230,14 @@ class AppViewModel(
         }
     }
 
-    fun addSampleData() {
-        val profile = _state.value.profile ?: return
-        viewModelScope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    check(store.observations.count() == 0L) { "not empty" }
-                    container.addSampleData(AppContainer.DEMO_DAYS, profile.id)
-                    container.preferences.setDemo(true)
-                }
-            }
-            message = if (result.isSuccess) {
-                SettingsMessage.DEMO_ADDED
-            } else {
-                SettingsMessage.DEMO_FAILED
-            }
-            rebuild()
-        }
-    }
-
     fun export(uri: Uri, passphrase: CharArray) {
+        if (busy) {
+            passphrase.fill('\u0000')
+            return
+        }
         busy = true
         refresh()
-        viewModelScope.launch {
+        launchGuarded {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     val bytes = container.export.export(passphrase)
@@ -1101,16 +1255,24 @@ class AppViewModel(
     }
 
     fun restore(uri: Uri, passphrase: CharArray) {
+        if (busy) {
+            passphrase.fill('\u0000')
+            return
+        }
         busy = true
         refresh()
-        viewModelScope.launch {
+        launchGuarded {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
+                    val bytes = container.documents.read(uri)
+                    // Decrypt and validate before touching the live record or snapshot.
+                    val bundle = container.export.read(bytes, passphrase)
                     check(container.writePreRestoreSnapshot()) {
                         "a restore needs a local snapshot first"
                     }
-                    val bytes = container.documents.read(uri)
-                    container.export.restore(bytes, passphrase)
+                    container.export.restoreBundle(bundle)
+                    store.engine.refreshRegistry()
+                    store.engine.rebuildAll()
                 }
             }
             message = when (result.exceptionOrNull()) {
@@ -1125,8 +1287,14 @@ class AppViewModel(
     }
 
     fun undoLastRestore() {
-        viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) { container.restorePreRestoreSnapshot() }
+        launchGuarded {
+            val ok = withContext(Dispatchers.IO) {
+                container.restorePreRestoreSnapshot().also { restored ->
+                    // The snapshot brings its own sources back; the live engine must not
+                    // keep the registry the restore it is undoing left behind.
+                    if (restored) store.engine.refreshRegistry()
+                }
+            }
             message = if (ok) SettingsMessage.RESTORE_DONE else SettingsMessage.RESTORE_FAILED
             rebuild()
         }
@@ -1169,14 +1337,49 @@ class AppViewModel(
         )
     }
 
+    private fun buildRecent(
+        preferences: app.openhealth.android.preferences.Preferences,
+    ): List<QuickAddRecent> {
+        val result = mutableListOf<QuickAddRecent>()
+        if (HealthModule.NUTRITION in preferences.modules) {
+            val water = store.settings.get(SettingKeys.LAST_WATER_ML)?.toDoubleOrNull()
+            if (water != null) {
+                result += QuickAddRecent(
+                    action = QuickAction.WATER,
+                    title = container.context.getString(UiR.string.quick_water),
+                    detail = formatDisplay(water, "mL"),
+                    value = water,
+                    unit = UcumUnit.MILLILITRE,
+                )
+            }
+        }
+        if (HealthModule.BODY in preferences.modules &&
+            preferences.displayPolicy.shows(app.openhealth.core.preferences.SensitiveMetric.WEIGHT)
+        ) {
+            store.observations.latest(ObservationType.WEIGHT)?.let { weight ->
+                result += QuickAddRecent(
+                    action = QuickAction.WEIGHT,
+                    title = container.context.getString(UiR.string.quick_weight),
+                    detail = formatDisplay(
+                        weight.value.value,
+                        weight.value.unit.ucum,
+                    ),
+                    value = weight.value.value,
+                    unit = UcumUnit.KILOGRAM,
+                )
+            }
+        }
+        return result.take(RECENT_LIMIT)
+    }
+
     private fun buildSettings(
         preferences: app.openhealth.android.preferences.Preferences,
         profile: Profile?,
     ): SettingsState = SettingsState(
         profileName = profile?.name.orEmpty(),
         profileSubtitle = listOfNotNull(
-            profile?.goal?.let(::humanize),
-            profile?.units,
+            profile?.goal?.let(::goalLabel),
+            UnitSystem.fromKey(profile?.units)?.let(::unitLabel),
         ).joinToString(" · "),
         profileBirthDate = profile?.date_of_birth.orEmpty(),
         profileGoal = ProfileGoal.fromKey(profile?.goal),
@@ -1194,6 +1397,7 @@ class AppViewModel(
         modules = preferences.modules,
         preset = preferences.preset,
         weightNeutral = preferences.weightNeutral,
+        displayPolicy = preferences.displayPolicy,
         theme = when (preferences.theme) {
             app.openhealth.android.preferences.ThemeMode.SYSTEM -> ThemeChoice.SYSTEM
             app.openhealth.android.preferences.ThemeMode.DARK -> ThemeChoice.DARK
@@ -1212,18 +1416,31 @@ class AppViewModel(
             trash = store.trash.active().size.toLong(),
         ),
         busy = busy,
-        message = message,
+        // A long encryption is stated, not left silent (`DESIGN.md` §6.4).
+        message = if (busy) SettingsMessage.WORKING else message,
     )
 
-    private fun buildTimeline(): TimelineModel {
+    private fun buildTimeline(
+        preferences: app.openhealth.android.preferences.Preferences,
+    ): TimelineModel {
         val sourceRows = store.sources.all().associateBy { it.id.value }
-        val sources = sourceRows.mapValues { it.value.label }
-        val page = store.timeline.page(timelineLimit)
-        val all = page.mapNotNull { timelineRow(it, sources) }
-        val visible = if (_state.value.preferences.weightNeutral) {
-            all.filterNot { it.sensitive }
+        // A manual entry says "Entered by you" (`DESIGN.md` §7.2); the stored label is
+        // data and is never shown untranslated.
+        val sources = sourceRows.mapValues { (_, row) ->
+            if (row.kind == SourceKind.MANUAL) manualSourceLabel() else row.label
+        }
+        val page = store.timeline.page(timelineLimit + 1)
+        val hasMore = page.size > timelineLimit
+        val all = page.take(timelineLimit.toInt()).mapNotNull { timelineRow(it, sources) }
+        val withImport = all.map { row ->
+            row.copy(
+                imported = sourceRows[row.sourceId]?.kind != SourceKind.MANUAL,
+            )
+        }
+        val visible = if (preferences.weightNeutral) {
+            withImport.filterNot { it.sensitive }
         } else {
-            all
+            withImport
         }
         val filtered = visible.filter(::matchesFilter)
         val days = filtered
@@ -1234,7 +1451,7 @@ class AppViewModel(
             days = days,
             filter = filter,
             total = filtered.size,
-            hasMore = page.size >= timelineLimit.toInt(),
+            hasMore = hasMore,
         )
     }
 
@@ -1261,7 +1478,7 @@ class AppViewModel(
         "observation" -> observationTimelineRow(item, sources)
         "measurement" -> measurementTimelineRow(item, sources)
         "vital" -> vitalTimelineRow(item, sources)
-        "meal" -> mealTimelineRow(item, sources)
+        "meal" -> mealTimelineRow(item)
         "entry" -> entryTimelineRow(item, sources)
         "session" -> sessionTimelineRow(item, sources)
         else -> null
@@ -1271,10 +1488,11 @@ class AppViewModel(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel? = store.notes.byId(NoteId(item.entityId))?.let { note ->
-        val source = sources[note.source_id] ?: UNKNOWN_SOURCE
+        val source = sources[note.source_id] ?: unknownSource()
         TimelineRowModel(
             kind = TimelineKind.NOTE,
             entityId = note.id,
+            sourceId = note.source_id.orEmpty(),
             title = note.body,
             detail = source,
             valueText = null,
@@ -1297,7 +1515,7 @@ class AppViewModel(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel? = store.observations.byId(ObservationId(item.entityId))?.let { obs ->
-        val source = sources[obs.provenance.sourceId.value] ?: UNKNOWN_SOURCE
+        val source = sources[obs.provenance.sourceId.value] ?: unknownSource()
         TimelineRowModel(
             sensitive = obs.type in SENSITIVE_TYPES,
             kind = timelineKind(obs.type),
@@ -1319,6 +1537,8 @@ class AppViewModel(
             ),
             deletable = true,
             excludable = true,
+            excluded = obs.excludedFromTrends,
+            sourceId = obs.provenance.sourceId.value,
         )
     }
 
@@ -1326,9 +1546,10 @@ class AppViewModel(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel? = store.body.measurementById(item.entityId)?.let { row ->
-        val source = sources[row.source_id] ?: UNKNOWN_SOURCE
+        val source = sources[row.source_id] ?: unknownSource()
         TimelineRowModel(
             sensitive = row.type in SENSITIVE_TYPE_NAMES,
+            sourceId = row.source_id,
             kind = TimelineKind.MEASUREMENT,
             entityId = row.id,
             title = humanize(row.type),
@@ -1353,10 +1574,11 @@ class AppViewModel(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel? = store.body.vitalById(item.entityId)?.let { row ->
-        val source = sources[row.source_id] ?: UNKNOWN_SOURCE
+        val source = sources[row.source_id] ?: unknownSource()
         TimelineRowModel(
             kind = TimelineKind.VITAL,
             entityId = row.id,
+            sourceId = row.source_id,
             title = humanize(row.type),
             detail = source,
             valueText = formatDisplay(row.value_, row.unit),
@@ -1375,40 +1597,42 @@ class AppViewModel(
         )
     }
 
-    private fun mealTimelineRow(
-        item: app.openhealth.data.repo.TimelineItem,
-        sources: Map<String, String>,
-    ): TimelineRowModel? = store.nutrition.mealById(item.entityId)?.let { meal ->
-        val source = sources[item.sourceId] ?: UNKNOWN_SOURCE
-        TimelineRowModel(
-            kind = TimelineKind.MEAL,
-            entityId = meal.id,
-            title = meal.name ?: humanize(meal.kind),
-            detail = source,
-            valueText = null,
-            provenance = RowProvenance(
-                sourceLabel = source,
-                happenedAt = Instant.fromEpochMilliseconds(meal.created_at),
-                recordedAt = Instant.fromEpochMilliseconds(meal.created_at),
-                method = null,
-                device = null,
-                edited = false,
-            ),
-            deletable = false,
-        )
-    }
+    private fun mealTimelineRow(item: app.openhealth.data.repo.TimelineItem): TimelineRowModel? =
+        store.nutrition.mealById(item.entityId)?.let { meal ->
+            // B2's meal table has no provenance columns yet; B6 adds them. Do not invent
+            // a source in the meantime.
+            val source = container.context.getString(UiR.string.timeline_not_recorded)
+            TimelineRowModel(
+                kind = TimelineKind.MEAL,
+                entityId = meal.id,
+                sourceId = "",
+                title = meal.name.ifBlank { humanize(meal.kind) },
+                detail = source,
+                valueText = null,
+                provenance = RowProvenance(
+                    sourceLabel = source,
+                    happenedAt = Instant.fromEpochMilliseconds(meal.created_at),
+                    recordedAt = Instant.fromEpochMilliseconds(meal.created_at),
+                    method = null,
+                    device = null,
+                    edited = false,
+                ),
+                deletable = false,
+            )
+        }
 
     private fun entryTimelineRow(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel? = store.nutrition.entryById(item.entityId)?.let { entry ->
-        val source = sources[entry.source_id] ?: UNKNOWN_SOURCE
+        val source = sources[entry.source_id] ?: unknownSource()
         TimelineRowModel(
             kind = TimelineKind.ENTRY,
             entityId = entry.id,
-            title = entry.food_id ?: "Diary entry",
+            sourceId = entry.source_id.orEmpty(),
+            title = entry.food_id ?: container.context.getString(UiR.string.timeline_diary_entry),
             detail = source,
-            valueText = entry.energy_kcal?.let { format(it) + " kcal" },
+            valueText = entry.energy_kcal?.let { withUnit(it, "kcal") },
             provenance = RowProvenance(
                 sourceLabel = source,
                 happenedAt = Instant.fromEpochMilliseconds(entry.happened_at),
@@ -1426,11 +1650,12 @@ class AppViewModel(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel {
-        val source = sources[item.sourceId] ?: UNKNOWN_SOURCE
+        val source = sources[item.sourceId] ?: unknownSource()
         return TimelineRowModel(
             kind = TimelineKind.SESSION,
             entityId = item.entityId,
-            title = "Workout session",
+            sourceId = item.sourceId,
+            title = container.context.getString(UiR.string.timeline_workout_session),
             detail = source,
             valueText = null,
             provenance = RowProvenance(
@@ -1445,24 +1670,28 @@ class AppViewModel(
         )
     }
 
-    private fun buildTrash(): List<TrashItemModel> = store.trash.active().map { row ->
-        val kind = when (row.entity_table) {
-            TrashEntity.NOTE.table -> TrashKind.NOTE
-            TrashEntity.OBSERVATION.table -> TrashKind.OBSERVATION
-            TrashEntity.MEASUREMENT.table -> TrashKind.MEASUREMENT
-            TrashEntity.VITAL.table -> TrashKind.VITAL
-            TrashEntity.ENTRY.table -> TrashKind.ENTRY
-            TrashEntity.WORK_SET.table -> TrashKind.SET
-            else -> TrashKind.OBSERVATION
+    private fun buildTrash(
+        preferences: app.openhealth.android.preferences.Preferences,
+    ): List<TrashItemModel> = store.trash.active()
+        .filterNot { preferences.weightNeutral && store.trash.isSensitive(it) }
+        .map { row ->
+            val kind = when (row.entity_table) {
+                TrashEntity.NOTE.table -> TrashKind.NOTE
+                TrashEntity.OBSERVATION.table -> TrashKind.OBSERVATION
+                TrashEntity.MEASUREMENT.table -> TrashKind.MEASUREMENT
+                TrashEntity.VITAL.table -> TrashKind.VITAL
+                TrashEntity.ENTRY.table -> TrashKind.ENTRY
+                TrashEntity.WORK_SET.table -> TrashKind.SET
+                else -> TrashKind.OBSERVATION
+            }
+            TrashItemModel(
+                id = row.id,
+                kind = kind,
+                detail = store.trash.preview(row),
+                deletedLabel = Instant.fromEpochMilliseconds(row.deleted_at)
+                    .toLocalDateTime(zone).date.toString(),
+            )
         }
-        TrashItemModel(
-            id = row.id,
-            kind = kind,
-            detail = store.trash.preview(row),
-            deletedLabel = Instant.fromEpochMilliseconds(row.deleted_at)
-                .toLocalDateTime(zone).date.toString(),
-        )
-    }
 
     // ----------------------------------------------------------------------- helpers
 
@@ -1473,48 +1702,65 @@ class AppViewModel(
 
     private fun showToast(messageRes: Int, undo: Boolean) {
         toastJob?.cancel()
-        _state.update { it.copy(toast = AppToast(messageRes, undo)) }
-        toastJob = viewModelScope.launch {
+        _state.update {
+            it.copy(
+                toast = AppToast(messageRes, undo),
+                sessionUndo = null,
+            )
+        }
+        toastJob = launchGuarded {
             delay(if (undo) UNDO_TOAST_MS else PLAIN_TOAST_MS)
             _state.update { it.copy(toast = null) }
         }
     }
 
     private fun chosenInstant(date: LocalDate, hour: Int): Instant {
-        val local = now().toLocalDateTime(zone)
-        val safeHour = if (date == local.date) minOf(hour, local.hour) else hour
-        return LocalDateTime(date, LocalTime(safeHour, 0)).toInstant(zone)
+        val instant = now()
+        val local = instant.toLocalDateTime(zone)
+        if (date == local.date && hour >= local.hour) return instant
+        return LocalDateTime(date, LocalTime(hour.coerceIn(0, LAST_HOUR), 0)).toInstant(zone)
     }
 
     private fun writeObservation(
         type: ObservationType,
         value: Double,
         happenedAt: Instant,
-        asInterval: Boolean = false,
         id: String = container.ids.newId(),
+        method: MeasurementMethod = container.manualMethod(),
     ) {
-        val recorded = now()
-        val provenance = provenance(happenedAt, recorded)
-        val observation = if (asInterval) {
-            Observation(
-                id = ObservationId(id),
-                type = type,
-                value = Measure(value, type.canonicalUnit),
-                start = happenedAt,
-                end = happenedAt,
-                provenance = provenance,
-                quality = Quality(),
-            )
-        } else {
+        val provenance = provenance(happenedAt, now(), method)
+        store.observations.record(
             Observation.of(
                 id = ObservationId(id),
                 type = type,
                 value = Measure(value, type.canonicalUnit),
                 start = happenedAt,
                 provenance = provenance,
-            )
-        }
-        store.observations.record(observation)
+            ),
+        )
+    }
+
+    /**
+     * One part of a day's total: a glass of water, not the day's figure. It is stored as
+     * a moment with an end so the rollup sums the parts of this source, which keeps the
+     * day right whatever order the parts were logged in and whichever one is deleted.
+     */
+    private fun writeIncrement(
+        type: ObservationType,
+        value: Double,
+        happenedAt: Instant,
+        id: String = container.ids.newId(),
+    ) {
+        store.observations.record(
+            Observation(
+                id = ObservationId(id),
+                type = type,
+                value = Measure(value, type.canonicalUnit),
+                start = happenedAt,
+                end = happenedAt,
+                provenance = provenance(happenedAt, now(), container.manualMethod()),
+            ),
+        )
     }
 
     private fun writeMeasurement(
@@ -1568,13 +1814,17 @@ class AppViewModel(
         )
     }
 
-    private fun provenance(happenedAt: Instant, recordedAt: Instant): Provenance = Provenance(
+    private fun provenance(
+        happenedAt: Instant,
+        recordedAt: Instant,
+        method: MeasurementMethod,
+    ): Provenance = Provenance(
         sourceId = AppContainer.MANUAL_SOURCE,
         time = TimeProvenance.of(happenedAt, recordedAt, zone),
         idempotencyKey = container.ids.newId(),
         device = "android",
         appVersion = container.versionName,
-        method = container.manualMethod(),
+        method = method,
     )
 
     private fun profileUnits(): UnitSystem =
@@ -1597,21 +1847,58 @@ class AppViewModel(
         refresh()
     }
 
+    /** Value and unit are joined by a non-breaking space, never concatenated (§11.7). */
     private fun formatDisplay(value: Double, unit: String): String {
         val units = UnitSystem.fromKey(_state.value.profile?.units) ?: UnitSystem.METRIC
         if (units == UnitSystem.IMPERIAL) {
             return when (unit) {
-                UcumUnit.KILOGRAM.ucum ->
-                    format(Measure(value, UcumUnit.KILOGRAM).convertTo(UcumUnit.POUND).value) +
-                        " " + UcumUnit.POUND.ucum
-                UcumUnit.CENTIMETRE.ucum ->
-                    format(Measure(value, UcumUnit.CENTIMETRE).convertTo(UcumUnit.INCH).value) +
-                        " " + UcumUnit.INCH.ucum
-                else -> format(value) + " " + unit
+                UcumUnit.KILOGRAM.ucum -> withUnit(
+                    Measure(value, UcumUnit.KILOGRAM).convertTo(UcumUnit.POUND).value,
+                    "lb",
+                )
+                UcumUnit.CENTIMETRE.ucum -> withUnit(
+                    Measure(value, UcumUnit.CENTIMETRE).convertTo(UcumUnit.INCH).value,
+                    "in",
+                )
+                else -> withUnit(value, displayUnit(unit))
             }
         }
-        return format(value) + " " + unit
+        return withUnit(value, displayUnit(unit))
     }
+
+    private fun withUnit(value: Double, unit: String): String =
+        if (unit.isBlank()) format(value) else format(value) + NBSP + unit
+
+    private fun displayUnit(unit: String): String = when (unit) {
+        "[lb_av]" -> "lb"
+        "[in_i]" -> "in"
+        "mm[Hg]" -> "mmHg"
+        "{step}" -> "steps"
+        "{score}" -> ""
+        "/min" -> "bpm"
+        else -> unit
+    }
+
+    private fun goalLabel(goal: String): String = when (ProfileGoal.fromKey(goal)) {
+        ProfileGoal.LOSE_FAT -> container.context.getString(UiR.string.goal_lose_fat)
+        ProfileGoal.MAINTAIN -> container.context.getString(UiR.string.goal_maintain)
+        ProfileGoal.GAIN_MUSCLE -> container.context.getString(UiR.string.goal_gain_muscle)
+        ProfileGoal.IMPROVE_HEALTH -> container.context.getString(UiR.string.goal_improve_health)
+        ProfileGoal.MANAGE_CONDITION ->
+            container.context.getString(UiR.string.goal_manage_condition)
+        ProfileGoal.JUST_TRACK -> container.context.getString(UiR.string.goal_just_track)
+        null -> goal
+    }
+
+    private fun unitLabel(units: UnitSystem): String = container.context.getString(
+        if (units ==
+            UnitSystem.IMPERIAL
+        ) {
+            UiR.string.onb_units_imperial
+        } else {
+            UiR.string.onb_units_metric
+        },
+    )
 
     private fun displayLength(cm: Double, units: UnitSystem): String = format(
         if (units == UnitSystem.IMPERIAL) {
@@ -1628,6 +1915,12 @@ class AppViewModel(
             kg
         },
     )
+
+    private fun manualSourceLabel(): String =
+        container.context.getString(UiR.string.timeline_source_manual)
+
+    private fun unknownSource(): String =
+        container.context.getString(UiR.string.timeline_unknown_source)
 
     private fun parseDate(text: String): LocalDate? =
         runCatching { LocalDate.parse(text.trim()) }.getOrNull()
@@ -1663,15 +1956,21 @@ class AppViewModel(
     }
 
     private fun greeting(hour: Int): Greeting = when (hour) {
+        in NIGHT_FROM..NIGHT_TO -> Greeting.NIGHT
         in MORNING_FROM..MORNING_TO -> Greeting.MORNING
         in AFTERNOON_FROM..AFTERNOON_TO -> Greeting.AFTERNOON
         else -> Greeting.EVENING
     }
 
-    private fun format(value: Double): String {
-        val rounded = String.format(Locale.getDefault(), "%.1f", value)
-        return if (rounded.endsWith(".0")) rounded.dropLast(2) else rounded
-    }
+    /**
+     * The locale's separators, at most one decimal, no trailing zero, and a true minus
+     * sign rather than a hyphen (`DESIGN.md` §8.1, §11.7).
+     */
+    private fun format(value: Double): String = java.text.NumberFormat
+        .getNumberInstance(Locale.getDefault())
+        .apply { maximumFractionDigits = 1 }
+        .format(value)
+        .replace('-', MINUS)
 
     private fun humanize(key: String): String = key.lowercase(Locale.getDefault())
         .split('_')
@@ -1701,11 +2000,16 @@ class AppViewModel(
         private const val MAX_SYSTOLIC = 260.0
         private const val MIN_DIASTOLIC = 30.0
         private const val MAX_DIASTOLIC = 180.0
+        private const val NIGHT_FROM = 0
+        private const val NIGHT_TO = 4
         private const val MORNING_FROM = 5
         private const val MORNING_TO = 11
         private const val AFTERNOON_FROM = 12
         private const val AFTERNOON_TO = 17
-        private const val UNKNOWN_SOURCE = "Unknown source"
+        private const val RECENT_LIMIT = 3
+        private const val LAST_HOUR = 23
+        private const val NBSP = '\u00A0'
+        private const val MINUS = '\u2212'
         private val SENSITIVE_TYPES = setOf(
             ObservationType.WEIGHT,
             ObservationType.BODY_FAT_PERCENT,

@@ -21,6 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.icons.OhIcon
@@ -34,7 +37,12 @@ import app.openhealth.ui.theme.OhWeight
  * button again.
  */
 @Composable
-fun LockScreen(message: LockMessage?, onUnlock: () -> Unit, modifier: Modifier = Modifier) {
+fun LockScreen(
+    message: LockMessage?,
+    onUnlock: () -> Unit,
+    modifier: Modifier = Modifier,
+    onDisableLock: (() -> Unit)? = null,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -84,6 +92,10 @@ fun LockScreen(message: LockMessage?, onUnlock: () -> Unit, modifier: Modifier =
                 ),
                 style = OhTheme.type.footnote,
                 color = OhTheme.colors.orangeInk,
+                modifier = Modifier.semantics {
+                    liveRegion =
+                        androidx.compose.ui.semantics.LiveRegionMode.Polite
+                },
             )
         }
         Spacer(Modifier.height(OhTheme.space.s8))
@@ -92,5 +104,14 @@ fun LockScreen(message: LockMessage?, onUnlock: () -> Unit, modifier: Modifier =
             onClick = onUnlock,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (message == LockMessage.NO_ENROLMENT && onDisableLock != null) {
+            Spacer(Modifier.height(OhTheme.space.s2))
+            OhButton(
+                text = stringResource(R.string.lock_disable),
+                onClick = onDisableLock,
+                variant = app.openhealth.ui.components.OhButtonVariant.Quiet,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }

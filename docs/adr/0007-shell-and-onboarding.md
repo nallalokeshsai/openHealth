@@ -70,12 +70,13 @@ choices.
    mixes fabricated device provenance into a real profile; there is no "add sample
    data" action in Settings.
 
-9. **Quick-add writes choose the honest storage shape.** `WATER` is declared a
-   `DAILY_TOTAL`, so a glass reads the day's current manual total, adds to it and
-   writes the new total: `last total wins` keeps every drink and undo reverts one.
-   A weight is a `WEIGHT` observation (`LAST` wins), not a layer-4 measurement, so a
-   second weigh-in replaces the day instead of being skipped by the rollup. A body-fat
-   entry is the same observation shape. A note is the note table.
+9. **Quick-add writes choose the honest storage shape.** Each water glass is its own
+   observation with `end = start`, one part of the manual source; the rollup sums that
+   source's parts, so a backdated glass adds and a deleted glass subtracts. A source
+   that reports a daily total replaces only **its own** intervals, never another
+   source's parts. A weight is a `WEIGHT` observation (`LAST` wins), not a layer-4
+   measurement, so a second weigh-in replaces the day instead of being skipped by the
+   rollup. A body-fat entry is the same observation shape. A note is the note table.
 
 10. **Onboarding marks progress, not a score.** `intake_tier` is the highest tier the
     person reached, each skipped field is simply absent, and Skip is visible on every

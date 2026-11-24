@@ -78,6 +78,7 @@ fun TrashScreen(
                                 item.deletedLabel,
                             ),
                             showDivider = index > 0,
+                            mergeSemantics = false,
                             trailing = {
                                 OhButton(
                                     text = stringResource(R.string.trash_restore),

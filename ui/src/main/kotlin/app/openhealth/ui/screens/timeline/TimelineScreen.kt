@@ -3,6 +3,7 @@ package app.openhealth.ui.screens.timeline
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +61,7 @@ import app.openhealth.ui.screens.common.recordingDelay
 import app.openhealth.ui.screens.common.timeOf
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -102,13 +105,30 @@ fun TimelineScreen(
         }
         Spacer(Modifier.height(OhTheme.space.s5))
         if (model.days.isEmpty()) {
+            val filtered = model.filter != TimelineFilter.ALL
             OhCard {
                 OhEmptyState(
-                    title = stringResource(R.string.timeline_empty_title),
+                    title = stringResource(
+                        if (filtered) {
+                            R.string.timeline_empty_filter_title
+                        } else {
+                            R.string.timeline_empty_title
+                        },
+                    ),
                     body = stringResource(R.string.timeline_empty_body),
                     glyph = OhIcons.timer,
-                    actionLabel = stringResource(R.string.timeline_empty_action),
-                    onAction = onLogNote,
+                    actionLabel = stringResource(
+                        if (filtered) {
+                            R.string.timeline_clear_filter
+                        } else {
+                            R.string.timeline_empty_action
+                        },
+                    ),
+                    onAction = if (filtered) {
+                        { onFilter(TimelineFilter.ALL) }
+                    } else {
+                        onLogNote
+                    },
                 )
             }
             return@Column
@@ -182,6 +202,7 @@ private fun TimelineRow(
     val dims = OhTheme.dims
     val interaction = rememberInteraction()
     val shape = RectangleShape
+    val deleteLabel = stringResource(R.string.timeline_delete_action)
     var surface = Modifier
         .fillMaxWidth()
         .heightIn(min = dims.mediaRowMin)
@@ -193,7 +214,16 @@ private fun TimelineRow(
             onLongClick = onLongClick,
         )
         .ohPressFill(interaction, shape)
-        .semantics(mergeDescendants = true) {}
+        .semantics(mergeDescendants = true) {
+            if (row.deletable) {
+                customActions = listOf(
+                    androidx.compose.ui.semantics.CustomAccessibilityAction(deleteLabel) {
+                        onLongClick()
+                        true
+                    },
+                )
+            }
+        }
     if (showDivider) {
         surface = surface.ohHairline(
             color = colors.sep,
@@ -235,6 +265,7 @@ private fun TimelineRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            RowTags(row)
         }
         if (row.valueText != null) {
             Spacer(Modifier.width(OhTheme.space.s3))
@@ -242,6 +273,35 @@ private fun TimelineRow(
                 text = row.valueText.orEmpty(),
                 style = type.subhead,
                 color = colors.label2,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * The 12 sp tags of `DESIGN.md` §7.3. `Late` is the "entered late" mark `pr.md` §6.27
+ * asks for and uses the same one-minute threshold as the provenance sheet's delay line.
+ * `Edited` is drawn neutral rather than `indigo`: at 12 sp on `surface` indigo reaches
+ * only 3.36:1 in dark, under the 4.5:1 body-text bar of §11.1 (see the audit note).
+ */
+@Composable
+private fun RowTags(row: TimelineRowModel) {
+    val late = row.provenance.recordedAt - row.provenance.happenedAt >= 1.minutes
+    val tags = buildList {
+        if (row.imported) add(stringResource(R.string.timeline_tag_imported) to false)
+        if (late) add(stringResource(R.string.timeline_tag_late) to false)
+        if (row.provenance.edited) add(stringResource(R.string.timeline_tag_edited) to false)
+        if (row.excluded) add(stringResource(R.string.timeline_tag_excluded) to true)
+    }
+    if (tags.isEmpty()) return
+    Spacer(Modifier.height(OhTheme.space.s0))
+    Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
+        tags.forEach { (label, warning) ->
+            Text(
+                text = label,
+                style = OhTheme.type.caption,
+                color = if (warning) OhTheme.colors.orangeInk else OhTheme.colors.label2,
                 maxLines = 1,
             )
         }
@@ -290,15 +350,24 @@ private fun ProvenanceSheet(
             )
             ProvenanceLine(
                 label = stringResource(R.string.timeline_recorded),
-                value = listOfNotNull(
-                    instantLabel(row.provenance.recordedAt),
-                    delay,
-                ).joinToString(" · "),
+                value = if (delay != null) {
+                    stringResource(
+                        R.string.timeline_recorded_value,
+                        instantLabel(row.provenance.recordedAt),
+                        delay,
+                    )
+                } else {
+                    instantLabel(row.provenance.recordedAt)
+                },
             )
             if (row.provenance.localDay.isNotBlank()) {
                 ProvenanceLine(
                     label = stringResource(R.string.timeline_local_day),
-                    value = row.provenance.localDay + " (" + row.provenance.zoneId + ")",
+                    value = stringResource(
+                        R.string.timeline_local_day_value,
+                        localDayLabel(row.provenance.localDay),
+                        zoneLabel(row.provenance.zoneId),
+                    ),
                 )
             }
             row.provenance.quality?.let {
@@ -327,7 +396,9 @@ private fun ProvenanceSheet(
         if (row.excludable) {
             Spacer(Modifier.height(OhTheme.space.s5))
             OhRow(
-                title = stringResource(R.string.timeline_exclude),
+                title = stringResource(
+                    if (row.excluded) R.string.timeline_include else R.string.timeline_exclude,
+                ),
                 leadingIcon = OhIcons.filter,
                 onClick = onExclude,
             )
@@ -352,26 +423,44 @@ private fun ProvenanceSheet(
 
 @Composable
 private fun ProvenanceLine(label: String, value: String) {
-    Row(
+    val stack = androidx.compose.ui.platform.LocalDensity.current.fontScale >=
+        OhTheme.dims.largeFontScale
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = OhTheme.dims.rowMin)
             .padding(horizontal = OhTheme.space.s5, vertical = OhTheme.space.s3),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = if (stack) Arrangement.Center else Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = label,
-            style = OhTheme.type.footnote,
-            color = OhTheme.colors.label2,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = OhTheme.type.footnote,
-            color = OhTheme.colors.label,
-        )
+        if (stack) {
+            Text(text = label, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
+            Text(text = value, style = OhTheme.type.footnote, color = OhTheme.colors.label)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = label,
+                    style = OhTheme.type.footnote,
+                    color = OhTheme.colors.label2,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(text = value, style = OhTheme.type.footnote, color = OhTheme.colors.label)
+            }
+        }
     }
 }
+
+@Composable
+private fun localDayLabel(raw: String): String {
+    val parsed = runCatching { LocalDate.parse(raw) }.getOrNull()
+    return if (parsed != null) mediumDate(parsed) else raw
+}
+
+private fun zoneLabel(zoneId: String): String = runCatching {
+    java.time.ZoneId.of(zoneId).getDisplayName(
+        java.time.format.TextStyle.SHORT,
+        java.util.Locale.getDefault(),
+    )
+}.getOrDefault(zoneId)
 
 @Composable
 private fun dayLabel(date: LocalDate): String {

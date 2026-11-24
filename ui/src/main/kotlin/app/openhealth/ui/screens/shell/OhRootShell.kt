@@ -37,6 +37,7 @@ fun OhRootShell(
     modifier: Modifier = Modifier,
     settingsDot: Boolean = false,
     onDateClick: (() -> Unit)? = null,
+    dateActionLabel: String? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Box(
@@ -58,6 +59,7 @@ fun OhRootShell(
                 onSettings = onSettings,
                 settingsDot = settingsDot,
                 onDateClick = onDateClick,
+                dateActionLabel = dateActionLabel,
             )
             // The content scrolls under the translucent tab bar; every screen reserves
             // the documented 88 dp at its bottom (§4.3), so nothing hides behind it.

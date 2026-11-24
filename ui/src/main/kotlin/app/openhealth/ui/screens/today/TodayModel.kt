@@ -4,7 +4,7 @@ import app.openhealth.core.preferences.HealthModule
 import kotlinx.datetime.LocalDate
 
 /** The part of the day the greeting names (`DESIGN.md` §14.2, Today item 1). */
-enum class Greeting { MORNING, AFTERNOON, EVENING }
+enum class Greeting { NIGHT, MORNING, AFTERNOON, EVENING }
 
 /** The one-line status under the greeting. Never a score and never a guess. */
 enum class TodayStatus { NOTHING_LOGGED, LOGGED_TODAY, WEIGHT_NEUTRAL }

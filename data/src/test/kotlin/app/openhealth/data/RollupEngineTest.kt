@@ -388,6 +388,88 @@ class RollupEngineTest {
     }
 
     @Test
+    fun oneSourcesDailyTotalDoesNotDiscardAnothersParts() {
+        // `SumAllPolicy` keeps every source for water and nutrition on purpose; the
+        // "a total is the day" rule is per source and must not drop the other one.
+        val (store, engine) = storeAndEngine()
+        val glasses = (0 until 3).map { index ->
+            testObservation(
+                id = "glass-$index",
+                type = ObservationType.WATER,
+                value = 250.0,
+                unit = UcumUnit.MILLILITRE,
+                start = dayStart(D1).plus((8 + index).hours),
+                end = dayStart(D1).plus((8 + index).hours),
+                sourceId = "manual",
+            )
+        }
+        val watchTotal = testObservation(
+            id = "watch-total",
+            type = ObservationType.WATER,
+            value = 1_000.0,
+            unit = UcumUnit.MILLILITRE,
+            start = dayStart(D1).plus(20.hours),
+            sourceId = "garmin",
+        )
+        ObservationRepository(store.db).recordAll(glasses + watchTotal)
+        engine.rebuildDay(D1)
+        val rollup = RollupRepository(store.db).forDayAndType(D1, ObservationType.WATER)!!
+        assertEquals(1_750.0, rollup.value.value, 1e-9)
+        assertEquals(2, rollup.contributingSources)
+        store.close()
+    }
+
+    @Test
+    fun aBackdatedGlassAddsToTheDayWhateverOrderItWasLoggedIn() {
+        val (store, engine) = storeAndEngine()
+        val observations = ObservationRepository(store.db)
+        val later = testObservation(
+            id = "glass-later",
+            type = ObservationType.WATER,
+            value = 250.0,
+            unit = UcumUnit.MILLILITRE,
+            start = dayStart(D1).plus(14.hours),
+            end = dayStart(D1).plus(14.hours),
+            sourceId = "manual",
+        )
+        observations.recordAll(listOf(later))
+        engine.rebuildDay(D1)
+        assertEquals(
+            250.0,
+            RollupRepository(store.db).forDayAndType(D1, ObservationType.WATER)!!.value.value,
+            1e-9,
+        )
+        val backdated = testObservation(
+            id = "glass-earlier",
+            type = ObservationType.WATER,
+            value = 500.0,
+            unit = UcumUnit.MILLILITRE,
+            start = dayStart(D1).plus(9.hours),
+            end = dayStart(D1).plus(9.hours),
+            sourceId = "manual",
+            recordedAt = dayStart(D1).plus(15.hours),
+        )
+        observations.recordAll(listOf(backdated))
+        engine.rebuildDay(D1)
+        assertEquals(
+            750.0,
+            RollupRepository(store.db).forDayAndType(D1, ObservationType.WATER)!!.value.value,
+            1e-9,
+        )
+        // Deleting the earlier glass takes exactly that glass off the day.
+        app.openhealth.data.repo.TrashService(store.db).deleteObservation(
+            app.openhealth.core.ids.ObservationId("glass-earlier"),
+        )
+        engine.rebuildDay(D1)
+        assertEquals(
+            250.0,
+            RollupRepository(store.db).forDayAndType(D1, ObservationType.WATER)!!.value.value,
+            1e-9,
+        )
+        store.close()
+    }
+
+    @Test
     fun aMeasurementOfAnObservationTypeReachesTheRollup() {
         val (store, engine) = storeAndEngine()
         app.openhealth.data.repo.BodyRepository(store.db).upsertMeasurement(

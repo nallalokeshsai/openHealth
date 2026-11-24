@@ -69,6 +69,9 @@ private fun role(sizeSp: Float, lineHeightMultiplier: Float, trackingEm: Float):
         letterSpacing = trackingEm.em,
         // Sentence case everywhere, never an uppercase transform (§3.3, §11.4).
         textAlign = TextAlign.Unspecified,
+        // Bidi resolves from the content, not the layout: English prose on an RTL phone
+        // keeps its full stop on the right (§11.5).
+        textDirection = TextDirection.Content,
     )
 
 /** Builds the scale for a window width: 34 sp titles, 30 sp below 420 dp (§3.2). */

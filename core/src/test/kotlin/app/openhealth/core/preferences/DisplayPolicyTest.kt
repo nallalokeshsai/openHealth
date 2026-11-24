@@ -20,7 +20,12 @@ class DisplayPolicyTest {
     fun weightNeutralHidesWeightCaloriesBodyFatAndPhotos() {
         val policy = DisplayPolicy.WeightNeutral
         assertEquals(
-            SensitiveMetric.entries.toSet(),
+            setOf(
+                SensitiveMetric.WEIGHT,
+                SensitiveMetric.CALORIES,
+                SensitiveMetric.BODY_FAT,
+                SensitiveMetric.PROGRESS_PHOTOS,
+            ),
             SensitiveMetric.entries.filterNot(policy::shows).toSet(),
         )
         assertTrue(policy.hidesSomething)
