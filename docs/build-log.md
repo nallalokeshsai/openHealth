@@ -1667,6 +1667,33 @@ phase.
 - **The demo corpus is synthetic**, so its micronutrients are absent; real USDA and OFF
   foods carry them.
 
+### Independent plan audit (2026-11-25, headless)
+
+One confirmed defect, fixed here with a test:
+
+- **The Open Food Facts cache was write-only.** `NutritionPresenter.lookupBarcode` went
+  to the network for every barcode; `NutritionRepository.foodByBarcode` existed but was
+  never called. A product already on the phone needed a second request, failed in
+  airplane mode, and the disclosure's "works offline afterwards" was not true. The lookup
+  now answers from the stored food first (`cachedBarcode`) and only an unknown barcode
+  leaves the phone. `NutritionExitTest.aCachedBarcodeResolvesWithoutCallingOpenFoodFacts`
+  asserts one transport call for the first scan and none for the second; the instrumented
+  suite is now **30/30**. `gradle/licences/allowed.tsv` also still named ML Kit; corrected.
+
+Checked and found sound: the five B6 exit tests against the code that backs them; the
+day-total and micronutrient arithmetic (one `sumInOrder` path, asserted at 0.0 tolerance,
+with the rollup `detail` covered by `aDayTotalIsTheExactSumOfItsEntries`); weight-neutral
+on every nutrition surface and sheet; provenance on entries and meals; tombstone-backed
+deletion with `deletable = false` on the meal and fast timeline rows; the v6→v7 migration
+test; the CC0/ODbL/FDA/IOM notices; no `android.*` in `:core`, `:data`, `:integrations`;
+no telemetry dependency in either flavour; no secret, device identity, screenshot,
+`references/` or keystore in the diff.
+
+Not fixed, reported only (outside B6 or owner decisions): a cached Open Food Facts product
+is never refreshed once stored, so a corrected product needs a manual edit; the rollup's
+micronutrient `detail` is written and tested but no screen reads it (the panel recomputes
+from the entries through the same `sumInOrder`); the deferrals already listed below.
+
 ### Open issues
 
 - The OFF user agent is a static app string; OFF's rate limits and their guidance for a

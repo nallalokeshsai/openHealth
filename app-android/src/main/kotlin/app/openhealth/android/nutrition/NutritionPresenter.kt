@@ -1389,10 +1389,25 @@ class NutritionPresenter(
         disclosureAccepted = true,
     )
 
+    /**
+     * The local cache answers first (`BUILD-ROADMAP.md` §B6.3): a barcode this phone has
+     * already stored is a food row, so the scan resolves offline, in airplane mode, and
+     * without a second request to Open Food Facts. Only an unknown barcode leaves the
+     * phone, which is what the disclosure promises.
+     */
+    fun cachedBarcode(barcode: String): FoodChoiceModel? {
+        val clean = barcode.filter { it.isDigit() }
+        if (!OpenFoodFactsClient.isPlausibleBarcode(clean)) return null
+        return store.nutrition.foodByBarcode(clean)?.let(::choiceOf)
+    }
+
     suspend fun lookupBarcode(barcode: String): BarcodeModel {
         val clean = barcode.filter { it.isDigit() }
         if (!OpenFoodFactsClient.isPlausibleBarcode(clean)) {
             return BarcodeModel(BarcodeState.NOT_FOUND, clean, null, true)
+        }
+        cachedBarcode(clean)?.let { cached ->
+            return BarcodeModel(BarcodeState.FOUND, clean, cached, true)
         }
         return when (val result = off.lookup(clean)) {
             is OffLookup.Found -> {

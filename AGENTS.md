@@ -220,7 +220,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B6 Nutrition** (2026-11-25); next is **B7 Body and vitals**.
 - Build: green. `./gradlew check :app-android:assembleDebug` passes; **396 JVM tests**
   (179 `:core`, 100 `:data`, 10 `:integrations`, 97 `:ui`, 7 tools:foodindex, 1 fixtures,
-  2 exerciseindex) and **29 instrumented tests** pass on the owner's phone. `:ui` holds
+  2 exerciseindex) and **30 instrumented tests** pass on the owner's phone. `:ui` holds
   the B1 design system, the B3 screens, the B4 body map, the B5 Train surfaces and the B6
   Nutrition surfaces: **222 goldens** (198 before + 24 for the Nutrition root, neutral
   root, micros, barcode found/disclosure and the recipe editor) in dark, light, 200 % text

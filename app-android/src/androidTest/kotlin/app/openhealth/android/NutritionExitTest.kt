@@ -310,6 +310,44 @@ class NutritionExitTest {
         }
     }
 
+    /**
+     * `BUILD-ROADMAP.md` §B6.3 asks for a **local cache** behind the Open Food Facts
+     * lookup, and the disclosure tells the person the product "works offline afterwards".
+     * A barcode the phone already holds must therefore resolve without a second request:
+     * one network call for the first scan, none for the second, and the same product.
+     */
+    @Test
+    fun aCachedBarcodeResolvesWithoutCallingOpenFoodFacts() {
+        seedProfile()
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        compose.onNodeWithContentDescription("Nutrition").performClick()
+        waitFor("nutrition") { viewModel.state.value.nutrition != null }
+
+        compose.onNodeWithContentDescription("Scan a barcode").performClick()
+        compose.onNodeWithText("Look up barcodes").performClick()
+        compose.onNodeWithText("Enter the barcode instead").performClick()
+        compose.onNodeWithContentDescription("Barcode digits").performTextInput("12345678")
+        compose.onNodeWithText("Look up").performClick()
+        waitFor("found") {
+            viewModel.state.value.barcode?.state ==
+                app.openhealth.ui.screens.nutrition.BarcodeState.FOUND
+        }
+        assertEquals(1, transport.calls, "the first lookup is the one call that goes out")
+
+        // The second scan of the same barcode: the cached food answers it.
+        viewModel.startBarcode()
+        waitFor("scanner") { viewModel.state.value.barcode != null }
+        viewModel.barcodeManual()
+        viewModel.barcodeLookup("12345678")
+        waitFor("found from cache") {
+            viewModel.state.value.barcode?.state ==
+                app.openhealth.ui.screens.nutrition.BarcodeState.FOUND
+        }
+        assertEquals(1, transport.calls, "a cached barcode must not call the network again")
+        assertEquals("Testo Bar", viewModel.state.value.barcode?.product?.name)
+    }
+
     @Test
     fun theBundledIndexSearchesAndLogsWithNoNetwork() {
         seedProfile()

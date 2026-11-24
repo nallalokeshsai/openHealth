@@ -60,6 +60,6 @@ community.flock.kotlinx.rgxgen:*	MIT	Test-only, pulled in by Kotest
 net.bytebuddy:*	Apache-2.0	Test-only, pulled in by Kotest
 net.java.dev.jna:*	Apache-2.0	Test-only, pulled in by Kotest; dual LGPL-2.1+/Apache-2.0, Apache elected so no LGPL code is taken
 
-# B6 CameraX and the bundled ML Kit model (play flavour) pull these two annotations.
+# B6 CameraX pulls these two annotations (ML Kit was removed in B6; see ADR 0011).
 jakarta.inject:jakarta.inject-api	Apache-2.0	Jakarta Inject annotations, pulled in by CameraX
-org.checkerframework:checker-qual	MIT	Checker Framework annotations, pulled in by CameraX/ML Kit
+org.checkerframework:checker-qual	MIT	Checker Framework annotations, pulled in by CameraX
