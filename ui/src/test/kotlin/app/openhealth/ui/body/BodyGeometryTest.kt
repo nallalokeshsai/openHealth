@@ -2,7 +2,6 @@ package app.openhealth.ui.body
 
 import android.content.Context
 import android.graphics.Region
-import android.graphics.RegionIterator
 import app.openhealth.core.body.AdiposeInputs
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
@@ -99,26 +98,34 @@ class BodyGeometryTest {
                 (view.viewBox.x + view.viewBox.width).toInt(),
                 (view.viewBox.y + view.viewBox.height).toInt(),
             )
-            val muscleRegion = Region()
-            view.parts.filter { it.muscle != null }.forEach { part ->
-                part.paths.forEach { path ->
-                    val one = Region()
-                    one.setPath(path, bounds)
-                    muscleRegion.op(one, Region.Op.UNION)
+            val muscleUnion = android.graphics.Path().apply {
+                view.parts.filter { it.muscle != null }.forEach { part ->
+                    part.paths.forEach(::addPath)
                 }
             }
-            val muscleArea = area(muscleRegion)
+            val muscleRegion = Region()
+            muscleRegion.setPath(muscleUnion, bounds)
+            // Take a two-unit ring off the muscle's edge, so rasterisation of a shared
+            // boundary cannot be mistaken for a real overlap: the band must not enter
+            // the interior of any muscle shape at all.
+            val ring = android.graphics.Path()
+            android.graphics.Paint().apply {
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = BOUNDARY_UNITS
+                strokeJoin = android.graphics.Paint.Join.ROUND
+                isAntiAlias = true
+            }.getFillPath(muscleUnion, ring)
+            val ringRegion = Region()
+            ringRegion.setPath(ring, bounds)
+            val interior = Region(muscleRegion)
+            interior.op(ringRegion, Region.Op.DIFFERENCE)
             val fat = Region()
             fat.setPath(band, bounds)
             val overlap = Region(fat)
-            overlap.op(muscleRegion, Region.Op.INTERSECT)
-            // The difference is exact in path space; region rasterisation rounds to whole
-            // viewBox units, so only a one-unit sliver along a shared boundary can ever
-            // register. Anything wider is a real overlap.
-            val overlapArea = area(overlap)
+            overlap.op(interior, Region.Op.INTERSECT)
             assertTrue(
-                overlapArea <= muscleArea * BOUNDARY_TOLERANCE,
-                "the fat layer overlaps $overlapArea of $muscleArea muscle units on $side",
+                overlap.isEmpty,
+                "the fat layer enters the interior of a muscle on $side: $overlap",
             )
         }
     }
@@ -137,7 +144,7 @@ class BodyGeometryTest {
     }
 
     private companion object {
-        const val BOUNDARY_TOLERANCE = 0.02
+        const val BOUNDARY_UNITS = 2f
     }
 
     @Test
@@ -145,14 +152,6 @@ class BodyGeometryTest {
         val view = geometry.view(BodySex.MALE, BodySide.FRONT)!!
         val inert = view.parts.filter { it.muscle == null }.map { it.key }.toSet()
         assertTrue("head" in inert && "hands" in inert)
-    }
-
-    private fun area(region: Region): Long {
-        var total = 0L
-        val iterator = RegionIterator(region)
-        val rect = android.graphics.Rect()
-        while (iterator.next(rect)) total += rect.width().toLong() * rect.height()
-        return total
     }
 
     /** A path's own bounds are not a hit test; the region is. */

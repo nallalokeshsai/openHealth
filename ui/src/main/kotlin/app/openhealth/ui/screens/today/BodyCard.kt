@@ -29,8 +29,8 @@ import app.openhealth.ui.components.OhCardHeader
 import app.openhealth.ui.components.OhChip
 import app.openhealth.ui.components.OhChipStrip
 import app.openhealth.ui.components.OhInsetGroup
+import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRow
-import app.openhealth.ui.components.OhSheet
 import app.openhealth.ui.icons.OhModuleIcons
 import app.openhealth.ui.screens.common.OhEmptyState
 import app.openhealth.ui.screens.common.number
@@ -138,11 +138,11 @@ fun BodyCard(model: BodyMapModel?, onOpenTrain: () -> Unit, modifier: Modifier =
     if (open != null && map != null) {
         MuscleSheet(model = map, muscle = open, onClose = { selected = null })
     }
-    if (showTable && map != null) {
-        OhSheet(
+    if (map != null) {
+        OhModalSheet(
+            visible = showTable,
+            onDismiss = { showTable = false },
             title = stringResource(R.string.body_map_table_title),
-            onCancel = { showTable = false },
-            cancelLabel = stringResource(R.string.oh_back),
         ) {
             BodyMapTable(model = map)
         }
@@ -169,10 +169,10 @@ private fun lastTrainedLine(model: BodyMapModel): String {
 @Composable
 private fun MuscleSheet(model: BodyMapModel, muscle: Muscle, onClose: () -> Unit) {
     val shade = model.shade(muscle) as? MuscleShade.Recovery
-    OhSheet(
+    OhModalSheet(
+        visible = true,
+        onDismiss = onClose,
         title = muscleLabel(muscle),
-        onCancel = onClose,
-        cancelLabel = stringResource(R.string.oh_back),
     ) {
         if (shade == null) {
             Text(
@@ -180,7 +180,7 @@ private fun MuscleSheet(model: BodyMapModel, muscle: Muscle, onClose: () -> Unit
                 style = OhTheme.type.body,
                 color = OhTheme.colors.label,
             )
-            return@OhSheet
+            return@OhModalSheet
         }
         Column(verticalArrangement = Arrangement.spacedBy(OhTheme.space.s4)) {
             Text(
