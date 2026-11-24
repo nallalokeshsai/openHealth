@@ -21,3 +21,11 @@ dependencies {
     testRuntimeOnly(libs.junit.vintage.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
+
+// The corpus benchmark prints every query's best time. Showing that output in CI is what
+// makes a budget failure diagnosable (which query, how far over) instead of a bare line.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        showStandardStreams = true
+    }
+}
