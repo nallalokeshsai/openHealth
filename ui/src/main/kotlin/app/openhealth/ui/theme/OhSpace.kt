@@ -195,6 +195,16 @@ data class OhDims(
     // §5.19 timer bar
     val timerProgress: Dp = 3.dp,
 
+    // §14.2 Live session set table
+    /** The set column: 34 dp, warm-ups as W1… and work sets numbered. */
+    val setColumn: Dp = 34.dp,
+    /** The RIR column: 56 dp, a sheet opener and never a free-text keyboard. */
+    val setRir: Dp = 56.dp,
+    /** The Done circle: 38 dp inside a 44 dp target. */
+    val setDone: Dp = 38.dp,
+    /** The active row's leading edge: 1.5 dp of accent. */
+    val setActiveEdge: Dp = 1.5.dp,
+
     // §12.3 soft shadows, mapped to Compose elevation (dark is stronger than light)
     val dialogElevation: Dp = 12.dp,
     val raisedElevation: Dp = 6.dp,

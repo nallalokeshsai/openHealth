@@ -178,6 +178,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             position = entry.position,
             targetSets = entry.target_sets,
             targetReps = entry.target_reps,
+            targetRepsHigh = entry.target_reps_high,
             targetWeightKg = entry.target_weight_kg,
             notes = entry.notes,
             targetRir = entry.target_rir,
@@ -279,6 +280,9 @@ class TrainingRepository(private val db: OpenHealthDb) {
     fun lastFinishedSession(): Session? =
         db.trainingQueries.lastFinishedSession().executeAsOneOrNull()
 
+    fun sessionsForRoutine(routineId: String): List<Session> =
+        db.trainingQueries.sessionsForRoutine(routineId).executeAsList()
+
     fun upsertSessionExercise(entry: Session_exercise) {
         db.trainingQueries.insertSessionExercise(
             id = entry.id,
@@ -287,6 +291,12 @@ class TrainingRepository(private val db: OpenHealthDb) {
             position = entry.position,
             notes = entry.notes,
             groupIndex = entry.group_index,
+            targetSets = entry.target_sets,
+            targetReps = entry.target_reps,
+            targetRepsHigh = entry.target_reps_high,
+            targetWeightKg = entry.target_weight_kg,
+            progression = entry.progression,
+            restSeconds = entry.rest_seconds,
         )
     }
 
@@ -300,10 +310,13 @@ class TrainingRepository(private val db: OpenHealthDb) {
     /** Finishes an open session; the day's training rollups then include it. */
     fun finishSession(id: String, endedAt: Long, nowMillis: Long): Boolean {
         val session = sessionById(id) ?: return false
+        // Editing a saved workout keeps the moment it actually ended; only an open
+        // session takes the new end time.
+        val ended = session.ended_at ?: endedAt
         db.trainingQueries.updateSessionTiming(
             id = id,
             startedAt = session.started_at,
-            endedAt = endedAt,
+            endedAt = ended,
             localDate = session.local_date,
             happenedAt = session.happened_at,
             updatedAt = nowMillis,
@@ -410,6 +423,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             isBodyweight = set.is_bodyweight,
             tempo = set.tempo,
             restSeconds = set.rest_seconds,
+            notes = set.notes,
             completedAt = set.completed_at,
             happenedAt = set.happened_at,
             recordedAt = set.recorded_at,
@@ -449,6 +463,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             bandKg = values.bandKg,
             tempo = values.tempo,
             restSeconds = values.restSeconds,
+            notes = values.notes,
         )
         sessionDate(set.session_id)?.let(::invalidate)
         return true
@@ -490,6 +505,7 @@ data class SetValues(
     val bandKg: Double?,
     val tempo: String?,
     val restSeconds: Long?,
+    val notes: String?,
 )
 
 /** One exercise's result in one session, for the per-exercise history list. */

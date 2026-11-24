@@ -464,14 +464,23 @@ class DatabaseTest {
                 "target_rest_seconds",
             ),
             "routine_exercise" to listOf(
+                "target_reps_high",
                 "target_rir",
                 "rest_seconds",
                 "progression",
                 "group_index",
             ),
             "session" to listOf("title", "feeling", "perceived_effort"),
-            "session_exercise" to listOf("group_index"),
-            "work_set" to listOf("is_drop", "is_assisted", "assistance_kg", "band_kg"),
+            "session_exercise" to listOf(
+                "group_index",
+                "target_sets",
+                "target_reps",
+                "target_reps_high",
+                "target_weight_kg",
+                "progression",
+                "rest_seconds",
+            ),
+            "work_set" to listOf("is_drop", "is_assisted", "assistance_kg", "band_kg", "notes"),
         ).forEach { (table, columns) ->
             columns.forEach { column ->
                 driver.execute(null, "ALTER TABLE $table DROP COLUMN $column", 0)

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import app.openhealth.R
 import app.openhealth.android.AppContainer
 import app.openhealth.android.security.LockError
+import app.openhealth.android.training.TrainingPresenter
 import app.openhealth.core.body.AdiposeInputs
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
@@ -62,6 +63,14 @@ import app.openhealth.ui.screens.today.Greeting
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayModel
 import app.openhealth.ui.screens.today.TodayStatus
+import app.openhealth.ui.screens.train.ExerciseHistoryModel
+import app.openhealth.ui.screens.train.LiveSessionModel
+import app.openhealth.ui.screens.train.LiveSetEdit
+import app.openhealth.ui.screens.train.RoutineDetailModel
+import app.openhealth.ui.screens.train.RoutineDraft
+import app.openhealth.ui.screens.train.RoutineEditorModel
+import app.openhealth.ui.screens.train.SessionSummaryModel
+import app.openhealth.ui.screens.train.TrainModel
 import app.openhealth.ui.theme.OhAccent
 import java.util.Locale
 import kotlin.time.Instant
@@ -141,6 +150,12 @@ data class AppState(
     val fatal: Boolean = false,
     val sessionUndo: AppToast? = null,
     val recent: List<QuickAddRecent> = emptyList(),
+    val train: TrainModel? = null,
+    val routine: RoutineDetailModel? = null,
+    val editor: RoutineEditorModel? = null,
+    val live: LiveSessionModel? = null,
+    val summary: SessionSummaryModel? = null,
+    val exerciseHistory: ExerciseHistoryModel? = null,
 )
 
 /**
@@ -156,6 +171,20 @@ class AppViewModel(
     private val store: app.openhealth.data.LocalStore get() = container.store
     private val zone: TimeZone = container.zone
     private val now: () -> Instant = { container.clock.now() }
+    private val training: TrainingPresenter by lazy {
+        TrainingPresenter(
+            store = store,
+            clock = container.clock,
+            zone = zone,
+            restTimer = container.restTimer,
+            ids = container.ids,
+            manualSource = AppContainer.MANUAL_SOURCE,
+            appVersion = container.versionName,
+            freestyleTitle = container.context.getString(R.string.train_freestyle),
+            pastTitle = container.context.getString(R.string.train_past_workout),
+        )
+    }
+    private var liveTicker: Job? = null
 
     private val _state = MutableStateFlow(
         AppState(
@@ -245,6 +274,272 @@ class AppViewModel(
                 locked = previous.locked || lockOnFirstLoad,
             )
         }
+        // The Train root is the heaviest model; it lands in a second update so a quick
+        // add's timeline or a settings change is never held behind the exercise library.
+        val train = profile?.let { training.train(preferences, it) }
+        _state.update { it.copy(train = train) }
+    }
+
+    // -------------------------------------------------------------------- training
+
+    fun startSession(routineId: String?) {
+        launchGuarded {
+            val id = withContext(Dispatchers.IO) { training.startSession(routineId) }
+            openLive(id)
+        }
+    }
+
+    fun startFreestyle() = startSession(null)
+
+    fun startPastSession(date: kotlinx.datetime.LocalDate) {
+        launchGuarded {
+            val id = withContext(Dispatchers.IO) { training.startPastSession(date) }
+            openLive(id)
+        }
+    }
+
+    fun openLive(sessionId: String) {
+        liveTicker?.cancel()
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { training.live(sessionId) }
+            _state.update { it.copy(live = model) }
+            container.restTimer.resume()
+            liveTicker = viewModelScope.launch {
+                while (true) {
+                    delay(LIVE_TICK_MILLIS)
+                    val rest = container.restTimer.snapshot(
+                        container.clock.now().toEpochMilliseconds(),
+                    )
+                    _state.update { current ->
+                        current.live?.let { live ->
+                            current.copy(
+                                live = live.copy(
+                                    rest = rest?.let {
+                                        app.openhealth.ui.screens.train.RestDisplay(
+                                            it.remainingSeconds,
+                                            it.totalSeconds,
+                                            it.paused,
+                                        )
+                                    },
+                                ),
+                            )
+                        } ?: current
+                    }
+                }
+            }
+        }
+    }
+
+    fun closeLive() {
+        liveTicker?.cancel()
+        liveTicker = null
+        _state.update { it.copy(live = null) }
+    }
+
+    fun logSet(sessionId: String, entry: app.openhealth.ui.screens.train.LoggedSet) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.logSet(sessionId, entry) }
+            refreshLive(sessionId)
+            rebuild()
+        }
+    }
+
+    fun updateLiveSet(sessionId: String, setId: String, edit: LiveSetEdit) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.updateSet(setId, edit) }
+            refreshLive(sessionId)
+        }
+    }
+
+    fun deleteLiveSet(sessionId: String, setId: String) {
+        launchGuarded {
+            val tombstone = withContext(Dispatchers.IO) { training.deleteSet(setId) }
+            if (tombstone != null) {
+                undoAction = UndoAction.Deleted(tombstone)
+                _state.update {
+                    it.copy(
+                        sessionUndo = AppToast(R.string.toast_deleted, undo = true),
+                        toast = null,
+                    )
+                }
+            }
+            refreshLive(sessionId)
+        }
+    }
+
+    fun addLiveExercise(sessionId: String, exerciseId: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.addExercise(sessionId, exerciseId) }
+            refreshLive(sessionId)
+        }
+    }
+
+    fun setLiveExerciseNotes(sessionId: String, exerciseId: String, notes: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.setExerciseNotes(sessionId, exerciseId, notes) }
+            refreshLive(sessionId)
+        }
+    }
+
+    fun setLiveNote(note: String) {
+        _state.update { it.copy(live = it.live?.copy(note = note)) }
+    }
+
+    fun superset(sessionId: String, exerciseId: String, withNext: Boolean) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.superset(sessionId, exerciseId, withNext) }
+            refreshLive(sessionId)
+        }
+    }
+
+    fun finishLive(sessionId: String) {
+        val live = state.value.live
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                live?.let { training.saveSummary(sessionId, it.feeling, it.note) }
+                training.finishSession(sessionId)
+            }
+            liveTicker?.cancel()
+            liveTicker = null
+            val summary = withContext(Dispatchers.IO) {
+                state.value.profile?.let { training.summary(sessionId, it) }
+            }
+            _state.update { it.copy(live = null, summary = summary) }
+            rebuild()
+        }
+    }
+
+    fun openSummary(sessionId: String) {
+        launchGuarded {
+            val summary = withContext(Dispatchers.IO) {
+                state.value.profile?.let { training.summary(sessionId, it) }
+            }
+            _state.update { it.copy(summary = summary) }
+        }
+    }
+
+    fun closeSummary() {
+        _state.update { it.copy(summary = null) }
+    }
+
+    fun saveSummary(sessionId: String, feeling: String, note: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.saveSummary(sessionId, feeling, note) }
+            showToast(R.string.toast_saved, undo = false)
+            openSummary(sessionId)
+            rebuild()
+        }
+    }
+
+    fun moveSession(sessionId: String, date: kotlinx.datetime.LocalDate) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.moveSession(sessionId, date) }
+            openSummary(sessionId)
+            rebuild()
+            showToast(R.string.toast_saved, undo = false)
+        }
+    }
+
+    fun deleteSession(sessionId: String) {
+        launchGuarded {
+            val tombstone = withContext(Dispatchers.IO) { training.deleteSession(sessionId) }
+            if (tombstone != null) {
+                undoAction = UndoAction.Deleted(tombstone)
+                _state.update {
+                    it.copy(
+                        summary = null,
+                        sessionUndo = AppToast(R.string.toast_deleted, undo = true),
+                        toast = null,
+                    )
+                }
+                rebuild()
+            }
+        }
+    }
+
+    fun openRoutine(id: String) {
+        launchGuarded {
+            val routine = withContext(Dispatchers.IO) {
+                state.value.profile?.let { training.routine(id, it) }
+            }
+            _state.update { it.copy(routine = routine) }
+        }
+    }
+
+    fun closeRoutine() {
+        _state.update { it.copy(routine = null) }
+    }
+
+    fun openEditor(id: String?) {
+        launchGuarded {
+            val editor = withContext(Dispatchers.IO) {
+                if (id == null) training.editor(null) else id.let { training.editor(it) }
+            }
+            _state.update { it.copy(editor = editor) }
+        }
+    }
+
+    fun closeEditor() {
+        _state.update { it.copy(editor = null) }
+    }
+
+    fun saveRoutine(draft: RoutineDraft) {
+        launchGuarded {
+            val id = withContext(Dispatchers.IO) { training.saveRoutine(draft) }
+            _state.update { it.copy(editor = null) }
+            openRoutine(id)
+            rebuild()
+        }
+    }
+
+    fun toggleFavourite(id: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.toggleFavourite(id) }
+            openRoutine(id)
+            rebuild()
+        }
+    }
+
+    fun openExerciseHistory(id: String) {
+        launchGuarded {
+            val history = withContext(Dispatchers.IO) {
+                state.value.profile?.let { training.exerciseHistory(id, it) }
+            }
+            _state.update { it.copy(exerciseHistory = history) }
+        }
+    }
+
+    fun closeExerciseHistory() {
+        _state.update { it.copy(exerciseHistory = null) }
+    }
+
+    fun saveEquipment(profile: app.openhealth.core.training.EquipmentProfile) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.saveEquipment(profile) }
+            refreshLive(state.value.live?.sessionId)
+        }
+    }
+
+    fun restMinus() {
+        training.restMinus()
+    }
+
+    fun restPlus() {
+        training.restPlus()
+    }
+
+    fun restPause() {
+        training.restPause()
+    }
+
+    fun restSkip() {
+        training.restSkip()
+    }
+
+    private suspend fun refreshLive(sessionId: String?) {
+        val id = sessionId ?: return
+        val model = withContext(Dispatchers.IO) { training.live(id) }
+        _state.update { it.copy(live = model) }
     }
 
     // ---------------------------------------------------------------- onboarding
@@ -949,6 +1244,9 @@ class AppViewModel(
                     TimelineKind.VITAL ->
                         store.trash.deleteVital(app.openhealth.core.ids.VitalId(row.entityId))
                     TimelineKind.ENTRY -> store.trash.deleteEntry(EntryId(row.entityId))
+                    TimelineKind.SESSION -> store.trash.deleteSession(row.entityId)
+                    TimelineKind.SET ->
+                        store.trash.deleteWorkSet(app.openhealth.core.ids.SetId(row.entityId))
                     else -> null
                 }
             }
@@ -1587,6 +1885,7 @@ class AppViewModel(
                 row.kind == TimelineKind.MEAL ||
                 row.kind == TimelineKind.ENTRY
         TimelineFilter.MANUAL -> !row.imported
+        // Training rows are their own filter once B9 adds one; today they ride ALL.
         TimelineFilter.IMPORTED -> row.imported
     }
 
@@ -1601,6 +1900,7 @@ class AppViewModel(
         "meal" -> mealTimelineRow(item)
         "entry" -> entryTimelineRow(item, sources)
         "session" -> sessionTimelineRow(item, sources)
+        "work_set" -> setTimelineRow(item, sources)
         else -> null
     }
 
@@ -1766,16 +2066,50 @@ class AppViewModel(
         )
     }
 
+    private fun setTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.training.setById(item.entityId)?.let { set ->
+        val source = sources[set.source_id] ?: unknownSource()
+        val exercise = store.training.exerciseById(set.exercise_id)?.name ?: set.exercise_id
+        TimelineRowModel(
+            kind = TimelineKind.SET,
+            entityId = set.id,
+            sourceId = set.source_id,
+            title = exercise,
+            detail = source,
+            valueText = "${format(set.weight_kg)} kg × ${set.reps}",
+            provenance = RowProvenance(
+                sourceLabel = source,
+                happenedAt = Instant.fromEpochMilliseconds(set.happened_at),
+                recordedAt = Instant.fromEpochMilliseconds(set.recorded_at),
+                method = null,
+                device = set.device,
+                edited = set.revision > 1,
+                localDay = LocalDate.parse(
+                    store.training.sessionById(set.session_id)?.local_date
+                        ?: item.localDate.toString(),
+                ).toString(),
+                zoneId = store.training.sessionById(set.session_id)?.zone_id
+                    ?: zone.id,
+                rawRecord = set.raw_record_id != null,
+            ),
+            deletable = true,
+        )
+    }
+
     private fun sessionTimelineRow(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel {
         val source = sources[item.sourceId] ?: unknownSource()
+        val session = store.training.sessionById(item.entityId)
         return TimelineRowModel(
             kind = TimelineKind.SESSION,
             entityId = item.entityId,
             sourceId = item.sourceId,
-            title = container.context.getString(UiR.string.timeline_workout_session),
+            title = session?.title
+                ?: container.context.getString(UiR.string.timeline_workout_session),
             detail = source,
             valueText = null,
             provenance = RowProvenance(
@@ -1786,7 +2120,7 @@ class AppViewModel(
                 device = null,
                 edited = false,
             ),
-            deletable = false,
+            deletable = true,
         )
     }
 
@@ -1802,6 +2136,7 @@ class AppViewModel(
                 TrashEntity.VITAL.table -> TrashKind.VITAL
                 TrashEntity.ENTRY.table -> TrashKind.ENTRY
                 TrashEntity.WORK_SET.table -> TrashKind.SET
+                TrashEntity.SESSION.table -> TrashKind.SESSION
                 else -> TrashKind.OBSERVATION
             }
             TrashItemModel(
@@ -2167,3 +2502,5 @@ class AppViewModelFactory(private val container: AppContainer) : ViewModelProvid
         return AppViewModel(container) as T
     }
 }
+
+private const val LIVE_TICK_MILLIS = 1_000L

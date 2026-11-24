@@ -67,6 +67,7 @@ data class WorkSetPayload(
     val isAssisted: Boolean = false,
     val assistanceKg: Double? = null,
     val bandKg: Double? = null,
+    val notes: String? = null,
     /** The session's local day, so restoring or deleting a set rebuilds the right rollup. */
     val localDate: String? = null,
 )
@@ -105,6 +106,12 @@ data class SessionExercisePayload(
     val position: Long,
     val notes: String?,
     val groupIndex: Long? = null,
+    val targetSets: Long? = null,
+    val targetReps: Long? = null,
+    val targetRepsHigh: Long? = null,
+    val targetWeightKg: Double? = null,
+    val progression: String? = null,
+    val restSeconds: Long? = null,
 )
 
 @Serializable
@@ -574,6 +581,7 @@ class TrashService(
             isAssisted = row.isAssisted,
             assistanceKg = row.assistanceKg,
             bandKg = row.bandKg,
+            notes = row.notes,
         )
     }
 
@@ -611,6 +619,12 @@ class TrashService(
                 position = entry.position,
                 notes = entry.notes,
                 groupIndex = entry.groupIndex,
+                targetSets = entry.targetSets,
+                targetReps = entry.targetReps,
+                targetRepsHigh = entry.targetRepsHigh,
+                targetWeightKg = entry.targetWeightKg,
+                progression = entry.progression,
+                restSeconds = entry.restSeconds,
             )
         }
         row.sets.forEach { set ->
@@ -753,7 +767,7 @@ class TrashService(
         rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds,
         completed_at, happened_at, recorded_at, source_id, idempotency_key,
         observation_id, raw_record_id, device, app_version, revision, is_drop,
-        is_assisted, assistance_kg, band_kg, localDate?.toString(),
+        is_assisted, assistance_kg, band_kg, notes, localDate?.toString(),
     )
 
     private fun Session.toRowPayload(): SessionRowPayload = SessionRowPayload(

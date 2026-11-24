@@ -46,6 +46,7 @@ CREATE TABLE routine_exercise (
     position INTEGER NOT NULL,
     target_sets INTEGER,
     target_reps INTEGER,
+    target_reps_high INTEGER,
     target_weight_kg REAL,
     notes TEXT,
     target_rir REAL,
@@ -113,7 +114,13 @@ CREATE TABLE session_exercise (
     exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE RESTRICT,
     position INTEGER NOT NULL,
     notes TEXT,
-    group_index INTEGER
+    group_index INTEGER,
+    target_sets INTEGER,
+    target_reps INTEGER,
+    target_reps_high INTEGER,
+    target_weight_kg REAL,
+    progression TEXT,
+    rest_seconds INTEGER
 );
 
 CREATE INDEX session_exercise_session ON session_exercise(session_id);
@@ -134,6 +141,7 @@ CREATE TABLE work_set (
     is_bodyweight INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     tempo TEXT,
     rest_seconds INTEGER,
+    notes TEXT,
     completed_at INTEGER NOT NULL,
     happened_at INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL,
@@ -220,10 +228,12 @@ SELECT * FROM routine ORDER BY name;
 insertRoutineExercise:
 INSERT OR REPLACE INTO routine_exercise(
     id, routine_id, exercise_id, position, target_sets, target_reps,
-    target_weight_kg, notes, target_rir, rest_seconds, progression, group_index
+    target_reps_high, target_weight_kg, notes, target_rir, rest_seconds, progression,
+    group_index
 ) VALUES (
     :id, :routineId, :exerciseId, :position, :targetSets, :targetReps,
-    :targetWeightKg, :notes, :targetRir, :restSeconds, :progression, :groupIndex
+    :targetRepsHigh, :targetWeightKg, :notes, :targetRir, :restSeconds, :progression,
+    :groupIndex
 );
 
 allRoutineExercises:
@@ -304,9 +314,11 @@ SELECT * FROM session ORDER BY started_at;
 
 insertSessionExercise:
 INSERT INTO session_exercise(
-    id, session_id, exercise_id, position, notes, group_index
+    id, session_id, exercise_id, position, notes, group_index, target_sets,
+    target_reps, target_reps_high, target_weight_kg, progression, rest_seconds
 ) VALUES (
-    :id, :sessionId, :exerciseId, :position, :notes, :groupIndex
+    :id, :sessionId, :exerciseId, :position, :notes, :groupIndex, :targetSets,
+    :targetReps, :targetRepsHigh, :targetWeightKg, :progression, :restSeconds
 )
 -- A real upsert, not INSERT OR REPLACE: session_exercise is referenced by a foreign
 -- key, and replacing the row would delete it and its children with it.
@@ -315,7 +327,13 @@ ON CONFLICT(id) DO UPDATE SET
     exercise_id = excluded.exercise_id,
     position = excluded.position,
     notes = excluded.notes,
-    group_index = excluded.group_index;
+    group_index = excluded.group_index,
+    target_sets = excluded.target_sets,
+    target_reps = excluded.target_reps,
+    target_reps_high = excluded.target_reps_high,
+    target_weight_kg = excluded.target_weight_kg,
+    progression = excluded.progression,
+    rest_seconds = excluded.rest_seconds;
 
 sessionExercises:
 SELECT * FROM session_exercise WHERE session_id = :sessionId ORDER BY position;
@@ -327,15 +345,15 @@ insertWorkSet:
 INSERT OR IGNORE INTO work_set(
     id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps,
     rir, rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds,
-    completed_at, happened_at, recorded_at, source_id, idempotency_key, observation_id,
-    raw_record_id, device, app_version, revision, is_drop, is_assisted, assistance_kg,
-    band_kg
+    notes, completed_at, happened_at, recorded_at, source_id, idempotency_key,
+    observation_id, raw_record_id, device, app_version, revision, is_drop, is_assisted,
+    assistance_kg, band_kg
 ) VALUES (
     :id, :sessionId, :sessionExerciseId, :exerciseId, :position, :weightKg, :reps,
     :rir, :rpe, :isWarmup, :isBackoff, :isFailure, :isBodyweight, :tempo, :restSeconds,
-    :completedAt, :happenedAt, :recordedAt, :sourceId, :idempotencyKey, :observationId,
-    :rawRecordId, :device, :appVersion, :revision, :isDrop, :isAssisted, :assistanceKg,
-    :bandKg
+    :notes, :completedAt, :happenedAt, :recordedAt, :sourceId, :idempotencyKey,
+    :observationId, :rawRecordId, :device, :appVersion, :revision, :isDrop, :isAssisted,
+    :assistanceKg, :bandKg
 );
 
 workSetById:
@@ -416,7 +434,7 @@ WHERE id = :id;
 
 updateSessionDetails:
 UPDATE session
-SET title = :title, notes = :notes, feeling = :feeling,
+SET title = coalesce(:title, title), notes = :notes, feeling = :feeling,
     perceived_effort = :perceivedEffort, ended_at = :endedAt, updated_at = :updatedAt,
     revision = revision + 1
 WHERE id = :id;
@@ -427,7 +445,7 @@ SET weight_kg = :weightKg, reps = :reps, rir = :rir, rpe = :rpe,
     is_warmup = :isWarmup, is_backoff = :isBackoff, is_failure = :isFailure,
     is_bodyweight = :isBodyweight, is_drop = :isDrop, is_assisted = :isAssisted,
     assistance_kg = :assistanceKg, band_kg = :bandKg, tempo = :tempo,
-    rest_seconds = :restSeconds, revision = revision + 1
+    rest_seconds = :restSeconds, notes = :notes, revision = revision + 1
 WHERE id = :id;
 
 updateWorkSetTiming:
@@ -463,6 +481,12 @@ ORDER BY last_at DESC;
 
 deleteSessionExercise:
 DELETE FROM session_exercise WHERE id = :id;
+
+updateSessionExerciseNotes:
+UPDATE session_exercise SET notes = :notes WHERE id = :id;
+
+updateSessionExerciseGroup:
+UPDATE session_exercise SET group_index = :groupIndex WHERE id = :id;
 
 deleteSessionExercises:
 DELETE FROM session_exercise WHERE session_id = :sessionId;

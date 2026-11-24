@@ -10,6 +10,7 @@ ALTER TABLE routine ADD COLUMN favourite INTEGER AS kotlin.Boolean NOT NULL DEFA
 ALTER TABLE routine ADD COLUMN progression TEXT;
 ALTER TABLE routine ADD COLUMN target_rest_seconds INTEGER;
 
+ALTER TABLE routine_exercise ADD COLUMN target_reps_high INTEGER;
 ALTER TABLE routine_exercise ADD COLUMN target_rir REAL;
 ALTER TABLE routine_exercise ADD COLUMN rest_seconds INTEGER;
 ALTER TABLE routine_exercise ADD COLUMN progression TEXT;
@@ -20,11 +21,18 @@ ALTER TABLE session ADD COLUMN feeling TEXT;
 ALTER TABLE session ADD COLUMN perceived_effort REAL;
 
 ALTER TABLE session_exercise ADD COLUMN group_index INTEGER;
+ALTER TABLE session_exercise ADD COLUMN target_sets INTEGER;
+ALTER TABLE session_exercise ADD COLUMN target_reps INTEGER;
+ALTER TABLE session_exercise ADD COLUMN target_reps_high INTEGER;
+ALTER TABLE session_exercise ADD COLUMN target_weight_kg REAL;
+ALTER TABLE session_exercise ADD COLUMN progression TEXT;
+ALTER TABLE session_exercise ADD COLUMN rest_seconds INTEGER;
 
 ALTER TABLE work_set ADD COLUMN is_drop INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
 ALTER TABLE work_set ADD COLUMN is_assisted INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
 ALTER TABLE work_set ADD COLUMN assistance_kg REAL;
 ALTER TABLE work_set ADD COLUMN band_kg REAL;
+ALTER TABLE work_set ADD COLUMN notes TEXT;
 
 CREATE INDEX IF NOT EXISTS session_ended ON session(ended_at);
 CREATE INDEX IF NOT EXISTS session_routine ON session(routine_id);

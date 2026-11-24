@@ -16,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -100,6 +101,12 @@ class TrainingRepositoryTest {
                 position = 0L,
                 notes = null,
                 group_index = null,
+                target_sets = 3L,
+                target_reps = 5L,
+                target_reps_high = 8L,
+                target_weight_kg = 100.0,
+                progression = "linear",
+                rest_seconds = 120L,
             ),
         )
         listOf(true, false, false).forEachIndexed { index, warmup ->
@@ -121,6 +128,7 @@ class TrainingRepositoryTest {
                     is_bodyweight = false,
                     tempo = null,
                     rest_seconds = 180L,
+                    notes = null,
                     completed_at = at.toEpochMilliseconds(),
                     happened_at = at.toEpochMilliseconds(),
                     recorded_at = at.toEpochMilliseconds(),
@@ -274,6 +282,55 @@ class TrainingRepositoryTest {
         assertEquals(id, history.single().sessionId)
         assertEquals(2, history.single().setCount)
         assertEquals(100.0, history.single().topWeightKg)
+    }
+
+    @Test
+    fun editingAFinishedSessionKeepsTheMomentItEnded() {
+        val store = localStore()
+        seedExercise(store.training)
+        val start = midday(day)
+        val id = session(store, "squat", start)
+        val ended = store.training.sessionById(id)!!.ended_at
+        val recorded = store.training.sessionById(id)!!.recorded_at
+        store.training.finishSession(id, start.toEpochMilliseconds() + 999_000L, 1L)
+        assertEquals(ended, store.training.sessionById(id)!!.ended_at)
+        assertEquals(recorded, store.training.sessionById(id)!!.recorded_at)
+        store.close()
+    }
+
+    @Test
+    fun aLegSessionTurnsQuadsRedThenOrangeThenGreen() {
+        val store = localStore()
+        seedExercise(store.training)
+        val start = midday(day)
+        session(store, "squat", start)
+        val sets = store.training.loadedSets(
+            (start - 28.days).toEpochMilliseconds(),
+        )
+        val atLoad = app.openhealth.core.body.RecoveryMap.compute(start + 1.hours, sets)
+        assertEquals(
+            app.openhealth.core.formula.RecoveryStep.RECOVERING,
+            atLoad.getValue(Muscle.QUADS).step,
+        )
+        val nextDay = start + 26.hours
+        val dayTwo = app.openhealth.core.body.RecoveryMap.compute(
+            nextDay,
+            store.training.loadedSets((nextDay - 28.days).toEpochMilliseconds()),
+        )
+        assertEquals(
+            app.openhealth.core.formula.RecoveryStep.EASING,
+            dayTwo.getValue(Muscle.QUADS).step,
+        )
+        val thirdDay = start + 50.hours
+        val dayThree = app.openhealth.core.body.RecoveryMap.compute(
+            thirdDay,
+            store.training.loadedSets((thirdDay - 28.days).toEpochMilliseconds()),
+        )
+        assertEquals(
+            app.openhealth.core.formula.RecoveryStep.READY,
+            dayThree.getValue(Muscle.QUADS).step,
+        )
+        store.close()
     }
 
     @Test

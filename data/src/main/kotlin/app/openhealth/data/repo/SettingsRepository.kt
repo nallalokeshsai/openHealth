@@ -80,4 +80,7 @@ object SettingKeys {
 
     /** The bundled exercise library's version, so seeding runs once (pr.md §6.5). */
     const val EXERCISE_CATALOGUE = "exercise.catalogue_version"
+
+    /** The one equipment profile: bars, plates and the dumbbell increment (pr.md §6.5). */
+    const val TRAINING_EQUIPMENT = "training.equipment"
 }

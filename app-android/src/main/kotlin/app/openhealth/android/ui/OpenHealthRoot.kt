@@ -1,8 +1,13 @@
 package app.openhealth.android.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -15,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -36,6 +43,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import app.openhealth.R
 import app.openhealth.android.AppContainer
 import app.openhealth.android.preferences.ThemeMode
@@ -49,7 +57,6 @@ import app.openhealth.ui.screens.onboarding.OnboardingScreen
 import app.openhealth.ui.screens.quickadd.QuickAddSheet
 import app.openhealth.ui.screens.roots.NutritionRoot
 import app.openhealth.ui.screens.roots.StatsRoot
-import app.openhealth.ui.screens.roots.TrainRoot
 import app.openhealth.ui.screens.roots.VitalsRoot
 import app.openhealth.ui.screens.settings.SettingsScreen
 import app.openhealth.ui.screens.settings.TrashScreen
@@ -57,6 +64,12 @@ import app.openhealth.ui.screens.shell.OhRootShell
 import app.openhealth.ui.screens.timeline.TimelineScreen
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayScreen
+import app.openhealth.ui.screens.train.ExerciseHistoryScreen
+import app.openhealth.ui.screens.train.LiveSessionScreen
+import app.openhealth.ui.screens.train.RoutineDetailScreen
+import app.openhealth.ui.screens.train.RoutineEditorScreen
+import app.openhealth.ui.screens.train.SessionSummaryScreen
+import app.openhealth.ui.screens.train.TrainRootScreen
 import app.openhealth.ui.theme.OhTheme
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -222,11 +235,32 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                TrainRoot(
-                    onAddNote = { viewModel.openQuickAdd(QuickAction.NOTE) },
-                    moduleOff = HealthModule.TRAINING !in state.preferences.modules,
-                    onOpenSettings = { nav.navigate(SettingsRoute) },
-                )
+                val train = state.train
+                if (train == null) {
+                    Loading()
+                } else {
+                    TrainRootScreen(
+                        model = train,
+                        onStartPlan = { routineId ->
+                            viewModel.startSession(routineId)
+                            nav.navigate(LiveSessionRoute())
+                        },
+                        onStartFreestyle = {
+                            viewModel.startFreestyle()
+                            nav.navigate(LiveSessionRoute())
+                        },
+                        onStartPast = { date ->
+                            viewModel.startPastSession(date)
+                            nav.navigate(LiveSessionRoute())
+                        },
+                        onResume = { id -> nav.navigate(LiveSessionRoute(id)) },
+                        onOpenRoutine = { id -> nav.navigate(RoutineRoute(id)) },
+                        onNewRoutine = { nav.navigate(RoutineEditorRoute(null)) },
+                        onOpenSession = { id -> nav.navigate(SessionSummaryRoute(id)) },
+                        onOpenSettings = { nav.navigate(SettingsRoute) },
+                        moduleOff = HealthModule.TRAINING !in state.preferences.modules,
+                    )
+                }
             }
         }
         composable<NutritionRoute> {
@@ -257,6 +291,134 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
                 StatsRoot(onAddNote = { viewModel.openQuickAdd(QuickAction.NOTE) })
+            }
+        }
+        composable<RoutineRoute> { entry ->
+            val id = entry.toRoute<RoutineRoute>().id
+            LaunchedEffect(id) { viewModel.openRoutine(id) }
+            val routine = state.routine
+            if (routine == null) {
+                Loading()
+            } else {
+                RoutineDetailScreen(
+                    model = routine,
+                    onBack = {
+                        viewModel.closeRoutine()
+                        nav.popBackStack()
+                    },
+                    onStart = { routineId ->
+                        viewModel.startSession(routineId)
+                        nav.navigate(LiveSessionRoute())
+                    },
+                    onEdit = { routineId -> nav.navigate(RoutineEditorRoute(routineId)) },
+                    onFavourite = { routineId, _ -> viewModel.toggleFavourite(routineId) },
+                    onExercise = { exerciseId -> nav.navigate(ExerciseHistoryRoute(exerciseId)) },
+                )
+            }
+        }
+        composable<RoutineEditorRoute> { entry ->
+            val id = entry.toRoute<RoutineEditorRoute>().id
+            LaunchedEffect(id) { viewModel.openEditor(id) }
+            val editor = state.editor
+            if (editor == null) {
+                Loading()
+            } else {
+                RoutineEditorScreen(
+                    model = editor,
+                    onBack = {
+                        viewModel.closeEditor()
+                        nav.popBackStack()
+                    },
+                    onSave = { draft ->
+                        viewModel.saveRoutine(draft)
+                        nav.popBackStack()
+                    },
+                )
+            }
+        }
+        composable<LiveSessionRoute> { entry ->
+            val id = entry.toRoute<LiveSessionRoute>().sessionId
+            AskNotificationPermission()
+            LaunchedEffect(id) { if (id != null) viewModel.openLive(id) }
+            val live = state.live
+            if (live == null) {
+                Loading()
+            } else {
+                LiveSessionScreen(
+                    model = live,
+                    now = System.currentTimeMillis(),
+                    onBack = {
+                        viewModel.closeLive()
+                        nav.popBackStack()
+                    },
+                    onFinish = { sessionId ->
+                        viewModel.finishLive(sessionId)
+                        nav.navigate(SessionSummaryRoute(sessionId)) {
+                            popUpTo<LiveSessionRoute> { inclusive = true }
+                        }
+                    },
+                    onLogSet = { logged -> viewModel.logSet(live.sessionId, logged) },
+                    onUpdateSet = { setId, edit ->
+                        viewModel.updateLiveSet(live.sessionId, setId, edit)
+                    },
+                    onDeleteSet = { setId -> viewModel.deleteLiveSet(live.sessionId, setId) },
+                    onAddExercise = { exerciseId ->
+                        viewModel.addLiveExercise(live.sessionId, exerciseId)
+                    },
+                    onExerciseNotes = { exerciseId, notes ->
+                        viewModel.setLiveExerciseNotes(live.sessionId, exerciseId, notes)
+                    },
+                    onSessionNote = viewModel::setLiveNote,
+                    onSuperset = { exerciseId, withNext ->
+                        viewModel.superset(live.sessionId, exerciseId, withNext)
+                    },
+                    onSaveEquipment = viewModel::saveEquipment,
+                    onRestMinus = viewModel::restMinus,
+                    onRestPlus = viewModel::restPlus,
+                    onRestPause = viewModel::restPause,
+                    onRestSkip = viewModel::restSkip,
+                )
+            }
+        }
+        composable<SessionSummaryRoute> { entry ->
+            val id = entry.toRoute<SessionSummaryRoute>().sessionId
+            LaunchedEffect(id) { viewModel.openSummary(id) }
+            val summary = state.summary
+            if (summary == null) {
+                Loading()
+            } else {
+                SessionSummaryScreen(
+                    model = summary,
+                    onBack = {
+                        viewModel.closeSummary()
+                        nav.popBackStack()
+                    },
+                    onEdit = { sessionId -> nav.navigate(LiveSessionRoute(sessionId)) },
+                    onMove = { sessionId, date -> viewModel.moveSession(sessionId, date) },
+                    onDelete = { sessionId ->
+                        viewModel.deleteSession(sessionId)
+                        nav.popBackStack()
+                    },
+                    onSaveNote = { feeling, note ->
+                        viewModel.saveSummary(summary.sessionId, feeling, note)
+                    },
+                )
+            }
+        }
+        composable<ExerciseHistoryRoute> { entry ->
+            val id = entry.toRoute<ExerciseHistoryRoute>().exerciseId
+            LaunchedEffect(id) { viewModel.openExerciseHistory(id) }
+            val history = state.exerciseHistory
+            if (history == null) {
+                Loading()
+            } else {
+                ExerciseHistoryScreen(
+                    model = history,
+                    onBack = {
+                        viewModel.closeExerciseHistory()
+                        nav.popBackStack()
+                    },
+                )
             }
         }
         composable<SettingsRoute> {
@@ -330,7 +492,15 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             },
         ),
         onDismiss = viewModel::closeQuickAdd,
-        onSelect = viewModel::openQuickAdd,
+        onSelect = { action ->
+            if (action == QuickAction.SET) {
+                viewModel.closeQuickAdd()
+                viewModel.startFreestyle()
+                nav.navigate(LiveSessionRoute())
+            } else {
+                viewModel.openQuickAdd(action)
+            }
+        },
         onBack = viewModel::quickAddBack,
         onNoteChange = viewModel::onQuickAddNote,
         onWaterChange = viewModel::onQuickAddWater,
@@ -458,3 +628,25 @@ private val TAB_ROUTES = listOf(
     NutritionRoute,
     StatsRoute,
 )
+
+/**
+ * `POST_NOTIFICATIONS` at the point of use (`Tech-Stack.md` §8): the rest timer's
+ * ongoing notification is the only notification the session needs, and the prompt is
+ * asked when the person first opens a live session, never at launch.
+ */
+@Composable
+private fun AskNotificationPermission() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = {},
+    )
+    LaunchedEffect(Unit) {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+}

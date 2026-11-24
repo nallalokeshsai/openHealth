@@ -5,6 +5,14 @@
          permission is declared; it is only exercised when the person turns the lock on. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- The rest timer is an ongoing foreground service (pr.md §6.5, Tech-Stack.md §4):
+         health, a short rest countdown for a training session. Sound and vibration at
+         zero are local alerts, never a push. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:name="app.openhealth.android.OpenHealthApp"
         android:allowBackup="false"
@@ -25,5 +33,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name="app.openhealth.android.training.RestTimerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Rest timer between strength-training sets" />
+        </service>
     </application>
 </manifest>

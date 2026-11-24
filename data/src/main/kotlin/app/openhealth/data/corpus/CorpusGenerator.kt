@@ -115,6 +115,7 @@ private data class TrainingContext(
  *
  * Deterministic for a given seed and end date, so a benchmark failure is reproducible.
  */
+@Suppress("LargeClass")
 class CorpusGenerator(
     private val db: OpenHealthDb,
     private val idGenerator: IdGenerator = RandomIdGenerator(),
@@ -427,6 +428,7 @@ class CorpusGenerator(
                     position = index.toLong(),
                     target_sets = 3L,
                     target_reps = 5L,
+                    target_reps_high = 8L,
                     target_weight_kg = seed.baseWeightKg,
                     notes = null,
                     target_rir = 2.0,
@@ -500,6 +502,12 @@ class CorpusGenerator(
                     position = exerciseIndex.toLong(),
                     notes = null,
                     group_index = null,
+                    target_sets = 3L,
+                    target_reps = 5L,
+                    target_reps_high = 8L,
+                    target_weight_kg = 100.0,
+                    progression = "linear",
+                    rest_seconds = 120L,
                 ),
             )
             repeat(3) { setIndex ->
@@ -522,6 +530,7 @@ class CorpusGenerator(
                         is_bodyweight = false,
                         tempo = null,
                         rest_seconds = 120L,
+                        notes = null,
                         completed_at = completedAt.toEpochMilliseconds(),
                         happened_at = completedAt.toEpochMilliseconds(),
                         recorded_at = completedAt.toEpochMilliseconds(),

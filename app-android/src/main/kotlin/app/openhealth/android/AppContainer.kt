@@ -63,6 +63,9 @@ class AppContainer(
     val clock: ClockSeam = SystemClock
     val ids: IdGenerator = RandomIdGenerator()
     val preferences: PreferencesStore by lazy { PreferencesStore(store.settings, store.profile) }
+    val restTimer: app.openhealth.core.seam.RestTimerSeam by lazy {
+        app.openhealth.android.training.AndroidRestTimer(appContext)
+    }
     val export: ExportService by lazy {
         ExportService(store.driver, store.db, Argon2ExportCipher(), clock)
     }

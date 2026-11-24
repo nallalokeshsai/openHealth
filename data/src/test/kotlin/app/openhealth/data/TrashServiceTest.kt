@@ -255,6 +255,7 @@ class TrashServiceTest {
             is_bodyweight = false,
             tempo = "3-1-1",
             rest_seconds = 180L,
+            notes = null,
             completed_at = now.toEpochMilliseconds(),
             happened_at = now.toEpochMilliseconds(),
             recorded_at = now.toEpochMilliseconds(),

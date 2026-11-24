@@ -21,6 +21,9 @@ data class RoutinePlacement(
     val rotates: Boolean get() = weekday == null
 }
 
+/** How a routine is placed: one weekday, or the next position in a rotation (`pr.md` §6.5). */
+enum class RoutineSchedule { WEEKDAY, ROTATION }
+
 /** Why today's plan is the routine it is, so the card can say it rather than guess. */
 enum class PlanReason { WEEKDAY, ROTATION_NEXT, ROTATION_FIRST }
 

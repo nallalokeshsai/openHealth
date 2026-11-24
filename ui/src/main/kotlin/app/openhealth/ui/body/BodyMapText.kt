@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import app.openhealth.core.body.Muscle
 import app.openhealth.core.formula.RecoveryStep
@@ -70,9 +71,17 @@ fun bodyMapDescription(model: BodyMapModel): String = when (model.type) {
         } else {
             stringResource(
                 R.string.body_map_desc_plan,
-                plans.size,
+                pluralStringResource(
+                    R.plurals.body_map_plan_muscles,
+                    plans.size,
+                    plans.size,
+                ),
                 muscleLabel(top.first),
-                number(top.second.weeklySets),
+                pluralStringResource(
+                    R.plurals.body_map_plan_sets,
+                    top.second.weeklySets.toInt(),
+                    number(top.second.weeklySets),
+                ),
             )
         }
     }
