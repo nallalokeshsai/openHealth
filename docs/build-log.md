@@ -1400,7 +1400,7 @@ No device identity (serial, model, build) is recorded in this repository.
 
 ### QA sweep on the phone (section 4.2)
 
-The QA sweep found eighteen issues and the independent reviews found a further fifteen;
+The QA sweep found eighteen issues and the independent reviews found a further two dozen;
 `issues.md` and its screenshots lived outside the repository and were deleted when every
 entry was fixed. The largest QA ones were: a `health`
 foreground service that Android 16 refused (now `specialUse`), a Skip that could tear
