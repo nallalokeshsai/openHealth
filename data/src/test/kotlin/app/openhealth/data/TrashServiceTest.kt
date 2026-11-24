@@ -5,7 +5,6 @@ import app.openhealth.core.ids.MeasurementId
 import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.SetId
 import app.openhealth.core.seam.FixedClock
-import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Measurement
 import app.openhealth.data.db.Note
 import app.openhealth.data.db.Work_set

@@ -1,3 +1,5 @@
+@file:Suppress("ReturnCount")
+
 package app.openhealth.core.nutrition
 
 import app.openhealth.core.citation.CitationKey
@@ -27,8 +29,12 @@ data class MacroTargets(
     }
 
     val isEmpty: Boolean
-        get() = kcal == null && proteinG == null && carbsG == null && fatG == null &&
-            fibreG == null && waterMl == null
+        get() = kcal == null &&
+            proteinG == null &&
+            carbsG == null &&
+            fatG == null &&
+            fibreG == null &&
+            waterMl == null
 
     companion object {
         val EMPTY = MacroTargets()

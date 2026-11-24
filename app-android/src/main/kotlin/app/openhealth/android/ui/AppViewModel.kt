@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import app.openhealth.R
 import app.openhealth.android.AppContainer
+import app.openhealth.android.nutrition.AssetFoodIndex
+import app.openhealth.android.nutrition.HttpUrlConnectionTransport
+import app.openhealth.android.nutrition.NutritionPresenter
 import app.openhealth.android.security.LockError
 import app.openhealth.android.training.TrainingPresenter
 import app.openhealth.core.body.AdiposeInputs
@@ -41,6 +44,24 @@ import app.openhealth.data.repo.SettingKeys
 import app.openhealth.data.repo.TrashEntity
 import app.openhealth.ui.R as UiR
 import app.openhealth.ui.screens.lock.LockMessage
+import app.openhealth.ui.screens.nutrition.BarcodeModel
+import app.openhealth.ui.screens.nutrition.BarcodeState
+import app.openhealth.ui.screens.nutrition.EntryDetailModel
+import app.openhealth.ui.screens.nutrition.FastingModel
+import app.openhealth.ui.screens.nutrition.FoodChoiceModel
+import app.openhealth.ui.screens.nutrition.FoodEditorModel
+import app.openhealth.ui.screens.nutrition.FoodSaveModel
+import app.openhealth.ui.screens.nutrition.FoodSearchModel
+import app.openhealth.ui.screens.nutrition.IngredientModel
+import app.openhealth.ui.screens.nutrition.MealChoiceModel
+import app.openhealth.ui.screens.nutrition.MealSectionModel
+import app.openhealth.ui.screens.nutrition.MealSlot
+import app.openhealth.ui.screens.nutrition.MicrosModel
+import app.openhealth.ui.screens.nutrition.NutritionModel
+import app.openhealth.ui.screens.nutrition.PortionModel
+import app.openhealth.ui.screens.nutrition.TargetsModel
+import app.openhealth.ui.screens.nutrition.TargetsSaveModel
+import app.openhealth.ui.screens.nutrition.WaterSheetModel
 import app.openhealth.ui.screens.onboarding.OnboardingAnswers
 import app.openhealth.ui.screens.onboarding.OnboardingIssue
 import app.openhealth.ui.screens.onboarding.OnboardingStep
@@ -157,6 +178,19 @@ data class AppState(
     val liveMissing: Boolean = false,
     val summary: SessionSummaryModel? = null,
     val exerciseHistory: ExerciseHistoryModel? = null,
+    val nutrition: NutritionModel? = null,
+    val nutritionDate: LocalDate? = null,
+    val foodSearch: FoodSearchModel? = null,
+    val portion: PortionModel? = null,
+    val entryDetail: EntryDetailModel? = null,
+    val waterSheet: WaterSheetModel? = null,
+    val targetsSheet: TargetsModel? = null,
+    val fastingSheet: FastingModel? = null,
+    val micros: MicrosModel? = null,
+    val barcode: BarcodeModel? = null,
+    val foodEditor: FoodEditorModel? = null,
+    val ingredientMode: Boolean = false,
+    val quickCalories: Boolean = false,
 )
 
 /**
@@ -186,6 +220,20 @@ class AppViewModel(
         )
     }
     private var liveTicker: Job? = null
+    private val nutritionPresenter: NutritionPresenter by lazy {
+        NutritionPresenter(
+            store = store,
+            clock = container.clock,
+            zone = zone,
+            ids = container.ids,
+            manualSource = AppContainer.MANUAL_SOURCE,
+            appVersion = container.versionName,
+            foodIndex = AssetFoodIndex(container.context),
+            off = app.openhealth.integrations.food.OpenFoodFactsClient(
+                HttpUrlConnectionTransport(),
+            ),
+        )
+    }
 
     private val _state = MutableStateFlow(
         AppState(
@@ -279,6 +327,13 @@ class AppViewModel(
         // add's timeline or a settings change is never held behind the exercise library.
         val train = profile?.let { training.train(preferences, it) }
         _state.update { it.copy(train = train) }
+        // The diary is the third update: its own reads (seven days of entries, the
+        // water rollup, the food index) never delay the shell or the Train root.
+        val date = _state.value.nutritionDate ?: container.clock.now().toLocalDateTime(zone).date
+        val nutritionModel = withContext(Dispatchers.IO) {
+            nutritionPresenter.root(date, preferences)
+        }
+        _state.update { it.copy(nutrition = nutritionModel, nutritionDate = date) }
     }
 
     // -------------------------------------------------------------------- training
@@ -579,6 +634,611 @@ class AppViewModel(
             state.value.profile?.let { training.live(id, it) }
         }
         _state.update { it.copy(live = model) }
+    }
+
+    // ----------------------------------------------------------------- nutrition
+
+    fun selectNutritionDay(date: LocalDate) {
+        launchGuarded {
+            val preferences = state.value.preferences
+            val model = withContext(Dispatchers.IO) { nutritionPresenter.root(date, preferences) }
+            _state.update { it.copy(nutritionDate = date, nutrition = model) }
+        }
+    }
+
+    fun openFoodSearch(section: MealSectionModel) {
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        val meal = if (section.mealId != null && section.slot == MealSlot.CUSTOM) {
+            MealChoiceModel(section.mealId, MealSlot.CUSTOM, section.name.orEmpty())
+        } else {
+            MealChoiceModel(null, section.slot, "")
+        }
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.search("", meal, date)
+            }
+            _state.update { it.copy(foodSearch = model, nutritionDate = date) }
+        }
+    }
+
+    fun openFoodSearchDefault() {
+        val hour = container.clock.now().toLocalDateTime(zone).hour
+        val slot = mealForHour(hour)
+        val date = container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.search("", MealChoiceModel(null, slot, ""), date)
+            }
+            _state.update { it.copy(foodSearch = model, nutritionDate = date) }
+        }
+    }
+
+    fun searchFoods(query: String) {
+        val current = state.value.foodSearch ?: return
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.search(query, current.meal, current.date)
+            }
+            _state.update { it.copy(foodSearch = model) }
+        }
+    }
+
+    fun selectFoodMeal(meal: MealChoiceModel) {
+        val search = state.value.foodSearch
+        if (search != null) {
+            launchGuarded {
+                val model = withContext(Dispatchers.IO) {
+                    nutritionPresenter.search(search.query, meal, search.date)
+                }
+                _state.update { it.copy(foodSearch = model) }
+            }
+            return
+        }
+        val portion = state.value.portion
+        if (portion != null) {
+            _state.update { it.copy(portion = portion.copy(meal = meal)) }
+        }
+    }
+
+    fun selectFood(food: FoodChoiceModel) {
+        val search = state.value.foodSearch ?: return
+        if (state.value.ingredientMode) {
+            val editor = state.value.foodEditor
+            if (editor != null) {
+                val ingredient = IngredientModel(
+                    foodId = food.id,
+                    name = food.name,
+                    grams = 100.0,
+                    per100g = food.per100g,
+                )
+                _state.update {
+                    it.copy(
+                        foodSearch = null,
+                        ingredientMode = false,
+                        foodEditor = editor.copy(ingredients = editor.ingredients + ingredient),
+                    )
+                }
+            }
+            return
+        }
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.portion(food, search.meal, search.date)
+            }
+            _state.update { it.copy(foodSearch = null, portion = model) }
+        }
+    }
+
+    fun logPortion(grams: Double, servings: Double, servingLabel: String?) {
+        val portion = state.value.portion ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                nutritionPresenter.logFood(
+                    food = portion.food,
+                    meal = portion.meal,
+                    date = portion.date,
+                    grams = grams,
+                    servings = servings,
+                    servingLabel = servingLabel,
+                    at = nutritionPresenter.atFor(portion.date, portion.meal.slot),
+                    entryId = portion.entryId,
+                )
+            }
+            _state.update { it.copy(portion = null, entryDetail = null, foodSearch = null) }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_logged, undo = false)
+        }
+    }
+
+    fun openEntry(entryId: String) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { nutritionPresenter.entryDetail(entryId) }
+            _state.update { it.copy(entryDetail = model) }
+        }
+    }
+
+    fun editEntry() {
+        val entry = state.value.entryDetail ?: return
+        launchGuarded {
+            val portion = withContext(Dispatchers.IO) {
+                nutritionPresenter.portionForEntry(entry.id)
+            }
+            _state.update { it.copy(entryDetail = null, portion = portion) }
+        }
+    }
+
+    fun deleteEntry(entryId: String) {
+        launchGuarded {
+            val tombstone = withContext(Dispatchers.IO) {
+                nutritionPresenter.deleteEntry(entryId)
+            }
+            _state.update { it.copy(entryDetail = null, portion = null) }
+            if (tombstone != null) {
+                undoAction = UndoAction.Deleted(tombstone)
+                showToast(UiR.string.nutrition_entry_deleted, undo = true)
+            }
+            refreshNutritionModel()
+        }
+    }
+
+    fun openWater() {
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { nutritionPresenter.waterSheet(date) }
+            _state.update { it.copy(waterSheet = model) }
+        }
+    }
+
+    fun logWaterContainer(containerId: String) {
+        val container = nutritionPresenter.containers().firstOrNull { it.id == containerId }
+            ?: return
+        logWater(containerId, container.millilitres)
+    }
+
+    fun logWater(containerId: String, millilitres: Double) {
+        val sheet = state.value.waterSheet ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                nutritionPresenter.selectContainer(containerId)
+                nutritionPresenter.logWater(millilitres)
+            }
+            _state.update { it.copy(waterSheet = null) }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_logged, undo = false)
+        }
+    }
+
+    fun addWaterContainer(label: String, millilitres: Double) {
+        val sheet = state.value.waterSheet ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                nutritionPresenter.saveContainer(null, label, millilitres)
+            }
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.waterSheet(sheet.date)
+            }
+            _state.update { it.copy(waterSheet = model) }
+            refreshNutritionModel()
+        }
+    }
+
+    fun deleteWaterContainer(id: String) {
+        val sheet = state.value.waterSheet ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.deleteContainer(id) }
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.waterSheet(sheet.date)
+            }
+            _state.update { it.copy(waterSheet = model) }
+            refreshNutritionModel()
+        }
+    }
+
+    fun openTargets() {
+        val today = container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.targets(today, state.value.preferences)
+            }
+            _state.update { it.copy(targetsSheet = model) }
+        }
+    }
+
+    fun saveTargets(save: TargetsSaveModel) {
+        val today = container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.saveTargets(today, save) }
+            _state.update { it.copy(targetsSheet = null) }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_targets_saved, undo = false)
+        }
+    }
+
+    fun openFasting() {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.fasting()
+            }
+            _state.update { it.copy(fastingSheet = model) }
+        }
+    }
+
+    fun setFastingEnabled(enabled: Boolean) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.setFastingEnabled(enabled) }
+            refreshFasting()
+            refreshNutritionModel()
+        }
+    }
+
+    fun setFastingHours(hours: Double) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.setFastingHours(hours) }
+            refreshFasting()
+        }
+    }
+
+    fun startFast() {
+        val sheet = state.value.fastingSheet ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.startFast(sheet.targetHours) }
+            refreshFasting()
+            refreshNutritionModel()
+        }
+    }
+
+    fun endFast() {
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.endFast() }
+            refreshFasting()
+            refreshNutritionModel()
+        }
+    }
+
+    fun openMicros() {
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { nutritionPresenter.micros(date) }
+            _state.update { it.copy(micros = model) }
+        }
+    }
+
+    fun openMicros(date: LocalDate) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { nutritionPresenter.micros(date) }
+            _state.update { it.copy(micros = model) }
+        }
+    }
+
+    fun closeMicros() {
+        _state.update { it.copy(micros = null) }
+    }
+
+    fun startBarcode() {
+        _state.update { it.copy(barcode = nutritionPresenter.barcodeStart()) }
+    }
+
+    fun acceptBarcodeDisclosure() {
+        nutritionPresenter.acceptBarcodeDisclosure()
+        _state.update {
+            it.copy(
+                barcode = it.barcode?.copy(
+                    state = BarcodeState.SCANNING,
+                    disclosureAccepted = true,
+                ),
+            )
+        }
+    }
+
+    fun barcodeLookup(code: String) {
+        val current = state.value.barcode ?: nutritionPresenter.barcodeStart()
+        _state.update {
+            it.copy(barcode = current.copy(state = BarcodeState.LOOKING_UP, barcode = code))
+        }
+        launchGuarded {
+            val result = withContext(Dispatchers.IO) { nutritionPresenter.lookupBarcode(code) }
+            _state.update { it.copy(barcode = result) }
+        }
+    }
+
+    fun barcodeScanAgain() {
+        _state.update {
+            it.copy(
+                barcode = it.barcode?.copy(
+                    state = if (it.barcode.disclosureAccepted) {
+                        BarcodeState.SCANNING
+                    } else {
+                        BarcodeState.DISCLOSURE
+                    },
+                    product = null,
+                ),
+            )
+        }
+    }
+
+    fun barcodeManual() {
+        _state.update {
+            it.copy(
+                barcode =
+                it.barcode?.copy(state = BarcodeState.MANUAL) ?: nutritionPresenter.manualBarcode(),
+            )
+        }
+    }
+
+    fun barcodeCreateFood(barcode: String?) {
+        launchGuarded {
+            val editor = withContext(Dispatchers.IO) { nutritionPresenter.foodEditor(null) }
+            _state.update {
+                it.copy(
+                    barcode = null,
+                    foodEditor = editor?.copy(barcode = barcode.orEmpty()),
+                )
+            }
+        }
+    }
+
+    fun logBarcodeProduct(food: FoodChoiceModel) {
+        val date = container.clock.now().toLocalDateTime(zone).date
+        val hour = container.clock.now().toLocalDateTime(zone).hour
+        val slot = mealForHour(hour)
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.portion(food, MealChoiceModel(null, slot, ""), date)
+            }
+            _state.update { it.copy(barcode = null, portion = model) }
+        }
+    }
+
+    fun closeBarcode() {
+        _state.update { it.copy(barcode = null) }
+    }
+
+    fun openFoodEditor(foodId: String?) {
+        launchGuarded {
+            val editor = withContext(Dispatchers.IO) { nutritionPresenter.foodEditor(foodId) }
+            _state.update { it.copy(foodEditor = editor, ingredientMode = false) }
+        }
+    }
+
+    fun openRecipeEditor(recipeId: String?) {
+        launchGuarded {
+            val editor = withContext(Dispatchers.IO) { nutritionPresenter.recipeEditor(recipeId) }
+            _state.update { it.copy(foodEditor = editor, ingredientMode = false) }
+        }
+    }
+
+    fun saveFoodEditor(save: FoodSaveModel) {
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.saveFood(save) }
+            _state.update { it.copy(foodEditor = null, ingredientMode = false) }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_saved, undo = false)
+        }
+    }
+
+    fun openIngredientSearch() {
+        val editor = state.value.foodEditor ?: return
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.search(
+                    "",
+                    MealChoiceModel(null, MealSlot.BREAKFAST, ""),
+                    date,
+                )
+            }
+            _state.update {
+                it.copy(foodSearch = model, ingredientMode = true, foodEditor = editor)
+            }
+        }
+    }
+
+    fun setIngredientGrams(index: Int, grams: Double) {
+        val editor = state.value.foodEditor ?: return
+        val ingredients = editor.ingredients.mapIndexed { i, ingredient ->
+            if (i == index) ingredient.copy(grams = grams) else ingredient
+        }
+        _state.update { it.copy(foodEditor = editor.copy(ingredients = ingredients)) }
+    }
+
+    fun removeIngredient(index: Int) {
+        val editor = state.value.foodEditor ?: return
+        val ingredients = editor.ingredients.filterIndexed { i, _ -> i != index }
+        _state.update { it.copy(foodEditor = editor.copy(ingredients = ingredients)) }
+    }
+
+    fun duplicateRecipe() {
+        val editor = state.value.foodEditor ?: return
+        val id = editor.id ?: return
+        launchGuarded {
+            val copyId = withContext(Dispatchers.IO) { nutritionPresenter.duplicateRecipe(id) }
+            if (copyId != null) {
+                val copy = withContext(Dispatchers.IO) {
+                    nutritionPresenter.foodEditor(copyId)
+                }
+                _state.update { it.copy(foodEditor = copy) }
+                refreshNutritionModel()
+            }
+        }
+    }
+
+    fun openRecipePortion(id: String) {
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            val food = withContext(Dispatchers.IO) { store.nutrition.foodById(id) }
+            val editor = state.value.foodEditor
+            _state.update { it.copy(foodEditor = null) }
+            if (food != null) {
+                val portion = withContext(Dispatchers.IO) {
+                    nutritionPresenter.portion(
+                        app.openhealth.ui.screens.nutrition.FoodChoiceModel(
+                            id = food.id,
+                            name = food.name,
+                            brand = food.brand,
+                            barcode = food.barcode,
+                            sourceKey = food.sourceKind,
+                            sourceLabel = food.sourceKind,
+                            foodTypeKey = food.foodType.key,
+                            per100g = food.per100g,
+                            portions = food.portions,
+                            defaultServingG = food.defaultServingG,
+                            defaultServingLabel = food.defaultServingLabel,
+                            allergens = food.allergens,
+                            analysisTags = food.analysisTags,
+                            ingredientsText = food.ingredientsText,
+                            verified = food.verified,
+                            isRecipe = food.isRecipe,
+                            isBundled = false,
+                        ),
+                        MealChoiceModel(null, MealSlot.LUNCH, ""),
+                        date,
+                    )
+                }
+                _state.update { it.copy(portion = portion) }
+            }
+            if (editor == null) refreshNutritionModel()
+        }
+    }
+
+    fun addCustomMeal(name: String) {
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.addCustomMeal(date, name) }
+            refreshNutritionModel()
+        }
+    }
+
+    fun copyMeal(section: MealSectionModel) {
+        val from = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        val to = container.clock.now().toLocalDateTime(zone).date
+        if (from == to) return
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                nutritionPresenter.copyMeal(from, section.slot, to)
+            }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_logged, undo = false)
+        }
+    }
+
+    fun copyDay() {
+        val from = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        val to = container.clock.now().toLocalDateTime(zone).date
+        if (from == to) return
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.copyDay(from, to) }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_logged, undo = false)
+        }
+    }
+
+    fun saveMealTemplate(section: MealSectionModel, name: String) {
+        val mealId = section.mealId ?: return
+        if (name.isBlank()) return
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                nutritionPresenter.saveMealAsTemplate(mealId, name)
+            }
+            showToast(UiR.string.nutrition_template_saved, undo = false)
+        }
+    }
+
+    fun logTemplate(templateId: String) {
+        val search = state.value.foodSearch ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                nutritionPresenter.logTemplate(templateId, search.meal, search.date)
+            }
+            _state.update { it.copy(foodSearch = null) }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_logged, undo = false)
+        }
+    }
+
+    fun closeNutritionSheets() {
+        _state.update {
+            it.copy(
+                foodSearch = null,
+                portion = null,
+                entryDetail = null,
+                waterSheet = null,
+                targetsSheet = null,
+                fastingSheet = null,
+                ingredientMode = false,
+                quickCalories = false,
+            )
+        }
+    }
+
+    fun closeFoodEditor() {
+        _state.update { it.copy(foodEditor = null, ingredientMode = false) }
+    }
+
+    fun openQuickCalories() {
+        _state.update { it.copy(foodSearch = null, quickCalories = true) }
+    }
+
+    fun saveQuickCalories(
+        kcal: Double,
+        protein: Double,
+        carbs: Double,
+        fat: Double,
+        fibre: Double,
+    ) {
+        val today = container.clock.now().toLocalDateTime(zone).date
+        val hour = container.clock.now().toLocalDateTime(zone).hour
+        val slot = mealForHour(hour)
+        val date = state.value.nutritionDate ?: today
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                nutritionPresenter.logQuick(
+                    kcal = kcal,
+                    protein = protein,
+                    carbs = carbs,
+                    fat = fat,
+                    fibre = fibre,
+                    meal = MealChoiceModel(null, slot, ""),
+                    date = date,
+                    at = nutritionPresenter.atFor(date, slot),
+                )
+            }
+            _state.update { it.copy(quickCalories = false) }
+            refreshNutritionModel()
+            showToast(UiR.string.nutrition_logged, undo = false)
+        }
+    }
+
+    private fun mealForHour(hour: Int): MealSlot = when {
+        hour < BREAKFAST_UNTIL -> MealSlot.BREAKFAST
+        hour < LUNCH_UNTIL -> MealSlot.LUNCH
+        hour < SNACKS_UNTIL -> MealSlot.SNACKS
+        hour < DINNER_UNTIL -> MealSlot.DINNER
+        else -> MealSlot.SNACKS
+    }
+
+    private suspend fun refreshNutritionModel() {
+        val date = state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
+        val preferences = state.value.preferences
+        val model = withContext(Dispatchers.IO) { nutritionPresenter.root(date, preferences) }
+        _state.update { it.copy(nutrition = model, nutritionDate = date) }
+    }
+
+    private suspend fun refreshFasting() {
+        val model = withContext(Dispatchers.IO) {
+            nutritionPresenter.fasting()
+        }
+        _state.update { it.copy(fastingSheet = model) }
     }
 
     // ---------------------------------------------------------------- onboarding
@@ -1097,6 +1757,13 @@ class AppViewModel(
     // -------------------------------------------------------------------- quick add
 
     fun openQuickAdd(action: QuickAction?) {
+        if (action == QuickAction.FOOD &&
+            HealthModule.NUTRITION in _state.value.preferences.modules
+        ) {
+            _state.update { it.copy(quickAdd = it.quickAdd.copy(visible = false)) }
+            openFoodSearchDefault()
+            return
+        }
         message = null
         val current = _state.value.quickAdd
         val mode = when (action) {
@@ -1936,7 +2603,7 @@ class AppViewModel(
         "observation" -> observationTimelineRow(item, sources)
         "measurement" -> measurementTimelineRow(item, sources)
         "vital" -> vitalTimelineRow(item, sources)
-        "meal" -> mealTimelineRow(item)
+        "meal" -> mealTimelineRow(item, sources)
         "entry" -> entryTimelineRow(item, sources)
         "session" -> sessionTimelineRow(item, sources)
         "work_set" -> setTimelineRow(item, sources)
@@ -2056,49 +2723,53 @@ class AppViewModel(
         )
     }
 
-    private fun mealTimelineRow(item: app.openhealth.data.repo.TimelineItem): TimelineRowModel? =
-        store.nutrition.mealById(item.entityId)?.let { meal ->
-            // B2's meal table has no provenance columns yet; B6 adds them. Do not invent
-            // a source in the meantime.
-            val source = container.context.getString(UiR.string.timeline_not_recorded)
-            TimelineRowModel(
-                kind = TimelineKind.MEAL,
-                entityId = meal.id,
-                sourceId = "",
-                title = meal.name.ifBlank { humanize(meal.kind) },
-                detail = source,
-                valueText = null,
-                provenance = RowProvenance(
-                    sourceLabel = source,
-                    happenedAt = Instant.fromEpochMilliseconds(meal.created_at),
-                    recordedAt = Instant.fromEpochMilliseconds(meal.created_at),
-                    method = null,
-                    device = null,
-                    edited = false,
-                ),
-                deletable = false,
-            )
-        }
+    private fun mealTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.nutrition.mealById(item.entityId)?.let { meal ->
+        val source = meal.sourceId?.let { sources[it] }
+            ?: container.context.getString(UiR.string.timeline_not_recorded)
+        TimelineRowModel(
+            kind = TimelineKind.MEAL,
+            entityId = meal.id,
+            sourceId = meal.sourceId.orEmpty(),
+            title = meal.name.ifBlank { humanize(meal.kind.key) },
+            detail = source,
+            valueText = null,
+            provenance = RowProvenance(
+                sourceLabel = source,
+                happenedAt = meal.happenedAt ?: Instant.fromEpochMilliseconds(meal.createdAt),
+                recordedAt = meal.recordedAt
+                    ?: Instant.fromEpochMilliseconds(meal.createdAt),
+                method = null,
+                device = null,
+                edited = false,
+            ),
+            deletable = false,
+        )
+    }
 
     private fun entryTimelineRow(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
     ): TimelineRowModel? = store.nutrition.entryById(item.entityId)?.let { entry ->
-        val source = sources[entry.source_id] ?: unknownSource()
+        val source = entry.sourceId?.let { sources[it] } ?: unknownSource()
         TimelineRowModel(
             kind = TimelineKind.ENTRY,
             entityId = entry.id,
-            sourceId = entry.source_id.orEmpty(),
-            title = entry.food_id ?: container.context.getString(UiR.string.timeline_diary_entry),
+            sourceId = entry.sourceId.orEmpty(),
+            title = entry.foodName ?: entry.foodId
+                ?: container.context.getString(UiR.string.timeline_diary_entry),
             detail = source,
-            valueText = entry.energy_kcal?.let { withUnit(it, "kcal") },
+            valueText = entry.totals.of(app.openhealth.core.nutrition.Nutrient.ENERGY)
+                ?.let { withUnit(it, "kcal") },
             provenance = RowProvenance(
                 sourceLabel = source,
-                happenedAt = Instant.fromEpochMilliseconds(entry.happened_at),
-                recordedAt = Instant.fromEpochMilliseconds(entry.recorded_at),
+                happenedAt = entry.happenedAt,
+                recordedAt = entry.recordedAt,
                 method = null,
                 device = entry.device,
-                edited = entry.user_edited,
+                edited = entry.edited,
             ),
             deletable = true,
             sensitive = true,
@@ -2544,3 +3215,9 @@ class AppViewModelFactory(private val container: AppContainer) : ViewModelProvid
 }
 
 private const val LIVE_TICK_MILLIS = 1_000L
+
+/** The default meal by the time of day (`DESIGN.md` §14.3). */
+private const val BREAKFAST_UNTIL = 10
+private const val LUNCH_UNTIL = 15
+private const val SNACKS_UNTIL = 17
+private const val DINNER_UNTIL = 21

@@ -12,6 +12,8 @@
 androidx.*:*	Apache-2.0	AndroidX libraries
 com.google.android.*:*	Apache-2.0	Android support libraries
 com.google.*:*	Apache-2.0	Guava, errorprone annotations, auto-value
+com.google.mlkit:*	ML-Kit-ToS	Bundled ML Kit barcode (play flavour only); Google ML Kit Terms of Service, not Apache-2.0
+com.google.zxing:*	Apache-2.0	ZXing barcode decoding in the F-Droid flavour (free-software-only build)
 com.google.code.findbugs:jsr305	BSD-3-Clause	Annotations pulled in by AndroidX
 com.google.guava:*	Apache-2.0	ListenableFuture, pulled in by AndroidX
 org.jetbrains:*	Apache-2.0	Kotlin annotations and JetBrains tooling runtime
@@ -58,3 +60,7 @@ com.github.curious-odd-man:rgxgen	Apache-2.0	Test-only, pulled in by Kotest
 community.flock.kotlinx.rgxgen:*	MIT	Test-only, pulled in by Kotest
 net.bytebuddy:*	Apache-2.0	Test-only, pulled in by Kotest
 net.java.dev.jna:*	Apache-2.0	Test-only, pulled in by Kotest; dual LGPL-2.1+/Apache-2.0, Apache elected so no LGPL code is taken
+
+# B6 CameraX and the bundled ML Kit model (play flavour) pull these two annotations.
+jakarta.inject:jakarta.inject-api	Apache-2.0	Jakarta Inject annotations, pulled in by CameraX
+org.checkerframework:checker-qual	MIT	Checker Framework annotations, pulled in by CameraX/ML Kit

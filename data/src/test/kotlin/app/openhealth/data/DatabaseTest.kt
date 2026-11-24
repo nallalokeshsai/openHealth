@@ -508,7 +508,6 @@ class DatabaseTest {
         }
     }
 
-
     private fun dropTimelineView(driver: app.cash.sqldelight.db.SqlDriver) {
         driver.execute(null, "DROP VIEW IF EXISTS timeline", 0)
     }
@@ -533,14 +532,29 @@ class DatabaseTest {
         ).forEach { driver.execute(null, "DROP TABLE IF EXISTS $it", 0) }
         mapOf(
             "food" to listOf(
-                "category", "food_type", "nutrients_json", "default_serving_g",
-                "default_serving_label", "allergens_json", "ingredients_text", "analysis_json",
+                "category",
+                "food_type",
+                "nutrients_json",
+                "default_serving_g",
+                "default_serving_label",
+                "allergens_json",
+                "ingredients_text",
+                "analysis_json",
             ),
             "meal" to listOf(
-                "zone_id", "happened_at", "recorded_at", "source_id", "idempotency_key",
+                "zone_id",
+                "happened_at",
+                "recorded_at",
+                "source_id",
+                "idempotency_key",
             ),
             "entry" to listOf(
-                "serving_label", "serving_g", "servings", "food_name", "brand", "micros_json",
+                "serving_label",
+                "serving_g",
+                "servings",
+                "food_name",
+                "brand",
+                "micros_json",
             ),
         ).forEach { (table, columns) ->
             columns.forEach { column ->

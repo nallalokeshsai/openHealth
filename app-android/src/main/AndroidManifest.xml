@@ -5,6 +5,12 @@
          permission is declared; it is only exercised when the person turns the lock on. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Barcode scanning (pr.md §6.3): the camera is requested at the moment the scan
+         action is used, never at launch. A phone without a camera still runs the app. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <!-- The rest timer is an ongoing foreground service (pr.md §6.5, Tech-Stack.md §4):
          health, a short rest countdown for a training session. Sound and vibration at
          zero are local alerts, never a push. -->

@@ -1,3 +1,5 @@
+@file:Suppress("ReturnCount")
+
 package app.openhealth.data.repo
 
 import app.openhealth.core.nutrition.FastWindow
@@ -247,7 +249,7 @@ object NutritionJson {
         val ordered = values.entries
             .sortedBy { it.key.ordinal }
             .joinToString(prefix = "{", postfix = "}") { (nutrient, amount) ->
-                "\"${nutrient.key}\":${amount}"
+                "\"${nutrient.key}\":$amount"
             }
         return ordered
     }
@@ -293,12 +295,11 @@ object NutritionJson {
         }
     }
 
-    fun encodeTags(tags: Set<String>): String =
-        kotlinx.serialization.json.buildJsonArray {
-            tags.sorted().forEach {
-                add(kotlinx.serialization.json.JsonPrimitive(it))
-            }
-        }.toString()
+    fun encodeTags(tags: Set<String>): String = kotlinx.serialization.json.buildJsonArray {
+        tags.sorted().forEach {
+            add(kotlinx.serialization.json.JsonPrimitive(it))
+        }
+    }.toString()
 
     fun decodeTags(text: String?): Set<String> {
         if (text.isNullOrBlank()) return emptySet()

@@ -9,10 +9,10 @@ import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.test.assertFailsWith
 
 class NutrientTest {
     @Test
@@ -104,7 +104,10 @@ class PortionMathTest {
         val second = PortionMath.forGrams(per100g, 66.7)
         val totals = NutrientTotals.sumInOrder(listOf(first, second))
         // The same left-to-right addition the rollup performs, not a rounded display value.
-        assertEquals(first.getValue(Nutrient.ENERGY) + second.getValue(Nutrient.ENERGY), totals.values.getValue(Nutrient.ENERGY))
+        assertEquals(
+            first.getValue(Nutrient.ENERGY) + second.getValue(Nutrient.ENERGY),
+            totals.values.getValue(Nutrient.ENERGY),
+        )
         assertEquals(389.0, totals.values.getValue(Nutrient.ENERGY), 1e-12)
         assertEquals(
             first.getValue(Nutrient.FIBRE) + second.getValue(Nutrient.FIBRE),
@@ -159,8 +162,10 @@ class TargetSuggestionsTest {
 
     @Test
     fun aFemaleSuggestionUsesTheFemaleWaterStartingPoint() {
-        val targets = (TargetSuggestions.suggest(SexAtBirth.FEMALE, 60.0, 1_800.0)
-            as FormulaOutcome.Computed).value
+        val targets = (
+            TargetSuggestions.suggest(SexAtBirth.FEMALE, 60.0, 1_800.0)
+                as FormulaOutcome.Computed
+            ).value
         assertEquals(2_000.0, targets.waterMl)
         assertEquals(48.0, targets.proteinG!!, 1e-12)
     }

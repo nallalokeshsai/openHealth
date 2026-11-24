@@ -218,6 +218,19 @@ data class OhDims(
     /** §10.1: chevrons may go to 2.0–2.4 for weight. */
     val chevronStroke: Float = 2.4f,
 
+    // §14.2 Nutrition and §8.2 charts
+    /** §14.2: the energy card's calorie ring is 120 dp. */
+    val nutritionRing: Dp = 120.dp,
+    /** §8.2: a ring is an 8 dp stroke with a round cap on a `surface-3` track. */
+    val nutritionRingStroke: Dp = 8.dp,
+    /** §8.2: a bar is 8 dp tall with an 8 dp radius cap and a 2 dp gap. */
+    val macroBarHeight: Dp = 8.dp,
+    val macroBarGap: Dp = 2.dp,
+    /** §14.2: the date strip cell is a 44 dp target. */
+    val nutritionDayCell: Dp = 44.dp,
+    /** §14.2: the barcode viewfinder fills the width and most of the page's height. */
+    val scanPreview: Dp = 320.dp,
+
     // §9.1 the body map
     /** §9.1: `maxHeight = min(46 % of the viewport, 340 dp)`. */
     val bodyMapMaxFraction: Float = 0.46f,

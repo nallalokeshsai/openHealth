@@ -27,7 +27,7 @@ object PortionMath {
     /** The amount of every nutrient in [grams] of a food. */
     fun forGrams(per100g: Map<Nutrient, Double>, grams: Double): Map<Nutrient, Double> {
         require(grams >= 0.0) { "A portion cannot have a negative mass." }
-        return per100g.mapValues { (_, value) -> value * grams / 100.0 }
+        return per100g.mapValues { (_, value) -> value * grams / PERCENT }
     }
 
     /** The mass in grams of [servings] servings of [portion]. */
@@ -38,7 +38,7 @@ object PortionMath {
 
     /** The kilocalories in [grams] of a food, or null when the food does not report it. */
     fun kilocalories(per100g: Map<Nutrient, Double>, grams: Double): Double? =
-        per100g[Nutrient.ENERGY]?.let { it * grams / 100.0 }
+        per100g[Nutrient.ENERGY]?.let { it * grams / PERCENT }
 }
 
 /**
@@ -75,7 +75,7 @@ data class NutrientTotals(val values: Map<Nutrient, Double>) {
 
 private fun round(value: Double, decimals: Int): Double {
     var factor = 1.0
-    repeat(decimals) { factor *= 10.0 }
+    repeat(decimals) { factor *= DECIMAL_BASE }
     return kotlin.math.round(value * factor) / factor
 }
 
@@ -95,7 +95,7 @@ object RecipeMath {
         val totalGrams = ingredients.sumOf { it.grams }
         if (totalGrams <= 0.0) return emptyMap()
         val totals = NutrientTotals.sumInOrder(ingredients.map { forGrams(it) })
-        return totals.values.mapValues { (_, amount) -> amount / totalGrams * 100.0 }
+        return totals.values.mapValues { (_, amount) -> amount / totalGrams * PERCENT }
     }
 
     /** The grams of one serving when a recipe of [totalGrams] makes [servings] servings. */
@@ -107,3 +107,8 @@ object RecipeMath {
     private fun forGrams(ingredient: Ingredient): Map<Nutrient, Double> =
         PortionMath.forGrams(ingredient.per100g, ingredient.grams)
 }
+
+/** A per-100 g value and a percentage are the same factor. */
+private const val PERCENT = 100.0
+
+private const val DECIMAL_BASE = 10.0

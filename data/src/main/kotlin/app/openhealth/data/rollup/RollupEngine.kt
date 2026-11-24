@@ -1,3 +1,5 @@
+@file:Suppress("ReturnCount")
+
 package app.openhealth.data.rollup
 
 import app.openhealth.core.formula.VolumeSet

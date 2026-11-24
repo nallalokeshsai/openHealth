@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber")
+
 package app.openhealth.core.nutrition
 
 import app.openhealth.core.citation.CitationKey

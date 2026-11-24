@@ -1,7 +1,6 @@
 package app.openhealth.data.repo
 
 import app.openhealth.core.nutrition.FastWindow
-import app.openhealth.core.nutrition.FoodPortion
 import app.openhealth.core.nutrition.MacroTargets
 import app.openhealth.core.nutrition.Nutrient
 import app.openhealth.core.nutrition.NutrientTotals
@@ -17,7 +16,6 @@ import app.openhealth.data.db.Recipe_item
 import app.openhealth.data.mapping.requireConsistentDay
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
 
 /**
  * Layer 4 nutrition (`pr.md` §6.3). A diary entry is the source of truth for its values,
@@ -79,7 +77,9 @@ class NutritionRepository(
         db.nutritionQueries.searchFoods(prefix, limit).executeAsList().map { it.toRecord() }
 
     fun searchFoodsContaining(query: String, limit: Long): List<FoodRecord> =
-        db.nutritionQueries.searchFoodsContaining(query, limit).executeAsList().map { it.toRecord() }
+        db.nutritionQueries.searchFoodsContaining(query, limit).executeAsList().map {
+            it.toRecord()
+        }
 
     fun countFoods(): Long = db.nutritionQueries.countFoods().executeAsOne()
 
@@ -141,7 +141,11 @@ class NutritionRepository(
     // ---- Entries ------------------------------------------------------------------
 
     fun upsertEntry(draft: EntryDraft) {
-        requireConsistentDay(draft.localDate.toString(), draft.zoneId.id, draft.happenedAt.toEpochMilliseconds())
+        requireConsistentDay(
+            draft.localDate.toString(),
+            draft.zoneId.id,
+            draft.happenedAt.toEpochMilliseconds(),
+        )
         val totals = draft.totals
         db.transaction {
             db.nutritionQueries.insertEntry(
@@ -185,7 +189,11 @@ class NutritionRepository(
      */
     fun updateEntry(id: String, draft: EntryDraft): Boolean {
         val existing = db.nutritionQueries.entryById(id).executeAsOneOrNull() ?: return false
-        requireConsistentDay(draft.localDate.toString(), draft.zoneId.id, draft.happenedAt.toEpochMilliseconds())
+        requireConsistentDay(
+            draft.localDate.toString(),
+            draft.zoneId.id,
+            draft.happenedAt.toEpochMilliseconds(),
+        )
         val totals = draft.totals
         db.transaction {
             db.nutritionQueries.updateEntry(
@@ -275,7 +283,14 @@ class NutritionRepository(
     fun mealTemplates(): List<MealTemplateRecord> =
         db.nutritionQueries.mealTemplates().executeAsList().mapNotNull { row ->
             MealKind.fromKey(row.kind)?.let { kind ->
-                MealTemplateRecord(row.id, row.name, kind, row.created_at, row.updated_at, row.revision)
+                MealTemplateRecord(
+                    row.id,
+                    row.name,
+                    kind,
+                    row.created_at,
+                    row.updated_at,
+                    row.revision,
+                )
             }
         }
 
@@ -387,8 +402,7 @@ class NutritionRepository(
     fun fastById(id: String): FastRecord? =
         db.nutritionQueries.fastById(id).executeAsOneOrNull()?.toRecord()
 
-    fun openFast(): FastRecord? =
-        db.nutritionQueries.openFast().executeAsOneOrNull()?.toRecord()
+    fun openFast(): FastRecord? = db.nutritionQueries.openFast().executeAsOneOrNull()?.toRecord()
 
     fun recentFasts(limit: Long): List<FastRecord> =
         db.nutritionQueries.recentFasts(limit).executeAsList().map { it.toRecord() }
@@ -538,10 +552,10 @@ class NutritionRepository(
     fun seedDefaultContainers() {
         if (countWaterContainers() > 0) return
         listOf(
-            Triple("water-glass", "Glass", 250.0),
-            Triple("water-mug", "Mug", 350.0),
-            Triple("water-bottle", "Bottle", 500.0),
-            Triple("water-large", "Large bottle", 750.0),
+            Triple("water-glass", "Glass", GLASS_ML),
+            Triple("water-mug", "Mug", MUG_ML),
+            Triple("water-bottle", "Bottle", BOTTLE_ML),
+            Triple("water-large", "Large bottle", LARGE_BOTTLE_ML),
         ).forEachIndexed { index, (id, label, ml) ->
             upsertWaterContainer(
                 WaterContainerRecord(
@@ -555,3 +569,9 @@ class NutritionRepository(
         }
     }
 }
+
+/** The four starting water containers (`pr.md` §6.3). */
+private const val GLASS_ML = 250.0
+private const val MUG_ML = 350.0
+private const val BOTTLE_ML = 500.0
+private const val LARGE_BOTTLE_ML = 750.0

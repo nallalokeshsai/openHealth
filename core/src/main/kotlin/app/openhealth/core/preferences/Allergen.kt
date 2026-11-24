@@ -23,7 +23,6 @@ enum class Allergen(val key: String, val labelKey: String, val offTags: Set<Stri
     companion object {
         fun fromKey(key: String): Allergen? = entries.firstOrNull { it.key == key }
 
-        fun fromKeys(keys: Iterable<String>): Set<Allergen> =
-            keys.mapNotNull(::fromKey).toSet()
+        fun fromKeys(keys: Iterable<String>): Set<Allergen> = keys.mapNotNull(::fromKey).toSet()
     }
 }

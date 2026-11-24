@@ -14,6 +14,18 @@ data class IndexedFood(
     val energyKcalPer100g: Double? get() = nutrition.per100g[Nutrient.ENERGY]
 }
 
+/** The dataset record shown on the food-data attribution screen (`pr.md` §12.2). */
+data class FoodIndexMeta(
+    val version: String,
+    val licence: String,
+    val licenceUrl: String,
+    val foodCount: Int,
+    val foundationCount: Int,
+    val srLegacyCount: Int,
+    val sourceUrls: List<String>,
+    val generatedAt: String,
+)
+
 /**
  * The bundled offline index (`pr.md` §6.3). It is a platform seam because the compact
  * SQLite file ships as an app asset; the search contract stays here so `:core` owns the
@@ -24,6 +36,8 @@ interface BundledFoodIndex {
     val version: String
 
     val foodCount: Int
+
+    val meta: FoodIndexMeta
 
     /** Name search over the bundled foods, most useful first, at most [limit]. */
     fun search(query: String, limit: Int): List<IndexedFood>

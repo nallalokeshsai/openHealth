@@ -78,6 +78,13 @@ object SettingKeys {
     const val GOAL_TARGET_DATE = "goal.target_date"
     const val LAST_WATER_ML = "quickadd.last_water_ml"
 
+    /** Nutrition (B6): the fasting card is opt-in, and the Open Food Facts lookup is
+     * explicit for the first time (pr.md §6.3). */
+    const val NUTRITION_FASTING = "nutrition.fasting_enabled"
+    const val NUTRITION_FASTING_HOURS = "nutrition.fasting_hours"
+    const val NUTRITION_OFF_DISCLOSURE = "nutrition.off_disclosure_accepted"
+    const val NUTRITION_LAST_CONTAINER = "nutrition.last_water_container"
+
     /** The bundled exercise library's version, so seeding runs once (pr.md §6.5). */
     const val EXERCISE_CATALOGUE = "exercise.catalogue_version"
 
