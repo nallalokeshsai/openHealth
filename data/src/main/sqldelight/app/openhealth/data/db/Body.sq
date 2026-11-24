@@ -78,6 +78,12 @@ ORDER BY happened_at;
 latestMeasurements:
 SELECT * FROM measurement ORDER BY happened_at DESC LIMIT :limit;
 
+-- The newest value of one tape site (DESIGN.md §9.1.1 needs one per region).
+latestMeasurementOfType:
+SELECT * FROM measurement
+WHERE type = :type AND excluded_from_trends = 0
+ORDER BY happened_at DESC LIMIT 1;
+
 countMeasurements:
 SELECT count(*) FROM measurement;
 

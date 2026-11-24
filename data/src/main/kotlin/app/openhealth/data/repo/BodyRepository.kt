@@ -53,6 +53,10 @@ class BodyRepository(private val db: OpenHealthDb) {
     fun latestMeasurements(limit: Long): List<Measurement> =
         db.bodyQueries.latestMeasurements(limit).executeAsList()
 
+    /** The newest reading of one tape site, or null when it was never measured. */
+    fun latestMeasurementOfType(type: String): Measurement? =
+        db.bodyQueries.latestMeasurementOfType(type).executeAsOneOrNull()
+
     fun upsertVital(vital: Vital) {
         requireConsistentDay(vital.local_date, vital.zone_id, vital.happened_at)
         db.transaction {

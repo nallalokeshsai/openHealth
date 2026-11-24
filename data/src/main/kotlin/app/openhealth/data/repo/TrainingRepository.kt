@@ -1,5 +1,13 @@
 package app.openhealth.data.repo
 
+import app.openhealth.core.body.LoadedSet
+import app.openhealth.core.body.Muscle
+import app.openhealth.core.exercise.Equipment
+import app.openhealth.core.exercise.Exercise as CatalogueExercise
+import app.openhealth.core.exercise.ExerciseCatalogue
+import app.openhealth.core.exercise.ExerciseForce
+import app.openhealth.core.exercise.ExerciseLevel
+import app.openhealth.core.exercise.ExerciseMechanic
 import app.openhealth.data.db.Exercise
 import app.openhealth.data.db.OpenHealthDb
 import app.openhealth.data.db.Programme
@@ -9,6 +17,7 @@ import app.openhealth.data.db.Session
 import app.openhealth.data.db.Session_exercise
 import app.openhealth.data.db.Work_set
 import app.openhealth.data.mapping.requireConsistentDay
+import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 
 /**
@@ -24,6 +33,9 @@ class TrainingRepository(private val db: OpenHealthDb) {
             secondaryMuscles = exercise.secondary_muscles,
             equipment = exercise.equipment,
             instructions = exercise.instructions,
+            level = exercise.level,
+            mechanic = exercise.mechanic,
+            force = exercise.force,
             metActivity = exercise.met_activity,
             isCustom = exercise.is_custom,
             sourceId = exercise.source_id,
@@ -37,6 +49,91 @@ class TrainingRepository(private val db: OpenHealthDb) {
 
     fun exerciseById(id: String): Exercise? =
         db.trainingQueries.exerciseById(id).executeAsOneOrNull()
+
+    /**
+     * Writes one library or custom exercise. The stored muscle columns and the typed
+     * model are the same list, so no reader has to re-map one to the other.
+     */
+    fun insertCatalogueExercise(exercise: CatalogueExercise, sourceId: String?, nowMillis: Long) {
+        upsertExercise(
+            Exercise(
+                id = exercise.id,
+                name = exercise.name,
+                primary_muscles = exercise.primary.joinToString(",") { it.key },
+                secondary_muscles = exercise.secondary.joinToString(",") { it.key },
+                equipment = exercise.equipment.key,
+                instructions = exercise.instructions.joinToString("\n")
+                    .ifBlank { null },
+                level = exercise.level.key,
+                mechanic = exercise.mechanic?.key,
+                force = exercise.force?.key,
+                met_activity = null,
+                is_custom = exercise.isCustom,
+                source_id = sourceId,
+                created_at = nowMillis,
+                updated_at = nowMillis,
+                revision = 1L,
+            ),
+        )
+    }
+
+    /**
+     * Writes the bundled library once. The caller records [ExerciseCatalogue.VERSION] in
+     * settings and skips this next launch; re-seeding is a real upsert, so a corrected
+     * library replaces its own rows and leaves custom exercises alone.
+     */
+    fun seedCatalogue(
+        exercises: List<CatalogueExercise>,
+        sourceId: String?,
+        nowMillis: Long,
+    ): Int = db.transactionWithResult {
+        exercises.forEach { insertCatalogueExercise(it, sourceId, nowMillis) }
+        exercises.size
+    }
+
+    /** The whole library as typed models; a row whose muscle keys are unreadable is skipped. */
+    fun catalogue(): List<CatalogueExercise> = exercises().mapNotNull { row ->
+        val primary = muscles(row.primary_muscles)
+        if (primary.isEmpty()) return@mapNotNull null
+        CatalogueExercise(
+            id = row.id,
+            name = row.name,
+            primary = primary,
+            secondary = muscles(row.secondary_muscles) - primary.toSet(),
+            equipment = Equipment.fromKey(row.equipment),
+            level = ExerciseLevel.fromKey(row.level),
+            mechanic = ExerciseMechanic.fromKey(row.mechanic),
+            force = ExerciseForce.fromKey(row.force),
+            bodyPart = app.openhealth.core.body.BodyPart.of(primary),
+            instructions = row.instructions.orEmpty().split('\n').filter { it.isNotBlank() },
+            isCustom = row.is_custom,
+        )
+    }
+
+    /**
+     * The last four weeks of completed sets with their exercise's muscles, for the
+     * recovery map (`pr.md` §6.5). Warm-ups are returned too; the engine ignores them.
+     */
+    fun loadedSets(fromMillis: Long): List<LoadedSet> =
+        db.trainingQueries.recentSetLoads(fromMillis).executeAsList().map { row ->
+            LoadedSet(
+                sessionId = row.session_id,
+                exerciseId = row.exercise_id,
+                primary = muscles(row.primary_muscles),
+                secondary = muscles(row.secondary_muscles),
+                completedAt = Instant.fromEpochMilliseconds(row.completed_at),
+                weightKg = row.weight_kg,
+                reps = row.reps.toInt(),
+                isWarmup = row.is_warmup,
+                sourceId = row.source_id,
+                recordedAt = Instant.fromEpochMilliseconds(row.recorded_at),
+            )
+        }
+
+    private fun muscles(cell: String): List<Muscle> = cell
+        .split(',')
+        .mapNotNull { Muscle.fromKey(it) }
+        .distinct()
 
     fun upsertRoutine(routine: Routine) {
         db.trainingQueries.insertRoutine(
@@ -183,4 +280,6 @@ class TrainingRepository(private val db: OpenHealthDb) {
         db.trainingQueries.setsForExerciseBetween(exerciseId, from, to).executeAsList()
 
     fun countSets(): Long = db.trainingQueries.countWorkSets().executeAsOne()
+
+    fun countExercises(): Long = db.trainingQueries.countExercises().executeAsOne()
 }

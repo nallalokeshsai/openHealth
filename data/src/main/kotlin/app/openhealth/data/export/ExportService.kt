@@ -60,10 +60,15 @@ class ExportService(
         }
     }
 
+    /**
+     * An export from an older schema is accepted and restored into the current one: the
+     * dump names its columns, and a column that did not exist then takes its default. A
+     * newer export is refused, because this build cannot know what it means.
+     */
     private fun requireSupportedSchema(bundle: ExportBundle) {
-        if (bundle.schemaVersion != OpenHealthDb.Schema.version) {
+        if (bundle.schemaVersion > OpenHealthDb.Schema.version) {
             throw UnsupportedExportFormat(
-                "Export schema ${bundle.schemaVersion} does not match this app's " +
+                "Export schema ${bundle.schemaVersion} is newer than this app's " +
                     OpenHealthDb.Schema.version,
             )
         }

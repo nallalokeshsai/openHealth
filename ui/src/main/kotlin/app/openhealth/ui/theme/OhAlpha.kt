@@ -42,4 +42,13 @@ object OhAlpha {
 
     /** §5.19: a paused timer is at 50 %. */
     const val paused: Float = 0.50f
+
+    /** §9.1.1: the adipose layer is `fat` at 55 % over the figure. */
+    const val bodyFatLayer: Float = 0.55f
+
+    /** §9.1: Recovering carries a `surface` hatch at 35 % for colour-blind separation. */
+    const val bodyHatch: Float = 0.35f
+
+    /** §9.1: the mini map's untrained base is 26 %. */
+    const val bodyMiniBase: Float = 0.26f
 }

@@ -959,3 +959,191 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 - **The `Skip` key on a required question** explains itself rather than advancing; this
   is the resolution of the "Skip always visible" recipe with "tier 1 required" and is
   recorded in ADR 0007.
+
+---
+
+## B4 — Body model and exercise data
+
+**Status:** Completed · **Date:** 2026-11-24 · **Branch:** `build/b4-body-and-exercises`
+**Goal:** the signature visual and the data it depends on (`BUILD-ROADMAP.md` §B4).
+
+### Environment and decisions taken at the start
+
+- Workstation unchanged: Linux, JDK 21, the wrapper. Test target: the owner's **physical
+  phone**. It was locked with a secure keyguard for part of the session; the owner
+  unlocked it on request and the connected suite then ran.
+- **Questions asked (one):** none about product content. The only question was the owner
+  unlocking the phone after the keyguard stopped every Compose test ("No compose
+  hierarchies found"); it is not a contract question.
+- **No B4 question was needed:** Free Exercise DB is released under the Unlicense, its
+  licence was read at the source, and it permits redistribution (`pr.md` §12.2).
+- ADR `0008-body-model-and-exercises.md` records seventeen decisions beyond the text:
+  whole muscles without openGym's sub-group split, the generated TSV + Compose path
+  renderer, the closed-silhouette adipose band and its pure thickness model, the recovery
+  engine's session baselines, the library mapping and enrichment, schema v5, one
+  accessibility node per muscle, Today's card, and the debug harness.
+
+### Milestones
+
+1. **Geometry, taxonomy and the map** — commit `88385ac`.
+   MuscleMap's path data (MIT) is copied to `tools/bodygeometry/upstream/body-paths.js`
+   and converted by `tools/bodygeometry/convert.mjs` to
+   `ui/src/main/res/raw/body_paths.tsv` (four views, 1 278 path commands). `:core` gains
+   the 19 whole muscles, regions, body parts and silhouette keys; `:ui` gains
+   `BodyGeometry`/`AdiposeGeometry` and `OhBodyMap` — base, 2.5 dp surface stroke,
+   selection 7 dp + 2 dp glow, the Recovering hatch, the accent-ramp plan map, the
+   adipose band (closed silhouette, only outside the muscles, 55 % dark / full light), the
+   mini variants, one accessibility node per muscle, never mirrored in RTL.
+2. **Recovery, adipose and plan models** — in `88385ac`. `RecoveryMap` (primary 1,
+   secondary 0.5, warm-ups excluded, 28-day window, hard session against earlier
+   sessions' median), `AdiposeModel` (body fat → Navy tape → nothing; base × region
+   factors; self-relative tape scaling; clamps), `PlanCoverage`, and the muscle-weighted
+   session loads from `:data`.
+3. **Exercise library** — in `88385ac`. `tools/exerciseindex` converts the vendored
+   dataset (Unlicense) into `core/…/exercise/exercises.tsv`: **871 exercises** of 876 (five
+   upstream entries have no instructions: Push Press, Side Bridge, Side Jackknife, Iron
+   Cross, One-Arm Kettlebell Swings; the tool prints them). 17 dataset muscles map to the
+   19, four unnamed muscles are enriched by name idiom, body-part tags are derived, and
+   `fex:` ids are stable. Schema **v5** adds level/mechanic/force (`4.sqm`), the seed runs
+   once behind `SettingKeys.EXERCISE_CATALOGUE`, and custom exercises are `is_custom` rows.
+4. **Today, the sheets and the harness** — commit `35f224b` and the fix commit.
+   Today's empty body card is replaced by the map, chip row, last-trained line, fat
+   provenance row + sheet, legend, muscle sheet with provenance, table alternative and a
+   generic-figure note. `BodyLabActivity` (debug only) scrubs body fat, waist and hours and
+   shows the library count.
+5. **Verification and documentation** — this entry, ADR 0008's review section, the dated
+   DESIGN edit, NOTICE, AGENTS "Current state", and the fixes below.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint and **262 JVM tests** (111 `:core`, 73 `:data`, 75 `:ui`, 1 fixtures, 2 exerciseindex) with no failures. `:ui` verifies **170 goldens** (136 before + 34: 24 four-view × three-map × two-theme, 4 pair/selection, 2 mini, 4 Today). |
+| `:core:test :data:test :ui:testDebugUnitTest :tools:*:test --rerun-tasks --no-build-cache` | **BUILD SUCCESSFUL**, 262 tests, to prove nothing came from cache. |
+| `:app-android:connectedDebugAndroidTest` on the owner's phone | **BUILD SUCCESSFUL, 12/12**: the 11 B3 scenarios (storage now isolated per test), B2's encrypted-database test, and the new `theLibraryIsPackagedAndWrittenOnce` (871 rows reach the encrypted store on device, idempotent on reopen). |
+| `:app-android:assembleRelease` + `apkanalyzer` | **BUILD SUCCESSFUL**; the release manifest has **one** activity (no gallery, no body lab) and no new permission. |
+| Cold start on the phone (`force-stop`, `am start -W`) | `LaunchState: COLD`, **1 058 ms** in the debug build, inside the 1.5 s budget. |
+| First store open with the seed, measured in the instrumented test | **1 717 ms** (SQLCipher load + integrity check + schema + 871 rows), which is why the regression wire is 3 s. |
+| `uiautomator dump` on Today | One accessibility node with content-desc **"Forearms"**, plus the one-sentence description "Recovery map: 4 recovering, 0 easing, 0 ready; Shoulders was trained most recently." 16 of 19 muscles are in the platform's *visible* dump; the two thin ones are covered by neighbours (see open issues). |
+| Phone walk-through | Onboarding → sample data → Today body card; tap Chest opens its sheet with "From Manual, recorded 23 Nov, 6:12 pm"; "Show as table" opens the 19-row table; the BodyLab scrubs body fat/waist/hours and shows "871 exercises, 19 map rows"; rotate to landscape and back (the sheet and selection survive); gallery launches. No `AndroidRuntime` entry in any step. |
+
+No device identity (serial, model, build) is recorded in this repository.
+
+### Exit tests (`BUILD-ROADMAP.md` §B4)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| Screenshot tests for four views × dark/light × each map type | `BodyMapScreenshotTest`: male/female × front/back × recovery/plan/untrained × dark/light = **24 goldens**, plus the pair, the selection and the mini in both themes; `ScreenScreenshotTest` adds Today with the map in dark, light, 200 % text and RTL. All verify in `check`. | **pass** |
+| TalkBack announces "Forearms" once | `BodyMapSemanticsTest.talkBackAnnouncesEachMuscleOnce` (one node) and the phone's `uiautomator` dump: exactly one `content-desc="Forearms"`; every muscle has one Compose node, and a front/back touch test selects the right muscle. | **pass** |
+| The fat layer never overlaps a recovery-coloured shape | `BodyGeometryTest.theAdiposeBandIsDrawnOnlyOutsideTheMuscles`: the band is cut against the **closed** silhouette and the test asserts it enters no seam on any of the four views, with a 4-cell rasterisation tolerance; the renderer draws it under opaque recovery fills. | **pass** |
+| Unit test proves recovery steps at 0, 23, 25, 47, 49, 73 hours for default thresholds | `RecoveryStepsTest.theDefaultThresholdsAtTheDocumentedHours` (0/23 Recovering, 25/47 Easing, 49 Ready, 73 Untrained), the boundary test, and the hard-session test. | **pass** |
+
+### Regression over earlier phases
+
+- **B0 install/launch and guards** — clean `check`/`assembleDebug`, install and cold launch
+  above; `checkPortability` and `checkLicences` run in every module.
+- **B1 design system** — all 136 earlier goldens verify unchanged; the gallery launches on
+  the phone; `checkDesignTokens` and `OhContrastTest` pass, now including the adipose
+  layer's 3:1 measurement in both themes.
+- **B2 rollups, dedup, export and encryption** — the 73 `:data` tests pass, and
+  `OlderSchemaRestoreTest` proves a v4 bundle still restores into v5 after this schema
+  bump. `EncryptedDatabaseTest` re-ran on the phone.
+- **B3 shell, onboarding, settings** — the 10 `ShellExitTest` scenarios re-ran on the
+  phone (12/12 with B2's test and the new library test), now each with its own database
+  and vault; no test can delete the owner's record.
+
+### Independent review and the fixes it produced
+
+Three fresh reviewers saw only the diff and the contract (correctness and tests;
+`AGENTS.md` invariants and licences; `DESIGN.md` conformance). Every finding below was
+confirmed in the code, the goldens or the device, then fixed and re-verified:
+
+| Finding | Fix |
+|---|---|
+| The adipose rim ran down every seam between adjacent muscles, so the figure read as a gold wireframe | the union is closed by a 24-unit ring first; the band is cut against the closed silhouette; a seam test covers all four views |
+| `fat` at 55 % in light measured 1.97:1 on a white card | the light layer is full opacity (3.79:1 `surface`, 3.39:1 `bg`); `OhColors.fatLayerAlpha` + `OhContrastTest`; DESIGN §9.1.1/§12.5 dated |
+| A muscle trained 73 h ago was labelled "Not loaded", the card claimed "No sessions", and the TalkBack sentence said "no muscle has been loaded" | all three derive from `hoursSinceLoad`: a trained muscle past Ready says "Recovered"; the empty state needs no load in the window at all |
+| Untrained muscles were filled twice (base pass + muscle fill), so they were 21 % / 26 % against an 11 % / 14 % silhouette | the base is painted once; a muscle with no colour of its own is not repainted |
+| The mini map's 3 dp strokes buried its fills | in the mini variant the separations are drawn before the fills |
+| Every pre-B4 export became unrestorable at schema v5 | `ExportService` accepts an older schema and lets a missing column take its default; `OlderSchemaRestoreTest` proves v4 → v5, and a newer schema is still refused |
+| Instrumented tests deleted the production database and vault on the owner's phone | `AppContainer` takes a database name and vault name; both instrumented suites use their own and clean only those |
+| A library re-seed reset `revision` and erased any MET enrichment | the upsert bumps `revision` and keeps `met_activity` (`coalesce`) |
+| B3's demo rows used muscle names that are not in the taxonomy (`back`, `shoulders`, `glutes`) | `4.sqm` normalises them; the generator was already fixed |
+| The generator had no test and silently dropped five exercises | `ExerciseIndexTest` asserts the shipped TSV equals what the vendored dataset generates and carries no image/URL; the tool prints the skipped count |
+| The fat-provenance line was a non-tappable sentence with broken grammar | it is a row opening a sheet with value, method, source, recorded time and the tape sites that actually scaled; the muscle sheet names the recording source and time |
+| The body-fat figure came from the newest raw observation, bypassing per-day source priority | it reads the day's rollup (the winning source) and finds that source's observation for method and timestamps |
+| A single tape site was claimed to have shaped the layer | only a second measured site is listed as scaling |
+| The "Recovery" chip was an inert control; "Show as table" was double-inset | Recovery is a static label in the chip strip; card rows sit flush with the card's column |
+| Legend did not name the fat layer; it could not wrap at 200 % | a "Fat layer" swatch joins the legend, in a `FlowRow`; the 200 % golden shows it wrapping |
+| Hours read "0 h ago", and ran without a unit | "under an hour" under 60 minutes, and the unit is in the sheet value |
+| Sex at birth unknown silently drew the male figure | the card says the figure is generic when the profile states no sex (ADR 0008 item 7) |
+| Muscle keys were free text; a custom exercise could name nothing | an exercise requires a primary muscle, primary and secondary are disjoint, and `muscleWeights` lets primary win |
+| Alternatives could suggest a lift with no shared primary | the candidate must share a primary muscle |
+| Thin muscles were below a 44 dp touch target | a tap that misses every path falls back to the nearest muscle within half a target; front and back taps are tested |
+| The loading placeholder did not reserve the drawn height | it uses the same arithmetic and the known viewBox ratios |
+| Anatomy docs said Today carries the mini map | §9.1 now says the hero pair, Today; Train and Stats carry minis |
+| NOTICE did not say the geometry is openGym's conversion or pin the sources | both sources pinned by commit; the conversion and the image position stated |
+| New debug strings were in the release resource table | they moved to `app-android/src/debug/res` |
+
+Second review round over the fixes themselves found no new defect: the gates were re-run
+clean, and the device walk-through was repeated on the final build.
+
+### Invariant audit (`AGENTS.md`)
+
+| Invariant | This phase |
+|---|---|
+| Provenance on every value | The library rows name the `exercise-library` source and their timestamps; the muscle sheet says which source recorded the last session and when; the fat sheet names body-fat method, source, recorded time and tape sites; the recovery map is computed, not stored. **Holds.** |
+| `happened_at` ≠ `recorded_at` | Sets are read with both instants; the sheet shows the recording time; nothing rewrites either. **Holds.** |
+| Five layers, rebuildable rollups | Exercise is layer 4; recovery, adipose and plan are derived at read; no rollup changed; schema v5 adds columns only and keeps every row. **Holds.** |
+| One source wins a day | The adipose figure reads the BODY_FAT_PERCENT rollup (the winning source), not the newest raw reading; no new dedup path. **Holds.** |
+| Local-first | The dataset and geometry are vendored; no network, permission or service was added. **Holds.** |
+| Not a medical device | "Recovering / Easing / Ready / Recovered" are neutral; the fat layer says it is a schematic estimate, not a body scan; no diagnosis, no "sore". **Holds.** |
+| No telemetry | No analytics or third-party SDK; two new dependencies are AndroidX/Kotlinx, Apache-2.0. **Holds.** |
+| Portability | The taxonomy, recovery, adipose, catalogue and plan models live in `:core` with no `android.*`/`androidx.*`; paths and Compose live in `:ui`; `checkPortability` green. **Holds.** |
+| Licence split | MuscleMap MIT notice complete and retained; Free Exercise DB Unlicense recorded with its commit; no image crosses; no GPL family. **Holds.** |
+| Tombstone undo | No delete path was added; custom exercises have no delete yet (recorded). **Holds.** |
+| Modules hide, never delete | With Training off the map is not rendered; its data is untouched. **Holds.** |
+| Weight-neutral first-class | The adipose layer is not computed at all under the policy, not blurred; it is absent at the source, and the chip disappears with it. **Holds.** |
+| Chart has a table and a sentence | Every map has a one-sentence description and a 19-row table alternative; the card shows the row and the map exposes a TalkBack action. **Holds.** |
+| Closed design tokens | New geometry is quoted from §9.1/§9.1.1 in `OhDims`/`OhAlpha`/`OhRamp`, recorded in Appendix A; the only DESIGN edits are the dated B4 additions; `checkDesignTokens` green. **Holds.** |
+| Closed cut list | Nothing from `pr.md` §14.5 (no photo body composition, no form-check AI, no 3D). **Holds.** |
+| Quality bars | Cold start 1 058 ms debug; the geometry loads off the first frame; sealing 871 rows costs 1.7 s on the first open only. No budget lowered. **Holds.** |
+
+### Placeholders and deferred work
+
+- **Strength view** (`DESIGN.md` §9.1) needs per-muscle strength data, which is B5's 1RM
+  work; only base, recovery and plan are rendered.
+- **Exercise detail media** does not exist: no image is bundled, and the dataset's images
+  are not reusable (`NOTICE.md`). Exercise content (names, instructions) is English
+  content with its own translation path (`DESIGN.md` §11.4), not UI strings.
+- **MET for library exercises** is null; `pr.md` §6.4's energy model will need a cited MET
+  per exercise (or per equipment/level) in B9/B5. Recorded as an open issue.
+- **Sex at birth** is not editable in Settings (B3 surface), so a person who chose "prefer
+  not to say" sees the generic male figure and can change it only by redoing onboarding.
+- **The Train root** still does not show the plan/recovery pair; that is B5's screen. The
+  plan map is rendered by the debug harness and the component tests.
+- **A11y coverage of two thin muscles:** Compose has all 19 nodes, but the platform's
+  visible-node dump omits serratus and hip flexors because their 44 dp targets are fully
+  covered by their neighbours. The table alternative lists all 19; a dedicated
+  accessibility pass should lay the nodes out without overlap.
+- **RTL wrapped paragraphs** in an English string inside an RTL layout left-align (a B3
+  text-style default); the map itself is never mirrored. Recorded, not swept.
+- **The ViewModel assembly of the map** (`buildBodyMap`) is device- and golden-verified but
+  has no JVM test; the pure models it calls are unit-tested. B10's reliability pass should
+  extract it.
+
+### Open issues
+
+- **Seeding on first open** costs 1.7 s on the owner's phone (SQLCipher + schema + 871
+  rows). It happens on the IO path after the first frame, so cold start is unaffected, but
+  the first Today after install waits for it. A batched insert or a smaller starter set is
+  the fix if it matters.
+- **The library is 664 KB of TSV** in the APK (~871 rows of instructions). R8 does not
+  shrink resources (R8 is B10's); a later pass can compress or lazily load it.
+- **Two thin muscles are covered in the platform accessibility tree** (above).
+- **`HardSession` now takes weighted set counts as `Double`**, a B2 signature change with
+  one caller and a new test.
+- **The demo corpus writes its own five exercises**, not catalogue rows, so a demo database
+  has 876 exercises; harmless, but B5 may prefer the catalogue ids.
+- **The body-fat rollup range query** starts at 1970 on each rebuild; it is indexed and
+  small, but a `latestRollupOfType` query would be cheaper.

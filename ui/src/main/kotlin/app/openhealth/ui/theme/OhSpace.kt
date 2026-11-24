@@ -207,6 +207,27 @@ data class OhDims(
     val tabStrokeActive: Float = 2.0f,
     /** §10.1: chevrons may go to 2.0–2.4 for weight. */
     val chevronStroke: Float = 2.4f,
+
+    // §9.1 the body map
+    /** §9.1: `maxHeight = min(46 % of the viewport, 340 dp)`. */
+    val bodyMapMaxFraction: Float = 0.46f,
+    val bodyMapMax: Dp = 340.dp,
+    /** §9.1: the front and back pair sits 6 dp apart and always at equal height. */
+    val bodyMapPairGap: Dp = 6.dp,
+    /** §9.1: every path is stroked 2.5 dp in the card's surface colour. */
+    val bodyMapStroke: Dp = 2.5.dp,
+    /** §9.1: the selected muscle is a 7 dp `label` stroke over a 2 dp surface glow. */
+    val bodyMapSelectedStroke: Dp = 7.dp,
+    val bodyMapSelectedGlow: Dp = 2.dp,
+    /** §9.1: the mini map is 46 dp tall, 3 dp strokes, a 2 dp pair gap. */
+    val bodyMapMiniHeight: Dp = 46.dp,
+    val bodyMapMiniStroke: Dp = 3.dp,
+    val bodyMapMiniGap: Dp = 2.dp,
+    /** §9.1: the session header's mini map is 30 dp tall. */
+    val bodyMapEventMini: Dp = 30.dp,
+    /** §9.1: the Recovering hatch is a 1.5 dp line every 7 dp, at 35 %. */
+    val bodyMapHatchStroke: Dp = 1.5.dp,
+    val bodyMapHatchSpacing: Dp = 7.dp,
 )
 
 /** Spacing and radius are single instances; geometry is one immutable record. */

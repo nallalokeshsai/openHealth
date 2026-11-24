@@ -267,8 +267,8 @@ class RecoveryTest {
     @Test
     fun aHardSessionIsComparedWithTheMedianSession() {
         val history = MuscleLoadHistory(sessionMedianSets = 12.0, sessionMedianTonnage = 1_500.0)
-        assertTrue(HardSession.isHard(sets = 16, tonnageKg = 1_800.0, history = history))
-        assertTrue(!HardSession.isHard(sets = 12, tonnageKg = 1_500.0, history = history))
+        assertTrue(HardSession.isHard(sets = 16.0, tonnageKg = 1_800.0, history = history))
+        assertTrue(!HardSession.isHard(sets = 12.0, tonnageKg = 1_500.0, history = history))
     }
 
     @Test

@@ -88,7 +88,7 @@ object HardSession {
      * bar for everything that follows. The comparison is session to session; a weekly
      * total would make every session of a high-volume week look hard.
      */
-    fun isHard(sets: Int, tonnageKg: Double, history: MuscleLoadHistory): Boolean =
+    fun isHard(sets: Double, tonnageKg: Double, history: MuscleLoadHistory): Boolean =
         sets > history.sessionMedianSets * HARD_MULTIPLIER ||
             tonnageKg > history.sessionMedianTonnage * HARD_MULTIPLIER
 }

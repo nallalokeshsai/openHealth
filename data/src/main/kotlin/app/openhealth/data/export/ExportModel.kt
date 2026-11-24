@@ -44,7 +44,8 @@ object ExportTables {
             "exercise",
             listOf(
                 text("id"), text("name"), text("primary_muscles"), text("secondary_muscles"),
-                text("equipment"), text("instructions"), text("met_activity"),
+                text("equipment"), text("instructions"), text("level"), text("mechanic"),
+                text("force"), text("met_activity"),
                 bool("is_custom"), text("source_id"), long("created_at"), long("updated_at"),
                 long("revision"),
             ),

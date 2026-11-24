@@ -9,6 +9,9 @@ CREATE TABLE exercise (
     secondary_muscles TEXT NOT NULL,
     equipment TEXT,
     instructions TEXT,
+    level TEXT,
+    mechanic TEXT,
+    force TEXT,
     met_activity TEXT,
     is_custom INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
@@ -133,11 +136,11 @@ CREATE INDEX work_set_exercise ON work_set(exercise_id, completed_at);
 
 insertExercise:
 INSERT INTO exercise(
-    id, name, primary_muscles, secondary_muscles, equipment, instructions, met_activity,
-    is_custom, source_id, created_at, updated_at, revision
+    id, name, primary_muscles, secondary_muscles, equipment, instructions, level,
+    mechanic, force, met_activity, is_custom, source_id, created_at, updated_at, revision
 ) VALUES (
-    :id, :name, :primaryMuscles, :secondaryMuscles, :equipment, :instructions,
-    :metActivity, :isCustom, :sourceId, :createdAt, :updatedAt, :revision
+    :id, :name, :primaryMuscles, :secondaryMuscles, :equipment, :instructions, :level,
+    :mechanic, :force, :metActivity, :isCustom, :sourceId, :createdAt, :updatedAt, :revision
 )
 -- A real upsert, not INSERT OR REPLACE: exercise is referenced by a foreign
 -- key, and replacing the row would delete it and its children with it.
@@ -147,11 +150,14 @@ ON CONFLICT(id) DO UPDATE SET
     secondary_muscles = excluded.secondary_muscles,
     equipment = excluded.equipment,
     instructions = excluded.instructions,
-    met_activity = excluded.met_activity,
+    level = excluded.level,
+    mechanic = excluded.mechanic,
+    force = excluded.force,
+    met_activity = coalesce(excluded.met_activity, exercise.met_activity),
     is_custom = excluded.is_custom,
     source_id = excluded.source_id,
     updated_at = excluded.updated_at,
-    revision = excluded.revision;
+    revision = exercise.revision + 1;
 
 exerciseById:
 SELECT * FROM exercise WHERE id = :id;
@@ -314,6 +320,25 @@ ORDER BY completed_at;
 
 setsForDay:
 SELECT * FROM work_set WHERE happened_at >= :from AND happened_at < :to ORDER BY position;
+
+-- One row per completed set with its exercise's muscles, for the recovery map
+-- (pr.md §6.5, DESIGN.md §9.1). The map is computed from sets, never stored.
+recentSetLoads:
+SELECT
+    work_set.session_id,
+    work_set.exercise_id,
+    work_set.completed_at,
+    work_set.weight_kg,
+    work_set.reps,
+    work_set.is_warmup,
+    work_set.source_id,
+    work_set.recorded_at,
+    exercise.primary_muscles,
+    exercise.secondary_muscles
+FROM work_set
+JOIN exercise ON exercise.id = work_set.exercise_id
+WHERE work_set.completed_at >= :from
+ORDER BY work_set.completed_at;
 
 countWorkSets:
 SELECT count(*) FROM work_set;

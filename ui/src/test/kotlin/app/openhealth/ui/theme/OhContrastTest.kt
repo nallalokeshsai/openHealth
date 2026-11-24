@@ -254,6 +254,19 @@ class OhContrastTest {
     }
 
     @Test
+    fun theAdiposeLayerIsAGraphicWithThreeToOne() {
+        // DESIGN.md §9.1.1 and §12.5: `fat` at the layer's own opacity, over the card and
+        // the page. Light is full opacity because 55 % measured 1.97:1.
+        baseThemes().forEach { (theme, colors) ->
+            val layer = colors.fat.copy(alpha = colors.fatLayerAlpha)
+            listOf("surface" to colors.surface, "bg" to colors.bg, "surface-2" to colors.surface2)
+                .forEach { (name, base) ->
+                    assertAtLeast("$theme fat layer on $name", layer, base, 3.0)
+                }
+        }
+    }
+
+    @Test
     fun lightIsADistinctVerifiedSibling() {
         val dark = ohDarkColors()
         val light = ohLightColors()

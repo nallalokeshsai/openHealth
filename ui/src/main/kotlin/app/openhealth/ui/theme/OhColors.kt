@@ -88,6 +88,11 @@ data class OhColors(
     val timerBarFill: Color,
     /** `label` at 11 % (dark) / 14 % (light): the body map's untrained base (§9.1). */
     val bodyBase: Color,
+    /**
+     * §9.1.1: the adipose layer's opacity. 55 % in dark; full in light, where `fat` at
+     * 55 % composites to 1.97:1 and misses the 3:1 graphic bar of §12.5.
+     */
+    val fatLayerAlpha: Float,
 )
 
 /** The nine accents of `DESIGN.md` §2.6. No more (`§0.2`). */
@@ -188,6 +193,7 @@ fun ohDarkColors(accent: OhAccent = OhAccent.Brand): OhColors = OhColors(
     toastFill = Color(0xFF2C2C2E).copy(alpha = OhAlpha.toast),
     timerBarFill = Color(0xFF2C2C2E).copy(alpha = OhAlpha.timerBar),
     bodyBase = Color(0xFFFFFFFF).copy(alpha = 0.11f),
+    fatLayerAlpha = OhAlpha.bodyFatLayer,
 )
 
 /** Light theme: derived and contrast-verified (`DESIGN.md` §12.2, Appendix A.2). */
@@ -247,4 +253,5 @@ fun ohLightColors(accent: OhAccent = OhAccent.Brand): OhColors = OhColors(
     toastFill = Color(0xFFECECEF).copy(alpha = OhAlpha.toast),
     timerBarFill = Color(0xFFFFFFFF).copy(alpha = OhAlpha.timerBar),
     bodyBase = Color(0xFF000000).copy(alpha = 0.14f),
+    fatLayerAlpha = OhAlpha.full,
 )

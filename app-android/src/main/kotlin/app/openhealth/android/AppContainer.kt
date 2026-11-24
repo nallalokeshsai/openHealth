@@ -5,6 +5,7 @@ import app.openhealth.android.data.AndroidDatabaseFactory
 import app.openhealth.android.data.AndroidSecretVault
 import app.openhealth.android.documents.AndroidDocumentStore
 import app.openhealth.android.preferences.PreferencesStore
+import app.openhealth.core.exercise.ExerciseCatalogue
 import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.RandomIdGenerator
 import app.openhealth.core.observation.MeasurementMethod
@@ -18,6 +19,7 @@ import app.openhealth.data.corpus.CorpusGenerator
 import app.openhealth.data.corpus.CorpusRequest
 import app.openhealth.data.export.Argon2ExportCipher
 import app.openhealth.data.export.ExportService
+import app.openhealth.data.repo.SettingKeys
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -32,11 +34,18 @@ import kotlinx.datetime.toLocalDateTime
 class AppContainer(
     context: Context,
     documentStore: app.openhealth.android.documents.DocumentStore? = null,
+    /**
+     * The database and vault this container opens. The production app uses the defaults;
+     * an instrumented test names its own, so a run never deletes or decrypts the record
+     * on the owner's phone (`AGENTS.md` "Test device").
+     */
+    databaseName: String = AndroidDatabaseFactory.DEFAULT_DATABASE,
+    vaultPreferences: String = DEFAULT_VAULT,
 ) {
     val context: Context = context.applicationContext
     private val appContext = this.context
-    private val vault = AndroidSecretVault(appContext)
-    private val opened = lazy { AndroidDatabaseFactory(appContext, vault).open() }
+    private val vault = AndroidSecretVault(appContext, vaultPreferences)
+    private val opened = lazy { AndroidDatabaseFactory(appContext, vault, databaseName).open() }
 
     /**
      * Opening SQLCipher and running the integrity check is local work, but it is not
@@ -46,6 +55,7 @@ class AppContainer(
     private val storeLazy = lazy {
         val local = LocalStore(opened.value.driver, opened.value.db)
         ensureManualSource(local)
+        ensureExerciseLibrary(local)
         local.trash.purgeExpired()
         local
     }
@@ -79,6 +89,32 @@ class AppContainer(
                 permissions = SourcePermission.entries.toSet(),
             ),
         )
+    }
+
+    /**
+     * The bundled exercise library and the source it names (`NOTICE.md`), written into the
+     * encrypted store once. 871 rows in one transaction is a sub-second local write, and it
+     * happens on the same IO path that opened the store, never before the first frame
+     * (Tech-Stack.md §12).
+     */
+    private fun ensureExerciseLibrary(local: LocalStore) {
+        if (local.settings.get(SettingKeys.EXERCISE_CATALOGUE) == ExerciseCatalogue.VERSION) return
+        if (local.sources.byId(LIBRARY_SOURCE) == null) {
+            local.sources.upsert(
+                Source(
+                    id = LIBRARY_SOURCE,
+                    kind = SourceKind.MANUAL,
+                    label = ExerciseCatalogue.SOURCE_LABEL,
+                    permissions = setOf(SourcePermission.WRITE_EXERCISE),
+                ),
+            )
+        }
+        local.training.seedCatalogue(
+            exercises = ExerciseCatalogue.bundled,
+            sourceId = LIBRARY_SOURCE.value,
+            nowMillis = clock.now().toEpochMilliseconds(),
+        )
+        local.settings.put(SettingKeys.EXERCISE_CATALOGUE, ExerciseCatalogue.VERSION)
     }
 
     /** Another write path that must name provenance: the manual method for a typed value. */
@@ -141,7 +177,9 @@ class AppContainer(
 
     companion object {
         const val DEMO_DAYS = 90
+        const val DEFAULT_VAULT = "openhealth.vault"
         val MANUAL_SOURCE = app.openhealth.core.ids.SourceId("manual")
+        val LIBRARY_SOURCE = app.openhealth.core.ids.SourceId("exercise-library")
         private const val PRE_RESTORE = "pre-restore.ohe"
     }
 }
