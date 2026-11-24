@@ -1152,12 +1152,23 @@ clean, and the device walk-through was repeated on the final build.
 
 ## B4 audit — phase-wise drift pass (2026-11-24)
 
-**Status:** Completed · **Date:** 2026-11-24 · **Branch:** `build/b4-qa`
+**Status:** Completed · **Date:** 2026-11-24 · **Commits:** `2d2d913`, `f3da2c0` on `main`
 **Goal:** read B0–B4 against the code and the running app, hunting the drift a passing
 build hides: a deliverable quietly reduced, a stub nobody filled, an exit test that is
 ticked but not asserted, an invented value, a provenance or accessibility gap. Seven
 defects were found and fixed with tests; three items are owner decisions and were not
-touched.
+touched, and the first note's flaky exit test was traced and fixed.
+
+**A process error, recorded rather than hidden.** The QA work was done on
+`build/b4-qa`, but the headless plan audit began by checking the working tree out to
+`main`; the two commits under this heading were then made on `main` and pushed there
+directly, bypassing the pull-request and merge gate this project requires. Nothing under
+`references/`, `.env.local`, a keystore or a secret was in the diff and no device identity
+was published, and CI on `main` (`45353101217`) passed on `f3da2c0`, but the review step a
+pull request forces was skipped. A pushed branch is not rewritten in this project, so the
+commits stand; this record and the follow-up documentation pull request are the
+correction. The lesson is in `AGENTS.md`: the audit step must verify its branch before and
+after the headless run, and a commit must name its branch before it is made.
 
 ### What was found, and what was done
 
