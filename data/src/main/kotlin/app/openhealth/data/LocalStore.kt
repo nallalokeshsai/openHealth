@@ -52,6 +52,7 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
         observations.invalidateRollupsWith(engine::rebuildDay)
         nutrition.invalidateRollupsWith(engine::rebuildDay)
         body.invalidateRollupsWith(engine::rebuildDay)
+        training.invalidateRollupsWith(engine::rebuildDay)
         trash.invalidateRollupsWith(engine::rebuildDay)
         sources.invalidateAllRollupsWith {
             engine.refreshRegistry()

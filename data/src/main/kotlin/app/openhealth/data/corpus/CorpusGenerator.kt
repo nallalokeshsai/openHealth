@@ -115,6 +115,7 @@ private data class TrainingContext(
  *
  * Deterministic for a given seed and end date, so a benchmark failure is reproducible.
  */
+@Suppress("LargeClass")
 class CorpusGenerator(
     private val db: OpenHealthDb,
     private val idGenerator: IdGenerator = RandomIdGenerator(),
@@ -411,6 +412,11 @@ class CorpusGenerator(
                 updated_at = now,
                 source_id = "manual",
                 revision = 1L,
+                weekday = null,
+                rotation_index = 1L,
+                favourite = true,
+                progression = "linear",
+                target_rest_seconds = 120L,
             ),
         )
         seeds.forEachIndexed { index, seed ->
@@ -422,8 +428,13 @@ class CorpusGenerator(
                     position = index.toLong(),
                     target_sets = 3L,
                     target_reps = 5L,
+                    target_reps_high = 8L,
                     target_weight_kg = seed.baseWeightKg,
                     notes = null,
+                    target_rir = 2.0,
+                    rest_seconds = 120L,
+                    progression = null,
+                    group_index = null,
                 ),
             )
         }
@@ -474,6 +485,9 @@ class CorpusGenerator(
                 app_version = "fixture",
                 revision = 1L,
                 updated_at = started.plus(1.hours).toEpochMilliseconds(),
+                title = "Full body",
+                feeling = null,
+                perceived_effort = null,
             ),
         )
         var position = 0L
@@ -487,6 +501,13 @@ class CorpusGenerator(
                     exercise_id = context.exerciseIds[exerciseIndex],
                     position = exerciseIndex.toLong(),
                     notes = null,
+                    group_index = null,
+                    target_sets = 3L,
+                    target_reps = 5L,
+                    target_reps_high = 8L,
+                    target_weight_kg = 100.0,
+                    progression = "linear",
+                    rest_seconds = 120L,
                 ),
             )
             repeat(3) { setIndex ->
@@ -509,6 +530,7 @@ class CorpusGenerator(
                         is_bodyweight = false,
                         tempo = null,
                         rest_seconds = 120L,
+                        notes = null,
                         completed_at = completedAt.toEpochMilliseconds(),
                         happened_at = completedAt.toEpochMilliseconds(),
                         recorded_at = completedAt.toEpochMilliseconds(),
@@ -519,6 +541,15 @@ class CorpusGenerator(
                         device = "manual",
                         app_version = "fixture",
                         revision = 1L,
+                        is_drop = false,
+                        is_assisted = false,
+                        assistance_kg = null,
+                        band_kg = null,
+                        original_weight_kg = null,
+                        original_reps = null,
+                        edit_reason = null,
+                        edited_at = null,
+                        user_edited = false,
                     ),
                 )
                 sets += 1

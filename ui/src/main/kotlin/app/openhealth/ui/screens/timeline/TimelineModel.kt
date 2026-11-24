@@ -14,6 +14,7 @@ enum class TimelineKind {
     NUTRITION,
     ENTRY,
     SESSION,
+    SET,
     OBSERVATION,
     OTHER,
 }

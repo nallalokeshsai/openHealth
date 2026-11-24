@@ -59,6 +59,17 @@ fun number(value: Double, decimals: Int = 0): String = java.text.NumberFormat
 
 private const val MINUS = '\u2212'
 
+/**
+ * A number outside composition, for text the screen builds inside a lambda or a saved
+ * value initializer where [number] cannot run. It uses the system locale and the same
+ * separators and true minus, and it is never used where a composed number is possible.
+ */
+fun decimalText(value: Double, decimals: Int = 2): String = java.text.NumberFormat
+    .getNumberInstance(java.util.Locale.getDefault())
+    .apply { maximumFractionDigits = decimals }
+    .format(value)
+    .replace('-', MINUS)
+
 /** "1 h 28 m later", or null when the recording happened at the same moment. */
 @Composable
 fun recordingDelay(happenedAt: Instant, recordedAt: Instant): String? {

@@ -255,6 +255,7 @@ class TrashServiceTest {
             is_bodyweight = false,
             tempo = "3-1-1",
             rest_seconds = 180L,
+            notes = null,
             completed_at = now.toEpochMilliseconds(),
             happened_at = now.toEpochMilliseconds(),
             recorded_at = now.toEpochMilliseconds(),
@@ -265,6 +266,15 @@ class TrashServiceTest {
             device = "manual",
             app_version = "test",
             revision = 2L,
+            is_drop = false,
+            is_assisted = false,
+            assistance_kg = null,
+            band_kg = null,
+            original_weight_kg = null,
+            original_reps = null,
+            edit_reason = null,
+            edited_at = null,
+            user_edited = false,
         )
         app.openhealth.data.repo.TrainingRepository(store.db).upsertSet(set)
         val tombstone = trash.deleteWorkSet(SetId("s-1"))!!

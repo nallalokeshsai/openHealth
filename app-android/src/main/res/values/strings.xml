@@ -13,4 +13,13 @@
     <string name="startup_error_title">openHealth could not open its database</string>
     <string name="startup_error_retry">Try again</string>
     <string name="startup_error_body">The encrypted store is unavailable. Nothing was changed. Restart the app, or restore a backup on a working install.</string>
+    <string name="rest_timer_channel">Rest timer</string>
+    <string name="rest_timer_title">Rest</string>
+    <string name="rest_timer_minus">15 seconds less</string>
+    <string name="rest_timer_plus">15 seconds more</string>
+    <string name="rest_timer_pause">Pause</string>
+    <string name="rest_timer_resume">Resume</string>
+    <string name="rest_timer_skip">Skip</string>
+    <string name="train_freestyle">Freestyle</string>
+    <string name="train_past_workout">Past workout</string>
 </resources>

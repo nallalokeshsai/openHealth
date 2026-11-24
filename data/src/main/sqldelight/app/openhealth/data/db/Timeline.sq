@@ -19,6 +19,12 @@ SELECT
 FROM session
 UNION ALL
 SELECT
+    'work_set', work_set.id, session.local_date, work_set.happened_at,
+    work_set.recorded_at, work_set.source_id, work_set.exercise_id, 0
+FROM work_set
+JOIN session ON session.id = work_set.session_id
+UNION ALL
+SELECT
     'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
 FROM entry
 UNION ALL

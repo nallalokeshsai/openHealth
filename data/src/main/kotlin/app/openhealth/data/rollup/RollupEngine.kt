@@ -1,5 +1,6 @@
 package app.openhealth.data.rollup
 
+import app.openhealth.core.formula.VolumeSet
 import app.openhealth.core.ids.SourceId
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
@@ -59,7 +60,12 @@ class RollupEngine(
         val entryDays = db.nutritionQueries.entryDays().executeAsList().map(LocalDate::parse)
         val vitalDays = db.bodyQueries.vitalDays().executeAsList().map(LocalDate::parse)
         val measurementDays = db.bodyQueries.measurementDays().executeAsList().map(LocalDate::parse)
-        (observations.daysWithObservations() + entryDays + vitalDays + measurementDays)
+        val sessionDays = db.trainingQueries.sessionDays().executeAsList()
+            .map(LocalDate::parse)
+        (
+            observations.daysWithObservations() + entryDays + vitalDays + measurementDays +
+                sessionDays
+            )
             .distinct()
             .sumOf { rebuildDayInternal(it) }
     }
@@ -98,6 +104,10 @@ class RollupEngine(
             written += 1
         }
         measurementRollups(date, writtenTypes).forEach {
+            rollups.upsert(it)
+            written += 1
+        }
+        trainingRollups(date, writtenTypes).forEach {
             rollups.upsert(it)
             written += 1
         }
@@ -199,6 +209,83 @@ class RollupEngine(
             )
         }
     }
+
+    /**
+     * Layer 4 sessions are the source of truth for training (`pr.md` §7.3, §7.4): a day's
+     * volume, set count and duration are summed here, never stored twice. Only a finished
+     * session counts; an open session is still being recorded and is rolled up when it is
+     * finished. Moving a session rebuilds both the old and the new day.
+     */
+    private fun trainingRollups(date: LocalDate, skip: Set<ObservationType>): List<DailyRollup> {
+        val sessions = db.trainingQueries.sessionsForDay(date.toString()).executeAsList()
+            .filter { it.ended_at != null }
+        val sets = sessions.flatMap { session ->
+            db.trainingQueries.setsForSession(session.id).executeAsList()
+        }
+        val work = sets.filterNot { it.is_warmup }
+        val sources = (sessions.map { it.source_id } + sets.map { it.source_id })
+            .distinct()
+        val durationSeconds = sessions.sumOf { session ->
+            ((session.ended_at ?: session.started_at) - session.started_at)
+                .coerceAtLeast(0L) / MILLIS_PER_SECOND
+        }
+        // The layer-3 volume is the same number the session summary shows, so it uses the
+        // one formula in `:core` rather than a second sum here: a bodyweight set moves the
+        // person's own mass less any assistance, plus any band (`pr.md` §6.5, §7.3).
+        val bodyweightKg = bodyweightFor(date)
+        val volumeKg = work.sumOf { set ->
+            VolumeSet(
+                weightKg = set.weight_kg,
+                reps = set.reps.toInt(),
+                isWarmup = false,
+                isBodyweight = set.is_bodyweight,
+                bandKg = set.band_kg ?: 0.0,
+                assistanceKg = set.assistance_kg ?: 0.0,
+                bodyweightKg = bodyweightKg,
+            ).externalLoadKg * set.reps
+        }
+        return if (sessions.isEmpty()) {
+            emptyList()
+        } else {
+            listOf(
+                ObservationType.TRAINING_VOLUME to volumeKg,
+                ObservationType.TRAINING_SETS to work.size.toDouble(),
+                ObservationType.TRAINING_DURATION to durationSeconds.toDouble(),
+            ).mapNotNull { (type, value) ->
+                if (type in skip) return@mapNotNull null
+                DailyRollup(
+                    localDate = date,
+                    type = type,
+                    value = Measure(value, type.canonicalUnit),
+                    secondaryValue = sessions.size.toDouble(),
+                    sourceId = sources.singleOrNull()?.let(::SourceId),
+                    contributingSources = sources.size,
+                    dedupReason = if (sources.size == 1) {
+                        DedupReason.ONE_SOURCE_WINS.name
+                    } else {
+                        DedupReason.NO_DEDUP.name
+                    },
+                    watermark = Instant.fromEpochMilliseconds(
+                        (sessions.map { it.recorded_at } + sets.map { it.recorded_at })
+                            .maxOrNull() ?: 0L,
+                    ),
+                    computedAt = clock.now(),
+                    detail = null,
+                )
+            }
+        }
+    }
+
+    /**
+     * The bodyweight a bodyweight set moved on [date]: that day's weight rollup when the
+     * person weighed in, otherwise the profile's recorded weight. Null means unknown, and
+     * an unknown bodyweight contributes no kilograms rather than an invented number.
+     */
+    private fun bodyweightFor(date: LocalDate): Double? =
+        rollups.forDayAndType(date, ObservationType.WEIGHT)?.let { rollup ->
+            runCatching { rollup.value.convertTo(UcumUnit.KILOGRAM).value }
+                .getOrDefault(rollup.value.value)
+        } ?: db.profileQueries.activeProfile().executeAsOneOrNull()?.weight_kg
 
     /**
      * A tape or scale measurement that names an observation type (weight, body fat, lean
@@ -305,5 +392,6 @@ class RollupEngine(
 
     private companion object {
         const val LAST_DAY_OF_WEEK = 6
+        const val MILLIS_PER_SECOND = 1_000L
     }
 }

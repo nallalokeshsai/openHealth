@@ -99,25 +99,55 @@ fun OhSegmentedControl(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    require(options.size <= 5) {
+        "A segmented control holds up to five segments (DESIGN.md §5.10)."
+    }
+    // At the largest text sizes the segments scroll instead of clipping a label. The
+    // track must be sized to that content, not to an unbounded scroll width, or it
+    // collapses to zero and the control loses its surface.
+    val scrollable = LocalDensity.current.fontScale >= OhTheme.dims.largeFontScale
+    Box(
+        modifier = modifier.defaultMinSize(minHeight = OhTheme.dims.touchTarget),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (scrollable) {
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                SegmentedContent(
+                    options = options,
+                    selectedIndex = selectedIndex,
+                    onSelect = onSelect,
+                    scrollable = true,
+                    modifier = Modifier.width(IntrinsicSize.Max),
+                )
+            }
+        } else {
+            SegmentedContent(
+                options = options,
+                selectedIndex = selectedIndex,
+                onSelect = onSelect,
+                scrollable = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SegmentedContent(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    scrollable: Boolean,
+    modifier: Modifier,
+) {
     val colors = OhTheme.colors
     val type = OhTheme.type
     val dims = OhTheme.dims
     val shape = RoundedCornerShape(OhTheme.radius.md)
-    require(options.size <= 5) {
-        "A segmented control holds up to five segments (DESIGN.md §5.10)."
-    }
-    // At the largest text sizes the segments scroll instead of clipping a label.
-    val scrollable = LocalDensity.current.fontScale >= dims.largeFontScale
-    Box(
-        modifier = modifier
-            .defaultMinSize(minHeight = dims.touchTarget)
-            .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
-        contentAlignment = Alignment.Center,
-    ) {
-        // The painted track is 36 dp (32 + 2 dp padding); each segment's target is 44.
+    Box(modifier = modifier) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .matchParentSize()
                 .height(dims.segmentHeight + dims.segmentPad * 2f)
                 .clip(shape)
                 .background(colors.surface3)
@@ -138,9 +168,7 @@ fun OhSegmentedControl(
                     modifier = Modifier
                         .then(
                             if (scrollable) {
-                                Modifier.width(
-                                    IntrinsicSize.Max,
-                                )
+                                Modifier.width(IntrinsicSize.Max)
                             } else {
                                 Modifier.weight(1f)
                             },

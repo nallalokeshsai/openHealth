@@ -14,6 +14,8 @@ import app.openhealth.data.db.Measurement
 import app.openhealth.data.db.Note
 import app.openhealth.data.db.Observation
 import app.openhealth.data.db.OpenHealthDb
+import app.openhealth.data.db.Session
+import app.openhealth.data.db.Session_exercise
 import app.openhealth.data.db.Tombstone
 import app.openhealth.data.db.Vital
 import app.openhealth.data.db.Work_set
@@ -25,6 +27,8 @@ import kotlinx.serialization.json.Json
 
 /** The tables Trash can restore today. A leaf entity is restorable on its own. */
 enum class TrashEntity(val table: String) {
+    SESSION("session"),
+    ROUTINE_EXERCISE("routine_exercise"),
     WORK_SET("work_set"),
     ENTRY("entry"),
     MEASUREMENT("measurement"),
@@ -60,6 +64,79 @@ data class WorkSetPayload(
     val device: String?,
     val appVersion: String?,
     val revision: Long,
+    val isDrop: Boolean = false,
+    val isAssisted: Boolean = false,
+    val assistanceKg: Double? = null,
+    val bandKg: Double? = null,
+    val notes: String? = null,
+    /** The session's local day, so restoring or deleting a set rebuilds the right rollup. */
+    val localDate: String? = null,
+)
+
+/** The session row as a restorable payload; the sets and exercises travel with it. */
+@Serializable
+data class SessionRowPayload(
+    val id: String,
+    val startedAt: Long,
+    val endedAt: Long?,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val routineId: String?,
+    val programmeId: String?,
+    val notes: String?,
+    val sourceId: String,
+    val idempotencyKey: String,
+    val observationId: String?,
+    val rawRecordId: String?,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+    val updatedAt: Long,
+    val title: String? = null,
+    val feeling: String? = null,
+    val perceivedEffort: Double? = null,
+)
+
+@Serializable
+data class RoutineExercisePayload(
+    val id: String,
+    val routineId: String,
+    val exerciseId: String,
+    val position: Long,
+    val targetSets: Long?,
+    val targetReps: Long?,
+    val targetRepsHigh: Long?,
+    val targetWeightKg: Double?,
+    val notes: String?,
+    val targetRir: Double?,
+    val restSeconds: Long?,
+    val progression: String?,
+    val groupIndex: Long?,
+)
+
+@Serializable
+data class SessionExercisePayload(
+    val id: String,
+    val sessionId: String,
+    val exerciseId: String,
+    val position: Long,
+    val notes: String?,
+    val groupIndex: Long? = null,
+    val targetSets: Long? = null,
+    val targetReps: Long? = null,
+    val targetRepsHigh: Long? = null,
+    val targetWeightKg: Double? = null,
+    val progression: String? = null,
+    val restSeconds: Long? = null,
+)
+
+@Serializable
+data class SessionPayload(
+    val session: SessionRowPayload,
+    val exercises: List<SessionExercisePayload> = emptyList(),
+    val sets: List<WorkSetPayload> = emptyList(),
 )
 
 @Serializable
@@ -205,9 +282,66 @@ class TrashService(
         record(
             entity = TrashEntity.WORK_SET,
             entityId = row.id,
-            payload = json.encodeToString(WorkSetPayload.serializer(), row.toPayload()),
+            payload = json.encodeToString(
+                WorkSetPayload.serializer(),
+                row.toPayload(sessionDate(row.session_id)),
+            ),
+            invalidateOn = sessionDate(row.session_id),
         ) {
             db.trainingQueries.deleteWorkSet(row.id)
+        }
+    }
+
+    /**
+     * Deletes a whole workout with undo (`pr.md` §6.5, §6.29). The tombstone carries the
+     * session, its exercise rows and its sets, so one restore puts the workout back whole.
+     */
+    /** Removes one routine exercise with a tombstone; a routine edit is undoable. */
+    fun deleteRoutineExercise(id: String): TombstoneId? =
+        db.trainingQueries.routineEntryById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.ROUTINE_EXERCISE,
+                entityId = id,
+                payload = json.encodeToString(
+                    RoutineExercisePayload.serializer(),
+                    RoutineExercisePayload(
+                        id = row.id,
+                        routineId = row.routine_id,
+                        exerciseId = row.exercise_id,
+                        position = row.position,
+                        targetSets = row.target_sets,
+                        targetReps = row.target_reps,
+                        targetRepsHigh = row.target_reps_high,
+                        targetWeightKg = row.target_weight_kg,
+                        notes = row.notes,
+                        targetRir = row.target_rir,
+                        restSeconds = row.rest_seconds,
+                        progression = row.progression,
+                        groupIndex = row.group_index,
+                    ),
+                ),
+            ) {
+                db.trainingQueries.deleteRoutineExercise(row.id)
+            }
+        }
+
+    fun deleteSession(id: String): TombstoneId? = session(id)?.let { row ->
+        val exercises = db.trainingQueries.sessionExercises(row.id).executeAsList()
+        val sets = db.trainingQueries.setsForSession(row.id).executeAsList()
+        val payload = SessionPayload(
+            session = row.toRowPayload(),
+            exercises = exercises.map { it.toPayload() },
+            sets = sets.map { it.toPayload(LocalDate.parse(row.local_date)) },
+        )
+        record(
+            entity = TrashEntity.SESSION,
+            entityId = row.id,
+            payload = json.encodeToString(SessionPayload.serializer(), payload),
+            invalidateOn = LocalDate.parse(row.local_date),
+        ) {
+            sets.forEach { db.trainingQueries.deleteWorkSet(it.id) }
+            db.trainingQueries.deleteSessionExercises(row.id)
+            db.trainingQueries.deleteSession(row.id)
         }
     }
 
@@ -277,6 +411,8 @@ class TrashService(
         var restored = false
         db.transaction {
             when (entity) {
+                TrashEntity.SESSION -> restoreSession(payload)
+                TrashEntity.ROUTINE_EXERCISE -> restoreRoutineExercise(payload)
                 TrashEntity.WORK_SET -> restoreWorkSet(payload)
                 TrashEntity.ENTRY -> restoreEntry(payload)
                 TrashEntity.MEASUREMENT -> restoreMeasurement(payload)
@@ -358,6 +494,14 @@ class TrashService(
                 val w = json.decodeFromString(WorkSetPayload.serializer(), payload)
                 "${w.weightKg} kg × ${w.reps}"
             }
+            TrashEntity.SESSION.table -> {
+                val s = json.decodeFromString(SessionPayload.serializer(), payload)
+                s.session.title ?: "Workout"
+            }
+            TrashEntity.ROUTINE_EXERCISE.table -> {
+                val e = json.decodeFromString(RoutineExercisePayload.serializer(), payload)
+                "routine exercise ${e.position + 1}"
+            }
             else -> row.entity_id
         }
     }.getOrElse { row.entity_id.take(TRASH_PREVIEW_FALLBACK) }
@@ -394,6 +538,9 @@ class TrashService(
     }
 
     private fun rowExists(entity: TrashEntity, id: String): Boolean = when (entity) {
+        TrashEntity.SESSION -> db.trainingQueries.sessionById(id).executeAsOneOrNull() != null
+        TrashEntity.ROUTINE_EXERCISE ->
+            db.trainingQueries.routineEntryById(id).executeAsOneOrNull() != null
         TrashEntity.WORK_SET -> db.trainingQueries.workSetById(id).executeAsOneOrNull() != null
         TrashEntity.ENTRY -> db.nutritionQueries.entryById(id).executeAsOneOrNull() != null
         TrashEntity.MEASUREMENT -> db.bodyQueries.measurementById(id).executeAsOneOrNull() != null
@@ -413,7 +560,11 @@ class TrashService(
                 json.decodeFromString(VitalPayload.serializer(), payload).localDate
             TrashEntity.OBSERVATION ->
                 json.decodeFromString(ObservationPayload.serializer(), payload).localDate
-            TrashEntity.WORK_SET, TrashEntity.NOTE -> null
+            TrashEntity.SESSION ->
+                json.decodeFromString(SessionPayload.serializer(), payload).session.localDate
+            TrashEntity.WORK_SET ->
+                json.decodeFromString(WorkSetPayload.serializer(), payload).localDate
+            TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE -> null
         }
         date?.let { rollupInvalidator?.invoke(LocalDate.parse(it)) }
     }
@@ -423,6 +574,12 @@ class TrashService(
 
     private fun workSet(id: String): Work_set? =
         db.trainingQueries.workSetById(id).executeAsOneOrNull()
+
+    private fun session(id: String): Session? =
+        db.trainingQueries.sessionById(id).executeAsOneOrNull()
+
+    private fun sessionDate(sessionId: String): LocalDate? =
+        session(sessionId)?.local_date?.let(LocalDate::parse)
 
     private fun entry(id: String): Entry? = db.nutritionQueries.entryById(id).executeAsOneOrNull()
 
@@ -474,6 +631,77 @@ class TrashService(
             device = row.device,
             appVersion = row.appVersion,
             revision = row.revision,
+            isDrop = row.isDrop,
+            isAssisted = row.isAssisted,
+            assistanceKg = row.assistanceKg,
+            bandKg = row.bandKg,
+            notes = row.notes,
+        )
+    }
+
+    private fun restoreSession(payload: String) {
+        val row = json.decodeFromString(SessionPayload.serializer(), payload)
+        val session = row.session
+        db.trainingQueries.insertSession(
+            id = session.id,
+            startedAt = session.startedAt,
+            endedAt = session.endedAt,
+            localDate = session.localDate,
+            zoneId = session.zoneId,
+            happenedAt = session.happenedAt,
+            recordedAt = session.recordedAt,
+            routineId = session.routineId,
+            programmeId = session.programmeId,
+            notes = session.notes,
+            sourceId = session.sourceId,
+            idempotencyKey = session.idempotencyKey,
+            observationId = session.observationId,
+            rawRecordId = session.rawRecordId,
+            device = session.device,
+            appVersion = session.appVersion,
+            revision = session.revision,
+            updatedAt = session.updatedAt,
+            title = session.title,
+            feeling = session.feeling,
+            perceivedEffort = session.perceivedEffort,
+        )
+        row.exercises.forEach { entry ->
+            db.trainingQueries.insertSessionExercise(
+                id = entry.id,
+                sessionId = entry.sessionId,
+                exerciseId = entry.exerciseId,
+                position = entry.position,
+                notes = entry.notes,
+                groupIndex = entry.groupIndex,
+                targetSets = entry.targetSets,
+                targetReps = entry.targetReps,
+                targetRepsHigh = entry.targetRepsHigh,
+                targetWeightKg = entry.targetWeightKg,
+                progression = entry.progression,
+                restSeconds = entry.restSeconds,
+            )
+        }
+        row.sets.forEach { set ->
+            restoreWorkSet(json.encodeToString(WorkSetPayload.serializer(), set))
+        }
+    }
+
+    private fun restoreRoutineExercise(payload: String) {
+        val row = json.decodeFromString(RoutineExercisePayload.serializer(), payload)
+        db.trainingQueries.insertRoutineExercise(
+            id = row.id,
+            routineId = row.routineId,
+            exerciseId = row.exerciseId,
+            position = row.position,
+            targetSets = row.targetSets,
+            targetReps = row.targetReps,
+            targetRepsHigh = row.targetRepsHigh,
+            targetWeightKg = row.targetWeightKg,
+            notes = row.notes,
+            targetRir = row.targetRir,
+            restSeconds = row.restSeconds,
+            progression = row.progression,
+            groupIndex = row.groupIndex,
         )
     }
 
@@ -607,11 +835,33 @@ class TrashService(
         )
     }
 
-    private fun Work_set.toPayload(): WorkSetPayload = WorkSetPayload(
-        id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps, rir, rpe,
-        is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds, completed_at,
-        happened_at, recorded_at, source_id, idempotency_key, observation_id, raw_record_id,
-        device, app_version, revision,
+    private fun Work_set.toPayload(localDate: LocalDate? = null): WorkSetPayload = WorkSetPayload(
+        id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps, rir,
+        rpe, is_warmup, is_backoff, is_failure, is_bodyweight, tempo, rest_seconds,
+        completed_at, happened_at, recorded_at, source_id, idempotency_key,
+        observation_id, raw_record_id, device, app_version, revision, is_drop,
+        is_assisted, assistance_kg, band_kg, notes, localDate?.toString(),
+    )
+
+    private fun Session.toRowPayload(): SessionRowPayload = SessionRowPayload(
+        id, started_at, ended_at, local_date, zone_id, happened_at, recorded_at, routine_id,
+        programme_id, notes, source_id, idempotency_key, observation_id, raw_record_id,
+        device, app_version, revision, updated_at, title, feeling, perceived_effort,
+    )
+
+    private fun Session_exercise.toPayload(): SessionExercisePayload = SessionExercisePayload(
+        id = id,
+        sessionId = session_id,
+        exerciseId = exercise_id,
+        position = position,
+        notes = notes,
+        groupIndex = group_index,
+        targetSets = target_sets,
+        targetReps = target_reps,
+        targetRepsHigh = target_reps_high,
+        targetWeightKg = target_weight_kg,
+        progression = progression,
+        restSeconds = rest_seconds,
     )
 
     private fun Entry.toPayload(): EntryPayload = EntryPayload(

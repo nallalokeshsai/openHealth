@@ -56,7 +56,23 @@ data class VolumeSet(
     val isWarmup: Boolean = false,
     val isBodyweight: Boolean = false,
     val completed: Boolean = true,
-)
+    /** Band or chain resistance added to the bar (`pr.md` §6.5). */
+    val bandKg: Double = 0.0,
+    /** Assistance subtracted from a bodyweight movement; never below zero. */
+    val assistanceKg: Double = 0.0,
+    /** The person's bodyweight when a set is a bodyweight movement; null means unknown. */
+    val bodyweightKg: Double? = null,
+) {
+    /** External load this set moved, as the session summary counts it. */
+    val externalLoadKg: Double
+        get() = when {
+            isBodyweight -> {
+                val base = ((bodyweightKg ?: 0.0) - assistanceKg).coerceAtLeast(0.0)
+                base + bandKg + weightKg.coerceAtLeast(0.0)
+            }
+            else -> weightKg.coerceAtLeast(0.0) + bandKg
+        }
+}
 
 data class SessionVolume(
     val externalLoadKg: Double,
@@ -92,14 +108,14 @@ object SessionVolumeCalculator {
 
             else -> {
                 val work = completed.filterNot { it.isWarmup }
-                val loaded = work.filterNot { it.isBodyweight }
                 computed(
                     SessionVolume(
-                        externalLoadKg = loaded.sumOf { it.weightKg * it.reps },
+                        externalLoadKg = work.sumOf { it.externalLoadKg * it.reps },
                         workSets = work.size,
                         warmupSets = completed.size - work.size,
                         totalReps = completed.sumOf { it.reps },
-                        heaviestKg = loaded.maxOfOrNull { it.weightKg },
+                        heaviestKg = work.filterNot { it.isBodyweight }
+                            .maxOfOrNull { it.weightKg },
                     ),
                     CitationKey.APP_RULE,
                     inputs,

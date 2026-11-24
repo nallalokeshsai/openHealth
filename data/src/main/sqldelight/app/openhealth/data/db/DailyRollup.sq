@@ -18,6 +18,7 @@ CREATE TABLE daily_rollup (
 );
 
 CREATE INDEX daily_rollup_date ON daily_rollup(local_date);
+CREATE INDEX daily_rollup_type_date ON daily_rollup(type, local_date);
 
 upsertRollup:
 INSERT OR REPLACE INTO daily_rollup(

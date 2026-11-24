@@ -207,7 +207,8 @@ class ShellExitTest {
         viewModel.openQuickAdd(QuickAction.WEIGHT)
         waitFor("weight form again") {
             viewModel.state.value.quickAdd.mode ==
-                app.openhealth.ui.screens.quickadd.QuickAddMode.WEIGHT
+                app.openhealth.ui.screens.quickadd.QuickAddMode.WEIGHT &&
+                viewModel.state.value.quickAdd.weight.isEmpty()
         }
         compose.onNode(hasSetTextAction()).performTextInput("82")
         closeKeyboard()
@@ -549,6 +550,9 @@ class ShellExitTest {
             imm.hideSoftInputFromWindow(compose.activity.window.decorView.windowToken, 0)
         }
         compose.waitForIdle()
+        // The IME animates away after the hide request; tapping while it still covers
+        // the sheet's Save button is what made this test flaky (B4 traced it).
+        Thread.sleep(300)
     }
 
     private fun waitFor(what: String, timeoutMillis: Long = 30_000, condition: () -> Boolean) {

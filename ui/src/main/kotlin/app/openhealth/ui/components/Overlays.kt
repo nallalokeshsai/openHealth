@@ -450,6 +450,7 @@ fun OhTimerBar(
     time: String,
     progress: Float,
     modifier: Modifier = Modifier,
+    remainingSeconds: Long? = null,
     paused: Boolean = false,
     work: Boolean = false,
     onMinus: () -> Unit = {},
@@ -466,6 +467,16 @@ fun OhTimerBar(
     val type = OhTheme.type
     val dims = OhTheme.dims
     val shape = RoundedCornerShape(OhTheme.radius.base)
+    // The clock changes every second; announcing all of it would be noise. A hidden
+    // milestone node carries only 10, 3, 2, 1 and Ready (`DESIGN.md` §11.2).
+    val announcement = when (remainingSeconds) {
+        ANNOUNCE_TEN -> stringResource(R.string.oh_timer_ten)
+        ANNOUNCE_THREE -> stringResource(R.string.oh_timer_three)
+        2L -> stringResource(R.string.oh_timer_two)
+        1L -> stringResource(R.string.oh_timer_one)
+        0L -> stringResource(R.string.oh_timer_ready)
+        else -> null
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -486,6 +497,16 @@ fun OhTimerBar(
                     .fillMaxWidth(progress.coerceIn(0f, 1f))
                     .height(dims.timerProgress)
                     .background(colors.acc),
+            )
+        }
+        if (announcement != null) {
+            Box(
+                modifier = Modifier
+                    .size(OhTheme.space.none)
+                    .semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        contentDescription = announcement
+                    },
             )
         }
         Row(
@@ -537,6 +558,9 @@ private fun TimerControl(
         )
     }
 }
+
+private const val ANNOUNCE_TEN = 10L
+private const val ANNOUNCE_THREE = 3L
 
 /** The dialog pops from 94 % scale (DESIGN.md §5.17). */
 private const val DIALOG_POP_FROM = 0.94f

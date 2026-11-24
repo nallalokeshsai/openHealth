@@ -29,3 +29,18 @@ data object TimelineRoute
 
 @Serializable
 data object TrashRoute
+
+@Serializable
+data class RoutineRoute(val id: String)
+
+@Serializable
+data class RoutineEditorRoute(val id: String? = null)
+
+@Serializable
+data class LiveSessionRoute(val sessionId: String? = null)
+
+@Serializable
+data class SessionSummaryRoute(val sessionId: String)
+
+@Serializable
+data class ExerciseHistoryRoute(val exerciseId: String)
