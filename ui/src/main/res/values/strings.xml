@@ -848,4 +848,5 @@
     <string name="train_editor_custom_instructions">Instructions</string>
     <string name="train_editor_custom_save">Save exercise</string>
     <string name="train_editor_custom_invalid">Give the exercise a name and a primary muscle.</string>
+    <string name="train_live_add_to_group">Add next to circuit</string>
 </resources>

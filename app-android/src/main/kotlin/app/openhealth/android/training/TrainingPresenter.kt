@@ -702,9 +702,13 @@ class TrainingPresenter(
         val current = entries[index]
         val next = entries.getOrNull(index + 1)
         if (!withNext) {
-            store.db.trainingQueries.updateSessionExerciseGroup(null, current.id)
-            if (next != null && next.group_index == current.group_index) {
-                store.db.trainingQueries.updateSessionExerciseGroup(null, next.id)
+            val group = current.group_index
+            if (group == null) {
+                store.db.trainingQueries.updateSessionExerciseGroup(null, current.id)
+            } else {
+                entries.filter { it.group_index == group }.forEach {
+                    store.db.trainingQueries.updateSessionExerciseGroup(null, it.id)
+                }
             }
             return
         }

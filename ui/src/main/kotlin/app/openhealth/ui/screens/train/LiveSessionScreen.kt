@@ -612,15 +612,15 @@ private fun ExerciseBlock(
                 variant = OhButtonVariant.Ghost,
                 size = app.openhealth.ui.components.OhButtonSize.ExtraSmall,
             )
-            if (next != null &&
-                (exercise.groupIndex == null || next.groupIndex != exercise.groupIndex)
-            ) {
+            if (exercise.groupIndex != null || next != null) {
+                val label = when {
+                    exercise.groupIndex == null -> R.string.train_live_superset
+                    next != null && next.groupIndex != exercise.groupIndex ->
+                        R.string.train_live_add_to_group
+                    else -> R.string.train_live_superset_off
+                }
                 OhButton(
-                    text = if (exercise.groupIndex == null) {
-                        stringResource(R.string.train_live_superset)
-                    } else {
-                        stringResource(R.string.train_live_superset_off)
-                    },
+                    text = stringResource(label),
                     onClick = onSuperset,
                     variant = OhButtonVariant.Ghost,
                     size = app.openhealth.ui.components.OhButtonSize.ExtraSmall,
