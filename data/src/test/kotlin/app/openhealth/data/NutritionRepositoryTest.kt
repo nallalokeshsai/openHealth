@@ -120,10 +120,66 @@ class NutritionRepositoryTest {
         assertEquals(expected.getValue(Nutrient.PROTEIN), protein.value.value, 0.0)
         // The micronutrient totals ride on the day's rollup detail, rebuilt with it.
         val detail = energy.detail.orEmpty()
-        assertTrue(detail.contains("sodium"), detail)
-        assertTrue(detail.contains("vitamin_c"), detail)
+        // The detail is the exact sum too, not just the presence of a key.
+        assertTrue(detail.contains("\"sodium\":\"2.8\""), detail)
+        assertTrue(detail.contains("\"vitamin_c\":\"0.123456789\""), detail)
         store.close()
     }
+
+    @Test
+    fun editingAnEntryKeepsRecordedAtAndRebuildsTheDay() {
+        val store = seeded()
+        val recorded = dayStart(day).plus(20.hours)
+        store.nutrition.upsertEntry(
+            EntryDraft(
+                id = "edit-me",
+                mealId = "meal-1",
+                foodId = "food-oats",
+                localDate = day,
+                zoneId = TEST_ZONE,
+                happenedAt = dayStart(day).plus(8.hours),
+                recordedAt = recorded,
+                quantityG = 50.0,
+                foodName = "Oats",
+                totals = mapOf(Nutrient.ENERGY to 194.5),
+                sourceKind = "usda",
+                sourceId = "manual",
+                idempotencyKey = "edit-me",
+            ),
+        )
+        store.nutrition.updateEntry(
+            "edit-me",
+            EntryDraft(
+                id = "edit-me",
+                mealId = "meal-1",
+                foodId = "food-oats",
+                localDate = day,
+                zoneId = TEST_ZONE,
+                happenedAt = dayStart(day).plus(8.hours),
+                recordedAt = clockNow(),
+                quantityG = 100.0,
+                foodName = "Oats",
+                totals = mapOf(Nutrient.ENERGY to 389.0),
+                sourceKind = "usda",
+                sourceId = "manual",
+                idempotencyKey = "edit-me",
+            ),
+        )
+        val edited = store.nutrition.entryById("edit-me")!!
+        assertEquals(recorded, edited.recordedAt)
+        assertTrue(edited.edited)
+        assertEquals(2L, edited.revision)
+        assertEquals(389.0, edited.totals.of(Nutrient.ENERGY)!!, 0.0)
+        val rollup = store.rollups.forDayAndType(
+            day,
+            app.openhealth.core.observation.ObservationType.NUTRITION_ENERGY,
+        )!!
+        assertEquals(389.0, rollup.value.value, 0.0)
+        store.close()
+    }
+
+    private fun clockNow(): kotlin.time.Instant =
+        kotlin.time.Instant.fromEpochMilliseconds(1_764_000_000_000)
 
     @Test
     fun aBackfilledEntryKeepsRecordedAtAndRebuildsItsOwnDay() {

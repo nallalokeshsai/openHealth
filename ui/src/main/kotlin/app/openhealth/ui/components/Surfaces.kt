@@ -295,7 +295,8 @@ fun OhMediaRow(
     Row(
         modifier = row
             .heightIn(min = dims.mediaRowMin)
-            .padding(dims.mediaPad),
+            .padding(dims.mediaPad)
+            .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (thumbnail != null) {

@@ -1501,8 +1501,8 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
   The phase's "Ask the owner" is empty and the contract answers the rest.
 - **Maestro is still not installed.** Exit tests are Compose instrumented tests, as B3,
   B4 and B5 recorded.
-- ADR `0011-nutrition.md` records the bundled USDA subset, the two barcode decoders by
-  store flavour, the OFF disclosure and cache, schema v7 and the layer-3/4 totals rule.
+- ADR `0011-nutrition.md` records the bundled USDA subset, the telemetry-free ZXing
+  barcode decoder, the OFF disclosure and cache, schema v7 and the layer-3/4 totals rule.
 
 ### Milestones
 
@@ -1516,17 +1516,20 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
    converts the two FDC CSV releases (8,262 foods, 56,411 tokens) into the committed
    9.4 MB asset; `:integrations` parses OFF product JSON through the `HttpTransport`
    seam; the Nutrition root, search, portion, entry provenance, water, targets, fasting,
-   micronutrient, barcode and food/recipe editor surfaces landed with 24 goldens.
+   micronutrient, barcode and food/recipe editor surfaces landed with 24 goldens. The
+   barcode decoder was initially split (ML Kit on Play, ZXing on F-Droid) and the
+   invariant review then removed ML Kit from both flavours, because its transitive
+   Google Data Transport is a telemetry path (ADR 0011).
 3. **QA, exit tests and the documents** — this entry. The device walk found and fixed the
-   issues below; the instrumented suite is 26/26.
+   issues below; the instrumented suite is 29/29.
 
 ### What was run, and its result
 
 | Command | Result |
 |---|---|
-| `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint; **393 JVM tests** (179 `:core`, 97 `:data`, 10 `:integrations`, 97 `:ui`, 7 `tools:foodindex`, 1 fixtures, 2 exerciseindex) and **222 goldens**. |
+| `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint; **396 JVM tests** (179 `:core`, 100 `:data`, 10 `:integrations`, 97 `:ui`, 7 `tools:foodindex`, 1 fixtures, 2 exerciseindex) and **222 goldens**. |
 | `:app-android:assembleFdroidDebug` | The Play-Services-free APK built. Both `play` and `fdroid` debug APKs exist. |
-| `./gradlew :app-android:connectedPlayDebugAndroidTest` | **BUILD SUCCESSFUL, 27/27** on the owner's phone: 11 B3, 2 B5, B2's encrypted database, B4's library, B5's rest-timer store and **6 B6 scenarios** (barcode to logged, exact day totals, weight-neutral, bundled-index offline search, copy day, undo). |
+| `./gradlew :app-android:connectedPlayDebugAndroidTest` | **BUILD SUCCESSFUL, 29/29** on the owner's phone: 11 B3, 2 B5, B2's encrypted database, B4's library, B5's rest-timer store and **7 B6 scenarios** (barcode to logged, exact day totals, weight-neutral, bundled-index offline search, copy day, undo, the INTERNET permission declared by the app itself). |
 | Barcode to logged | `NutritionExitTest.barcodeToLoggedTakesUnderFiveSeconds`: a fake OFF transport, manual barcode entry, lookup, portion and Log; **under 5 s** with the stored entry's energy exactly 80 kcal for 40 g of a 200 kcal/100 g product. The camera preview and the permission-at-use dialog were exercised on the phone; the capture itself needs a barcode in front of the lens, which the test cannot position. |
 | A day's totals | `NutritionRepositoryTest.aDayTotalIsTheExactSumOfItsEntries` and `NutritionExitTest.aDaysTotalsEqualTheSumOfItsEntriesExactly`: the rollup and the model equal the left-to-right sum of the stored entries bit for bit; the micro totals ride on the same rollup's detail. |
 | Airplane mode | Manual: airplane mode on, searched the **bundled** index for "oat", logged "Oat bran, raw" (94 g, 1 cup) and saw it in the day; OFF is never called by search (`NutritionExitTest.theBundledIndexSearchesAndLogsWithNoNetwork` also asserts the transport was not called). |
@@ -1623,8 +1626,9 @@ tree.
   in the data; the energy card itself does not yet open a separate day-summary
   provenance/formula sheet. That sheet belongs to B9's energy card
   (`pr.md` §6.4: every figure opens its provenance and formula sheet).
-- **The F-Droid flavour uses ZXing** rather than the proprietary ML Kit model; this is
-  recorded in ADR 0011 and `Tech-Stack.md` §8.
+- **Both store flavours use ZXing.** ML Kit was removed after the invariant review showed
+  its transitive `com.google.android.datatransport`/CCT telemetry path; this is recorded in
+  ADR 0011 and `Tech-Stack.md` §8 (version 2.3).
 - **The demo corpus is synthetic**, so its micronutrients are absent; real USDA and OFF
   foods carry them.
 

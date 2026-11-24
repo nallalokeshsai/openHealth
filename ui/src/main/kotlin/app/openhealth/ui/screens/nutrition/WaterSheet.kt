@@ -16,7 +16,6 @@ import app.openhealth.ui.R
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonSize
 import app.openhealth.ui.components.OhButtonVariant
-import app.openhealth.ui.components.OhIconButton
 import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhTextField
@@ -31,7 +30,6 @@ fun WaterSheet(
     onDismiss: () -> Unit,
     onLog: (containerId: String, millilitres: Double) -> Unit,
     onAdd: (label: String, millilitres: Double) -> Unit,
-    onDelete: (String) -> Unit,
 ) {
     var label by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -62,13 +60,6 @@ fun WaterSheet(
                 leadingIcon = OhIcons.add,
                 showDivider = true,
                 onClick = { onLog(container.id, container.millilitres) },
-                trailing = {
-                    OhIconButton(
-                        icon = OhIcons.delete,
-                        contentDescription = stringResource(R.string.nutrition_water_delete),
-                        onClick = { onDelete(container.id) },
-                    )
-                },
             )
         }
         Spacer(Modifier.height(OhTheme.space.s4))

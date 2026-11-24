@@ -379,6 +379,7 @@
     <string name="settings_about_version">openHealth %1$s</string>
     <string name="settings_about_medical">A record-keeping and wellness tool, not a medical device. It does not diagnose, treat or dose.</string>
     <string name="settings_about_licence">Apache-2.0. The source is open.</string>
+    <string name="settings_about_food_data">Food data: USDA FoodData Central, Foundation Foods 2026-04-30 and SR Legacy 2018-04 (CC0), bundled offline. Open Food Facts (ODbL) is used only for a barcode you choose to look up.</string>
     <string name="settings_about_sqlcipher">Database encryption: SQLCipher Community Edition, Copyright Zetetic LLC, BSD-3-Clause.</string>
     <string name="settings_delete_notes">Delete all notes</string>
     <string name="settings_delete_notes_title">Delete every note?</string>
@@ -895,7 +896,7 @@
     <string name="nutrition_macro_carbs">Carbs</string>
     <string name="nutrition_macro_fat">Fat</string>
     <string name="nutrition_macro_fibre">Fibre</string>
-    <string name="nutrition_macro_value">%1$s g</string>
+    <string name="nutrition_macro_value">%1$s&#160;g</string>
     <string name="nutrition_macro_of_target">of %1$s g</string>
 
     <string name="nutrition_meal_breakfast">Breakfast</string>
@@ -916,7 +917,7 @@
 
     <string name="nutrition_fasting_start">Start a fast</string>
     <string name="nutrition_fasting_end">End fast</string>
-    <string name="nutrition_fasting_target">Target %1$d h</string>
+    <string name="nutrition_fasting_target">Target %1$d&#160;h</string>
     <string name="nutrition_fasting_elapsed">Elapsed %1$s</string>
     <string name="nutrition_fasting_remaining">%1$s to your target</string>
     <string name="nutrition_fasting_past">Past your target</string>
@@ -973,7 +974,7 @@
     <string name="nutrition_portion_serving_label">%1$s g · %2$s</string>
 
     <string name="nutrition_entry_title">Entry</string>
-    <string name="nutrition_entry_amount">%1$s g</string>
+    <string name="nutrition_entry_amount">%1$s&#160;g</string>
     <string name="nutrition_entry_amount_label">Amount</string>
     <string name="nutrition_entry_servings">%1$s × %2$s</string>
     <string name="nutrition_entry_provenance">Source</string>
@@ -1103,11 +1104,22 @@
     <string name="nutrient_water">Water</string>
 
     <string name="unit_kcal">kcal</string>
-    <string name="nutrition_ml">%1$s ml</string>
+    <string name="nutrition_ml">%1$s&#160;ml</string>
     <string name="unit_ml">ml</string>
     <string name="unit_g">g</string>
     <string name="unit_mg">mg</string>
     <string name="unit_ug">µg</string>
         <string name="unit_hours_short">%1$d h</string>
     <string name="unit_minutes_short">%1$d min</string>
+    <string name="nutrition_meal_actions">Meal actions</string>
+    <string name="nutrition_ingredient_delete">Delete ingredient</string>
+    <string name="nutrition_entry_provenance_heading">Where this came from</string>
+    <string name="nutrition_scan_looking_body">Checking Open Food Facts. This needs a connection.</string>
+    <string name="nutrition_energy_provenance">How this day adds up</string>
+    <string name="nutrition_energy_provenance_body">The total is the sum of these entries. Each row opens its own source.</string>
+    <string name="nutrition_energy_provenance_targets">Targets are the ones you set in Targets.</string>
+    <string name="nutrition_energy_provenance_empty">No entries yet.</string>
+    <string name="nutrition_targets_source">Set by you</string>
+    <string name="nutrition_portion_serving_option">%1$s (%2$s&#160;g)</string>
+    <string name="nutrition_energy_total">%1$s&#160;kcal</string>
 </resources>

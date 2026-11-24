@@ -37,7 +37,9 @@ fun EntrySheet(
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
-        title = model.name,
+        title = model.name.ifBlank {
+            stringResource(R.string.nutrition_quick_calories)
+        },
         primaryLabel = stringResource(R.string.nutrition_entry_edit),
         onPrimary = onEdit,
         onCancel = onDismiss,
@@ -105,7 +107,7 @@ fun EntrySheet(
         }
         Spacer(Modifier.height(OhTheme.space.s4))
         Text(
-            text = stringResource(R.string.nutrition_entry_provenance),
+            text = stringResource(R.string.nutrition_entry_provenance_heading),
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,
         )

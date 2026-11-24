@@ -214,8 +214,8 @@ class NutritionExitTest {
         val meal = container.store.nutrition.upsertMeal(
             MealDraft(
                 id = "meal-copy",
-                name = "lunch",
-                kind = MealKind.LUNCH,
+                name = "Pre-workout",
+                kind = MealKind.CUSTOM,
                 localDate = source,
                 zoneId = container.zone,
                 happenedAt = container.clock.now(),
@@ -256,6 +256,12 @@ class NutritionExitTest {
         assertEquals(1, copied.size)
         assertEquals(130.0, copied.single().totals.of(Nutrient.ENERGY)!!, 0.0)
         assertEquals("Rice", copied.single().foodName)
+        // A custom meal is recreated on the target day, not shared with the source day.
+        val targetMeal = container.store.nutrition.mealsForDay(target)
+            .single { it.kind == MealKind.CUSTOM }
+        assertEquals("Pre-workout", targetMeal.name)
+        assertTrue(targetMeal.id != "meal-copy")
+        assertEquals(targetMeal.id, copied.single().mealId)
     }
 
     @Test
@@ -325,6 +331,62 @@ class NutritionExitTest {
         val today = container.clock.now().toLocalDateTime(container.zone).date
         assertEquals("usda", container.store.nutrition.entriesForDay(today).single().sourceKind)
         assertEquals(0, transport.calls, "the local search must not call the network")
+    }
+
+    /**
+     * `DESIGN.md` §14.3 budgets water at one tap. The chip sits on the Nutrition root, so
+     * it has to log without the water sheet ever being opened, and the glass has to land
+     * on the day being viewed.
+     */
+    @Test
+    fun theOneTapWaterChipLogsWithoutOpeningTheSheet() {
+        seedProfile()
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        compose.onNodeWithContentDescription("Nutrition").performClick()
+        waitFor("nutrition") { viewModel.state.value.nutrition != null }
+
+        val before = viewModel.state.value.nutrition?.water?.totalMl ?: 0.0
+        assertEquals(null, viewModel.state.value.waterSheet)
+        compose.onNodeWithText("Log 250 ml").performClick()
+        waitFor("water logged") {
+            (viewModel.state.value.nutrition?.water?.totalMl ?: 0.0) >= before + 250.0
+        }
+
+        val today = container.clock.now().toLocalDateTime(container.zone).date
+        val rollup = container.store.rollups.forDayAndType(
+            today,
+            app.openhealth.core.observation.ObservationType.WATER,
+        )
+        assertEquals(250.0, rollup!!.value.value, 1e-9)
+    }
+
+    /**
+     * The Open Food Facts lookup is the app's only outbound call, and the app must declare
+     * `INTERNET` itself. The timed exit test above uses a fake transport, so a missing
+     * declaration would not show there: on a real build the lookup would throw and the
+     * screen would show "Unavailable" for every barcode. The `play` flavour used to
+     * inherit the permission from ML Kit's manifest, which left the Play-Services-free
+     * `fdroid` flavour without it; this runs on whichever flavour is installed.
+     */
+    @Test
+    fun theAppDeclaresTheInternetPermissionItselfOnEveryFlavour() {
+        val declared = context.packageManager
+            .getPackageInfo(
+                context.packageName,
+                android.content.pm.PackageManager.GET_PERMISSIONS,
+            )
+            .requestedPermissions
+            .orEmpty()
+            .toSet()
+        assertTrue(
+            android.Manifest.permission.INTERNET in declared,
+            "the Open Food Facts lookup cannot run without INTERNET; declared: $declared",
+        )
+        assertEquals(
+            android.content.pm.PackageManager.PERMISSION_GRANTED,
+            context.checkSelfPermission(android.Manifest.permission.INTERNET),
+        )
     }
 
     private fun seedProfile() {

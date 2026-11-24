@@ -228,6 +228,8 @@ data class OhDims(
     val macroBarGap: Dp = 2.dp,
     /** §14.2: the date strip cell is a 44 dp target. */
     val nutritionDayCell: Dp = 44.dp,
+    /** §14.2 nutrition nutrient fields: wide enough for four digits and a separator. */
+    val nutritionField: Dp = 128.dp,
     /** §14.2: the barcode viewfinder fills the width and most of the page's height. */
     val scanPreview: Dp = 320.dp,
 

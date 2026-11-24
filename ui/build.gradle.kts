@@ -51,5 +51,5 @@ tasks.withType<Test>().configureEach {
     inputs.dir(layout.projectDirectory.dir("src/test/screenshots"))
         .withPropertyName("screenshotGoldens")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    maxHeapSize = "2g"
+    maxHeapSize = "3g"
 }

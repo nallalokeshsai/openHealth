@@ -343,20 +343,20 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     nav.popBackStack()
                 },
                 onCreateFood = { barcode ->
-                    viewModel.barcodeCreateFood(barcode)
+                    viewModel.closeBarcode()
                     nav.popBackStack()
-                    nav.navigate(FoodEditorRoute())
+                    nav.navigate(FoodEditorRoute(barcode = barcode))
                 },
             )
         }
         composable<FoodEditorRoute> { entry ->
             val route = entry.toRoute<FoodEditorRoute>()
-            LaunchedEffect(route.foodId, route.recipe) {
+            LaunchedEffect(route.foodId, route.recipe, route.barcode) {
                 if (state.foodEditor == null) {
                     if (route.recipe) {
                         viewModel.openRecipeEditor(route.foodId)
                     } else {
-                        viewModel.openFoodEditor(route.foodId)
+                        viewModel.openFoodEditor(route.foodId, route.barcode)
                     }
                 }
             }
@@ -706,7 +706,6 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             onDismiss = viewModel::closeNutritionSheets,
             onLog = viewModel::logWater,
             onAdd = viewModel::addWaterContainer,
-            onDelete = viewModel::deleteWaterContainer,
         )
     }
     state.targetsSheet?.let { targets ->

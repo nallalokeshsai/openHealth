@@ -183,7 +183,7 @@ fun FoodEditorScreen(
                     )
                     OhIconButton(
                         icon = OhIcons.delete,
-                        contentDescription = stringResource(R.string.nutrition_delete_entry),
+                        contentDescription = stringResource(R.string.nutrition_ingredient_delete),
                         onClick = { onRemoveIngredient(index) },
                     )
                 }
@@ -283,7 +283,7 @@ fun FoodEditorScreen(
                                     keyboardType = KeyboardType.Decimal,
                                 ),
                                 contentDescription = nutrientLabel(nutrient),
-                                modifier = Modifier.width(OhTheme.space.s8 * 4),
+                                modifier = Modifier.width(OhTheme.dims.nutritionField),
                             )
                         }
                     }

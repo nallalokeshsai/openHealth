@@ -139,7 +139,7 @@ class AssetFoodIndex(private val context: Context) : BundledFoodIndex {
     }
 
     private fun ensureCopied(): File {
-        val target = File(context.noBackupFilesDir, ASSET_NAME)
+        val target = File(context.noBackupFilesDir, CACHE_NAME)
         if (target.exists() && target.length() > 0L) return target
         val temporary = File(target.parentFile, "$ASSET_NAME.tmp")
         context.assets.open(ASSET_NAME).use { input ->
@@ -176,5 +176,12 @@ class AssetFoodIndex(private val context: Context) : BundledFoodIndex {
 
     private companion object {
         const val ASSET_NAME = "foodindex.db"
+
+        /**
+         * The copied file's name carries the dataset generation. A later phase that
+         * replaces the asset must bump this, otherwise an upgraded app would keep the
+         * old public-domain index in app storage forever.
+         */
+        const val CACHE_NAME = "foodindex-v1-2026-04-30.db"
     }
 }

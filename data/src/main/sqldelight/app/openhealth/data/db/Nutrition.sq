@@ -289,7 +289,7 @@ deleteMeal:
 DELETE FROM meal WHERE id = :id;
 
 insertEntry:
-INSERT OR IGNORE INTO entry(
+INSERT INTO entry(
     id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g,
     serving_label, serving_g, servings, food_name, brand, energy_kcal, protein_g, carbs_g,
     fat_g, fibre_g, micros_json, source_kind, source_id, user_verified, user_edited,
@@ -300,7 +300,10 @@ INSERT OR IGNORE INTO entry(
     :carbsG, :fatG, :fibreG, :microsJson, :sourceKind, :sourceId, :userVerified,
     :userEdited, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
     :revision
-);
+)
+-- Only the idempotency key is ignored: a duplicate primary key is a programming error,
+-- and swallowing it would hide a copy or import collision (B2 §7.9).
+ON CONFLICT(idempotency_key) DO NOTHING;
 
 updateEntry:
 UPDATE entry SET

@@ -672,11 +672,18 @@ class AppViewModel(
 
     fun searchFoods(query: String) {
         val current = state.value.foodSearch ?: return
+        // Mark the field's query immediately so a slower earlier result can be told apart
+        // from the one the person is now looking at.
+        _state.update { it.copy(foodSearch = current.copy(query = query)) }
         launchGuarded {
             val model = withContext(Dispatchers.IO) {
                 nutritionPresenter.search(query, current.meal, current.date)
             }
-            _state.update { it.copy(foodSearch = model) }
+            // A slower earlier query must not overwrite a newer one: only accept a
+            // result whose query is still the one in the field.
+            _state.update {
+                if (it.foodSearch?.query == query) it.copy(foodSearch = model) else it
+            }
         }
     }
 
@@ -793,12 +800,23 @@ class AppViewModel(
         logWater(containerId, container.millilitres)
     }
 
+    /**
+     * One tap from the water row or from the sheet (`DESIGN.md` §14.3). The sheet does not
+     * have to be open — the root's one-tap chip is the common path — and the observation
+     * is filed on the day being viewed, not on today, so backdating a glass works the way
+     * backdating a meal does.
+     */
     fun logWater(containerId: String, millilitres: Double) {
-        val sheet = state.value.waterSheet ?: return
+        val date = state.value.waterSheet?.date
+            ?: state.value.nutritionDate
+            ?: container.clock.now().toLocalDateTime(zone).date
         launchGuarded {
             withContext(Dispatchers.IO) {
                 nutritionPresenter.selectContainer(containerId)
-                nutritionPresenter.logWater(millilitres)
+                nutritionPresenter.logWater(
+                    millilitres,
+                    nutritionPresenter.atFor(date, MealSlot.SNACKS),
+                )
             }
             _state.update { it.copy(waterSheet = null) }
             refreshNutritionModel()
@@ -812,18 +830,6 @@ class AppViewModel(
             withContext(Dispatchers.IO) {
                 nutritionPresenter.saveContainer(null, label, millilitres)
             }
-            val model = withContext(Dispatchers.IO) {
-                nutritionPresenter.waterSheet(sheet.date)
-            }
-            _state.update { it.copy(waterSheet = model) }
-            refreshNutritionModel()
-        }
-    }
-
-    fun deleteWaterContainer(id: String) {
-        val sheet = state.value.waterSheet ?: return
-        launchGuarded {
-            withContext(Dispatchers.IO) { nutritionPresenter.deleteContainer(id) }
             val model = withContext(Dispatchers.IO) {
                 nutritionPresenter.waterSheet(sheet.date)
             }
@@ -965,15 +971,8 @@ class AppViewModel(
     }
 
     fun barcodeCreateFood(barcode: String?) {
-        launchGuarded {
-            val editor = withContext(Dispatchers.IO) { nutritionPresenter.foodEditor(null) }
-            _state.update {
-                it.copy(
-                    barcode = null,
-                    foodEditor = editor?.copy(barcode = barcode.orEmpty()),
-                )
-            }
-        }
+        _state.update { it.copy(barcode = null) }
+        openFoodEditor(null, barcode)
     }
 
     fun logBarcodeProduct(food: FoodChoiceModel) {
@@ -992,10 +991,17 @@ class AppViewModel(
         _state.update { it.copy(barcode = null) }
     }
 
-    fun openFoodEditor(foodId: String?) {
+    fun openFoodEditor(foodId: String?, barcode: String? = null) {
         launchGuarded {
             val editor = withContext(Dispatchers.IO) { nutritionPresenter.foodEditor(foodId) }
-            _state.update { it.copy(foodEditor = editor, ingredientMode = false) }
+            _state.update {
+                it.copy(
+                    foodEditor = editor?.let { model ->
+                        if (barcode != null) model.copy(barcode = barcode) else model
+                    },
+                    ingredientMode = false,
+                )
+            }
         }
     }
 
@@ -1119,7 +1125,13 @@ class AppViewModel(
         if (from == to) return
         launchGuarded {
             withContext(Dispatchers.IO) {
-                nutritionPresenter.copyMeal(from, section.slot, to)
+                nutritionPresenter.copyMeal(
+                    from = from,
+                    slot = section.slot,
+                    to = to,
+                    sourceMealId = section.mealId,
+                    sourceName = section.name,
+                )
             }
             refreshNutritionModel()
             showToast(UiR.string.nutrition_logged, undo = false)

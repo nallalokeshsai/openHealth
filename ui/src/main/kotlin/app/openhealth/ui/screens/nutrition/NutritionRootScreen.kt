@@ -3,7 +3,6 @@
 package app.openhealth.ui.screens.nutrition
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,9 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhBarRow
 import app.openhealth.ui.components.OhButton
@@ -43,14 +46,17 @@ import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhCardHeader
 import app.openhealth.ui.components.OhDialog
-import app.openhealth.ui.components.OhGlyphTile
 import app.openhealth.ui.components.OhIconButton
+import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhMediaRow
 import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRing
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhTextField
+import app.openhealth.ui.components.ohSurfacePressable
+import app.openhealth.ui.components.rememberInteraction
 import app.openhealth.ui.icons.OhGlyphIcons
+import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhObjectIcons
 import app.openhealth.ui.screens.common.OhScreen
@@ -104,6 +110,7 @@ fun NutritionRootScreen(
     var addMealOpen by rememberSaveable { mutableStateOf(false) }
     var newMealName by rememberSaveable { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf<String?>(null) }
+    var provenance by rememberSaveable { mutableStateOf(false) }
     OhScreen(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = OhTheme.space.s6),
@@ -125,7 +132,9 @@ fun NutritionRootScreen(
         DateStrip(model, onSelectDay)
         Spacer(Modifier.height(OhTheme.space.s5))
         if (model.energy != null) {
-            EnergyCard(model, onTargets, onWater, onLogWater)
+            EnergyCard(model, onTargets, onWater, onLogWater, onShowProvenance = {
+                provenance = true
+            })
         } else {
             model.water?.let { water ->
                 OhCard {
@@ -161,27 +170,31 @@ fun NutritionRootScreen(
             leadingIcon = OhIcons.add,
         )
         Spacer(Modifier.height(OhTheme.space.s4))
-        OhRow(
-            title = stringResource(R.string.nutrition_micros),
-            subtitle = stringResource(R.string.nutrition_micros_note),
-            showChevron = true,
-            onClick = onMicros,
-        )
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.nutrition_micros),
+                subtitle = stringResource(R.string.nutrition_micros_note),
+                showChevron = true,
+                onClick = onMicros,
+            )
+        }
         model.fast?.let { fast ->
             Spacer(Modifier.height(OhTheme.space.s3))
             FastingRow(fast, onFasting)
         }
         Spacer(Modifier.height(OhTheme.space.s3))
-        OhRow(
-            title = stringResource(R.string.nutrition_targets),
-            subtitle = if (model.targetsSet) {
-                null
-            } else {
-                stringResource(R.string.nutrition_energy_no_target)
-            },
-            showChevron = true,
-            onClick = onTargets,
-        )
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.nutrition_targets),
+                subtitle = if (model.targetsSet) {
+                    null
+                } else {
+                    stringResource(R.string.nutrition_energy_no_target)
+                },
+                showChevron = true,
+                onClick = onTargets,
+            )
+        }
         if (model.canCopyDay) {
             Spacer(Modifier.height(OhTheme.space.s3))
             OhButton(
@@ -258,6 +271,16 @@ fun NutritionRootScreen(
             )
         }
     }
+    if (provenance) {
+        DayProvenanceSheet(
+            model = model,
+            onDismiss = { provenance = false },
+            onOpenEntry = {
+                provenance = false
+                onOpenEntry(it)
+            },
+        )
+    }
     confirmDelete?.let { id ->
         OhDialog(
             visible = true,
@@ -287,67 +310,76 @@ private fun dateEyebrow(model: NutritionModel): String = if (model.selectedDate 
 
 @Composable
 private fun DateStrip(model: NutritionModel, onSelectDay: (LocalDate) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s1),
-    ) {
-        model.week.forEach { day ->
-            val selected = day.isSelected
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = OhTheme.dims.nutritionDayCell)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(OhTheme.radius.base))
-                    .background(
-                        when {
-                            selected -> OhTheme.colors.accSoft
-                            else -> OhTheme.colors.surface
-                        },
-                    )
-                    .clickable(
-                        interactionSource = remember {
-                            androidx.compose.foundation.interaction.MutableInteractionSource()
-                        },
-                        indication = null,
-                        onClick = { onSelectDay(day.date) },
-                    )
-                    .padding(vertical = OhTheme.space.s0),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(
-                    text = weekdayShort(day.date),
-                    style = OhTheme.type.caption2,
-                    color = if (selected) OhTheme.colors.accInk else OhTheme.colors.label2,
-                )
-                Text(
-                    text = day.date.dayOfMonth.toString(),
-                    style = OhTheme.type.subhead.tabular(),
-                    color = when {
-                        day.isToday -> OhTheme.colors.onAcc
-                        selected -> OhTheme.colors.accInk
-                        else -> OhTheme.colors.label
-                    },
+    // Time reads left-to-right even in RTL (DESIGN.md §11.5), as the Today week strip.
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s0),
+        ) {
+            model.week.forEach { day ->
+                val selected = day.isSelected
+                val interaction = rememberInteraction()
+                Column(
                     modifier = Modifier
-                        .clip(CircleShape)
-                        .then(
-                            if (day.isToday) {
-                                Modifier.background(
-                                    OhTheme.colors.acc,
-                                ).padding(horizontal = OhTheme.space.s1)
-                            } else {
-                                Modifier
-                            },
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .size(OhTheme.space.s0)
-                        .clip(CircleShape)
+                        .weight(1f)
+                        .heightIn(min = OhTheme.dims.nutritionDayCell)
+                        .clip(
+                            androidx.compose.foundation.shape.RoundedCornerShape(
+                                OhTheme.radius.base,
+                            ),
+                        )
                         .background(
-                            if (day.hasEntries) OhTheme.colors.acc else OhTheme.colors.surface,
-                        ),
-                )
+                            when {
+                                selected -> OhTheme.colors.accSoft
+                                else -> OhTheme.colors.bg
+                            },
+                        )
+                        .ohSurfacePressable(
+                            interactionSource = interaction,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                OhTheme.radius.base,
+                            ),
+                            enabled = true,
+                            onClick = { onSelectDay(day.date) },
+                        )
+                        .padding(vertical = OhTheme.space.s0),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = weekdayShort(day.date),
+                        style = OhTheme.type.caption2,
+                        color = if (selected) OhTheme.colors.accInk else OhTheme.colors.label2,
+                    )
+                    Text(
+                        text = day.date.dayOfMonth.toString(),
+                        style = OhTheme.type.subhead.tabular(),
+                        color = when {
+                            day.isToday -> OhTheme.colors.onAcc
+                            selected -> OhTheme.colors.accInk
+                            else -> OhTheme.colors.label
+                        },
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .then(
+                                if (day.isToday) {
+                                    Modifier.background(
+                                        OhTheme.colors.acc,
+                                    ).padding(horizontal = OhTheme.space.s1)
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(OhTheme.space.s0)
+                            .clip(CircleShape)
+                            .background(
+                                if (day.hasEntries) OhTheme.colors.acc else OhTheme.colors.surface,
+                            ),
+                    )
+                }
             }
         }
     }
@@ -368,6 +400,7 @@ private fun EnergyCard(
     onTargets: () -> Unit,
     onWater: () -> Unit,
     onLogWater: (String) -> Unit,
+    onShowProvenance: () -> Unit,
 ) {
     val energy = model.energy ?: return
     OhCard {
@@ -385,7 +418,17 @@ private fun EnergyCard(
             },
         )
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = OhTheme.space.s4),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = OhTheme.space.s4)
+                .ohSurfacePressable(
+                    interactionSource = rememberInteraction(),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                        OhTheme.radius.sm,
+                    ),
+                    enabled = true,
+                    onClick = onShowProvenance,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val remaining = energy.remainingKcal
@@ -465,22 +508,47 @@ private fun macroInk(key: MacroKey): androidx.compose.ui.graphics.Color = when (
 
 @Composable
 private fun WaterRow(water: WaterCardModel, onWater: () -> Unit, onLogWater: (String) -> Unit) {
-    OhRow(
-        title = stringResource(R.string.nutrition_water),
-        subtitle = if (water.targetMl != null) {
-            stringResource(
-                R.string.nutrition_water_total,
-                stringResource(R.string.nutrition_ml, number(water.totalMl)),
-                stringResource(R.string.nutrition_ml, number(water.targetMl)),
-            )
-        } else {
-            stringResource(R.string.nutrition_ml, number(water.totalMl))
-        },
-        leadingIcon = OhObjectIcons.water,
-        showChevron = true,
-        onClick = onWater,
-        trailing = {
+    val stack = androidx.compose.ui.platform.LocalDensity.current.fontScale >=
+        OhTheme.dims.largeFontScale
+    Column {
+        OhRow(
+            title = stringResource(R.string.nutrition_water),
+            subtitle = if (water.targetMl != null) {
+                stringResource(
+                    R.string.nutrition_water_total,
+                    stringResource(R.string.nutrition_ml, number(water.totalMl)),
+                    stringResource(R.string.nutrition_ml, number(water.targetMl)),
+                )
+            } else {
+                stringResource(R.string.nutrition_ml, number(water.totalMl))
+            },
+            leadingIcon = OhObjectIcons.water,
+            showChevron = true,
+            onClick = onWater,
+            trailing = if (stack) {
+                null
+            } else {
+                {
+                    water.lastContainer?.let { container ->
+                        OhButton(
+                            text = stringResource(
+                                R.string.nutrition_water_one_tap,
+                                stringResource(
+                                    R.string.nutrition_ml,
+                                    number(container.millilitres),
+                                ),
+                            ),
+                            onClick = { onLogWater(container.id) },
+                            variant = OhButtonVariant.Secondary,
+                            size = OhButtonSize.ExtraSmall,
+                        )
+                    }
+                }
+            },
+        )
+        if (stack) {
             water.lastContainer?.let { container ->
+                Spacer(Modifier.height(OhTheme.space.s2))
                 OhButton(
                     text = stringResource(
                         R.string.nutrition_water_one_tap,
@@ -488,11 +556,11 @@ private fun WaterRow(water: WaterCardModel, onWater: () -> Unit, onLogWater: (St
                     ),
                     onClick = { onLogWater(container.id) },
                     variant = OhButtonVariant.Secondary,
-                    size = OhButtonSize.ExtraSmall,
+                    size = OhButtonSize.Small,
                 )
             }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -518,6 +586,7 @@ private fun MealSection(
                     text = energyText(section.totalKcal),
                     style = OhTheme.type.footnote.tabular(),
                     color = OhTheme.colors.label2,
+                    modifier = Modifier.padding(top = OhTheme.space.s3),
                 )
                 Spacer(Modifier.width(OhTheme.space.s2))
             }
@@ -528,7 +597,7 @@ private fun MealSection(
             )
             OhIconButton(
                 icon = OhIcons.more,
-                contentDescription = stringResource(R.string.nutrition_add_food),
+                contentDescription = stringResource(R.string.nutrition_meal_actions),
                 onClick = onActions,
             )
         }
@@ -544,7 +613,11 @@ private fun MealSection(
                 section.entries.forEachIndexed { index, entry ->
                     SwipeToDelete(onDelete = { onDelete(entry.id) }) {
                         OhMediaRow(
-                            title = entry.name.ifBlank {
+                            title = if (entry.name.isNotBlank()) {
+                                entry.name
+                            } else if (entry.sourceKey == "quick") {
+                                stringResource(R.string.nutrition_quick_calories)
+                            } else {
                                 stringResource(R.string.nutrition_quick_add)
                             },
                             subtitle = buildString {
@@ -562,7 +635,7 @@ private fun MealSection(
                                     append(stringResource(R.string.nutrition_verified))
                                 }
                             },
-                            thumbnail = { OhGlyphTile(OhObjectIcons.plate) },
+                            thumbnail = { FoodThumb() },
                             onClick = { onOpenEntry(entry.id) },
                             trailing = {
                                 if (showKcal && entry.kcal != null) {
@@ -576,11 +649,62 @@ private fun MealSection(
                         )
                     }
                     if (index < section.entries.lastIndex) {
-                        Spacer(Modifier.height(OhTheme.dims.hairline))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = OhTheme.dims.rowHairInset)
+                                .height(OhTheme.dims.hairline)
+                                .background(OhTheme.colors.sep),
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DayProvenanceSheet(
+    model: NutritionModel,
+    onDismiss: () -> Unit,
+    onOpenEntry: (String) -> Unit,
+) {
+    val entries = model.meals.flatMap { it.entries }
+    OhModalSheet(
+        visible = true,
+        onDismiss = onDismiss,
+        title = stringResource(R.string.nutrition_energy_provenance),
+    ) {
+        Text(
+            text = stringResource(R.string.nutrition_energy_provenance_body),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s3))
+        if (entries.isEmpty()) {
+            Text(
+                text = stringResource(R.string.nutrition_energy_provenance_empty),
+                style = OhTheme.type.body,
+                color = OhTheme.colors.label2,
+            )
+        } else {
+            entries.forEach { entry ->
+                OhRow(
+                    title = entry.name,
+                    subtitle = sourceLabel(entry.sourceKey),
+                    value = entry.kcal?.let { number(it) },
+                    unit = entry.kcal?.let { stringResource(R.string.unit_kcal) },
+                    showDivider = true,
+                    onClick = { onOpenEntry(entry.id) },
+                )
+            }
+        }
+        Spacer(Modifier.height(OhTheme.space.s3))
+        Text(
+            text = stringResource(R.string.nutrition_energy_provenance_targets),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label3,
+        )
     }
 }
 
@@ -622,6 +746,26 @@ private fun MealActionsSheet(
     }
 }
 
+@Composable
+private fun FoodThumb() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                color = OhTheme.colors.surface2,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(OhTheme.radius.sm),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        OhIcon(
+            icon = OhObjectIcons.plate,
+            contentDescription = null,
+            size = OhTheme.dims.quickTileGlyph,
+            tint = OhTheme.colors.label2,
+        )
+    }
+}
+
 /** A horizontal drag reveals a destructive action; the sheet keeps it accessible. */
 @Composable
 private fun SwipeToDelete(onDelete: () -> Unit, content: @Composable () -> Unit) {
@@ -641,12 +785,14 @@ private fun SwipeToDelete(onDelete: () -> Unit, content: @Composable () -> Unit)
                 ),
             contentAlignment = Alignment.CenterEnd,
         ) {
-            Text(
-                text = stringResource(R.string.nutrition_delete_entry),
-                style = OhTheme.type.footnote,
-                color = OhTheme.colors.label,
-                modifier = Modifier.padding(end = OhTheme.space.s6),
-            )
+            if (offset < 0f) {
+                Text(
+                    text = stringResource(R.string.nutrition_delete_entry),
+                    style = OhTheme.type.footnote,
+                    color = OhTheme.colors.label,
+                    modifier = Modifier.padding(end = OhTheme.space.s6),
+                )
+            }
         }
         Box(
             modifier = Modifier

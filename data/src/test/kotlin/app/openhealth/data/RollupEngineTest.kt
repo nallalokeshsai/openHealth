@@ -688,6 +688,24 @@ class RollupEngineTest {
     )
 
     @Test
+    fun excludedReadingsDoNotReachTheRollup() {
+        val (store, engine) = storeAndEngine()
+        val repository = ObservationRepository(store.db)
+        val observation = testObservation(
+            "mood",
+            ObservationType.MOOD,
+            3.0,
+            UcumUnit.SCORE,
+            dayStart(D1).plus(9.hours),
+            sourceId = "manual",
+        )
+        repository.record(observation)
+        repository.excludeFromTrends(observation.id, true)
+        assertEquals(0, engine.rebuildDay(D1))
+        store.close()
+    }
+
+    @Test
     fun theWatermarkIsTheNewestObservationUsed() {
         val (store, engine) = storeAndEngine()
         val first = testObservation(

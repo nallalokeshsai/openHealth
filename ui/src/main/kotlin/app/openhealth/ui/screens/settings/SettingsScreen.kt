@@ -885,6 +885,12 @@ private fun AboutSheet(visible: Boolean, state: SettingsState, onDismiss: () -> 
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
+            text = stringResource(R.string.settings_about_food_data),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s5))
+        Text(
             text = stringResource(R.string.settings_about_sqlcipher),
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,

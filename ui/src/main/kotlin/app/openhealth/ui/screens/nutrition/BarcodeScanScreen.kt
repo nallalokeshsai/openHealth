@@ -105,7 +105,7 @@ fun BarcodeScanScreen(
 
             BarcodeState.LOOKING_UP -> OhEmptyState(
                 title = stringResource(R.string.nutrition_scan_looking),
-                body = stringResource(R.string.nutrition_scan_hint),
+                body = stringResource(R.string.nutrition_scan_looking_body),
             )
 
             BarcodeState.FOUND -> {
@@ -137,35 +137,49 @@ fun BarcodeScanScreen(
                     val protein = product.per100g[Nutrient.PROTEIN]
                     val carbs = product.per100g[Nutrient.CARBS]
                     val fat = product.per100g[Nutrient.FAT]
-                    OhKpiBand(
-                        figures = listOf(
-                            OhKpiFigure(
-                                value = if (showKcal && kcal != null) {
-                                    number(kcal)
-                                } else {
-                                    stringResource(R.string.nutrition_micros_missing)
-                                },
-                                label = stringResource(R.string.nutrient_energy),
-                                unit = if (showKcal && kcal != null) {
-                                    stringResource(R.string.unit_kcal)
-                                } else {
-                                    null
-                                },
-                            ),
+                    val figures = buildList {
+                        if (showKcal) {
+                            add(
+                                OhKpiFigure(
+                                    value = kcal?.let { number(it) }
+                                        ?: stringResource(R.string.nutrition_micros_missing),
+                                    label = stringResource(R.string.nutrient_energy),
+                                    unit = if (kcal != null) {
+                                        stringResource(R.string.unit_kcal)
+                                    } else {
+                                        null
+                                    },
+                                ),
+                            )
+                        }
+                        add(
                             OhKpiFigure(
                                 value = protein?.let { number(it, 1) }
                                     ?: stringResource(R.string.nutrition_micros_missing),
                                 label = stringResource(R.string.nutrition_macro_protein),
                                 unit = stringResource(R.string.unit_g),
                             ),
+                        )
+                        add(
                             OhKpiFigure(
                                 value = carbs?.let { number(it, 1) }
                                     ?: stringResource(R.string.nutrition_micros_missing),
                                 label = stringResource(R.string.nutrition_macro_carbs),
                                 unit = stringResource(R.string.unit_g),
                             ),
-                        ),
-                    )
+                        )
+                        if (!showKcal) {
+                            add(
+                                OhKpiFigure(
+                                    value = fat?.let { number(it, 1) }
+                                        ?: stringResource(R.string.nutrition_micros_missing),
+                                    label = stringResource(R.string.nutrition_macro_fat),
+                                    unit = stringResource(R.string.unit_g),
+                                ),
+                            )
+                        }
+                    }
+                    OhKpiBand(figures = figures)
                     Spacer(Modifier.height(OhTheme.space.s2))
                     Text(
                         text = stringResource(R.string.nutrition_portion_per_100g),

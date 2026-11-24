@@ -6,9 +6,9 @@ plugins {
 android {
     namespace = "app.openhealth"
 
-    // B6's barcode scanner has two implementations (BUILD-ROADMAP.md §B6): the Play build
-    // ships the bundled ML Kit model (no Play Services at runtime); the F-Droid build
-    // must contain only free software, so it uses ZXing and the same CameraX pipeline.
+    // The store flavours remain (Play and the Play-Services-free F-Droid build), but the
+    // barcode decoder is ZXing in both: ML Kit's transitive Google Data Transport is a
+    // telemetry path that the no-telemetry invariant forbids (ADR 0011, B6).
     flavorDimensions += "store"
     productFlavors {
         create("play") { dimension = "store" }
@@ -36,13 +36,13 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.android)
 
-    // CameraX is Apache-2.0 and shared; only the decoder differs by store flavour.
+    // CameraX and ZXing are Apache-2.0 and shared by both store flavours. ZXing keeps the
+    // decoder offline, free and telemetry-free; ML Kit was removed in B6 for the latter.
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-    "playImplementation"(libs.mlkit.barcode.scanning)
-    "fdroidImplementation"(libs.zxing.core)
+    implementation(libs.zxing.core)
 
     // Encrypted storage behind the :core seam (Tech-Stack.md §5). SQLCipher is the
     // community edition; its attribution requirement is recorded in NOTICE.md.

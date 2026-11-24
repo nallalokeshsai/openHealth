@@ -16,8 +16,8 @@
   smaller than the source CSVs because nutrients and portions are one compact JSON value
   per food and search uses a token table instead of an FTS index the platform SQLite may
   not have. The tool records the two source URLs, the SHA-256 of each `food.csv` and
-  `food_nutrient.csv`, the licence and the generation time in a `meta` table and a
-  sidecar JSON. Nothing downloads at build time.
+  `food_nutrient.csv`, the licence and the generation time in a `meta` table; the sidecar
+  JSON carries the version, counts and URLs. Nothing downloads at build time.
 - Logging a bundled food copies it into the encrypted `food` table, so "everything the
   person has ever logged" works offline and the entry has a real foreign key.
 
@@ -34,17 +34,24 @@
 - Offline, a lookup returns `Unavailable` and the screen offers manual entry; it never
   silently substitutes a different product.
 
-## 3. Barcode decoders by store flavour
+## 3. One barcode decoder, and why not ML Kit
 
-- `pr.md` §6.3 and `Tech-Stack.md` §8 require CameraX and the **bundled** ML Kit model
-  on the Play path, with no Play Services runtime.
-- F-Droid cannot redistribute the proprietary ML Kit binaries. The `fdroid` product
-  flavour therefore uses **ZXing core 3.5.4 (Apache-2.0)** on the same CameraX
-  `ImageAnalysis` pipeline; the `play` flavour uses `com.google.mlkit:barcode-scanning`
-  17.3.0. Both sit behind the `BarcodeDecoder` seam and accept the same NV21 frame.
-- This is a build-contract amendment, not a reversal: `Tech-Stack.md` §8 now names both
-  implementations. `checkLicences` records ML Kit's own terms in
-  `gradle/licences/allowed.tsv` (it is not Apache-2.0, despite the old wildcard).
+- `Tech-Stack.md` §8 originally named CameraX + the bundled ML Kit model. In B6 that
+  dependency resolved to `com.google.mlkit:common`, which pulls
+  `com.google.android.datatransport:transport-runtime`, `transport-backend-cct` and the
+  Firebase encoders, and registers `MlKitInitProvider` at app start. The AAR's telemetry
+  classes build `Event.ofTelemetry(...)` against `com.google.android.datatransport.cct.CCTDestination`
+  and initialise `TransportRuntime`. That is a Google upload path with no user action and
+  no opt-out, which the no-telemetry invariant (`AGENTS.md`; `pr.md` §6.23, §6.31)
+  forbids. ML Kit's binaries are also proprietary, so the F-Droid build could never
+  contain them.
+- B6 therefore uses **ZXing core 3.5.4 (Apache-2.0)** on the CameraX `ImageAnalysis`
+  pipeline in **every** store flavour. It is pure Java, offline, free and has no network
+  path; the two store flavours remain for the rest of the release split. `Tech-Stack.md`
+  §8 was amended in the same commit (version 2.3).
+- `checkLicences` records ZXing and no longer records ML Kit; the merged manifest
+  declares `INTERNET` itself (the app's one outbound call is the explicit Open Food
+  Facts lookup) instead of inheriting it from a telemetry library.
 - Camera permission is requested when the scanner opens, never at launch; denial is a
   visible state with the manual and create-food paths.
 

@@ -171,7 +171,7 @@ a courtesy, which the app gives on the Nutrition surface and here. The food name
 per-100 g nutrient values and household portions are used; no USDA narrative text is
 reproduced. The generated index records the source URLs, the SHA-256 of the two source
 `food.csv` and `food_nutrient.csv` files, the licence and the generation time in its
-`meta` table and sidecar JSON.
+`meta` table; the sidecar JSON records the version, counts and source URLs.
 
 ### Open Food Facts (Open Database License 1.0)
 
@@ -205,19 +205,12 @@ The barcode camera pipeline uses `androidx.camera:camera-core`, `camera-camera2`
 `camera-lifecycle` and `camera-view` under the Apache License 2.0. No CameraX code is
 modified.
 
-### ML Kit barcode scanning (Google ML Kit Terms of Service, play flavour only)
+### ZXing core (Apache-2.0, every store flavour)
 
-The Play Store flavour uses `com.google.mlkit:barcode-scanning` 17.3.0 with the bundled
-on-device model, under the Google ML Kit Terms of Service
-(`https://developers.google.com/ml-kit/terms`). It is not part of the F-Droid flavour,
-which contains no proprietary component. The model works offline and does not require
-Google Play Services at runtime.
-
-### ZXing core (Apache-2.0, F-Droid flavour only)
-
-The F-Droid flavour decodes barcodes with `com.google.zxing:core` 3.5.4 under the Apache
-License 2.0 (`https://github.com/zxing/zxing/blob/master/LICENSE`). It is a pure-Java
-library and is not modified.
+Barcode decoding uses `com.google.zxing:core` 3.5.4 under the Apache License 2.0
+(`https://github.com/zxing/zxing/blob/master/LICENSE`). It is a pure-Java library, is not
+modified, and makes no network call. ML Kit was evaluated and removed in B6 because its
+transitive Google Data Transport is a telemetry path.
 
 ### SQLDelight, Koin, Kotlin, Compose and AndroidX (Apache-2.0)
 

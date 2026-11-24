@@ -328,6 +328,66 @@ class DatabaseTest {
     }
 
     @Test
+    fun aV6DiarySurvivesTheSevenMigration() {
+        val directory = Files.createTempDirectory("openhealth-v6-diary")
+        val path = directory.resolve("v6.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        dropTimelineView(first)
+        stripV7Columns(first)
+        createV6Timeline(first)
+        first.execute(
+            null,
+            "INSERT INTO food(id, name, source_kind, energy_kcal_per_100g, " +
+                "protein_g_per_100g, carbs_g_per_100g, fat_g_per_100g, " +
+                "fibre_g_per_100g, verified, created_at, updated_at, revision) VALUES " +
+                "('legacy-food','Legacy oats','manual',389,16.9,66,7,10,0,0,0,1)",
+            0,
+        )
+        first.execute(
+            null,
+            "INSERT INTO meal(id, name, kind, local_date, notes, created_at, " +
+                "updated_at, revision) VALUES " +
+                "('legacy-meal','Breakfast','breakfast','2026-01-01',NULL,0,0,1)",
+            0,
+        )
+        first.execute(
+            null,
+            "INSERT INTO entry(id, meal_id, food_id, local_date, zone_id, happened_at, " +
+                "recorded_at, quantity_g, energy_kcal, protein_g, carbs_g, fat_g, fibre_g, " +
+                "source_kind, source_id, user_verified, user_edited, idempotency_key, " +
+                "revision) VALUES ('legacy-entry','legacy-meal','legacy-food','2026-01-01'," +
+                "'Europe/Berlin',0,0,100,389,16.9,66,7,10,'manual',NULL,0,0," +
+                "'legacy-entry',1)",
+            0,
+        )
+        first.execute(null, "PRAGMA user_version = 6", 0)
+        first.close()
+
+        val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
+            jdbcFactory("jdbc:sqlite:$path"),
+        )
+        assertEquals(7L, store.schemaVersion)
+        val repository = app.openhealth.data.repo.NutritionRepository(store.db)
+        val food = repository.foodById("legacy-food")!!
+        assertEquals(389.0, food.per100g[app.openhealth.core.nutrition.Nutrient.ENERGY])
+        assertEquals(16.9, food.per100g[app.openhealth.core.nutrition.Nutrient.PROTEIN])
+        val meal = repository.mealById("legacy-meal")!!
+        assertEquals(kotlinx.datetime.LocalDate(2026, 1, 1), meal.localDate)
+        assertEquals(null, meal.zoneId)
+        val entry = repository.entryById("legacy-entry")!!
+        assertEquals(389.0, entry.totals.of(app.openhealth.core.nutrition.Nutrient.ENERGY))
+        assertEquals(66.0, entry.totals.of(app.openhealth.core.nutrition.Nutrient.CARBS))
+        assertTrue(
+            app.openhealth.data.repo.TimelineRepository(store.db, store.driver)
+                .page(10).any { it.kind == "entry" },
+        )
+        store.close()
+        Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(directory)
+    }
+
+    @Test
     fun aV4DatabaseGainsTheExerciseColumnsAndKeepsItsRows() {
         val directory = Files.createTempDirectory("openhealth-v4-exercise")
         val path = directory.resolve("v4.db").toString()

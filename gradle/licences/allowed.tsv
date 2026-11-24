@@ -12,8 +12,7 @@
 androidx.*:*	Apache-2.0	AndroidX libraries
 com.google.android.*:*	Apache-2.0	Android support libraries
 com.google.*:*	Apache-2.0	Guava, errorprone annotations, auto-value
-com.google.mlkit:*	ML-Kit-ToS	Bundled ML Kit barcode (play flavour only); Google ML Kit Terms of Service, not Apache-2.0
-com.google.zxing:*	Apache-2.0	ZXing barcode decoding in the F-Droid flavour (free-software-only build)
+com.google.zxing:*	Apache-2.0	ZXing barcode decoding in every store flavour (offline, free and telemetry-free)
 com.google.code.findbugs:jsr305	BSD-3-Clause	Annotations pulled in by AndroidX
 com.google.guava:*	Apache-2.0	ListenableFuture, pulled in by AndroidX
 org.jetbrains:*	Apache-2.0	Kotlin annotations and JetBrains tooling runtime

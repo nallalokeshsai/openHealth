@@ -218,9 +218,9 @@ Non-negotiables in the visual contract:
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
 - Last completed phase: **B6 Nutrition** (2026-11-25); next is **B7 Body and vitals**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **393 JVM tests**
-  (179 `:core`, 97 `:data`, 10 `:integrations`, 97 `:ui`, 7 tools:foodindex, 1 fixtures,
-  2 exerciseindex) and **27 instrumented tests** pass on the owner's phone. `:ui` holds
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **396 JVM tests**
+  (179 `:core`, 100 `:data`, 10 `:integrations`, 97 `:ui`, 7 tools:foodindex, 1 fixtures,
+  2 exerciseindex) and **29 instrumented tests** pass on the owner's phone. `:ui` holds
   the B1 design system, the B3 screens, the B4 body map, the B5 Train surfaces and the B6
   Nutrition surfaces: **222 goldens** (198 before + 24 for the Nutrition root, neutral
   root, micros, barcode found/disclosure and the recipe editor) in dark, light, 200 % text
@@ -235,9 +235,10 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   2026-04-30 + SR Legacy 2018-04, CC0) as a 9.4 MB asset. `:integrations` parses Open
   Food Facts with an explicit, disclosed lookup and a local cache. `:ui` adds the
   Nutrition root, search, portion, entry provenance, water, targets, fasting, micros,
-  barcode and food/recipe editor; `app-android` adds the CameraX scanner with the bundled
-  ML Kit decoder in the Play flavour and ZXing in the F-Droid flavour, the OFF HTTP
-  transport and the nutrition presenter/state wiring. Debug cold start **1 112 ms**.
+  barcode and food/recipe editor; `app-android` adds the CameraX scanner with the ZXing
+  decoder in every flavour (ML Kit was removed after its transitive Google Data Transport
+  proved to be telemetry), the OFF HTTP transport and the nutrition presenter/state
+  wiring. Debug cold start **1 112 ms**.
 - Versions are in `docs/adr/0003-pinned-versions.md`; B1's decisions are
   `0004-design-system.md`, B2's `0005-core-and-data.md` and `0006-referential-integrity.md`,
   B3's `0007-shell-and-onboarding.md`, B4's `0008-body-model-and-exercises.md` and

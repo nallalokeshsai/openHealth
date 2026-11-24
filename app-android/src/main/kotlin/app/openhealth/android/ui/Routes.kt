@@ -51,7 +51,11 @@ data class ExerciseHistoryRoute(val exerciseId: String)
 data object BarcodeRoute
 
 @Serializable
-data class FoodEditorRoute(val foodId: String? = null, val recipe: Boolean = false)
+data class FoodEditorRoute(
+    val foodId: String? = null,
+    val recipe: Boolean = false,
+    val barcode: String? = null,
+)
 
 @Serializable
 data class MicrosRoute(val date: String)

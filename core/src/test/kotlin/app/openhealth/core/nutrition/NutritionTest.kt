@@ -236,6 +236,12 @@ class AllergenTest {
         assertTrue(Allergen.SHELLFISH.declaredIn(setOf("en:molluscs")))
         assertTrue(!Allergen.OTHER.declaredIn(setOf("en:gluten")))
         assertEquals(setOf(Allergen.GLUTEN), Allergen.fromKeys(listOf("gluten", "unknown")))
+        assertEquals(Allergen.PEANUTS, Allergen.fromKey(" Peanuts "))
+        assertEquals(Allergen.NUTS, Allergen.fromKey("tree nuts"))
+        assertEquals(Allergen.MILK, Allergen.fromKey("en:milk"))
+        assertEquals(Allergen.MILK, Allergen.fromKey("Lactose"))
+        assertEquals(Allergen.SHELLFISH, Allergen.fromKey("seafood"))
+        assertNull(Allergen.fromKey(""))
     }
 
     @Test

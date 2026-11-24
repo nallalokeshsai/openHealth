@@ -167,14 +167,18 @@ class NutritionPresenter(
         meals: List<app.openhealth.data.repo.MealRecord>,
     ): List<MealSectionModel> {
         val byMeal = entries.groupBy { it.mealId }
+        val byKind = meals.groupBy { it.kind.key }
         val result = mutableListOf<MealSectionModel>()
         val usedMealIds = mutableSetOf<String>()
         MealSlot.daySections.forEach { slot ->
-            val meal = meals.firstOrNull { it.kind.key == slot.key }
-            val rows = if (meal != null) byMeal[meal.id].orEmpty() else emptyList()
-            if (meal != null) usedMealIds += meal.id
+            val matches = byKind[slot.key].orEmpty()
+            // Two meals of one kind (a double-tapped log can race the lazy create) are
+            // merged into the one section, so no row is hidden from the diary.
+            val rows = matches.flatMap { byMeal[it.id].orEmpty() }
+                .sortedBy { it.happenedAt }
+            usedMealIds += matches.map { it.id }
             result += MealSectionModel(
-                mealId = meal?.id,
+                mealId = matches.firstOrNull()?.id,
                 slot = slot,
                 name = null,
                 entries = rows.map(::dayEntry),
@@ -670,7 +674,9 @@ class NutritionPresenter(
         at: Instant,
         entryId: String? = null,
     ): String {
-        val localId = ensureFood(food) ?: food.id
+        // A quick-calorie entry has no food row; editing its amount must not mint an
+        // orphan food with a blank name.
+        val localId = if (food.id.isBlank()) null else ensureFood(food)
         val mealId = ensureMeal(meal, date, at)
         val totals = PortionMath.forGrams(food.per100g, grams)
         val recordedAt = clock.now()
@@ -678,7 +684,7 @@ class NutritionPresenter(
         val draft = EntryDraft(
             id = draftId,
             mealId = mealId,
-            foodId = localId.takeIf { it.isNotBlank() },
+            foodId = localId,
             localDate = date,
             zoneId = zone,
             happenedAt = at,
@@ -737,7 +743,7 @@ class NutritionPresenter(
                 quantityG = null,
                 foodName = null,
                 totals = totals,
-                sourceKind = "manual",
+                sourceKind = "quick",
                 sourceId = manualSource.value,
                 verified = true,
                 idempotencyKey = "entry:$id",
@@ -750,11 +756,22 @@ class NutritionPresenter(
 
     fun deleteEntry(entryId: String): TombstoneId? = store.trash.deleteEntry(EntryId(entryId))
 
-    fun copyMeal(from: LocalDate, slot: MealSlot, to: LocalDate): Int {
-        val meal = store.nutrition.mealsForDay(from).firstOrNull { it.kind.key == slot.key }
+    fun copyMeal(
+        from: LocalDate,
+        slot: MealSlot,
+        to: LocalDate,
+        sourceMealId: String? = null,
+        sourceName: String? = null,
+    ): Int {
+        val meal = sourceMealId?.let(store.nutrition::mealById)
+            ?: store.nutrition.mealsForDay(from).firstOrNull { it.kind.key == slot.key }
             ?: return 0
         val entries = store.nutrition.entriesForMeal(meal.id)
-        val targetMeal = MealChoiceModel(null, slot, "")
+        val targetMeal = MealChoiceModel(
+            id = null,
+            slot = slot,
+            label = if (slot == MealSlot.CUSTOM) sourceName.orEmpty() else "",
+        )
         val at = defaultMoment(to, slot)
         val mealId = ensureMeal(targetMeal, to, at)
         var copied = 0
@@ -797,8 +814,10 @@ class NutritionPresenter(
             val sourceMeal = mealId?.let(store.nutrition::mealById)
             val slot = sourceMeal?.kind?.let { MealSlot.fromKey(it.key) } ?: MealSlot.SNACKS
             val at = defaultMoment(to, slot)
+            // A custom meal is created fresh on the target day; reusing the source id
+            // would file the copies under a meal that belongs to another day.
             val target = MealChoiceModel(
-                id = if (sourceMeal?.kind == MealKind.CUSTOM) sourceMeal.id else null,
+                id = null,
                 slot = slot,
                 label = if (sourceMeal?.kind == MealKind.CUSTOM) sourceMeal.name else "",
             )
@@ -857,15 +876,23 @@ class NutritionPresenter(
 
     private fun ensureMeal(meal: MealChoiceModel, date: LocalDate, at: Instant): String {
         meal.id?.let { existing ->
-            store.nutrition.mealById(existing)?.let { return it.id }
+            store.nutrition.mealById(existing)
+                ?.takeIf { it.localDate == date }
+                ?.let { return it.id }
         }
         val slot = meal.slot
-        store.nutrition.mealForDayKind(date, slot.toData())?.let { return it.id }
+        if (slot != MealSlot.CUSTOM) {
+            store.nutrition.mealForDayKind(date, slot.toData())?.let { return it.id }
+        }
         val id = ids.newId()
         store.nutrition.upsertMeal(
             MealDraft(
                 id = id,
-                name = if (slot == MealSlot.CUSTOM) meal.label else slot.key,
+                name = if (slot == MealSlot.CUSTOM) {
+                    meal.label.ifBlank { "Meal" }
+                } else {
+                    slot.key
+                },
                 kind = slot.toData(),
                 localDate = date,
                 zoneId = zone,
@@ -898,8 +925,12 @@ class NutritionPresenter(
     }
 
     private fun ensureFood(food: FoodChoiceModel): String? {
-        if (food.id.isNotBlank() && !food.isBundled && !food.id.startsWith("off:")) {
-            if (store.nutrition.foodById(food.id) != null) return food.id
+        // A food this phone already holds is logged as itself. That includes a bundled
+        // food copied in by an earlier log and the demo corpus's own rows: re-prefixing
+        // those with `usda:` would both duplicate the row and claim a USDA source ref the
+        // food never had.
+        if (food.id.isNotBlank() && !food.id.startsWith("off:")) {
+            store.nutrition.foodById(food.id)?.let { return it.id }
         }
         val id = when {
             food.id.startsWith("usda:") || food.id.startsWith("off:") -> food.id
@@ -979,6 +1010,11 @@ class NutritionPresenter(
         } else {
             emptyList()
         }
+        val totalGrams = ingredients.sumOf { it.grams }
+        val servings = food.defaultServingG
+            ?.takeIf { it > 0.0 }
+            ?.let { (totalGrams / it).roundTo(0).toInt().coerceAtLeast(1) }
+            ?: 1
         return FoodEditorModel(
             id = food.id,
             isRecipe = food.isRecipe,
@@ -991,7 +1027,7 @@ class NutritionPresenter(
                 food.per100g[nutrient]?.plain().orEmpty()
             },
             ingredients = ingredients,
-            servings = "1",
+            servings = servings.toString(),
             per100g = food.per100g,
         )
     }
@@ -1046,7 +1082,7 @@ class NutritionPresenter(
         }
         if (ingredients.isEmpty()) return null
         val per100g = RecipeMath.per100g(ingredients)
-        val totalGrams = save.ingredients.sumOf { it.grams }
+        val totalGrams = ingredients.sumOf { it.grams }
         val servings = save.servings.coerceAtLeast(1)
         store.nutrition.upsertFood(
             FoodDraft(
@@ -1094,7 +1130,7 @@ class NutritionPresenter(
                                     else -> FoodType.CUSTOM
                                 },
                                 per100g = ingredient.per100g,
-                                verified = true,
+                                verified = false,
                             ),
                         )
                         copyId

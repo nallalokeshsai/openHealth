@@ -41,8 +41,17 @@ fun PortionSheet(
 ) {
     var grams by remember(model.food.id, model.grams) { mutableStateOf(model.grams) }
     var servings by remember(model.food.id, model.servings) { mutableStateOf(model.servings) }
-    var selectedPortion by remember(model.food.id) {
-        mutableStateOf(model.food.portions.firstOrNull())
+    // Editing an entry re-opens the portion it was logged with, not the food's first
+    // one: otherwise the servings stepper would scale from the wrong household measure
+    // and Log would relabel a "1 cup" entry as "1 tablespoon".
+    var selectedPortion by remember(model.food.id, model.entryId, model.servingLabel) {
+        mutableStateOf(
+            model.servingLabel
+                ?.let { label ->
+                    model.food.portions.firstOrNull { it.label.equals(label, ignoreCase = true) }
+                }
+                ?: model.food.portions.firstOrNull(),
+        )
     }
     val totals = remember(model.food.id, grams) {
         PortionMath.forGrams(model.food.per100g, grams)

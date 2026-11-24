@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.openhealth.ui.theme.OhTheme
@@ -43,7 +44,7 @@ fun OhRing(
     Box(
         modifier = modifier
             .size(OhTheme.dims.nutritionRing)
-            .semantics { this.contentDescription = contentDescription },
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -79,6 +80,7 @@ fun OhRing(
             text = centre,
             style = OhTheme.type.display.copy(fontWeight = OhWeight.semibold).tabular(),
             color = colors.label,
+            modifier = Modifier.clearAndSetSemantics {},
         )
     }
 }

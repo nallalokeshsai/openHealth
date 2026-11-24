@@ -101,7 +101,7 @@ fun FastingSheet(
         if (!model.enabled) {
             Spacer(Modifier.height(OhTheme.space.s2))
             OhButton(
-                text = stringResource(R.string.nutrition_fasting_off),
+                text = stringResource(R.string.nutrition_fasting_on),
                 onClick = { onToggle(true) },
                 variant = OhButtonVariant.Quiet,
                 size = OhButtonSize.Small,
