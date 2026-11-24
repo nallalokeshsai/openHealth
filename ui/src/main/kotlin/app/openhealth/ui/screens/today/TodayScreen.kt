@@ -64,6 +64,7 @@ fun TodayScreen(
     onOpenTrain: () -> Unit,
     onOpenNutrition: () -> Unit,
     modifier: Modifier = Modifier,
+    synchronousLayers: Boolean = false,
 ) {
     OhScreen(modifier = modifier) {
         TodayHeader(model = model)
@@ -71,7 +72,11 @@ fun TodayScreen(
             DemoLabel()
         }
         if (HealthModule.TRAINING in model.modules) {
-            BodyCard(model = model.bodyMap, onOpenTrain = onOpenTrain)
+            BodyCard(
+                model = model.bodyMap,
+                onOpenTrain = onOpenTrain,
+                synchronousLayers = synchronousLayers,
+            )
             Spacer(Modifier.height(OhTheme.space.s5))
         }
         if (HealthModule.SLEEP in model.modules || HealthModule.VITALS in model.modules) {

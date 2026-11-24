@@ -123,11 +123,32 @@ class ShellExitTest {
         compose.onNode(hasSetTextAction()).performTextInput("Knee felt fine today")
         waitFor("note typed") { viewModel.state.value.quickAdd.note.isNotBlank() }
         compose.onNodeWithText("Save").performClick()
+        // The sheet closes before its write is observable; asserting the sheet first
+        // separates "the tap did nothing" from "the write is slow" in a failure.
+        waitFor("note sheet closed") { !viewModel.state.value.quickAdd.visible }
         waitFor("note stored") { container.store.notes.count() == 1L }
 
         val elapsed = (System.nanoTime() - started).toDouble()
         val minutes = elapsed / 1_000_000_000.0 / 60.0
         assertTrue(minutes < 3.0, "first note took %.2f minutes".format(minutes))
+    }
+
+    @Test
+    fun todayRendersTheBodyMapFromTheShippedGeometry() {
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        compose.onNodeWithText("Try with sample data").performClick()
+        waitFor("demo complete") { viewModel.state.value.onboardingComplete }
+        // The muscle nodes exist only once OhBodyMap has parsed the packaged geometry;
+        // before that the card shows its reserved placeholder. This is the regression
+        // test for a blank map on Today.
+        waitFor("body map") {
+            runCatching {
+                compose.onNodeWithContentDescription("Chest").assertExists()
+            }.isSuccess
+        }
+        compose.onNodeWithContentDescription("Chest").assertExists()
+        compose.onNodeWithContentDescription("Quadriceps").assertExists()
     }
 
     @Test

@@ -87,6 +87,7 @@ class BodyMapScreenshotTest {
                         geometry = geometry,
                         sides = shot.sides,
                         variant = shot.variant,
+                        synchronousLayers = true,
                     )
                 }
             }

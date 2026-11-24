@@ -63,7 +63,12 @@ private const val ONE_HOUR = 1.0
  * (`DESIGN.md` §7.1, §8.6, §9.1).
  */
 @Composable
-fun BodyCard(model: BodyMapModel?, onOpenTrain: () -> Unit, modifier: Modifier = Modifier) {
+fun BodyCard(
+    model: BodyMapModel?,
+    onOpenTrain: () -> Unit,
+    modifier: Modifier = Modifier,
+    synchronousLayers: Boolean = false,
+) {
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var showFat by rememberSaveable { mutableStateOf(true) }
     var showTable by rememberSaveable { mutableStateOf(false) }
@@ -98,6 +103,7 @@ fun BodyCard(model: BodyMapModel?, onOpenTrain: () -> Unit, modifier: Modifier =
             ),
             onMuscle = { muscle -> selected = muscle.key },
             onShowTable = { showTable = true },
+            synchronousLayers = synchronousLayers,
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         OhChipStrip {

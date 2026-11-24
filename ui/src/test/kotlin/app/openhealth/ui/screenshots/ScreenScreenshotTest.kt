@@ -229,6 +229,7 @@ class ScreenScreenshotTest {
                 onOpenTimeline = {},
                 onOpenTrain = {},
                 onOpenNutrition = {},
+                synchronousLayers = true,
             )
         }
     }

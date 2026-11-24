@@ -1,5 +1,6 @@
 package app.openhealth.ui.body
 
+import android.graphics.Path as AndroidPath
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -20,6 +21,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -81,13 +83,28 @@ fun OhBodyMap(
     onMuscle: ((Muscle) -> Unit)? = null,
     onShowTable: (() -> Unit)? = null,
     geometry: BodyGeometry? = null,
+    /**
+     * Build the adipose band inline instead of on a background dispatcher. Screenshot
+     * tests set this so a golden never races the band; production leaves it false so the
+     * main thread is never blocked by path boolean operations.
+     */
+    synchronousLayers: Boolean = false,
 ) {
     val context = LocalContext.current
     var loaded by remember { mutableStateOf(geometry ?: BodyGeometry.cached()) }
     LaunchedEffect(geometry) {
         if (loaded == null) {
-            loaded = withContext(Dispatchers.IO) {
-                runCatching { BodyGeometry.load(context) }.getOrNull()
+            val first = withContext(Dispatchers.IO) {
+                runCatching { BodyGeometry.load(context) }
+            }
+            loaded = first.getOrNull()
+            first.exceptionOrNull()?.let { failure ->
+                // A silent failure would leave the card blank forever; name the failure in
+                // the local log (no personal data) and try once more after the first frame.
+                android.util.Log.e(TAG, "Body geometry failed to load", failure)
+                loaded = withContext(Dispatchers.IO) {
+                    runCatching { BodyGeometry.load(context) }.getOrNull()
+                }
             }
         }
     }
@@ -162,6 +179,7 @@ fun OhBodyMap(
                         paints = paints,
                         onMuscle = onMuscle,
                         nodeSide = nodeSide,
+                        synchronousLayers = synchronousLayers,
                     )
                 }
                 back?.let {
@@ -173,6 +191,7 @@ fun OhBodyMap(
                         paints = paints,
                         onMuscle = onMuscle,
                         nodeSide = nodeSide,
+                        synchronousLayers = synchronousLayers,
                     )
                 }
             }
@@ -232,6 +251,8 @@ private fun GeometryView.nearestWithin(x: Float, y: Float, reach: Float): Muscle
 
 /** Half a 44 dp target (`DESIGN.md` §11.1), in dp. */
 private const val TOUCH_REACH_DP = 22f
+
+private const val TAG = "OhBodyMap"
 
 private const val MALE_RATIO_SUM = 2 * 727f / 1280f
 private const val FEMALE_RATIO_SUM = 2 * 650f / 1450f
@@ -303,6 +324,7 @@ private fun ViewPanel(
     paints: Map<Muscle, AnimatedPaint>,
     onMuscle: ((Muscle) -> Unit)?,
     nodeSide: Map<Muscle, BodySide>,
+    synchronousLayers: Boolean,
 ) {
     val colors = OhTheme.colors
     val dims = OhTheme.dims
@@ -315,14 +337,36 @@ private fun ViewPanel(
     val hatchColor = colors.surface.copy(alpha = OhAlpha.bodyHatch)
     val fatColor = colors.fat.copy(alpha = colors.fatLayerAlpha)
     val baseColor = baseFill(colors, variant)
-    val fatLayer = remember(view, model.adipose) {
-        model.adipose?.let { layer ->
-            AdiposeGeometry.layer(
-                view = view,
-                thickness = MuscleRegion.entries.associateWith { region ->
-                    (layer.thicknessFor(region) * vb.height).toFloat()
-                },
-            )
+    // Building the adipose band is a set of boolean path operations over the whole
+    // silhouette; on a slow device that is seconds of work, so it never runs on the main
+    // thread and its result is cached across rotation. The muscles draw first, the band
+    // follows a frame or two later.
+    val fatThickness = model.adipose?.let { layer ->
+        MuscleRegion.entries.associateWith { region ->
+            (layer.thicknessFor(region) * vb.height).toFloat()
+        }
+    }
+    val fatLayer by produceState<AndroidPath?>(
+        initialValue = null,
+        fatThickness,
+    ) {
+        // Reset on every key change: a map without an adipose layer (or with the chip
+        // switched off) must not keep the previous band.
+        value = fatThickness?.let { thickness ->
+            AdiposeGeometry.cached(view, thickness) ?: if (synchronousLayers) {
+                AdiposeGeometry.layer(view, thickness).also {
+                    AdiposeGeometry.store(view, thickness, it)
+                }
+            } else {
+                null
+            }
+        }
+        if (value == null && fatThickness != null) {
+            value = withContext(Dispatchers.Default) {
+                AdiposeGeometry.layer(view, fatThickness).also {
+                    AdiposeGeometry.store(view, fatThickness, it)
+                }
+            }
         }
     }
     val hitRegions = remember(view) {
