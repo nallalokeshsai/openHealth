@@ -136,7 +136,8 @@ class RollupEngine(
             ObservationType.NUTRITION_FAT to { it.fat_g },
             ObservationType.NUTRITION_FIBRE to { it.fibre_g },
         )
-        return nutriments.mapNotNull { (type, valueOf) ->
+        val micros = microTotals(entries)
+        val produced = nutriments.mapNotNull { (type, valueOf) ->
             if (type in skip) return@mapNotNull null
             val values = entries.mapNotNull(valueOf)
             // A macro no entry reports is missing data, not a zero.
@@ -158,6 +159,31 @@ class RollupEngine(
                 detail = null,
             )
         }
+        // The micronutrient totals ride on one nutrition row so they are rebuilt with the
+        // day. Energy is the natural carrier; if no entry reports energy, the first macro
+        // that does carries them instead.
+        if (micros == null || produced.isEmpty()) return produced
+        return produced.mapIndexed { index, rollup ->
+            if (index == 0) rollup.copy(detail = micros) else rollup
+        }
+    }
+
+    /**
+     * The micronutrient totals live on the day's nutrition row's `detail`, keyed by
+     * nutrient code. They are derived from the same entries in the same order, so the panel
+     * and the rollup cannot disagree, and the values are rebuilt rather than patched.
+     */
+    private fun microTotals(entries: List<app.openhealth.data.db.Entry>): String? {
+        val totals = LinkedHashMap<String, String>()
+        entries.forEach { entry ->
+            app.openhealth.data.repo.NutritionJson.decodeNutrients(entry.micros_json)
+                .forEach { (nutrient, amount) ->
+                    val sum = (totals[nutrient.key]?.toDoubleOrNull() ?: 0.0) + amount
+                    totals[nutrient.key] = sum.toString()
+                }
+        }
+        if (totals.isEmpty()) return null
+        return rollups.encodeDetail(totals)
     }
 
     /** Layer 4 vitals follow the type's aggregation, never a blind cross-device mean. */

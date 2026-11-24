@@ -1,0 +1,150 @@
+-- Migration 6 -> 7 (2026-11-24, B6). Nutrition becomes a real diary (pr.md §6.3):
+-- per-100 g micronutrients, the portion that was logged, custom foods and recipes,
+-- meal templates, water containers, dated targets and fasting windows. Every added
+-- column is nullable or has a default, so an upgraded database keeps every row.
+
+ALTER TABLE food ADD COLUMN category TEXT;
+ALTER TABLE food ADD COLUMN food_type TEXT NOT NULL DEFAULT 'custom';
+ALTER TABLE food ADD COLUMN nutrients_json TEXT;
+ALTER TABLE food ADD COLUMN default_serving_g REAL;
+ALTER TABLE food ADD COLUMN default_serving_label TEXT;
+ALTER TABLE food ADD COLUMN allergens_json TEXT;
+ALTER TABLE food ADD COLUMN ingredients_text TEXT;
+ALTER TABLE food ADD COLUMN analysis_json TEXT;
+
+ALTER TABLE meal ADD COLUMN zone_id TEXT;
+ALTER TABLE meal ADD COLUMN happened_at INTEGER;
+ALTER TABLE meal ADD COLUMN recorded_at INTEGER;
+ALTER TABLE meal ADD COLUMN source_id TEXT REFERENCES source(id) ON DELETE SET NULL;
+ALTER TABLE meal ADD COLUMN idempotency_key TEXT;
+
+ALTER TABLE entry ADD COLUMN serving_label TEXT;
+ALTER TABLE entry ADD COLUMN serving_g REAL;
+ALTER TABLE entry ADD COLUMN servings REAL;
+ALTER TABLE entry ADD COLUMN food_name TEXT;
+ALTER TABLE entry ADD COLUMN brand TEXT;
+ALTER TABLE entry ADD COLUMN micros_json TEXT;
+
+CREATE INDEX IF NOT EXISTS food_type_index ON food(food_type);
+CREATE INDEX IF NOT EXISTS entry_food ON entry(food_id);
+
+CREATE TABLE IF NOT EXISTS recipe_item (
+    id TEXT NOT NULL PRIMARY KEY,
+    recipe_food_id TEXT NOT NULL REFERENCES food(id) ON DELETE CASCADE,
+    food_id TEXT REFERENCES food(id) ON DELETE SET NULL,
+    position INTEGER NOT NULL,
+    grams REAL NOT NULL,
+    food_name TEXT
+);
+
+CREATE INDEX IF NOT EXISTS recipe_item_recipe ON recipe_item(recipe_food_id);
+
+CREATE TABLE IF NOT EXISTS meal_template (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS meal_template_item (
+    id TEXT NOT NULL PRIMARY KEY,
+    template_id TEXT NOT NULL REFERENCES meal_template(id) ON DELETE CASCADE,
+    food_id TEXT REFERENCES food(id) ON DELETE SET NULL,
+    position INTEGER NOT NULL,
+    grams REAL NOT NULL,
+    food_name TEXT
+);
+
+CREATE INDEX IF NOT EXISTS meal_template_item_template ON meal_template_item(template_id);
+
+CREATE TABLE IF NOT EXISTS water_container (
+    id TEXT NOT NULL PRIMARY KEY,
+    label TEXT NOT NULL,
+    millilitres REAL NOT NULL,
+    position INTEGER NOT NULL,
+    is_default INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS nutrition_target (
+    id TEXT NOT NULL PRIMARY KEY,
+    effective_from TEXT NOT NULL,
+    kcal REAL,
+    protein_g REAL,
+    carbs_g REAL,
+    fat_g REAL,
+    fibre_g REAL,
+    water_ml REAL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS nutrition_target_effective ON nutrition_target(effective_from);
+
+CREATE TABLE IF NOT EXISTS fast_window (
+    id TEXT NOT NULL PRIMARY KEY,
+    start_at INTEGER NOT NULL,
+    target_hours REAL NOT NULL,
+    ended_at INTEGER,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS fast_window_start ON fast_window(start_at);
+
+-- A fasting window is a stored event, so it joins the timeline (pr.md §6.27). The meal
+-- branch moves from created_at to its own provenance columns, falling back to
+-- created_at for a meal logged before v7.
+DROP VIEW timeline;
+CREATE VIEW timeline AS
+SELECT
+    'observation' AS kind,
+    id AS entity_id,
+    local_date AS local_date,
+    happened_at AS happened_at,
+    recorded_at AS recorded_at,
+    source_id AS source_id,
+    type AS detail,
+    user_edited AS edited
+FROM observation
+UNION ALL
+SELECT
+    'session', id, local_date, happened_at, recorded_at, source_id, routine_id, 0
+FROM session
+UNION ALL
+SELECT
+    'work_set', work_set.id, session.local_date, work_set.happened_at,
+    work_set.recorded_at, work_set.source_id, work_set.exercise_id, 0
+FROM work_set
+JOIN session ON session.id = work_set.session_id
+UNION ALL
+SELECT
+    'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
+FROM entry
+UNION ALL
+SELECT
+    'measurement', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM measurement
+UNION ALL
+SELECT
+    'vital', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM vital
+UNION ALL
+SELECT
+    'meal', id, local_date, COALESCE(happened_at, created_at),
+    COALESCE(recorded_at, created_at), COALESCE(source_id, 'manual'), kind, 0
+FROM meal
+UNION ALL
+SELECT
+    'fast', id, local_date, start_at, recorded_at, 'manual', NULL, 0
+FROM fast_window
+UNION ALL
+SELECT
+    'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM note;

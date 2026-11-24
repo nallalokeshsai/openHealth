@@ -41,6 +41,7 @@ enum class UcumUnit(
     KILOGRAM(ucum = "kg", dimension = Dimension.MASS, scale = 1.0, canonical = true),
     GRAM(ucum = "g", dimension = Dimension.MASS, scale = 0.001),
     MILLIGRAM(ucum = "mg", dimension = Dimension.MASS, scale = 0.000001),
+    MICROGRAM(ucum = "ug", dimension = Dimension.MASS, scale = 0.000000001),
     POUND(ucum = "[lb_av]", dimension = Dimension.MASS, scale = 0.45359237),
 
     // Body length, canonical centimetre (`pr.md` §7.2).

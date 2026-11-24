@@ -9,12 +9,21 @@ CREATE TABLE food (
     barcode TEXT,
     source_kind TEXT NOT NULL,
     source_ref TEXT,
+    category TEXT,
+    food_type TEXT NOT NULL DEFAULT 'custom',
     energy_kcal_per_100g REAL,
     protein_g_per_100g REAL,
     carbs_g_per_100g REAL,
     fat_g_per_100g REAL,
     fibre_g_per_100g REAL,
+    -- Nutrient key to amount per 100 g, in the nutrient's own unit (Nutrient.kt).
+    nutrients_json TEXT,
     serving_json TEXT,
+    default_serving_g REAL,
+    default_serving_label TEXT,
+    allergens_json TEXT,
+    ingredients_text TEXT,
+    analysis_json TEXT,
     verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -23,12 +32,18 @@ CREATE TABLE food (
 
 CREATE INDEX food_barcode ON food(barcode);
 CREATE INDEX food_name ON food(name);
+CREATE INDEX food_type_index ON food(food_type);
 
 CREATE TABLE meal (
     id TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,
     kind TEXT NOT NULL,
     local_date TEXT NOT NULL,
+    zone_id TEXT,
+    happened_at INTEGER,
+    recorded_at INTEGER,
+    source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
+    idempotency_key TEXT,
     notes TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -47,11 +62,18 @@ CREATE TABLE entry (
     happened_at INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL,
     quantity_g REAL,
+    serving_label TEXT,
+    serving_g REAL,
+    servings REAL,
+    food_name TEXT,
+    brand TEXT,
     energy_kcal REAL,
     protein_g REAL,
     carbs_g REAL,
     fat_g REAL,
     fibre_g REAL,
+    -- Nutrient key to the absolute amount in this entry, exactly as logged.
+    micros_json TEXT,
     source_kind TEXT NOT NULL,
     source_id TEXT REFERENCES source(id) ON DELETE SET NULL,
     user_verified INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
@@ -67,16 +89,91 @@ CREATE TABLE entry (
 CREATE INDEX entry_local_date ON entry(local_date);
 CREATE INDEX entry_happened ON entry(happened_at);
 CREATE INDEX entry_meal ON entry(meal_id);
+CREATE INDEX entry_food ON entry(food_id);
+
+CREATE TABLE recipe_item (
+    id TEXT NOT NULL PRIMARY KEY,
+    recipe_food_id TEXT NOT NULL REFERENCES food(id) ON DELETE CASCADE,
+    food_id TEXT REFERENCES food(id) ON DELETE SET NULL,
+    position INTEGER NOT NULL,
+    grams REAL NOT NULL,
+    food_name TEXT
+);
+
+CREATE INDEX recipe_item_recipe ON recipe_item(recipe_food_id);
+
+CREATE TABLE meal_template (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE meal_template_item (
+    id TEXT NOT NULL PRIMARY KEY,
+    template_id TEXT NOT NULL REFERENCES meal_template(id) ON DELETE CASCADE,
+    food_id TEXT REFERENCES food(id) ON DELETE SET NULL,
+    position INTEGER NOT NULL,
+    grams REAL NOT NULL,
+    food_name TEXT
+);
+
+CREATE INDEX meal_template_item_template ON meal_template_item(template_id);
+
+CREATE TABLE water_container (
+    id TEXT NOT NULL PRIMARY KEY,
+    label TEXT NOT NULL,
+    millilitres REAL NOT NULL,
+    position INTEGER NOT NULL,
+    is_default INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
+);
+
+CREATE TABLE nutrition_target (
+    id TEXT NOT NULL PRIMARY KEY,
+    effective_from TEXT NOT NULL,
+    kcal REAL,
+    protein_g REAL,
+    carbs_g REAL,
+    fat_g REAL,
+    fibre_g REAL,
+    water_ml REAL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX nutrition_target_effective ON nutrition_target(effective_from);
+
+CREATE TABLE fast_window (
+    id TEXT NOT NULL PRIMARY KEY,
+    start_at INTEGER NOT NULL,
+    target_hours REAL NOT NULL,
+    ended_at INTEGER,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX fast_window_start ON fast_window(start_at);
 
 insertFood:
 INSERT INTO food(
-    id, name, brand, barcode, source_kind, source_ref, energy_kcal_per_100g,
-    protein_g_per_100g, carbs_g_per_100g, fat_g_per_100g, fibre_g_per_100g,
-    serving_json, verified, created_at, updated_at, revision
+    id, name, brand, barcode, source_kind, source_ref, category, food_type,
+    energy_kcal_per_100g, protein_g_per_100g, carbs_g_per_100g, fat_g_per_100g,
+    fibre_g_per_100g, nutrients_json, serving_json, default_serving_g,
+    default_serving_label, allergens_json, ingredients_text, analysis_json, verified,
+    created_at, updated_at, revision
 ) VALUES (
-    :id, :name, :brand, :barcode, :sourceKind, :sourceRef, :energyKcalPer100g,
-    :proteinGPer100g, :carbsGPer100g, :fatGPer100g, :fibreGPer100g,
-    :servingJson, :verified, :createdAt, :updatedAt, :revision
+    :id, :name, :brand, :barcode, :sourceKind, :sourceRef, :category, :foodType,
+    :energyKcalPer100g, :proteinGPer100g, :carbsGPer100g, :fatGPer100g,
+    :fibreGPer100g, :nutrientsJson, :servingJson, :defaultServingG,
+    :defaultServingLabel, :allergensJson, :ingredientsText, :analysisJson, :verified,
+    :createdAt, :updatedAt, :revision
 )
 -- A real upsert, not INSERT OR REPLACE: food is referenced by a foreign
 -- key, and replacing the row would delete it and its children with it.
@@ -86,12 +183,20 @@ ON CONFLICT(id) DO UPDATE SET
     barcode = excluded.barcode,
     source_kind = excluded.source_kind,
     source_ref = excluded.source_ref,
+    category = excluded.category,
+    food_type = excluded.food_type,
     energy_kcal_per_100g = excluded.energy_kcal_per_100g,
     protein_g_per_100g = excluded.protein_g_per_100g,
     carbs_g_per_100g = excluded.carbs_g_per_100g,
     fat_g_per_100g = excluded.fat_g_per_100g,
     fibre_g_per_100g = excluded.fibre_g_per_100g,
+    nutrients_json = excluded.nutrients_json,
     serving_json = excluded.serving_json,
+    default_serving_g = excluded.default_serving_g,
+    default_serving_label = excluded.default_serving_label,
+    allergens_json = excluded.allergens_json,
+    ingredients_text = excluded.ingredients_text,
+    analysis_json = excluded.analysis_json,
     verified = excluded.verified,
     updated_at = excluded.updated_at,
     revision = excluded.revision;
@@ -100,12 +205,20 @@ foodById:
 SELECT * FROM food WHERE id = :id;
 
 foodByBarcode:
-SELECT * FROM food WHERE barcode = :barcode LIMIT 1;
+SELECT * FROM food WHERE barcode = :barcode ORDER BY updated_at DESC LIMIT 1;
 
 -- A range seek on the name index, not LIKE: a bound LIKE pattern cannot use the index.
 searchFoods:
 SELECT * FROM food
 WHERE name >= :prefix AND name < :prefix || char(1114111)
+ORDER BY name LIMIT :limit;
+
+-- A substring form for a query that starts inside a word. The result set is the local
+-- diary's foods (hundreds at most), so a scan is honest here; the bundled index has its
+-- own token table (tools/foodindex).
+searchFoodsContaining:
+SELECT * FROM food
+WHERE name LIKE '%' || :query || '%' COLLATE NOCASE
 ORDER BY name LIMIT :limit;
 
 countFoods:
@@ -114,18 +227,41 @@ SELECT count(*) FROM food;
 allFoods:
 SELECT * FROM food ORDER BY name;
 
+deleteFood:
+DELETE FROM food WHERE id = :id;
+
+-- The diary's own foods, most recently logged first.
+recentFoods:
+SELECT food.* FROM food
+JOIN entry ON entry.food_id = food.id
+GROUP BY food.id
+ORDER BY max(entry.happened_at) DESC
+LIMIT :limit;
+
+-- The foods logged most often.
+frequentFoods:
+SELECT food.* FROM food
+JOIN entry ON entry.food_id = food.id
+GROUP BY food.id
+ORDER BY count(*) DESC, max(entry.happened_at) DESC
+LIMIT :limit;
+
 insertMeal:
 INSERT INTO meal(
-    id, name, kind, local_date, notes, created_at, updated_at, revision
+    id, name, kind, local_date, zone_id, happened_at, recorded_at, source_id,
+    idempotency_key, notes, created_at, updated_at, revision
 ) VALUES (
-    :id, :name, :kind, :localDate, :notes, :createdAt, :updatedAt, :revision
+    :id, :name, :kind, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
+    :idempotencyKey, :notes, :createdAt, :updatedAt, :revision
 )
--- A real upsert, not INSERT OR REPLACE: meal is referenced by a foreign
--- key, and replacing the row would delete it and its children with it.
 ON CONFLICT(id) DO UPDATE SET
     name = excluded.name,
     kind = excluded.kind,
     local_date = excluded.local_date,
+    zone_id = excluded.zone_id,
+    happened_at = excluded.happened_at,
+    recorded_at = excluded.recorded_at,
+    source_id = excluded.source_id,
     notes = excluded.notes,
     updated_at = excluded.updated_at,
     revision = excluded.revision;
@@ -134,32 +270,64 @@ mealById:
 SELECT * FROM meal WHERE id = :id;
 
 mealsForDay:
-SELECT * FROM meal WHERE local_date = :localDate ORDER BY created_at;
+SELECT * FROM meal WHERE local_date = :localDate
+ORDER BY CASE kind
+    WHEN 'breakfast' THEN 0
+    WHEN 'lunch' THEN 1
+    WHEN 'dinner' THEN 2
+    WHEN 'snacks' THEN 3
+    ELSE 4
+END, created_at;
+
+mealForDayKind:
+SELECT * FROM meal WHERE local_date = :localDate AND kind = :kind ORDER BY created_at LIMIT 1;
 
 allMeals:
 SELECT * FROM meal ORDER BY created_at;
 
+deleteMeal:
+DELETE FROM meal WHERE id = :id;
+
 insertEntry:
 INSERT OR IGNORE INTO entry(
     id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g,
-    energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, source_id,
-    user_verified, user_edited, observation_id, raw_record_id, idempotency_key, device, app_version,
-    revision
+    serving_label, serving_g, servings, food_name, brand, energy_kcal, protein_g, carbs_g,
+    fat_g, fibre_g, micros_json, source_kind, source_id, user_verified, user_edited,
+    observation_id, raw_record_id, idempotency_key, device, app_version, revision
 ) VALUES (
     :id, :mealId, :foodId, :localDate, :zoneId, :happenedAt, :recordedAt, :quantityG,
-    :energyKcal, :proteinG, :carbsG, :fatG, :fibreG, :sourceKind, :sourceId,
-    :userVerified, :userEdited, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
+    :servingLabel, :servingG, :servings, :foodName, :brand, :energyKcal, :proteinG,
+    :carbsG, :fatG, :fibreG, :microsJson, :sourceKind, :sourceId, :userVerified,
+    :userEdited, :observationId, :rawRecordId, :idempotencyKey, :device, :appVersion,
     :revision
 );
+
+updateEntry:
+UPDATE entry SET
+    meal_id = :mealId,
+    quantity_g = :quantityG,
+    serving_label = :servingLabel,
+    serving_g = :servingG,
+    servings = :servings,
+    energy_kcal = :energyKcal,
+    protein_g = :proteinG,
+    carbs_g = :carbsG,
+    fat_g = :fatG,
+    fibre_g = :fibreG,
+    micros_json = :microsJson,
+    user_edited = 1,
+    revision = :revision,
+    recorded_at = recorded_at
+WHERE id = :id;
 
 entryById:
 SELECT * FROM entry WHERE id = :id;
 
 entriesForDay:
-SELECT * FROM entry WHERE local_date = :localDate ORDER BY happened_at;
+SELECT * FROM entry WHERE local_date = :localDate ORDER BY happened_at, id;
 
 entriesForMeal:
-SELECT * FROM entry WHERE meal_id = :mealId ORDER BY happened_at;
+SELECT * FROM entry WHERE meal_id = :mealId ORDER BY happened_at, id;
 
 countEntries:
 SELECT count(*) FROM entry;
@@ -172,3 +340,125 @@ SELECT DISTINCT local_date FROM entry ORDER BY local_date;
 
 deleteEntry:
 DELETE FROM entry WHERE id = :id;
+
+insertRecipeItem:
+INSERT INTO recipe_item(id, recipe_food_id, food_id, position, grams, food_name)
+VALUES (:id, :recipeFoodId, :foodId, :position, :grams, :foodName);
+
+recipeItems:
+SELECT * FROM recipe_item WHERE recipe_food_id = :recipeFoodId ORDER BY position;
+
+deleteRecipeItems:
+DELETE FROM recipe_item WHERE recipe_food_id = :recipeFoodId;
+
+insertMealTemplate:
+INSERT INTO meal_template(id, name, kind, created_at, updated_at, revision)
+VALUES (:id, :name, :kind, :createdAt, :updatedAt, :revision)
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    kind = excluded.kind,
+    updated_at = excluded.updated_at,
+    revision = excluded.revision;
+
+mealTemplateById:
+SELECT * FROM meal_template WHERE id = :id;
+
+mealTemplates:
+SELECT * FROM meal_template ORDER BY name;
+
+deleteMealTemplate:
+DELETE FROM meal_template WHERE id = :id;
+
+insertMealTemplateItem:
+INSERT INTO meal_template_item(id, template_id, food_id, position, grams, food_name)
+VALUES (:id, :templateId, :foodId, :position, :grams, :foodName);
+
+mealTemplateItems:
+SELECT * FROM meal_template_item WHERE template_id = :templateId ORDER BY position;
+
+deleteMealTemplateItems:
+DELETE FROM meal_template_item WHERE template_id = :templateId;
+
+insertWaterContainer:
+INSERT INTO water_container(id, label, millilitres, position, is_default)
+VALUES (:id, :label, :millilitres, :position, :isDefault)
+ON CONFLICT(id) DO UPDATE SET
+    label = excluded.label,
+    millilitres = excluded.millilitres,
+    position = excluded.position,
+    is_default = excluded.is_default;
+
+waterContainers:
+SELECT * FROM water_container ORDER BY position, label;
+
+waterContainerById:
+SELECT * FROM water_container WHERE id = :id;
+
+deleteWaterContainer:
+DELETE FROM water_container WHERE id = :id;
+
+countWaterContainers:
+SELECT count(*) FROM water_container;
+
+insertNutritionTarget:
+INSERT INTO nutrition_target(
+    id, effective_from, kcal, protein_g, carbs_g, fat_g, fibre_g, water_ml,
+    created_at, updated_at, revision
+) VALUES (
+    :id, :effectiveFrom, :kcal, :proteinG, :carbsG, :fatG, :fibreG, :waterMl,
+    :createdAt, :updatedAt, :revision
+)
+ON CONFLICT(id) DO UPDATE SET
+    effective_from = excluded.effective_from,
+    kcal = excluded.kcal,
+    protein_g = excluded.protein_g,
+    carbs_g = excluded.carbs_g,
+    fat_g = excluded.fat_g,
+    fibre_g = excluded.fibre_g,
+    water_ml = excluded.water_ml,
+    updated_at = excluded.updated_at,
+    revision = excluded.revision;
+
+targetForDate:
+SELECT * FROM nutrition_target
+WHERE effective_from <= :localDate
+ORDER BY effective_from DESC, updated_at DESC
+LIMIT 1;
+
+targetOnDate:
+SELECT * FROM nutrition_target
+WHERE effective_from = :localDate
+ORDER BY updated_at DESC
+LIMIT 1;
+
+allTargets:
+SELECT * FROM nutrition_target ORDER BY effective_from, updated_at;
+
+insertFast:
+INSERT INTO fast_window(
+    id, start_at, target_hours, ended_at, local_date, zone_id, recorded_at,
+    created_at, updated_at, revision
+) VALUES (
+    :id, :startAt, :targetHours, :endedAt, :localDate, :zoneId, :recordedAt,
+    :createdAt, :updatedAt, :revision
+)
+ON CONFLICT(id) DO UPDATE SET
+    ended_at = excluded.ended_at,
+    target_hours = excluded.target_hours,
+    updated_at = excluded.updated_at,
+    revision = excluded.revision;
+
+fastById:
+SELECT * FROM fast_window WHERE id = :id;
+
+openFast:
+SELECT * FROM fast_window WHERE ended_at IS NULL ORDER BY start_at DESC LIMIT 1;
+
+recentFasts:
+SELECT * FROM fast_window ORDER BY start_at DESC LIMIT :limit;
+
+allFasts:
+SELECT * FROM fast_window ORDER BY start_at;
+
+deleteFast:
+DELETE FROM fast_window WHERE id = :id;

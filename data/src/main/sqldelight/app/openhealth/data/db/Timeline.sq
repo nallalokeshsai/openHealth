@@ -37,8 +37,13 @@ SELECT
 FROM vital
 UNION ALL
 SELECT
-    'meal', id, local_date, created_at, created_at, 'manual', kind, 0
+    'meal', id, local_date, COALESCE(happened_at, created_at),
+    COALESCE(recorded_at, created_at), COALESCE(source_id, 'manual'), kind, 0
 FROM meal
+UNION ALL
+SELECT
+    'fast', id, local_date, start_at, recorded_at, 'manual', NULL, 0
+FROM fast_window
 UNION ALL
 SELECT
     'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0

@@ -20,7 +20,7 @@ class DatabaseTest {
     fun aNewDatabaseIsCreatedAtTheCurrentSchemaVersion() {
         val store = inMemoryStore()
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
-        assertEquals(6L, store.schemaVersion)
+        assertEquals(7L, store.schemaVersion)
         assertEquals(0L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(0L, store.db.trainingQueries.countWorkSets().executeAsOne())
         store.close()
@@ -49,11 +49,14 @@ class DatabaseTest {
         OpenHealthDb.Schema.create(first).value
         // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
         // every view on a schema change and the view names note.
-        stripV5Columns(first)
+        dropTimelineView(first)
+        stripV7Columns(first)
         stripV6Columns(first)
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
+        createV6Timeline(first)
         first.execute(null, "PRAGMA user_version = 1", 0)
         first.close()
 
@@ -65,9 +68,9 @@ class DatabaseTest {
         val store = DatabaseOpener(backup).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals("v1-to-v6", backupLabel)
-        assertEquals(6L, store.schemaVersion)
-        assertEquals(6L, userVersion(store.driver))
+        assertEquals("v1-to-v7", backupLabel)
+        assertEquals(7L, store.schemaVersion)
+        assertEquals(7L, userVersion(store.driver))
         V2_INDEXES.forEach { assertEquals(1L, indexCount(store.driver, it), "index $it") }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
@@ -132,11 +135,14 @@ class DatabaseTest {
         OpenHealthDb.Schema.create(first).value
         // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
         // every view on a schema change and the view names note.
-        stripV5Columns(first)
+        dropTimelineView(first)
+        stripV7Columns(first)
         stripV6Columns(first)
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
+        createV6Timeline(first)
         first.execute(null, "PRAGMA user_version = 1", 0)
         first.close()
         assertFailsWith<IllegalStateException> {
@@ -154,11 +160,14 @@ class DatabaseTest {
         OpenHealthDb.Schema.create(first).value
         // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
         // every view on a schema change and the view names note.
-        stripV5Columns(first)
+        dropTimelineView(first)
+        stripV7Columns(first)
         stripV6Columns(first)
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
+        createV6Timeline(first)
         first.execute(null, "PRAGMA user_version = 1", 0)
         first.close()
         assertFailsWith<IllegalStateException> {
@@ -175,9 +184,12 @@ class DatabaseTest {
         val path = directory.resolve("v3.db").toString()
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        dropTimelineView(first)
+        stripV7Columns(first)
+        stripV6Columns(first)
+        stripV5Columns(first)
         // The v3 schema has the note-less view and no note table.
         first.execute(null, "DROP TABLE note", 0)
-        first.execute(null, "DROP VIEW timeline", 0)
         first.execute(
             null,
             "CREATE VIEW timeline AS SELECT 'observation' AS kind, id AS entity_id, " +
@@ -185,15 +197,13 @@ class DatabaseTest {
                 "user_edited AS edited FROM observation",
             0,
         )
-        stripV5Columns(first)
-        stripV6Columns(first)
         first.execute(null, "PRAGMA user_version = 3", 0)
         first.close()
 
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(6L, store.schemaVersion)
+        assertEquals(7L, store.schemaVersion)
         val view = store.driver.executeQuery(
             null,
             "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
@@ -248,8 +258,10 @@ class DatabaseTest {
         // DDL and rebuild. The fixture therefore tracks the schema instead of drifting.
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
-        stripV5Columns(first)
+        dropTimelineView(first)
+        stripV7Columns(first)
         stripV6Columns(first)
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         val ddl = tableDdl(first)
@@ -280,13 +292,14 @@ class DatabaseTest {
             originalUnit = null, editReason = null, editedAt = null, groupKey = null,
             excludedFromTrends = false, idempotencyKey = "k-1", rawRecordId = null,
         )
+        createV6Timeline(first)
         first.execute(null, "PRAGMA user_version = 2", 0)
         first.close()
 
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(6L, store.schemaVersion)
+        assertEquals(7L, store.schemaVersion)
         assertEquals(1L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(3, store.db.sourceQueries.allSources().executeAsList().size)
 
@@ -320,8 +333,10 @@ class DatabaseTest {
         val path = directory.resolve("v4.db").toString()
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
-        stripV5Columns(first)
+        dropTimelineView(first)
+        stripV7Columns(first)
         stripV6Columns(first)
+        stripV5Columns(first)
         first.execute(
             null,
             "INSERT INTO exercise(id, name, primary_muscles, secondary_muscles, is_custom, " +
@@ -340,13 +355,14 @@ class DatabaseTest {
                 0,
             )
         }
+        createV6Timeline(first)
         first.execute(null, "PRAGMA user_version = 4", 0)
         first.close()
 
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(6L, store.schemaVersion)
+        assertEquals(7L, store.schemaVersion)
         val columns = store.driver.executeQuery(
             null,
             "PRAGMA table_info(exercise)",
@@ -490,6 +506,84 @@ class DatabaseTest {
                 driver.execute(null, "ALTER TABLE $table DROP COLUMN $column", 0)
             }
         }
+    }
+
+
+    private fun dropTimelineView(driver: app.cash.sqldelight.db.SqlDriver) {
+        driver.execute(null, "DROP VIEW IF EXISTS timeline", 0)
+    }
+
+    /** Removes the B6 columns and tables, leaving a genuine v6-shaped database. */
+    private fun stripV7Columns(driver: app.cash.sqldelight.db.SqlDriver) {
+        listOf(
+            "food_type_index",
+            "entry_food",
+            "recipe_item_recipe",
+            "meal_template_item_template",
+            "nutrition_target_effective",
+            "fast_window_start",
+        ).forEach { driver.execute(null, "DROP INDEX IF EXISTS $it", 0) }
+        listOf(
+            "recipe_item",
+            "meal_template_item",
+            "meal_template",
+            "water_container",
+            "nutrition_target",
+            "fast_window",
+        ).forEach { driver.execute(null, "DROP TABLE IF EXISTS $it", 0) }
+        mapOf(
+            "food" to listOf(
+                "category", "food_type", "nutrients_json", "default_serving_g",
+                "default_serving_label", "allergens_json", "ingredients_text", "analysis_json",
+            ),
+            "meal" to listOf(
+                "zone_id", "happened_at", "recorded_at", "source_id", "idempotency_key",
+            ),
+            "entry" to listOf(
+                "serving_label", "serving_g", "servings", "food_name", "brand", "micros_json",
+            ),
+        ).forEach { (table, columns) ->
+            columns.forEach { column ->
+                driver.execute(null, "ALTER TABLE $table DROP COLUMN $column", 0)
+            }
+        }
+    }
+
+    /** The timeline as v6 left it: meals by created_at, and no fasting window. */
+    private fun createV6Timeline(driver: app.cash.sqldelight.db.SqlDriver) {
+        driver.execute(
+            null,
+            """
+            CREATE VIEW timeline AS
+            SELECT 'observation' AS kind, id AS entity_id, local_date AS local_date,
+                happened_at AS happened_at, recorded_at AS recorded_at,
+                source_id AS source_id, type AS detail, user_edited AS edited
+            FROM observation
+            UNION ALL
+            SELECT 'session', id, local_date, happened_at, recorded_at, source_id, routine_id, 0
+            FROM session
+            UNION ALL
+            SELECT 'work_set', work_set.id, session.local_date, work_set.happened_at,
+                work_set.recorded_at, work_set.source_id, work_set.exercise_id, 0
+            FROM work_set JOIN session ON session.id = work_set.session_id
+            UNION ALL
+            SELECT 'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
+            FROM entry
+            UNION ALL
+            SELECT 'measurement', id, local_date, happened_at, recorded_at, source_id, type, 0
+            FROM measurement
+            UNION ALL
+            SELECT 'vital', id, local_date, happened_at, recorded_at, source_id, type, 0
+            FROM vital
+            UNION ALL
+            SELECT 'meal', id, local_date, created_at, created_at, 'manual', kind, 0
+            FROM meal
+            UNION ALL
+            SELECT 'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+            FROM note
+            """.trimIndent(),
+            0,
+        )
     }
 
     private fun stripV5Columns(driver: app.cash.sqldelight.db.SqlDriver) {

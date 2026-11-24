@@ -198,39 +198,38 @@ class TrashServiceTest {
         val trash = TrashService(store.db, FixedClock(now))
         seedFood(store, "food-oats")
         NutritionRepository(store.db).upsertEntry(
-            Entry(
+            app.openhealth.data.repo.EntryDraft(
                 id = "e-1",
-                meal_id = null,
-                food_id = "food-oats",
-                local_date = date.toString(),
-                zone_id = TEST_ZONE.id,
-                happened_at = now.toEpochMilliseconds(),
-                recorded_at = now.toEpochMilliseconds(),
-                quantity_g = 80.0,
-                energy_kcal = 303.2,
-                protein_g = 10.4,
-                carbs_g = 55.0,
-                fat_g = 5.2,
-                fibre_g = 8.1,
-                source_kind = "manual",
-                source_id = "manual",
-                user_verified = true,
-                user_edited = false,
-                observation_id = null,
-                raw_record_id = null,
-                idempotency_key = "trash-entry-e-1",
+                mealId = null,
+                foodId = "food-oats",
+                localDate = date,
+                zoneId = TEST_ZONE,
+                happenedAt = now,
+                recordedAt = now,
+                quantityG = 80.0,
+                foodName = "Oats",
+                totals = mapOf(
+                    app.openhealth.core.nutrition.Nutrient.ENERGY to 303.2,
+                    app.openhealth.core.nutrition.Nutrient.PROTEIN to 10.4,
+                    app.openhealth.core.nutrition.Nutrient.CARBS to 55.0,
+                    app.openhealth.core.nutrition.Nutrient.FAT to 5.2,
+                    app.openhealth.core.nutrition.Nutrient.FIBRE to 8.1,
+                ),
+                sourceKind = "manual",
+                sourceId = "manual",
+                verified = true,
+                idempotencyKey = "trash-entry-e-1",
                 device = "manual",
-                app_version = "test",
-                revision = 1L,
+                appVersion = "test",
             ),
         )
         val tombstone = trash.deleteEntry(EntryId("e-1"))!!
         assertNull(NutritionRepository(store.db).entryById("e-1"))
         assertTrue(trash.undo(tombstone))
         val restored = NutritionRepository(store.db).entryById("e-1")!!
-        assertEquals(303.2, restored.energy_kcal)
-        assertEquals(80.0, restored.quantity_g)
-        assertEquals(8.1, restored.fibre_g)
+        assertEquals(303.2, restored.totals.of(app.openhealth.core.nutrition.Nutrient.ENERGY))
+        assertEquals(80.0, restored.quantityG)
+        assertEquals(8.1, restored.totals.of(app.openhealth.core.nutrition.Nutrient.FIBRE))
         store.close()
     }
 

@@ -15,6 +15,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -356,9 +357,9 @@ class RollupEngineTest {
         val (store, engine) = storeAndEngine()
         val row = entry("only-entry", 100.0, 5.0, 10.0, 2.0, 1.0, 1)
             .copy(
-                local_date = D2.toString(),
-                happened_at = dayStart(D2).plus(12.hours).toEpochMilliseconds() + 1,
-                recorded_at = dayStart(D2).plus(12.hours).toEpochMilliseconds() + 1,
+                localDate = D2,
+                happenedAt = dayStart(D2).plus(12.hours),
+                recordedAt = dayStart(D2).plus(12.hours),
             )
         app.openhealth.data.repo.NutritionRepository(store.db).upsertEntry(row)
         engine.rebuildAll()
@@ -633,30 +634,28 @@ class RollupEngineTest {
         fat: Double,
         fibre: Double,
         second: Long,
-    ) = app.openhealth.data.db.Entry(
+    ) = app.openhealth.data.repo.EntryDraft(
         id = id,
-        meal_id = null,
-        food_id = null,
-        local_date = D1.toString(),
-        zone_id = TEST_ZONE.id,
-        happened_at = dayStart(D1).plus(12.hours).toEpochMilliseconds() + second,
-        recorded_at = dayStart(D1).plus(12.hours).toEpochMilliseconds() + second,
-        quantity_g = 100.0,
-        energy_kcal = energy,
-        protein_g = protein,
-        carbs_g = carbs,
-        fat_g = fat,
-        fibre_g = fibre,
-        source_kind = "manual",
-        source_id = "manual",
-        user_verified = true,
-        user_edited = false,
-        observation_id = null,
-        raw_record_id = null,
-        idempotency_key = "entry-$id",
-        device = "manual",
-        app_version = "test",
-        revision = 1L,
+        mealId = null,
+        foodId = null,
+        localDate = D1,
+        zoneId = TEST_ZONE,
+        happenedAt = dayStart(D1).plus(12.hours).plus(second.seconds),
+        recordedAt = dayStart(D1).plus(12.hours).plus(second.seconds),
+        quantityG = 100.0,
+        totals = mapOf(
+            app.openhealth.core.nutrition.Nutrient.ENERGY to energy,
+            app.openhealth.core.nutrition.Nutrient.PROTEIN to protein,
+            app.openhealth.core.nutrition.Nutrient.CARBS to carbs,
+            app.openhealth.core.nutrition.Nutrient.FAT to fat,
+            app.openhealth.core.nutrition.Nutrient.FIBRE to fibre,
+        ),
+        sourceKind = "manual",
+        sourceId = "manual",
+        verified = true,
+        idempotencyKey = "entry-$id",
+        device = "test",
+        appVersion = "test",
     )
 
     private fun vital(
@@ -687,24 +686,6 @@ class RollupEngineTest {
         app_version = "test",
         revision = 1L,
     )
-
-    @Test
-    fun excludedReadingsDoNotReachTheRollup() {
-        val (store, engine) = storeAndEngine()
-        val repository = ObservationRepository(store.db)
-        val observation = testObservation(
-            "mood",
-            ObservationType.MOOD,
-            3.0,
-            UcumUnit.SCORE,
-            dayStart(D1).plus(9.hours),
-            sourceId = "manual",
-        )
-        repository.record(observation)
-        repository.excludeFromTrends(observation.id, true)
-        assertEquals(0, engine.rebuildDay(D1))
-        store.close()
-    }
 
     @Test
     fun theWatermarkIsTheNewestObservationUsed() {

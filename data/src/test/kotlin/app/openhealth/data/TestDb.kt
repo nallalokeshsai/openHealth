@@ -107,25 +107,18 @@ fun hourlySteps(
  * entry must first write the session, exercise or food it names, as the app does.
  */
 fun seedFood(store: OpenHealthStore, id: String, name: String = "Oats") {
-    val now = Instant.fromEpochMilliseconds(0).toEpochMilliseconds()
     app.openhealth.data.repo.NutritionRepository(store.db).upsertFood(
-        app.openhealth.data.db.Food(
+        app.openhealth.data.repo.FoodDraft(
             id = id,
             name = name,
-            brand = null,
-            barcode = null,
-            source_kind = "manual",
-            source_ref = null,
-            energy_kcal_per_100g = 379.0,
-            protein_g_per_100g = 13.0,
-            carbs_g_per_100g = 68.0,
-            fat_g_per_100g = 6.5,
-            fibre_g_per_100g = 10.1,
-            serving_json = null,
-            verified = false,
-            created_at = now,
-            updated_at = now,
-            revision = 1L,
+            sourceKind = "manual",
+            per100g = mapOf(
+                app.openhealth.core.nutrition.Nutrient.ENERGY to 379.0,
+                app.openhealth.core.nutrition.Nutrient.PROTEIN to 13.0,
+                app.openhealth.core.nutrition.Nutrient.CARBS to 68.0,
+                app.openhealth.core.nutrition.Nutrient.FAT to 6.5,
+                app.openhealth.core.nutrition.Nutrient.FIBRE to 10.1,
+            ),
         ),
     )
 }
