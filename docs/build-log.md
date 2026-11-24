@@ -1578,7 +1578,13 @@ no carbohydrate, fat or fibre, so the energy card looked empty (the ten demo foo
 carry all five macros). The camera permission is requested at the scanner and a denied
 permission leaves the manual path; the phone's camera was blocked at the system level and
 the system "Unblock" dialog was handled during the walk. The Train empty-plan Start was
-above the fold after the reorder. No secrets or device identity were written into the
+above the fold after the reorder. The review pass then caught three more: the fasting
+window was in the timeline view but had no timeline row (it now has `TimelineKind.FAST`),
+the portion sheet still showed a per-100 g kcal line in weight-neutral mode (it is now
+behind the same gate as the rest of the card, as is the custom-food energy field), and the
+barcode FOUND state invoked its scan-again callback during composition when a product was
+missing (it now renders an empty state). The entry's `serving_g` now stores the serving's
+own gram weight rather than the total. No secrets or device identity were written into the
 tree.
 
 ### Independent review, invariant audit and plan audit
