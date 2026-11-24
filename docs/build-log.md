@@ -1152,12 +1152,23 @@ clean, and the device walk-through was repeated on the final build.
 
 ## B4 audit — phase-wise drift pass (2026-11-24)
 
-**Status:** Completed · **Date:** 2026-11-24 · **Branch:** `build/b4-qa`
+**Status:** Completed · **Date:** 2026-11-24 · **Commits:** `2d2d913`, `f3da2c0` on `main`
 **Goal:** read B0–B4 against the code and the running app, hunting the drift a passing
 build hides: a deliverable quietly reduced, a stub nobody filled, an exit test that is
 ticked but not asserted, an invented value, a provenance or accessibility gap. Seven
 defects were found and fixed with tests; three items are owner decisions and were not
-touched.
+touched, and the first note's flaky exit test was traced and fixed.
+
+**A process error, recorded rather than hidden.** The QA work was done on
+`build/b4-qa`, but the headless plan audit began by checking the working tree out to
+`main`; the two commits under this heading were then made on `main` and pushed there
+directly, bypassing the pull-request and merge gate this project requires. Nothing under
+`references/`, `.env.local`, a keystore or a secret was in the diff and no device identity
+was published, and CI on `main` (`45353101217`) passed on `f3da2c0`, but the review step a
+pull request forces was skipped. A pushed branch is not rewritten in this project, so the
+commits stand; this record and the follow-up documentation pull request are the
+correction. The lesson is in `AGENTS.md`: the audit step must verify its branch before and
+after the headless run, and a commit must name its branch before it is made.
 
 ### What was found, and what was done
 
@@ -1186,6 +1197,7 @@ first one's regions; and the band producer keys on the view as well as the thick
 | `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL** from a cleaned tree; ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint and **269 JVM tests** (113 `:core`, 73 `:data`, 80 `:ui`, 1 fixtures, 2 exerciseindex), with **174 goldens** (170 + 4 for the table alternative). |
 | `:app-android:connectedDebugAndroidTest` | **13/13** on an Android 16 emulator (the owner's phone was not attached), after one flake described below. |
 | Negative proofs | Each new test was re-run against the unfixed code: the table golden, the mini-map band test and the strengthened fat-layer assertion all fail without their fix. |
+| Hosted CI, documentation pull request | The first run failed in `:tools:fixtures:test` on `QueryBenchmarkTest` (`noUiQueryExceedsTheBudgetOnAFiveYearCorpus`); the same commit passed all 269 tests locally and passed on a re-run of the same job. That is the benchmark flakiness B2 recorded: the 16 ms budget is measured against a shared runner, and a query landing near it can fail on a slow minute. The budget is not lowered; the open issue stands and B10/B14 own the measurement environment. |
 
 ### The flaky exit test: traced and fixed
 
@@ -1197,6 +1209,20 @@ landing on the still-animating keyboard, which covers that part of the modal she
 has just opened. The test now dismisses the IME before tapping Save (as a person does),
 and the same assertions run unchanged: **10 of 10** consecutive runs pass. Nothing was
 retried or widened; the input timing was made deterministic.
+### A benchmark flake on the hosted runner, and the timeline fix it forced
+
+The documentation pull request's first CI run failed on `QueryBenchmarkTest`; the same
+commit passed locally and passed when the job was re-run, and a later run passed with
+`timelinePage50` at **12.45 ms** against the 16 ms budget. This is the flakiness B2
+predicted, and the budget is not lowered. Printing the per-query times in CI (a test-logging
+line in `tools/fixtures`) showed the page query is the only one near the line, and reading
+the repository showed why: one page was **seven round trips of 50 rows each** through the
+separate `happened_at` indexes. The seven branches now carry their own
+`ORDER BY … LIMIT` inside a single `UNION`, and only the 50 kept rows have their dates
+parsed: **1.0 ms** on the same five-year corpus, so a three-times-slower runner sits at
+around 3 ms. `TimelineRepositoryTest` still passes; the query returns the same rows in the
+same order, with the tie-break now explicit (`happened_at DESC, entity_id`).
+
 ### Deliberately not changed
 
 - **A switched-off module still shows its root screen** (QA OH-02). Hiding a root needs a

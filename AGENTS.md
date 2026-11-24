@@ -154,6 +154,11 @@ git -C references/<name> pull --ff-only
 rg -n --glob '!**/.git/**' '<pattern>' references/<name>
 ```
 
+A headless audit or any other tool may leave the working tree on a different branch: read
+`git status -sb` immediately before staging, and push only the phase branch
+(`build/b<n>-<slug>`). Never commit or push to `main`; it moves through a merged pull
+request. The 2026-11-24 B4 audit is the recorded instance of getting this wrong.
+
 The workstation is Linux. `git`, `adb`, JDK 21 and the Android SDK are installed (verified 2026-11-23); Gradle is the wrapper (`./gradlew`), not a `PATH` install, and `rg` may not be present. Shell fallbacks:
 
 ```sh
@@ -215,7 +220,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B4 Body model and exercise data** (2026-11-24); next is **B5
   Gym training**.
 - Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `build/b4-qa`; **269 JVM tests** (113 `:core`, 73 `:data`, 80 `:ui`, 1 fixtures,
+  `main` (`f3da2c0`); **269 JVM tests** (113 `:core`, 73 `:data`, 80 `:ui`, 1 fixtures,
   2 exerciseindex) and **13 instrumented tests** pass, the instrumented suite most
   recently on an Android 16 emulator. `:ui` holds the B1 design system, the B3 screens
   and **174 goldens** (136 B1/B3 + 34 for the body map and Today's map card + 4 for the
@@ -238,7 +243,8 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   turning it on is B10's. Cold start in the debug build is **1 058 ms**, inside the 1.5 s
   budget; the release number is B14's. The first store open seeds 871 exercises in
   **1 717 ms** on IO, after the first frame.
-- A phase-wise audit of B0-B4 (2026-11-24, `build/b4-qa`) fixed seven defects with
+- A phase-wise audit of B0-B4 (2026-11-24, commits `2d2d913` and `f3da2c0` on `main`)
+  fixed seven defects with
   tests: the table alternative's hairline rule, the fat-layer exit test asserting only
   the seams, an unbounded adipose-band cache, a band built for mini maps that never draw
   one, the debug harness's inert waist slider, no provenance on an estimated fat layer,
