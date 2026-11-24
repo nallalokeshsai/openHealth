@@ -1625,10 +1625,10 @@ were fixed here:
   sheet; raw allergen keys became labels; the fasting action is a verb; the looking-up
   state explains itself; and the target fields round.
 
-The headless plan audit did not return a report: the first run was killed at the 30-minute
-limit with no output beyond a sign-in warning, and a second, narrower run is the one this
-entry waits on. The three reviewer passes above are the independent evidence for this
-phase.
+The first headless plan audit was killed at the 30-minute limit with no output beyond a
+sign-in warning; a second, narrower run completed, reviewed the tree and fixed one defect
+(the Open Food Facts cache was write-only; see below). The three reviewer passes above are
+the independent evidence for this phase.
 
 - Invariant audit: every value carries source, device, method, `happened_at`,
   `recorded_at`, local date, zone and idempotency key (entries and meals both do);
