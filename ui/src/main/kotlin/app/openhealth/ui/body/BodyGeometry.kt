@@ -1,6 +1,8 @@
 package app.openhealth.ui.body
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path as AndroidPath
 import android.graphics.Region
@@ -14,6 +16,7 @@ import app.openhealth.core.body.BodyView
 import app.openhealth.core.body.Muscle
 import app.openhealth.core.body.MuscleRegion
 import app.openhealth.ui.R
+import kotlin.math.roundToInt
 
 /**
  * The MuscleMap geometry (`DESIGN.md` §9.1, Appendix C): four views, each a viewBox and one
@@ -169,36 +172,78 @@ class BodyGeometry private constructor(val views: Map<BodyView, GeometryView>) {
 }
 
 /**
- * The adipose band (`DESIGN.md` §9.1.1): each region's outline stroked by its thickness and
- * cut against the union of every muscle, so the band exists **only outside** the muscle
- * shapes. A recovery colour can therefore never sit on fat, and a pale fat edge can never
- * be read as a recovery step.
+ * The adipose band (`DESIGN.md` §9.1.1), as an alpha mask.
+ *
+ * The band used to be built with `Path` boolean operations. Skia's `Path.op` returns false
+ * and leaves the destination untouched for some inputs, and the tape-scaled layer is one
+ * of them: at 22 % body fat with neck, chest and waist tape on the back view, most of the
+ * operations failed and the band came out as the whole body, drawn as a filled gold figure
+ * with the muscles painted back on top, and the build took seconds, so the card showed it
+ * late. A raster mask has no boolean operator that can fail: the same thicknesses give the
+ * same pixels, and the cost depends only on [HEIGHT_PX].
+ *
+ * Two facts the paths could not express reliably are what the mask is built from:
+ *
+ * - every pixel knows the region of the nearest muscle, from a chamfer distance transform
+ *   seeded with every muscle pixel, so a waist reads thicker than a forearm;
+ * - the body's interior is the muscle mask closed by [CLOSING_UNITS], so a seam between two
+ *   muscles is never fat however wide that seam is, and the band never reaches under a
+ *   muscle, because a muscle pixel is never a band pixel.
  */
-object AdiposeGeometry {
-    private const val STROKE_FACTOR = 2f
-    private const val KEY_SCALE = 10f
+object AdiposeMask {
+    /**
+     * The mask's height in pixels: 720 over a 1280-unit viewBox, about half a unit each.
+     * The map is drawn at roughly 300 dp, so the mask lands just under one pixel per drawn
+     * pixel at 3x density. The band's edge is soft by design, so the upscale costs nothing,
+     * and halving the height again halves a cold build that already fits in 400 ms.
+     */
+    const val HEIGHT_PX = 720
 
     /**
-     * How many bands are kept. The band is expensive to build and cheap to hold, but a
-     * scrub of body fat or a tape measurement (the debug harness, and the before/after
-     * slider of `DESIGN.md` §9.1.1) asks for a new thickness on every frame, so the
-     * cache is bounded rather than unbounded: four views, twice over, least recently
-     * used first out.
+     * The radius the silhouette is smoothed with, in viewBox units: about 5 dp on the drawn
+     * figure. It is what bridges a seam into the body, however wide that seam is; the cut
+     * itself sits a little below half coverage so the band keeps a pixel under each muscle.
      */
-    private const val CACHE_ENTRIES = 8
+    private const val SILHOUETTE_UNITS = 23f
 
-    private val cache = object : LinkedHashMap<String, AndroidPath>(CACHE_ENTRIES, LOAD, true) {
-        override fun removeEldestEntry(eldest: Map.Entry<String, AndroidPath>): Boolean =
+    private const val CACHE_ENTRIES = 6
+    private const val CACHE_LOAD = 0.75f
+    private const val KEY_SCALE = 10f
+    private const val OPAQUE = 0xFF
+    private const val HALF_PIXEL = 0.5f
+    private const val NO_COVERAGE = 0f
+    private const val FULL_COVERAGE = 1f
+    private const val ALPHA_MAX = 255f
+
+    /** How far the region thickness blends across a boundary, in viewBox units. */
+    private const val FIELD_BLUR_UNITS = 24f
+    private const val FULL_PERCENT = 100
+    private const val SILHOUETTE_CUT = 62
+
+    private const val NO_MUSCLE = 0
+    private const val CHAMFER_STRAIGHT = 3
+    private const val FAR = Int.MAX_VALUE / 4
+    private const val LABEL_SHIFT = 16
+    private const val BYTE_SHIFT = 8
+    private const val ALPHA_SHIFT = 24
+    private const val BYTE = 0xFF
+    private const val LABEL_MASK = 0xFF
+
+    /**
+     * How many masks are kept. A mask is expensive to build and cheap to hold, but a scrub
+     * of body fat or a tape measurement asks for a new thickness on every frame, so the
+     * cache is bounded rather than unbounded: six entries, least recently used first out.
+     */
+    private val cache = object : LinkedHashMap<String, Bitmap>(CACHE_ENTRIES, CACHE_LOAD, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, Bitmap>): Boolean =
             size > CACHE_ENTRIES
     }
 
-    private const val LOAD = 0.75f
-
     /** The band for a view at these thicknesses, cached across recompositions and rotation. */
-    fun cached(view: GeometryView, thickness: Map<MuscleRegion, Float>): AndroidPath? =
+    fun cached(view: GeometryView, thickness: Map<MuscleRegion, Float>): Bitmap? =
         synchronized(cache) { cache[key(view, thickness)] }
 
-    fun store(view: GeometryView, thickness: Map<MuscleRegion, Float>, band: AndroidPath) {
+    fun store(view: GeometryView, thickness: Map<MuscleRegion, Float>, band: Bitmap) {
         synchronized(cache) { cache[key(view, thickness)] = band }
     }
 
@@ -207,64 +252,152 @@ object AdiposeGeometry {
             .joinToString(",") { "${it.key.name}=${(it.value * KEY_SCALE).toInt()}" }
 
     /**
-     * How wide a seam between two muscle paths is closed before the band is built:
-     * 24 viewBox units (about 5.6 dp on a 300 dp figure), wide enough to bridge the gaps
-     * in the MuscleMap paths, including the neck and shoulder seams, and far narrower
-     * than a limb.
+     * The band: the pixels outside every muscle whose distance to a muscle is no more than
+     * the region thickness at that point, and that are not inside the body.
      */
-    const val SEAM_UNITS = 24f
+    fun build(view: GeometryView, thickness: Map<MuscleRegion, Float>): Bitmap {
+        val box = view.viewBox
+        val pxPerUnit = HEIGHT_PX / box.height
+        val width = (box.width * pxPerUnit).roundToInt().coerceAtLeast(1)
+        val height = HEIGHT_PX
+        val pixels = width * height
+
+        val labels = labels(view, width, height, pxPerUnit)
+        val distance = IntArray(pixels) { if (labels[it] == NO_MUSCLE) FAR else 0 }
+        val owner = IntArray(pixels) { labels[it] }
+        Chamfer(width, height, distance, owner).run()
+        val inside = silhouette(width, height, distance, pxPerUnit)
+        val field = thicknessField(width, height, owner, thickness, pxPerUnit)
+
+        val band = IntArray(pixels)
+        for (index in 0 until pixels) {
+            // The band is outside the body: a pixel inside it is a seam or a muscle, and
+            // the first pixel out is left to the body so the two rasters never share one.
+            if (distance[index] <= CHAMFER_STRAIGHT || inside[index]) continue
+            val coverage = (field[index] - distance[index] / CHAMFER_STRAIGHT + HALF_PIXEL)
+                .coerceIn(NO_COVERAGE, FULL_COVERAGE)
+            if (coverage > NO_COVERAGE) band[index] = coverage.toAlpha()
+        }
+        return Bitmap.createBitmap(band, width, height, Bitmap.Config.ARGB_8888)
+    }
+
+    /** Every muscle pixel tagged with its region: 1..7 in the red channel, 0 elsewhere. */
+    private fun labels(view: GeometryView, width: Int, height: Int, pxPerUnit: Float): IntArray {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.scale(pxPerUnit, pxPerUnit)
+        canvas.translate(-view.viewBox.x, -view.viewBox.y)
+        // No anti-aliasing: a half-covered edge pixel would blend two label values.
+        val paint = Paint().apply { style = Paint.Style.FILL }
+        view.parts.filter { it.muscle != null }.forEach { part ->
+            val label = part.muscle!!.region.ordinal + 1
+            paint.color = (OPAQUE shl ALPHA_SHIFT) or (label shl LABEL_SHIFT)
+            part.paths.forEach { path -> canvas.drawPath(path, paint) }
+        }
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        bitmap.recycle()
+        for (index in pixels.indices) {
+            pixels[index] =
+                (pixels[index] ushr LABEL_SHIFT) and LABEL_MASK
+        }
+        return pixels
+    }
 
     /**
-     * The adipose layer: one band around the body's outline, never under a muscle and
-     * never inside the silhouette (`DESIGN.md` §9.1.1).
-     *
-     * The muscle paths do not touch, so the raw union's outline runs down every seam
-     * between neighbouring muscles. Closing that union with a narrow ring before the
-     * band is built fills those seams into the silhouette, so the band is drawn only on
-     * the body's outside edge and never as a gold line between two abs. A region thicker
-     * than the thinnest one adds an outward ring beyond that rim, which is how a waist
-     * reads thicker than a forearm.
+     * The thickness at every pixel, in mask pixels: the nearest region's thickness, blurred
+     * so the band steps from a forearm to a waist over a few pixels instead of jumping at
+     * one edge. Nearest-only was the first version and its boundary read as sawteeth,
+     * because two neighbouring regions differ by several pixels of thickness and the
+     * nearest one flips from pixel to pixel.
      */
-    fun layer(view: GeometryView, thickness: Map<MuscleRegion, Float>): AndroidPath {
-        val muscleUnion = AndroidPath().apply {
-            view.parts.filter { it.muscle != null }.forEach { part ->
-                part.paths.forEach(::addPath)
-            }
+    private fun thicknessField(
+        width: Int,
+        height: Int,
+        owner: IntArray,
+        thickness: Map<MuscleRegion, Float>,
+        pxPerUnit: Float,
+    ): FloatArray {
+        val regions = MuscleRegion.entries
+        val perLabel = FloatArray(regions.size + 1)
+        regions.forEachIndexed { index, region ->
+            perLabel[index + 1] = (thickness[region] ?: 0f) * pxPerUnit
         }
-        val silhouette = AndroidPath().apply {
-            addPath(muscleUnion)
-            addPath(strokeOutline(muscleUnion, SEAM_UNITS / 2f))
-        }
-        val base = thickness.values.filter { it > 0f }.minOrNull() ?: return AndroidPath()
-        val rim = strokeOutline(silhouette, base)
-        val byRegion = view.parts
-            .filter { it.muscle != null }
-            .groupBy { it.muscle!!.region }
-        thickness.forEach { (region, outward) ->
-            if (outward <= base) return@forEach
-            val parts = byRegion[region] ?: return@forEach
-            val union = AndroidPath().apply { parts.forEach { p -> p.paths.forEach(::addPath) } }
-            val extra = strokeOutline(union, outward)
-            extra.op(rim, AndroidPath.Op.DIFFERENCE)
-            extra.op(silhouette, AndroidPath.Op.DIFFERENCE)
-            rim.op(extra, AndroidPath.Op.UNION)
-        }
-        rim.op(silhouette, AndroidPath.Op.DIFFERENCE)
-        return rim
+        val field = FloatArray(width * height)
+        for (pixel in field.indices) field[pixel] = perLabel[owner[pixel]]
+        return boxBlur(field, width, height, (FIELD_BLUR_UNITS * pxPerUnit).roundToInt())
     }
 
-    private fun strokeOutline(path: AndroidPath, outward: Float): AndroidPath {
-        val paint = Paint().apply {
-            style = Paint.Style.STROKE
-            strokeWidth = outward * STROKE_FACTOR
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-            isAntiAlias = true
+    /** A separable box blur, in place, on a field held in mask pixels. */
+    private fun boxBlur(field: FloatArray, width: Int, height: Int, radius: Int): FloatArray {
+        val span = radius * 2 + 1
+        val rows = FloatArray(field.size)
+        for (y in 0 until height) {
+            var sum = 0f
+            for (x in -radius..radius) sum += field[y * width + x.coerceIn(0, width - 1)]
+            for (x in 0 until width) {
+                rows[y * width + x] = sum / span
+                sum -= field[y * width + (x - radius).coerceIn(0, width - 1)]
+                sum += field[y * width + (x + radius + 1).coerceIn(0, width - 1)]
+            }
         }
-        val band = AndroidPath()
-        paint.getFillPath(path, band)
-        return band
+        for (x in 0 until width) {
+            var sum = 0f
+            for (y in -radius..radius) sum += rows[y.coerceIn(0, height - 1) * width + x]
+            for (y in 0 until height) {
+                field[y * width + x] = sum / span
+                sum -= rows[(y - radius).coerceIn(0, height - 1) * width + x]
+                sum += rows[(y + radius + 1).coerceIn(0, height - 1) * width + x]
+            }
+        }
+        return field
     }
+
+    /**
+     * The body's silhouette: the muscle mask blurred and cut at half coverage. A blur with
+     * radius r bridges every gap narrower than 2r, which is what fills a seam between two
+     * muscles into the body, and a 50 % cut on a straight edge leaves that edge where the
+     * muscles put it, so the band still meets the muscles. Thresholding a blur also has no
+     * single-pixel noise to clean up, which a boolean closing followed by an erosion does.
+     */
+    private fun silhouette(
+        width: Int,
+        height: Int,
+        distance: IntArray,
+        pxPerUnit: Float,
+    ): BooleanArray {
+        val stride = width + 1
+        val sums = LongArray(stride * (height + 1))
+        for (y in 0 until height) {
+            var row = 0L
+            for (x in 0 until width) {
+                if (distance[y * width + x] == 0) row++
+                sums[(y + 1) * stride + x + 1] = sums[y * stride + x + 1] + row
+            }
+        }
+        val half = (SILHOUETTE_UNITS * pxPerUnit).roundToInt().coerceAtLeast(1)
+        val interior = BooleanArray(width * height)
+        for (y in 0 until height) {
+            val top = (y - half).coerceAtLeast(0)
+            val bottom = (y + half + 1).coerceAtMost(height)
+            for (x in 0 until width) {
+                val left = (x - half).coerceAtLeast(0)
+                val right = (x + half + 1).coerceAtMost(width)
+                val area = (right - left) * (bottom - top)
+                val covered = sums[bottom * stride + right] - sums[top * stride + right] -
+                    sums[bottom * stride + left] + sums[top * stride + left]
+                // The cut sits a little inside the 50 % contour, so the band reaches a
+                // pixel under each muscle and the muscles hide that first ring: a band cut
+                // exactly on the edge leaves notches wherever a muscle's own path bulges
+                // past the smoothed silhouette.
+                interior[y * width + x] = covered * FULL_PERCENT > area * SILHOUETTE_CUT
+            }
+        }
+        return interior
+    }
+
+    private fun Float.toAlpha(): Int = ((this * ALPHA_MAX).toInt() shl ALPHA_SHIFT) or
+        (BYTE shl LABEL_SHIFT) or (BYTE shl BYTE_SHIFT) or BYTE
 }
 
 /**
@@ -290,4 +423,106 @@ private fun buildHitRegions(view: GeometryView): Map<Muscle, Region> {
         }
         muscle to region
     }.toMap()
+}
+
+/**
+ * A two-pass chamfer distance transform: the distance to the nearest zero, in thirds of a
+ * pixel, Euclidean within about two per cent. That is far finer than a band edge on screen
+ * and one pass costs a couple of milliseconds at this size.
+ */
+private class Chamfer(
+    private val width: Int,
+    private val height: Int,
+    private val distance: IntArray,
+    private val owner: IntArray,
+) {
+    fun run() {
+        forward()
+        backward()
+    }
+
+    /**
+     * The two sweeps run over the interior only: the body never touches the mask's border,
+     * and one branch per cell costs more than the four neighbour reads it saves.
+     */
+    private fun forward() {
+        for (y in 1 until height - 1) {
+            var index = y * width + 1
+            for (x in 1 until width - 1) {
+                relaxForward(index)
+                index++
+            }
+        }
+    }
+
+    private fun backward() {
+        for (y in height - 2 downTo 1) {
+            var index = y * width + width - 2
+            for (x in width - 2 downTo 1) {
+                relaxBackward(index)
+                index--
+            }
+        }
+    }
+
+    private fun relaxForward(index: Int) {
+        var best = distance[index]
+        if (best == 0) return
+        var who = owner[index]
+        var candidate = distance[index - 1] + STRAIGHT
+        if (candidate < best) {
+            best = candidate
+            who = owner[index - 1]
+        }
+        candidate = distance[index - width] + STRAIGHT
+        if (candidate < best) {
+            best = candidate
+            who = owner[index - width]
+        }
+        candidate = distance[index - width - 1] + DIAGONAL
+        if (candidate < best) {
+            best = candidate
+            who = owner[index - width - 1]
+        }
+        candidate = distance[index - width + 1] + DIAGONAL
+        if (candidate < best) {
+            best = candidate
+            who = owner[index - width + 1]
+        }
+        distance[index] = best
+        owner[index] = who
+    }
+
+    private fun relaxBackward(index: Int) {
+        var best = distance[index]
+        if (best == 0) return
+        var who = owner[index]
+        var candidate = distance[index + 1] + STRAIGHT
+        if (candidate < best) {
+            best = candidate
+            who = owner[index + 1]
+        }
+        candidate = distance[index + width] + STRAIGHT
+        if (candidate < best) {
+            best = candidate
+            who = owner[index + width]
+        }
+        candidate = distance[index + width - 1] + DIAGONAL
+        if (candidate < best) {
+            best = candidate
+            who = owner[index + width - 1]
+        }
+        candidate = distance[index + width + 1] + DIAGONAL
+        if (candidate < best) {
+            best = candidate
+            who = owner[index + width + 1]
+        }
+        distance[index] = best
+        owner[index] = who
+    }
+
+    private companion object {
+        const val STRAIGHT = 3
+        const val DIAGONAL = 4
+    }
 }

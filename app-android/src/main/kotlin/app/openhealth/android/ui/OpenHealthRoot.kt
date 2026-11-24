@@ -209,6 +209,8 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     } else {
                         null
                     },
+                    moduleOff = HealthModule.VITALS !in state.preferences.modules,
+                    onOpenSettings = { nav.navigate(SettingsRoute) },
                 )
             }
         }
@@ -220,7 +222,11 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                TrainRoot(onAddNote = { viewModel.openQuickAdd(QuickAction.NOTE) })
+                TrainRoot(
+                    onAddNote = { viewModel.openQuickAdd(QuickAction.NOTE) },
+                    moduleOff = HealthModule.TRAINING !in state.preferences.modules,
+                    onOpenSettings = { nav.navigate(SettingsRoute) },
+                )
             }
         }
         composable<NutritionRoute> {
@@ -237,6 +243,8 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     } else {
                         null
                     },
+                    moduleOff = HealthModule.NUTRITION !in state.preferences.modules,
+                    onOpenSettings = { nav.navigate(SettingsRoute) },
                 )
             }
         }

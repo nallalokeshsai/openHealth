@@ -56,3 +56,39 @@ fun RootStubScreen(
         }
     }
 }
+
+/**
+ * A module that is switched off (`pr.md` §2.4, §6.21): its surfaces are gone, its data is
+ * kept, and the one thing the person can do from its root is turn it back on. It is a calm
+ * explanation rather than an empty shell (`DESIGN.md` §7.6), and it offers no logging
+ * action, because the module's entries are exactly what is hidden.
+ */
+@Composable
+fun ModuleOffRoot(name: String, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+    OhScreen(modifier = modifier) {
+        Text(
+            text = name,
+            style = OhTheme.type.large.copy(fontWeight = OhWeight.bold),
+            color = OhTheme.colors.label,
+            modifier = Modifier
+                .padding(top = OhTheme.space.s6)
+                .semantics { heading() },
+        )
+        Spacer(Modifier.height(OhTheme.space.s1))
+        Text(
+            text = stringResource(R.string.root_subtitle),
+            style = OhTheme.type.subhead,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s7))
+        OhCard {
+            OhEmptyState(
+                title = stringResource(R.string.root_module_off_title, name),
+                body = stringResource(R.string.root_module_off_body),
+                glyph = app.openhealth.ui.icons.OhIcons.info,
+                actionLabel = stringResource(R.string.root_module_off_action),
+                onAction = onOpenSettings,
+            )
+        }
+    }
+}

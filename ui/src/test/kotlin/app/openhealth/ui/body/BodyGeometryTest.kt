@@ -87,75 +87,124 @@ class BodyGeometryTest {
             AdiposeInputs(sex = BodySex.MALE, bodyFatPercent = 35.0),
         )!!
         BodySex.entries.forEach { sex ->
-            BodySide.entries.forEach { side -> assertBandOutsideSeams(sex, side, layer) }
-        }
-    }
-
-    private fun assertBandOutsideSeams(sex: BodySex, side: BodySide, layer: AdiposeLayer) {
-        val view = geometry.view(sex, side)!!
-        val thickness = MuscleRegion.entries.associateWith { region ->
-            (layer.thicknessFor(region) * view.viewBox.height).toFloat()
-        }
-        val band = AdiposeGeometry.layer(view, thickness)
-        assertFalse(band.isEmpty, "the fat layer is drawn on $sex $side")
-        val bounds = Region(
-            view.viewBox.x.toInt(),
-            view.viewBox.y.toInt(),
-            (view.viewBox.x + view.viewBox.width).toInt(),
-            (view.viewBox.y + view.viewBox.height).toInt(),
-        )
-        val muscleUnion = android.graphics.Path().apply {
-            view.parts.filter { it.muscle != null }.forEach { part ->
-                part.paths.forEach(::addPath)
+            BodySide.entries.forEach { side ->
+                val mask = bandRaster(sex, side, layer)
+                assertTrue(mask.band.any { it }, "the fat layer is drawn on $sex $side")
+                assertFalse(
+                    mask.band.count { it } * 4 > mask.band.size,
+                    "the fat layer covers a quarter of the mask on $sex $side",
+                )
+                // The exit test (`BUILD-ROADMAP.md` §B4): no recovery colour can sit on
+                // fat, so the band may not reach under a muscle.
+                // The band's edge is a one-pixel ramp, so a fringe of its pixels shares a
+                // pixel with the muscle it starts from; a band that was not cut against the
+                // muscles at all overlaps half the figure.
+                val overlap = mask.band.indices.count { mask.band[it] && mask.muscles[it] }
+                assertTrue(
+                    overlap * OVERLAP_DIVISOR <= mask.band.count { it },
+                    "the fat layer reaches under a muscle on $sex $side ($overlap)",
+                )
             }
         }
-        // The bug this guards is fat filling the seam between two muscles: everything the
-        // closed silhouette adds over the raw union is a seam, and the band must not touch
-        // any of it.
-        val silhouette = android.graphics.Path().apply {
-            addPath(muscleUnion)
-            addPath(strokeOutline(muscleUnion, AdiposeGeometry.SEAM_UNITS / 2f))
-        }
-        val muscles = muscleRegion(muscleUnion, bounds)
-        val seam = Region()
-        seam.setPath(silhouette, bounds)
-        seam.op(muscles, Region.Op.DIFFERENCE)
-        val fat = Region()
-        fat.setPath(band, bounds)
-        val overlap = Region(fat)
-        overlap.op(seam, Region.Op.INTERSECT)
-        // A boolean difference is exact; rasterising both sides of a one-unit boundary
-        // can leave a single stray cell, nothing more.
-        assertTrue(
-            area(overlap) <= SEAM_TOLERANCE,
-            "the fat layer fills a seam on $sex $side: $overlap",
-        )
-        // The exit test itself (`BUILD-ROADMAP.md` §B4): the band never reaches under a
-        // muscle, so a recovery colour can never sit on fat. The seam check above does
-        // not imply it; a band cut against the seams alone would still cover every
-        // muscle. The intersection is taken on the paths, where the boolean is exact:
-        // rasterising the two shapes separately disagrees by up to a cell along a
-        // shared edge and would need a tolerance to hide it.
-        val underMuscle = android.graphics.Path(band).apply {
-            op(muscleUnion, android.graphics.Path.Op.INTERSECT)
-        }
-        val underRegion = Region().apply { setPath(underMuscle, bounds) }
-        // Skia's boolean operators flatten curves, so the cut leaves hairline slivers
-        // along the shared edge: measured 0, 0, 7 and 94 square viewBox units against
-        // muscle areas of 135 601 to 155 194, the worst 0.07 %. A band that was not cut
-        // against the silhouette at all would overlap by tens of thousands of units, so
-        // a thousandth of the muscle area separates the two cases by three orders of
-        // magnitude.
-        assertTrue(
-            area(underRegion) * UNDER_MUSCLE_BOUND <= area(muscles),
-            "the fat layer reaches under a muscle on $sex $side: " +
-                "${area(underRegion)} of ${area(muscles)}",
-        )
     }
 
     /**
+     * The inputs the path version could not draw: 22 % body fat scaled by neck, chest and
+     * waist tape. Skia's `Path.op` failed on them, the band came out as the whole figure
+     * and the phone drew a filled gold back with the muscles painted back on top. The mask
+     * has to keep it a ring, whatever the thickness map looks like.
+     */
+    @Test
+    fun aTapeScaledLayerIsARingAndNotAFilledFigure() {
+        val layer = AdiposeModel.compute(
+            AdiposeInputs(
+                sex = BodySex.MALE,
+                bodyFatPercent = 22.0,
+                heightCm = 178.0,
+                tapeCm = mapOf("neck" to 38.0, "chest" to 100.0, "waist" to 90.0),
+            ),
+        )!!
+        BodySex.entries.forEach { sex ->
+            BodySide.entries.forEach { side ->
+                val view = geometry.view(sex, side)!!
+                val mask = bandRaster(sex, side, layer)
+                val band = mask.band
+                assertTrue(band.any { it }, "the fat layer is drawn on $sex $side")
+                assertFalse(
+                    band.count { it } * 3 > band.size,
+                    "the tape-scaled band fills the figure on $sex $side",
+                )
+                val overlap = band.indices.count { band[it] && mask.muscles[it] }
+                assertTrue(
+                    overlap * OVERLAP_DIVISOR <= band.count { it },
+                    "the tape-scaled band reaches under a muscle on $sex $side ($overlap)",
+                )
+                // The middle of the figure at three heights: muscle, seam or body on every
+                // view, and band on the filled figure the path version produced.
+                listOf(0.35f, 0.45f, 0.55f).forEach { fraction ->
+                    assertFalse(
+                        bandAt(band, view, view.viewBox.x + view.viewBox.width / 2, fraction),
+                        "$sex $side: the band fills the middle at ${fraction * 100} %",
+                    )
+                }
+            }
+        }
+    }
+
+    /** The band and, drawn separately, the muscles, one flag per mask pixel. */
+    private data class Mask(val band: BooleanArray, val muscles: BooleanArray)
+
+    private fun bandRaster(sex: BodySex, side: BodySide, layer: AdiposeLayer): Mask {
+        val view = geometry.view(sex, side)!!
+        val mask = AdiposeMask.build(view, thicknessOf(layer, view))
+        val width = mask.width
+        val height = mask.height
+        val pixels = IntArray(width * height)
+        mask.getPixels(pixels, 0, width, 0, 0, width, height)
+        // A band pixel is one the edge ramp has made solid: the ramp's own fringe is a
+        // fraction of a pixel either side of the contour.
+        val band = BooleanArray(pixels.size) { (pixels[it] ushr 24) >= 128 }
+
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            width,
+            height,
+            android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        val canvas = android.graphics.Canvas(bitmap)
+        val pxPerUnit = AdiposeMask.HEIGHT_PX / view.viewBox.height
+        canvas.scale(pxPerUnit, pxPerUnit)
+        canvas.translate(-view.viewBox.x, -view.viewBox.y)
+        val paint = android.graphics.Paint().apply {
+            style = android.graphics.Paint.Style.FILL
+            color = 0xFF000000.toInt()
+        }
+        view.parts.filter { it.muscle != null }.forEach { part ->
+            part.paths.forEach { path -> canvas.drawPath(path, paint) }
+        }
+        val musclePixels = IntArray(width * height)
+        bitmap.getPixels(musclePixels, 0, width, 0, 0, width, height)
+        val muscles = BooleanArray(musclePixels.size) { (musclePixels[it] ushr 24) != 0 }
+        return Mask(band, muscles)
+    }
+
+    private fun bandAt(band: BooleanArray, view: GeometryView, x: Float, y: Float): Boolean {
+        val pxPerUnit = AdiposeMask.HEIGHT_PX / view.viewBox.height
+        val width = (view.viewBox.width * pxPerUnit).toInt()
+        val mx = ((x - view.viewBox.x) * pxPerUnit).toInt()
+        val my = ((y - view.viewBox.y) * pxPerUnit).toInt()
+        if (mx !in 0 until width || my < 0) return false
+        val index = my * width + mx
+        return index in band.indices && band[index]
+    }
+
+    private fun thicknessOf(layer: AdiposeLayer, view: GeometryView): Map<MuscleRegion, Float> =
+        MuscleRegion.entries.associateWith { region ->
+            (layer.thicknessFor(region) * view.viewBox.height).toFloat()
+        }
+
+    /**
      * The band cache keeps a scrub fast without growing for ever: a slider that walks
-     * through a hundred thicknesses must not hold a hundred paths.
+     * through a hundred thicknesses must not hold a hundred masks.
      */
     @Test
     fun theBandCacheIsBoundedAndKeepsTheNewest() {
@@ -163,11 +212,14 @@ class BodyGeometryTest {
         val keys = (1..CACHE_PROBE).map { step ->
             MuscleRegion.entries.associateWith { CACHE_BASE + step }
         }
-        keys.forEach { thickness ->
-            AdiposeGeometry.store(view, thickness, android.graphics.Path())
-        }
-        assertEquals(null, AdiposeGeometry.cached(view, keys.first()), "the oldest band is gone")
-        assertNotNull(AdiposeGeometry.cached(view, keys.last()), "the newest band is kept")
+        val one = android.graphics.Bitmap.createBitmap(
+            1,
+            1,
+            android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        keys.forEach { thickness -> AdiposeMask.store(view, thickness, one) }
+        assertEquals(null, AdiposeMask.cached(view, keys.first()), "the oldest band is gone")
+        assertNotNull(AdiposeMask.cached(view, keys.last()), "the newest band is kept")
     }
 
     /** The same thickness is built once; that is what survives a rotation. */
@@ -175,9 +227,9 @@ class BodyGeometryTest {
     fun theSameThicknessIsReturnedFromTheCache() {
         val view = geometry.view(BodySex.MALE, BodySide.BACK)!!
         val thickness = MuscleRegion.entries.associateWith { CACHE_BASE }
-        val band = AdiposeGeometry.layer(view, thickness)
-        AdiposeGeometry.store(view, thickness, band)
-        assertTrue(AdiposeGeometry.cached(view, thickness) === band)
+        val band = AdiposeMask.build(view, thickness)
+        AdiposeMask.store(view, thickness, band)
+        assertTrue(AdiposeMask.cached(view, thickness) === band)
     }
 
     @Test
@@ -224,41 +276,14 @@ class BodyGeometryTest {
         assertTrue(female.viewBox.height != male.viewBox.height)
     }
 
-    private fun area(region: Region): Long {
-        var total = 0L
-        val iterator = android.graphics.RegionIterator(region)
-        val rect = android.graphics.Rect()
-        while (iterator.next(rect)) total += rect.width().toLong() * rect.height()
-        return total
-    }
-
-    private fun muscleRegion(path: android.graphics.Path, bounds: Region): Region {
-        val region = Region()
-        region.setPath(path, bounds)
-        return region
-    }
-
-    private fun strokeOutline(path: android.graphics.Path, width: Float): android.graphics.Path {
-        val ring = android.graphics.Path()
-        android.graphics.Paint().apply {
-            style = android.graphics.Paint.Style.STROKE
-            strokeWidth = width
-            strokeJoin = android.graphics.Paint.Join.ROUND
-            isAntiAlias = true
-        }.getFillPath(path, ring)
-        return ring
-    }
-
     private companion object {
-        const val SEAM_TOLERANCE = 4L
-
         /** More thicknesses than the cache may hold, so the oldest has to fall out. */
         const val CACHE_PROBE = 24
         const val CACHE_BASE = 3f
         const val RATIO_TOLERANCE = 1e-6
 
-        /** The band may cover at most one thousandth of the muscle area. */
-        const val UNDER_MUSCLE_BOUND = 1_000L
+        /** The band's one-pixel edge ramp may share at most a hundredth of itself. */
+        const val OVERLAP_DIVISOR = 100
     }
 
     @Test

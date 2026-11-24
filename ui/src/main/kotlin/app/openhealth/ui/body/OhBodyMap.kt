@@ -1,6 +1,10 @@
 package app.openhealth.ui.body
 
-import android.graphics.Path as AndroidPath
+import android.graphics.Bitmap
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.RectF
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -34,7 +38,10 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -353,6 +360,14 @@ private fun ViewPanel(
     val hatchColor = colors.surface.copy(alpha = OhAlpha.bodyHatch)
     val fatColor = colors.fat.copy(alpha = colors.fatLayerAlpha)
     val baseColor = baseFill(colors, variant)
+    // The mask carries alpha only; the colour and the layer's own alpha come from the paint.
+    val fatPaint = remember(fatColor) {
+        Paint().apply {
+            isAntiAlias = true
+            isFilterBitmap = true
+            colorFilter = PorterDuffColorFilter(fatColor.toArgb(), PorterDuff.Mode.SRC_IN)
+        }
+    }
     // Building the adipose band is a set of boolean path operations over the whole
     // silhouette; on a slow device that is seconds of work, so it never runs on the main
     // thread and its result is cached across rotation. The muscles draw first, the band
@@ -363,7 +378,7 @@ private fun ViewPanel(
             (layer.thicknessFor(region) * vb.height).toFloat()
         }
     }
-    val fatLayer by produceState<AndroidPath?>(
+    val fatMask by produceState<Bitmap?>(
         initialValue = null,
         // The band belongs to a view as much as to a thickness: the same figure seen as
         // the other sex is a different silhouette, so both are keys.
@@ -373,9 +388,9 @@ private fun ViewPanel(
         // Reset on every key change: a map without an adipose layer (or with the chip
         // switched off) must not keep the previous band.
         value = fatThickness?.let { thickness ->
-            AdiposeGeometry.cached(view, thickness) ?: if (synchronousLayers) {
-                AdiposeGeometry.layer(view, thickness).also {
-                    AdiposeGeometry.store(view, thickness, it)
+            AdiposeMask.cached(view, thickness) ?: if (synchronousLayers) {
+                AdiposeMask.build(view, thickness).also {
+                    AdiposeMask.store(view, thickness, it)
                 }
             } else {
                 null
@@ -383,8 +398,8 @@ private fun ViewPanel(
         }
         if (value == null && fatThickness != null) {
             value = withContext(Dispatchers.Default) {
-                AdiposeGeometry.layer(view, fatThickness).also {
-                    AdiposeGeometry.store(view, fatThickness, it)
+                AdiposeMask.build(view, fatThickness).also {
+                    AdiposeMask.store(view, fatThickness, it)
                 }
             }
         }
@@ -446,7 +461,16 @@ private fun ViewPanel(
                     }
                 }
                 if (!mini) {
-                    fatLayer?.let { fat -> drawPath(fat.asComposePath(), color = fatColor) }
+                    fatMask?.let { mask ->
+                        drawIntoCanvas { canvas ->
+                            canvas.nativeCanvas.drawBitmap(
+                                mask,
+                                null,
+                                RectF(vb.x, vb.y, vb.x + vb.width, vb.y + vb.height),
+                                fatPaint,
+                            )
+                        }
+                    }
                 }
                 if (mini) {
                     // At 46 dp the 3 dp separation stroke is wider than most muscles; the

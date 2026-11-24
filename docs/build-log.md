@@ -1239,3 +1239,71 @@ same order, with the tie-break now explicit (`happened_at DESC, entity_id`).
 - **`synchronousLayers`** is a production parameter on `OhBodyMap`, `BodyCard` and
   `TodayScreen` that only screenshot tests set. It is honest and documented, but it is
   test-shaped API on a product surface; B10's reliability pass should take it.
+
+## B4 live QA on the phone (2026-11-24 · `build/b4-live-fixes`)
+
+A live pass on the owner's phone, after B4 had merged, found the body card broken for the
+kind of profile the Vitals module is for. The app was not changed to fit the test data;
+the defect and its cause are below.
+
+### What the phone showed
+
+- **The fat layer drew the whole back as a gold figure.** With 22 % body fat recorded and
+  neck, chest and waist tape, the back half of the card was filled amber with the muscles
+  painted back on top, and the front was a correct outline.
+- **The band arrived seconds late.** Sampled at 1, 2, 4 and 8 s after launch: nothing at
+  1–2 s, front at 4 s, back at 8 s.
+- **A switched-off module kept its surfaces.** With Vitals off, its tab still showed the
+  measurement empty state and "Log weight" still opened and saved a weight.
+
+### Cause, measured rather than guessed
+
+Skia's `Path.op` returns false on this geometry and leaves the destination path untouched.
+At 22 % body fat with the tape above, **12 of 21 operations failed on the back view**, the
+first of them (`rim` minus the silhouette) already; the front's succeeded, which is why
+only the back was filled. Flattening the paths with `Path.approximate(0.5f)` did not fix
+the failures and took 116 s (front) and 291 s (back) on the host against 0.9 s and 3.5 s
+unflattened, so the path route was abandoned.
+
+### The fix
+
+| Item | Before | After |
+|---|---|---|
+| Band rendering | `Path.op` unions and differences | `AdiposeMask`: a 720 px raster mask; chamfer distance with the seeding region, a blurred silhouette used to exclude seams, a blurred per-region thickness field, one-pixel alpha ramp |
+| Back view, tape-scaled layer | filled gold figure | ring, like the front |
+| Cold build on the phone (debug) | 4 s / 8 s to appear | **371 ms front, 479 ms back**, off the main thread |
+| Module root when its module is off | its empty state and its logging action | `ModuleOffRoot`: "%s is off", one calm sentence, "Open settings", no logging action (Vitals, Train, Nutrition) |
+
+`AdiposeMask` is cached per (view, quantised thickness) in a six-entry LRU, never built for
+a mini map, and its decisions are recorded in `docs/adr/0009-adipose-mask.md`. The goldens
+were re-recorded (174, same count) in dark, light, 200 % text and RTL.
+
+### Tests
+
+`BodyGeometryTest` now builds the mask for all four views at a plain and a tape-scaled
+layer and asserts: the band exists; it covers no separately drawn muscle pixel (one mask
+pixel of tolerance); it is a ring, not a filled figure, at three heights down the middle
+of the body. `ModuleOffRootTest` covers the switched-off root for Vitals, Train and
+Nutrition, and that an enabled module keeps its own root. The four assertions fail on the
+old path output, which is how the regression was confirmed.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**; ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint and **274 JVM tests** (113 `:core`, 73 `:data`, 85 `:ui`, 1 fixtures, 2 exerciseindex), **174 goldens**. |
+| `:app-android:connectedDebugAndroidTest` | **13/13** on an Android 16 emulator. |
+| Phone, cold start | **1005 ms**, inside the 1.5 s budget; the band is present by 3 s with the map, on both views. |
+| Colour check | dark band `#F2C230` at 55 % over the card; light band `#A87C00` at full opacity, **3.7:1** on the light card, so OH-03's 55 %-versus-3:1 conflict does not exist: the light token was re-valued to `#A87C00` in DESIGN's dated edit and the code matches it. |
+
+### Closed here
+
+- **QA OH-02 (module-off root):** implemented, not deferred. `pr.md` §2.4 and §6.21 are
+  now enforced for the three module roots that exist, with tests.
+- **QA OH-03 (light adipose opacity):** measured on the phone and resolved; no copy or
+  token change was needed.
+
+### Still open
+
+- `fatProvenanceLine` has no caller; `synchronousLayers` is test-shaped API; hours are
+  always spoken in hours ("672 h ago"). All three stay as recorded above.

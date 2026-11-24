@@ -45,7 +45,7 @@ Resolution: each file wins in its own domain, and a specialist beats a generalis
 | Client | Native Android, Kotlin + Jetpack Compose; Material 3 only as behaviour primitives | `Tech-Stack` §2, §4 |
 | Navigation | Five tabs — Today, Vitals, Train (raised centre), Nutrition, Stats — plus a global top bar with quick add and Settings; no More tab | `DESIGN.md` §4.4, §5.15, §13.1; `Tech-Stack.md` §4 |
 | Watch | Any Garmin; vívoactive 5 is the reference device. FIT import, Health Connect (one-way from Garmin Connect), then Connect IQ (V1). Garmin Health API not assumed | `pr.md` §6.18, §13.8 |
-| Body visuals | Recovery map red → orange → green (Recovering / Easing / Ready, 24/48/72 h defaults); `fat` layer `#EBD27A` dark / `#9A6F00` light, outside muscle shapes only; 2D schematic, no photo-derived shape | `DESIGN.md` §9.1, §9.1.1, §12.5; `pr.md` §6.5, §6.8 |
+| Body visuals | Recovery map red → orange → green (Recovering / Easing / Ready, 24/48/72 h defaults); `fat` layer `#F2C230` dark / `#A87C00` light (re-valued 2026-11-23, `DESIGN.md` §2.5), outside muscle shapes only; 2D schematic, no photo-derived shape | `DESIGN.md` §9.1, §9.1.1, §12.5; `pr.md` §6.5, §6.8; `docs/adr/0009` |
 | Energy | Net = in − (BMR + steps + workouts), one source per day; goal ETA is a window, not a date, needs 14 days of data, hidden in weight-neutral mode | `pr.md` §6.4 |
 | Core | Platform-neutral Kotlin modules, KMP-ready; no `android.*`/`androidx.*` | §3 |
 | Storage | SQLite + SQLDelight 2.x + SQLCipher; five physical layers | §5 |
@@ -219,19 +219,18 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
 - Last completed phase: **B4 Body model and exercise data** (2026-11-24); next is **B5
   Gym training**.
-- Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `main` (`f3da2c0`); **269 JVM tests** (113 `:core`, 73 `:data`, 80 `:ui`, 1 fixtures,
-  2 exerciseindex) and **13 instrumented tests** pass, the instrumented suite most
-  recently on an Android 16 emulator. `:ui` holds the B1 design system, the B3 screens
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **274 JVM tests**
+  (113 `:core`, 73 `:data`, 85 `:ui`, 1 fixtures, 2 exerciseindex) and **13 instrumented
+  tests** pass, the instrumented suite most recently on an Android 16 emulator. `:ui` holds the B1 design system, the B3 screens
   and **174 goldens** (136 B1/B3 + 34 for the body map and Today's map card + 4 for the
   map's table alternative) in dark, light, 200 % text and RTL.
 - `:core` adds the 19 whole muscles and their regions/body parts, the recovery engine
   (primary 1, secondary 0.5, 28-day window, hard session against earlier medians), the
   adipose thickness model, the exercise catalogue (871 exercises from Free Exercise DB,
   Unlicense, text only), plan coverage and ranked alternatives. `:ui` adds
-  `OhBodyMap`/`AdiposeGeometry` — MuscleMap geometry (MIT) as a generated TSV, the
-  recovery hatch, the accent-ramp plan map, the closed-silhouette fat layer, the mini
-  variants, one accessibility node per muscle and no mirroring in RTL. `:data` is schema
+  `OhBodyMap`/`AdiposeMask` — MuscleMap geometry (MIT) as a generated TSV, the recovery
+  hatch, the accent-ramp plan map, the fat layer as a raster mask (`docs/adr/0009`), the
+  mini variants, one accessibility node per muscle and no mirroring in RTL. `:data` is schema
   **v5** (exercise level/mechanic/force, `4.sqm`), seeds the library once behind a settings
   key, and reads the four-week set loads for the map. `app-android` replaces Today's empty
   body card with the real map, the muscle and table sheets, the fat provenance sheet and a

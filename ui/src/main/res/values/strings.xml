@@ -444,6 +444,9 @@
     <!-- Roots that later phases fill -->
     <string name="root_subtitle">Your data stays on this phone.</string>
     <string name="root_vitals">Vitals</string>
+    <string name="root_module_off_title">%1$s is off</string>
+    <string name="root_module_off_body">Its cards are hidden and your data is kept. Turn it on in Settings, under Modules.</string>
+    <string name="root_module_off_action">Open settings</string>
     <string name="root_vitals_empty_title">No measurements yet</string>
     <string name="root_vitals_empty_body">Weight, tape measurements, composition and lab readings collect here.</string>
     <string name="root_vitals_action">Log weight</string>
