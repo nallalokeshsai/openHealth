@@ -164,6 +164,13 @@ data class EntryPayload(
     val device: String?,
     val appVersion: String?,
     val revision: Long,
+    // v7 (B6). Defaults keep a tombstone written before the upgrade restorable.
+    val servingLabel: String? = null,
+    val servingG: Double? = null,
+    val servings: Double? = null,
+    val foodName: String? = null,
+    val brand: String? = null,
+    val microsJson: String? = null,
 )
 
 @Serializable
@@ -716,11 +723,17 @@ class TrashService(
             happenedAt = row.happenedAt,
             recordedAt = row.recordedAt,
             quantityG = row.quantityG,
+            servingLabel = row.servingLabel,
+            servingG = row.servingG,
+            servings = row.servings,
+            foodName = row.foodName,
+            brand = row.brand,
             energyKcal = row.energyKcal,
             proteinG = row.proteinG,
             carbsG = row.carbsG,
             fatG = row.fatG,
             fibreG = row.fibreG,
+            microsJson = row.microsJson,
             sourceKind = row.sourceKind,
             sourceId = row.sourceId,
             userVerified = row.userVerified,
@@ -868,7 +881,8 @@ class TrashService(
         id, meal_id, food_id, local_date, zone_id, happened_at, recorded_at, quantity_g,
         energy_kcal, protein_g, carbs_g, fat_g, fibre_g, source_kind, source_id,
         user_verified, user_edited, observation_id, raw_record_id, idempotency_key,
-        device, app_version, revision,
+        device, app_version, revision, serving_label, serving_g, servings, food_name,
+        brand, micros_json,
     )
 
     private fun Measurement.toPayload(): MeasurementPayload = MeasurementPayload(

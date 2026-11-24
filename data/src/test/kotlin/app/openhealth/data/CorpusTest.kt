@@ -53,7 +53,13 @@ class CorpusTest {
         assertTrue(entries.isNotEmpty())
         val energy = RollupRepository(store.db)
             .forDayAndType(date, ObservationType.NUTRITION_ENERGY)!!
-        assertEquals(entries.sumOf { it.energy_kcal ?: 0.0 }, energy.value.value, 1e-9)
+        assertEquals(
+            entries.sumOf {
+                it.totals.of(app.openhealth.core.nutrition.Nutrient.ENERGY) ?: 0.0
+            },
+            energy.value.value,
+            1e-9,
+        )
         assertEquals(entries.size.toDouble(), energy.secondaryValue)
         store.close()
     }

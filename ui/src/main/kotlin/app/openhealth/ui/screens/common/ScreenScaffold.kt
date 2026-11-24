@@ -172,7 +172,9 @@ fun OhFocusedScreen(modifier: Modifier = Modifier, content: @Composable ColumnSc
             .background(OhTheme.colors.bg)
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = OhTheme.space.s6),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = OhTheme.space.s6)
+            .padding(bottom = OhTheme.space.s6),
         verticalArrangement = Arrangement.Top,
         content = content,
     )

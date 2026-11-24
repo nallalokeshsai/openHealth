@@ -18,6 +18,10 @@ enum class CitationKey {
     CDC_WEIGHT_LOSS,
     SLEEP_CONSENSUS_2015,
     UCUM,
+    FDA_DAILY_VALUES_2020,
+    IOM_MACRONUTRIENTS_2005,
+    USDA_FOODDATA_CENTRAL,
+    OPEN_FOOD_FACTS,
     APP_RULE,
 }
 
@@ -159,6 +163,53 @@ object Citations {
             supports = "Every unit code stored with a value",
             licenceNote = "Unit codes and conversion factors are used as identifiers; " +
                 "attribution is in NOTICE.md.",
+        ),
+        Citation(
+            key = CitationKey.FDA_DAILY_VALUES_2020,
+            title = "Daily Value on the New Nutrition and Supplement Facts Labels",
+            authors = "U.S. Food and Drug Administration",
+            year = 2020,
+            publication = "21 CFR 101.9(c)(8)(iv); FDA consumer update",
+            url = "https://www.fda.gov/food/nutrition-facts-label/daily-value-new-nutrition-" +
+                "and-supplement-facts-labels",
+            supports = "The daily value each micronutrient is shown against on the panel",
+            licenceNote = "A U.S. Government work in the public domain. The values and the " +
+                "reference-diet note are reproduced; the FDA text is not.",
+        ),
+        Citation(
+            key = CitationKey.IOM_MACRONUTRIENTS_2005,
+            title = "Dietary Reference Intakes for energy, carbohydrate, fiber, fat, fatty " +
+                "acids, cholesterol, protein, and amino acids",
+            authors = "Institute of Medicine of the National Academies",
+            year = 2005,
+            publication = "The National Academies Press",
+            url = "https://doi.org/10.17226/10490",
+            supports = "Protein RDA (0.8 g/kg), the fat and carbohydrate acceptable ranges, " +
+                "the fibre recommendation and a suggested target starting point",
+            licenceNote = "Values are cited facts; the report text is not reproduced.",
+        ),
+        Citation(
+            key = CitationKey.USDA_FOODDATA_CENTRAL,
+            title = "USDA FoodData Central",
+            authors = "U.S. Department of Agriculture, Agricultural Research Service",
+            year = 2026,
+            publication = "Foundation Foods 2026-04-30 and SR Legacy 2018-04",
+            url = "https://fdc.nal.usda.gov/",
+            supports = "The bundled food index: names, per-100 g nutrients and portions",
+            licenceNote = "U.S. Government data released as CC0 1.0 (public domain " +
+                "dedication). The version and licence are recorded in NOTICE.md and in the " +
+                "app's food-data attribution screen.",
+        ),
+        Citation(
+            key = CitationKey.OPEN_FOOD_FACTS,
+            title = "Open Food Facts",
+            authors = "Open Food Facts contributors",
+            year = 2026,
+            publication = "Open Food Facts database",
+            url = "https://world.openfoodfacts.org/",
+            supports = "A product looked up by the person, by barcode, and cached locally",
+            licenceNote = "Open Database License (ODbL) 1.0. Attribution is shown before the " +
+                "first lookup and on every product it supplies, and in NOTICE.md.",
         ),
         Citation(
             key = CitationKey.APP_RULE,

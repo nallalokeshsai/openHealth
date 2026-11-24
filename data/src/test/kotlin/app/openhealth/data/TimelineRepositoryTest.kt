@@ -37,15 +37,16 @@ class TimelineRepositoryTest {
             ),
         )
         app.openhealth.data.repo.NutritionRepository(store.db).upsertMeal(
-            app.openhealth.data.db.Meal(
+            app.openhealth.data.repo.MealDraft(
                 id = "meal-1",
                 name = "Lunch",
-                kind = "lunch",
-                local_date = date.toString(),
-                notes = null,
-                created_at = dayStart(date).plus(22.hours).toEpochMilliseconds(),
-                updated_at = dayStart(date).plus(22.hours).toEpochMilliseconds(),
-                revision = 1L,
+                kind = app.openhealth.data.repo.MealKind.LUNCH,
+                localDate = date,
+                zoneId = TEST_ZONE,
+                happenedAt = dayStart(date).plus(22.hours),
+                recordedAt = dayStart(date).plus(22.hours),
+                sourceId = "manual",
+                idempotencyKey = "meal-1",
             ),
         )
         NoteRepository(store.db).insert(

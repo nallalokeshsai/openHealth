@@ -5,6 +5,15 @@ plugins {
 
 android {
     namespace = "app.openhealth"
+
+    // The store flavours remain (Play and the Play-Services-free F-Droid build), but the
+    // barcode decoder is ZXing in both: ML Kit's transitive Google Data Transport is a
+    // telemetry path that the no-telemetry invariant forbids (ADR 0011, B6).
+    flavorDimensions += "store"
+    productFlavors {
+        create("play") { dimension = "store" }
+        create("fdroid") { dimension = "store" }
+    }
 }
 
 dependencies {
@@ -26,6 +35,14 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.koin.core)
     implementation(libs.koin.android)
+
+    // CameraX and ZXing are Apache-2.0 and shared by both store flavours. ZXing keeps the
+    // decoder offline, free and telemetry-free; ML Kit was removed in B6 for the latter.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
 
     // Encrypted storage behind the :core seam (Tech-Stack.md §5). SQLCipher is the
     // community edition; its attribution requirement is recorded in NOTICE.md.

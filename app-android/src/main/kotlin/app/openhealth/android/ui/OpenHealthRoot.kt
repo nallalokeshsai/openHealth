@@ -48,6 +48,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.openhealth.R
 import app.openhealth.android.AppContainer
+import app.openhealth.android.nutrition.BarcodeCameraPreview
 import app.openhealth.android.preferences.ThemeMode
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.ui.R as UiR
@@ -55,9 +56,20 @@ import app.openhealth.ui.components.OhTabItem
 import app.openhealth.ui.components.OhToast
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.screens.lock.LockScreen
+import app.openhealth.ui.screens.nutrition.BarcodeScanScreen
+import app.openhealth.ui.screens.nutrition.BarcodeState
+import app.openhealth.ui.screens.nutrition.EntrySheet
+import app.openhealth.ui.screens.nutrition.FastingSheet
+import app.openhealth.ui.screens.nutrition.FoodEditorScreen
+import app.openhealth.ui.screens.nutrition.FoodSearchSheet
+import app.openhealth.ui.screens.nutrition.MicrosScreen
+import app.openhealth.ui.screens.nutrition.NutritionRootScreen
+import app.openhealth.ui.screens.nutrition.PortionSheet
+import app.openhealth.ui.screens.nutrition.QuickCaloriesSheet
+import app.openhealth.ui.screens.nutrition.TargetsSheet
+import app.openhealth.ui.screens.nutrition.WaterSheet
 import app.openhealth.ui.screens.onboarding.OnboardingScreen
 import app.openhealth.ui.screens.quickadd.QuickAddSheet
-import app.openhealth.ui.screens.roots.NutritionRoot
 import app.openhealth.ui.screens.roots.StatsRoot
 import app.openhealth.ui.screens.roots.VitalsRoot
 import app.openhealth.ui.screens.settings.SettingsScreen
@@ -273,15 +285,123 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                NutritionRoot(
-                    onLogWater = if (HealthModule.NUTRITION in state.preferences.modules) {
-                        { viewModel.openQuickAdd(QuickAction.WATER) }
+                val model = state.nutrition
+                if (model != null) {
+                    NutritionRootScreen(
+                        model = model,
+                        onSelectDay = viewModel::selectNutritionDay,
+                        onScan = {
+                            viewModel.startBarcode()
+                            nav.navigate(BarcodeRoute)
+                        },
+                        onTargets = viewModel::openTargets,
+                        onMicros = {
+                            viewModel.openMicros()
+                            nav.navigate(MicrosRoute(model.selectedDate.toString()))
+                        },
+                        onAddFood = viewModel::openFoodSearch,
+                        onOpenEntry = viewModel::openEntry,
+                        onDeleteEntry = viewModel::deleteEntry,
+                        onAddMeal = viewModel::addCustomMeal,
+                        onWater = viewModel::openWater,
+                        onLogWater = viewModel::logWaterContainer,
+                        onFasting = viewModel::openFasting,
+                        onCopyMeal = viewModel::copyMeal,
+                        onSaveTemplate = viewModel::saveMealTemplate,
+                        onCopyDay = viewModel::copyDay,
+                        onOpenSettings = { nav.navigate(SettingsRoute) },
+                        moduleOff = HealthModule.NUTRITION !in state.preferences.modules,
+                    )
+                }
+            }
+        }
+        composable<BarcodeRoute> {
+            LaunchedEffect(Unit) {
+                if (state.barcode == null) viewModel.startBarcode()
+            }
+            BarcodeScanScreen(
+                model = state.barcode ?: app.openhealth.ui.screens.nutrition.BarcodeModel(
+                    state = BarcodeState.DISCLOSURE,
+                    barcode = null,
+                    product = null,
+                    disclosureAccepted = false,
+                ),
+                showKcal = state.preferences.displayPolicy.shows(
+                    app.openhealth.core.preferences.SensitiveMetric.CALORIES,
+                ),
+                cameraPreview = { onBarcode -> BarcodeCameraPreview(onBarcode = onBarcode) },
+                onBack = {
+                    viewModel.closeBarcode()
+                    nav.popBackStack()
+                },
+                onAcceptDisclosure = viewModel::acceptBarcodeDisclosure,
+                onScanAgain = viewModel::barcodeScanAgain,
+                onManual = viewModel::barcodeManual,
+                onLookup = viewModel::barcodeLookup,
+                onLog = {
+                    viewModel.logBarcodeProduct(it)
+                    nav.popBackStack()
+                },
+                onCreateFood = { barcode ->
+                    viewModel.closeBarcode()
+                    nav.popBackStack()
+                    nav.navigate(FoodEditorRoute(barcode = barcode))
+                },
+            )
+        }
+        composable<FoodEditorRoute> { entry ->
+            val route = entry.toRoute<FoodEditorRoute>()
+            LaunchedEffect(route.foodId, route.recipe, route.barcode) {
+                if (state.foodEditor == null) {
+                    if (route.recipe) {
+                        viewModel.openRecipeEditor(route.foodId)
                     } else {
-                        null
+                        viewModel.openFoodEditor(route.foodId, route.barcode)
+                    }
+                }
+            }
+            val editor = state.foodEditor
+            if (editor != null) {
+                FoodEditorScreen(
+                    model = editor,
+                    showKcal = state.preferences.displayPolicy.shows(
+                        app.openhealth.core.preferences.SensitiveMetric.CALORIES,
+                    ),
+                    onBack = {
+                        viewModel.closeFoodEditor()
+                        nav.popBackStack()
                     },
-                    moduleOff = HealthModule.NUTRITION !in state.preferences.modules,
-                    onOpenSettings = { nav.navigate(SettingsRoute) },
+                    onSave = {
+                        viewModel.saveFoodEditor(it)
+                        nav.popBackStack()
+                    },
+                    onAddIngredient = viewModel::openIngredientSearch,
+                    onIngredientGrams = viewModel::setIngredientGrams,
+                    onRemoveIngredient = viewModel::removeIngredient,
+                    onDuplicate = viewModel::duplicateRecipe,
+                    onLog = { id ->
+                        viewModel.openRecipePortion(id)
+                        nav.popBackStack()
+                    },
                 )
+            } else {
+                Loading()
+            }
+        }
+        composable<MicrosRoute> { entry ->
+            val route = entry.toRoute<MicrosRoute>()
+            LaunchedEffect(route.date) { viewModel.openMicros(LocalDate.parse(route.date)) }
+            val micros = state.micros
+            if (micros != null) {
+                MicrosScreen(
+                    model = micros,
+                    onBack = {
+                        viewModel.closeMicros()
+                        nav.popBackStack()
+                    },
+                )
+            } else {
+                Loading()
             }
         }
         composable<StatsRoute> {
@@ -526,6 +646,92 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
         onSave = viewModel::saveQuickAdd,
         onRepeat = viewModel::repeat,
     )
+    val showKcal = state.preferences.displayPolicy.shows(
+        app.openhealth.core.preferences.SensitiveMetric.CALORIES,
+    )
+    state.foodSearch?.let { search ->
+        FoodSearchSheet(
+            model = search,
+            showKcal = showKcal,
+            onDismiss = viewModel::closeNutritionSheets,
+            onQuery = viewModel::searchFoods,
+            onSelect = viewModel::selectFood,
+            onTemplate = viewModel::logTemplate,
+            onMeal = viewModel::selectFoodMeal,
+            onScan = {
+                viewModel.closeNutritionSheets()
+                viewModel.startBarcode()
+                nav.navigate(BarcodeRoute)
+            },
+            onCreateFood = {
+                viewModel.closeNutritionSheets()
+                viewModel.openFoodEditor(null)
+                nav.navigate(FoodEditorRoute())
+            },
+            onCreateRecipe = {
+                viewModel.closeNutritionSheets()
+                viewModel.openRecipeEditor(null)
+                nav.navigate(FoodEditorRoute(recipe = true))
+            },
+            onQuickCalories = viewModel::openQuickCalories,
+        )
+    }
+    state.portion?.let { portion ->
+        PortionSheet(
+            model = portion,
+            showKcal = showKcal,
+            onDismiss = viewModel::closeNutritionSheets,
+            onMeal = viewModel::selectFoodMeal,
+            onLog = viewModel::logPortion,
+            onEditRecipe = {
+                val id = portion.food.id
+                viewModel.closeNutritionSheets()
+                viewModel.openRecipeEditor(id)
+                nav.navigate(FoodEditorRoute(id, recipe = true))
+            },
+        )
+    }
+    state.entryDetail?.let { entry ->
+        EntrySheet(
+            model = entry,
+            showKcal = showKcal,
+            onDismiss = viewModel::closeNutritionSheets,
+            onEdit = viewModel::editEntry,
+            onDelete = { viewModel.deleteEntry(entry.id) },
+        )
+    }
+    state.waterSheet?.let { water ->
+        WaterSheet(
+            model = water,
+            onDismiss = viewModel::closeNutritionSheets,
+            onLog = viewModel::logWater,
+            onAdd = viewModel::addWaterContainer,
+        )
+    }
+    state.targetsSheet?.let { targets ->
+        TargetsSheet(
+            model = targets,
+            onDismiss = viewModel::closeNutritionSheets,
+            onSave = viewModel::saveTargets,
+        )
+    }
+    state.fastingSheet?.let { fasting ->
+        FastingSheet(
+            model = fasting,
+            onDismiss = viewModel::closeNutritionSheets,
+            onToggle = viewModel::setFastingEnabled,
+            onHours = viewModel::setFastingHours,
+            onStart = viewModel::startFast,
+            onEnd = viewModel::endFast,
+        )
+    }
+    if (state.quickCalories) {
+        QuickCaloriesSheet(
+            showKcal = showKcal,
+            onDismiss = viewModel::closeNutritionSheets,
+            onSave = viewModel::saveQuickCalories,
+        )
+    }
 }
 
 @Composable

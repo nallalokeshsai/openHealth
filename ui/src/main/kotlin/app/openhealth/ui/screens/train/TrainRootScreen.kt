@@ -393,10 +393,6 @@ private fun PlanCard(
         )
         if (plan == null) {
             Spacer(Modifier.height(OhTheme.space.s3))
-            OhEmptyState(
-                title = stringResource(R.string.train_routines_empty_title),
-                body = stringResource(R.string.train_routines_empty_body),
-            )
             if (model.openSession != null) {
                 Text(
                     text = stringResource(R.string.train_session_open_note),
@@ -404,7 +400,8 @@ private fun PlanCard(
                     color = OhTheme.colors.label2,
                 )
             } else {
-                Spacer(Modifier.height(OhTheme.space.s3))
+                // The primary action stays above the explanation, so a fresh install can
+                // start a workout without the empty state pushing the button off-screen.
                 OhButton(text = stringResource(R.string.train_start), onClick = onStartFreestyle)
                 Spacer(Modifier.height(OhTheme.space.s2))
                 OhButton(
@@ -412,7 +409,12 @@ private fun PlanCard(
                     onClick = onPast,
                     variant = app.openhealth.ui.components.OhButtonVariant.Ghost,
                 )
+                Spacer(Modifier.height(OhTheme.space.s3))
             }
+            OhEmptyState(
+                title = stringResource(R.string.train_routines_empty_title),
+                body = stringResource(R.string.train_routines_empty_body),
+            )
         } else {
             Spacer(Modifier.height(OhTheme.space.s5))
             Row(verticalAlignment = Alignment.CenterVertically) {

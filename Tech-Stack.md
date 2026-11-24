@@ -1,6 +1,6 @@
 # openHealth — Technology Stack
 
-**Version:** 2.1 · 2026-11-22 (navigation row: five tabs; Garmin is the primary watch, see `pr.md` §6.18) — **Android only for the first releases** (`pr.md` §0.1)
+**Version:** 2.3 · 2026-11-25 (B6: a telemetry-free barcode decoder) — **Android only for the first releases** (`pr.md` §0.1)
 **Status:** Closes `pr.md` §13 decisions 1, 2, 3 and supersedes `pr.md` §8.1–8.4.
 **Companions:** [`pr.md`](pr.md) · [`DESIGN.md`](DESIGN.md) · [`BUILD-ROADMAP.md`](BUILD-ROADMAP.md) · [`prompts.md`](prompts.md) · ADR [`docs/adr/0001-android-first.md`](docs/adr/0001-android-first.md)
 
@@ -142,7 +142,7 @@ The server stores and relays. It never becomes required for a core action.
 | Live step counting | `Sensor.TYPE_STEP_COUNTER` | Reboot-safe counter handling; the rollup owns dedup against Health Connect (`pr.md` §7.6) |
 | Activity permission | `ACTIVITY_RECOGNITION` | Requested at the moment steps are first enabled, never at launch |
 | BLE devices | Android BLE (`BLUETOOTH_SCAN`/`CONNECT`) | Standard GATT: weight 0x181D, BP 0x1810, HR 0x180D, glucose 0x1808 |
-| Barcode | CameraX + **ML Kit barcode, bundled model** | Bundled keeps it offline and GMS-free |
+| Barcode | CameraX + **ZXing core** in every flavour | ZXing is Apache-2.0, offline, and has no network path. ML Kit was evaluated in B6 and removed: its transitive Google Data Transport is a telemetry path, which the no-telemetry invariant forbids, and its binaries are proprietary. Camera permission is requested when the scanner opens, never at launch (ADR 0011). |
 | GPS activities | Fused or platform location + foreground service | FIT/GPX/TCX import and export |
 | Maps | MapLibre + PMTiles | Open, self-hostable tiles, offline packs. Not Google Maps |
 | Notifications | Local only; `POST_NOTIFICATIONS` at the point of use | No push server for reminders |

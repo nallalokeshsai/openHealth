@@ -147,9 +147,15 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                 "happened_at",
             ),
             Branch(
-                "SELECT 'meal', id, local_date, created_at, created_at, 'manual', kind, 0 " +
+                "SELECT 'meal', id, local_date, COALESCE(happened_at, created_at), " +
+                    "COALESCE(recorded_at, created_at), COALESCE(source_id, 'manual'), kind, 0 " +
                     "FROM meal",
-                "created_at",
+                "COALESCE(happened_at, created_at)",
+            ),
+            Branch(
+                "SELECT 'fast', id, local_date, start_at, recorded_at, 'manual', NULL, 0 " +
+                    "FROM fast_window",
+                "start_at",
             ),
             Branch(
                 "SELECT 'note', id, local_date, happened_at, recorded_at, " +

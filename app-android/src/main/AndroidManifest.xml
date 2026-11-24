@@ -5,6 +5,19 @@
          permission is declared; it is only exercised when the person turns the lock on. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Barcode scanning (pr.md §6.3): the camera is requested at the moment the scan
+         action is used, never at launch. A phone without a camera still runs the app. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- The one outbound call the app makes: the Open Food Facts barcode lookup the
+         person asks for (pr.md §6.3, §6.23; ADR 0011). It is declared here, by the app,
+         and not inherited from a library: the F-Droid flavour has no ML Kit to merge one
+         in, so without this line the lookup fails on that build and silently falls back
+         to the manual path. Nothing else in the app opens a socket. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- The rest timer is an ongoing foreground service (pr.md §6.5, Tech-Stack.md §4):
          health, a short rest countdown for a training session. Sound and vibration at
          zero are local alerts, never a push. -->

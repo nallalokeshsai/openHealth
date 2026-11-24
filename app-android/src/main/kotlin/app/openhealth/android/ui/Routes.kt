@@ -44,3 +44,18 @@ data class SessionSummaryRoute(val sessionId: String)
 
 @Serializable
 data class ExerciseHistoryRoute(val exerciseId: String)
+
+// B6 nutrition pages: the scanner needs the camera, and the two long forms need a
+// scrollable page rather than a sheet.
+@Serializable
+data object BarcodeRoute
+
+@Serializable
+data class FoodEditorRoute(
+    val foodId: String? = null,
+    val recipe: Boolean = false,
+    val barcode: String? = null,
+)
+
+@Serializable
+data class MicrosRoute(val date: String)

@@ -18,10 +18,7 @@ import app.openhealth.core.time.Days
 import app.openhealth.core.time.TimeProvenance
 import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
-import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Exercise
-import app.openhealth.data.db.Food
-import app.openhealth.data.db.Meal
 import app.openhealth.data.db.Measurement
 import app.openhealth.data.db.OpenHealthDb
 import app.openhealth.data.db.Profile
@@ -35,6 +32,8 @@ import app.openhealth.data.db.Work_set
 import app.openhealth.data.ingestion.PayloadHash
 import app.openhealth.data.mapping.enumValueOrNull
 import app.openhealth.data.repo.BodyRepository
+import app.openhealth.data.repo.EntryDraft
+import app.openhealth.data.repo.MealDraft
 import app.openhealth.data.repo.NutritionRepository
 import app.openhealth.data.repo.ObservationRepository
 import app.openhealth.data.repo.ProfileRepository
@@ -573,45 +572,43 @@ class CorpusGenerator(
             val mealId = idGenerator.newId()
             val at = dayStart.plus(hour.toLong().hours)
             nutrition.upsertMeal(
-                Meal(
+                MealDraft(
                     id = mealId,
                     name = kind,
-                    kind = kind,
-                    local_date = date.toString(),
-                    notes = null,
-                    created_at = at.toEpochMilliseconds(),
-                    updated_at = at.toEpochMilliseconds(),
-                    revision = 1L,
+                    kind = app.openhealth.data.repo.MealKind.fromKey(kind)
+                        ?: app.openhealth.data.repo.MealKind.CUSTOM,
+                    localDate = date,
+                    zoneId = zone,
+                    happenedAt = at,
+                    recordedAt = at,
+                    sourceId = "manual",
+                    idempotencyKey = "corpus-meal-$mealId",
                 ),
             )
             repeat(2 + random.nextInt(0, 3)) {
                 val food = entryFoods[random.nextInt(entryFoods.size)]
                 val quantity = 80 + random.nextInt(0, 220)
                 nutrition.upsertEntry(
-                    Entry(
+                    EntryDraft(
                         id = idGenerator.newId(),
-                        meal_id = mealId,
-                        food_id = food.id,
-                        local_date = date.toString(),
-                        zone_id = zone.id,
-                        happened_at = at.toEpochMilliseconds(),
-                        recorded_at = at.plus(5.minutes).toEpochMilliseconds(),
-                        quantity_g = quantity.toDouble(),
-                        energy_kcal = (food.energy_kcal_per_100g ?: 0.0) * quantity / 100.0,
-                        protein_g = (food.protein_g_per_100g ?: 0.0) * quantity / 100.0,
-                        carbs_g = (food.carbs_g_per_100g ?: 0.0) * quantity / 100.0,
-                        fat_g = (food.fat_g_per_100g ?: 0.0) * quantity / 100.0,
-                        fibre_g = (food.fibre_g_per_100g ?: 0.0) * quantity / 100.0,
-                        source_kind = "manual",
-                        source_id = "manual",
-                        user_verified = true,
-                        user_edited = false,
-                        observation_id = null,
-                        raw_record_id = null,
-                        idempotency_key = "corpus-entry-${idGenerator.newId()}",
+                        mealId = mealId,
+                        foodId = food.id,
+                        localDate = date,
+                        zoneId = zone,
+                        happenedAt = at,
+                        recordedAt = at.plus(5.minutes),
+                        quantityG = quantity.toDouble(),
+                        foodName = food.name,
+                        totals = app.openhealth.core.nutrition.PortionMath.forGrams(
+                            food.per100g,
+                            quantity.toDouble(),
+                        ),
+                        sourceKind = "manual",
+                        sourceId = "manual",
+                        verified = true,
+                        idempotencyKey = "corpus-entry-${idGenerator.newId()}",
                         device = "manual",
-                        app_version = "fixture",
-                        revision = 1L,
+                        appVersion = "fixture",
                     ),
                 )
                 entries += 1
@@ -620,66 +617,58 @@ class CorpusGenerator(
         return NutritionCount(meals = 3, entries = entries)
     }
 
-    private val foods: List<Food> by lazy { createFoods() }
+    private val foods: List<app.openhealth.data.repo.FoodRecord> by lazy { createFoods() }
 
-    private fun createFoods(): List<Food> {
-        val now = clock.now().toEpochMilliseconds()
+    private fun createFoods(): List<app.openhealth.data.repo.FoodRecord> {
         val nutrition = NutritionRepository(db)
+        // Energy, protein, carbohydrate, fat and fibre per 100 g; approximate values for
+        // a demo day, never presented as a measured food.
         val items = listOf(
-            Triple("Oats", 379.0, 13.0),
-            Triple("Milk", 42.0, 3.4),
-            Triple("Banana", 89.0, 1.1),
-            Triple("Chicken breast", 165.0, 31.0),
-            Triple("Rice", 130.0, 2.7),
-            Triple("Broccoli", 34.0, 2.8),
-            Triple("Salmon", 208.0, 20.0),
-            Triple("Potato", 77.0, 2.0),
-            Triple("Yoghurt", 59.0, 10.0),
-            Triple("Apple", 52.0, 0.3),
+            DemoFood("Oats", 379.0, 13.0, 68.0, 6.5, 10.1),
+            DemoFood("Milk", 42.0, 3.4, 5.0, 1.0, 0.0),
+            DemoFood("Banana", 89.0, 1.1, 22.8, 0.3, 2.6),
+            DemoFood("Chicken breast", 165.0, 31.0, 0.0, 3.6, 0.0),
+            DemoFood("Rice", 130.0, 2.7, 28.2, 0.3, 0.4),
+            DemoFood("Broccoli", 34.0, 2.8, 6.6, 0.4, 2.6),
+            DemoFood("Salmon", 208.0, 20.0, 0.0, 13.0, 0.0),
+            DemoFood("Potato", 77.0, 2.0, 17.0, 0.1, 2.2),
+            DemoFood("Yoghurt", 59.0, 10.0, 3.6, 0.4, 0.0),
+            DemoFood("Apple", 52.0, 0.3, 13.8, 0.2, 2.4),
         )
-        val base = items.map { (name, energy, protein) ->
-            Food(
-                id = "food-$name",
-                name = name,
-                brand = null,
-                barcode = null,
-                source_kind = "bundled",
-                source_ref = null,
-                energy_kcal_per_100g = energy,
-                protein_g_per_100g = protein,
-                carbs_g_per_100g = null,
-                fat_g_per_100g = null,
-                fibre_g_per_100g = null,
-                serving_json = null,
+        val base = items.map { food ->
+            app.openhealth.data.repo.FoodDraft(
+                id = "food-${food.name}",
+                name = food.name,
+                sourceKind = "bundled",
+                foodType = app.openhealth.data.repo.FoodType.BUNDLED,
+                per100g = mapOf(
+                    app.openhealth.core.nutrition.Nutrient.ENERGY to food.energy,
+                    app.openhealth.core.nutrition.Nutrient.PROTEIN to food.protein,
+                    app.openhealth.core.nutrition.Nutrient.CARBS to food.carbs,
+                    app.openhealth.core.nutrition.Nutrient.FAT to food.fat,
+                    app.openhealth.core.nutrition.Nutrient.FIBRE to food.fibre,
+                ),
                 verified = true,
-                created_at = now,
-                updated_at = now,
-                revision = 1L,
             )
         }
         // A few thousand rows so the food search benchmark measures an index, not a
         // ten-row table (the real index is B6's; this is the right shape).
         val indexed = (1..INDEXED_FOOD_COUNT).map { index ->
-            Food(
+            app.openhealth.data.repo.FoodDraft(
                 id = "food-indexed-$index",
                 name = "Indexed food %04d".format(index),
-                brand = null,
-                barcode = null,
-                source_kind = "synthetic",
-                source_ref = null,
-                energy_kcal_per_100g = 100.0,
-                protein_g_per_100g = 5.0,
-                carbs_g_per_100g = 10.0,
-                fat_g_per_100g = 3.0,
-                fibre_g_per_100g = 1.0,
-                serving_json = null,
-                verified = false,
-                created_at = now,
-                updated_at = now,
-                revision = 1L,
+                sourceKind = "synthetic",
+                foodType = app.openhealth.data.repo.FoodType.BUNDLED,
+                per100g = mapOf(
+                    app.openhealth.core.nutrition.Nutrient.ENERGY to 100.0,
+                    app.openhealth.core.nutrition.Nutrient.PROTEIN to 5.0,
+                    app.openhealth.core.nutrition.Nutrient.CARBS to 10.0,
+                    app.openhealth.core.nutrition.Nutrient.FAT to 3.0,
+                    app.openhealth.core.nutrition.Nutrient.FIBRE to 1.0,
+                ),
             )
         }
-        return (base + indexed).onEach { nutrition.upsertFood(it) }
+        return (base + indexed).map { nutrition.upsertFood(it) }
     }
 
     private fun seedMeasurement(
@@ -784,3 +773,12 @@ private fun seedCorpusExercises(
     )
     id
 }
+
+private data class DemoFood(
+    val name: String,
+    val energy: Double,
+    val protein: Double,
+    val carbs: Double,
+    val fat: Double,
+    val fibre: Double,
+)

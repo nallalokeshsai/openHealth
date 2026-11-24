@@ -39,7 +39,7 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
         clock = clock,
         registryProvider = { sources.registry() },
     )
-    val nutrition = NutritionRepository(db)
+    val nutrition = NutritionRepository(db, clock)
     val body = BodyRepository(db)
     val training = TrainingRepository(db)
     val profile = ProfileRepository(db)

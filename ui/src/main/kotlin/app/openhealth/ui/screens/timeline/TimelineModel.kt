@@ -13,6 +13,7 @@ enum class TimelineKind {
     MEAL,
     NUTRITION,
     ENTRY,
+    FAST,
     SESSION,
     SET,
     OBSERVATION,
