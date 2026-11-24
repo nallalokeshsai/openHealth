@@ -22,6 +22,8 @@ sealed interface MuscleShade {
         val hoursSinceLoad: Double?,
         val sets: Double,
         val hardSession: Boolean,
+        val lastRecordedAt: kotlin.time.Instant? = null,
+        val lastSourceLabel: String? = null,
     ) : MuscleShade
 
     data class Plan(val share: Float, val weeklySets: Double) : MuscleShade
@@ -36,6 +38,8 @@ data class FatProvenance(
     val bodyFatPercent: Double? = null,
     val method: app.openhealth.core.observation.MeasurementMethod? = null,
     val sourceLabel: String? = null,
+    val observedAt: kotlin.time.Instant? = null,
+    val recordedAt: kotlin.time.Instant? = null,
     val tapeSites: List<String> = emptyList(),
 )
 
@@ -51,6 +55,8 @@ data class BodyMapModel(
     val adipose: AdiposeLayer? = null,
     val fatProvenance: FatProvenance? = null,
     val selected: Muscle? = null,
+    /** False when the profile did not state a sex at birth; the figure is then generic. */
+    val sexStated: Boolean = true,
 ) {
     fun shade(muscle: Muscle): MuscleShade = shades[muscle] ?: MuscleShade.None
 
@@ -60,7 +66,7 @@ data class BodyMapModel(
             states: Map<Muscle, MuscleRecoveryState>,
             adipose: AdiposeLayer? = null,
             fatProvenance: FatProvenance? = null,
-            selected: Muscle? = null,
+            extras: BodyMapExtras = BodyMapExtras(),
         ): BodyMapModel = BodyMapModel(
             sex = sex,
             type = BodyMapType.RECOVERY,
@@ -70,11 +76,14 @@ data class BodyMapModel(
                     hoursSinceLoad = state.hoursSinceLoad,
                     sets = state.sets,
                     hardSession = state.hardSession,
+                    lastRecordedAt = state.lastRecordedAt,
+                    lastSourceLabel = state.lastSourceId?.let(extras.sourceLabels::get),
                 )
             },
             adipose = adipose,
             fatProvenance = fatProvenance,
-            selected = selected,
+            selected = extras.selected,
+            sexStated = extras.sexStated,
         )
 
         fun plan(
@@ -91,6 +100,13 @@ data class BodyMapModel(
         )
     }
 }
+
+/** What a map carries besides its data: selection, the stated sex and source names. */
+data class BodyMapExtras(
+    val selected: Muscle? = null,
+    val sexStated: Boolean = true,
+    val sourceLabels: Map<String, String> = emptyMap(),
+)
 
 /** The two sizes of the map (`DESIGN.md` §9.1): the pair, and the mini map. */
 enum class BodyMapVariant { FULL, MINI, EVENT_MINI }

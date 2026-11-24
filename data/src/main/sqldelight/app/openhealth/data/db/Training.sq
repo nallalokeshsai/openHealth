@@ -153,11 +153,11 @@ ON CONFLICT(id) DO UPDATE SET
     level = excluded.level,
     mechanic = excluded.mechanic,
     force = excluded.force,
-    met_activity = excluded.met_activity,
+    met_activity = coalesce(excluded.met_activity, exercise.met_activity),
     is_custom = excluded.is_custom,
     source_id = excluded.source_id,
     updated_at = excluded.updated_at,
-    revision = excluded.revision;
+    revision = exercise.revision + 1;
 
 exerciseById:
 SELECT * FROM exercise WHERE id = :id;
@@ -331,6 +331,8 @@ SELECT
     work_set.weight_kg,
     work_set.reps,
     work_set.is_warmup,
+    work_set.source_id,
+    work_set.recorded_at,
     exercise.primary_muscles,
     exercise.secondary_muscles
 FROM work_set

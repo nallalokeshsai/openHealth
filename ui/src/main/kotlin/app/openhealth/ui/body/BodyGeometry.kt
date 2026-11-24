@@ -50,15 +50,6 @@ class BodyGeometry private constructor(val views: Map<BodyView, GeometryView>) {
         view.parts.filter { it.muscle != null }.forEach { part -> part.paths.forEach(::addPath) }
     }
 
-    /** Each muscle's paths as one path, so a tap or a stroke treats a muscle once. */
-    fun musclePaths(view: GeometryView): Map<Muscle, AndroidPath> = buildMap {
-        view.parts.forEach { part ->
-            val muscle = part.muscle ?: return@forEach
-            val combined = getOrPut(muscle) { AndroidPath() }
-            part.paths.forEach(combined::addPath)
-        }
-    }
-
     companion object {
         private const val PATH_COLUMNS = 4
         private const val VIEW_COLUMNS = 6
@@ -97,7 +88,9 @@ class BodyGeometry private constructor(val views: Map<BodyView, GeometryView>) {
                 val cells = line.split('\t')
                 when (cells[0]) {
                     "view" -> {
-                        require(cells.size == VIEW_COLUMNS) { "Bad view row: ${cells[0]}" }
+                        require(cells.size == VIEW_COLUMNS) {
+                            "Bad view row with ${cells.size} columns: ${cells.firstOrNull()}"
+                        }
                         viewBoxes[cells[VIEW_NAME]] = ViewBox(
                             x = cells[VIEW_X].toFloat(),
                             y = cells[VIEW_Y].toFloat(),
@@ -107,7 +100,9 @@ class BodyGeometry private constructor(val views: Map<BodyView, GeometryView>) {
                     }
 
                     "part" -> {
-                        require(cells.size == PATH_COLUMNS) { "Bad part row: ${cells[INDEX_KEY]}" }
+                        require(cells.size == PATH_COLUMNS) {
+                            "Bad part row with ${cells.size} columns: ${cells.firstOrNull()}"
+                        }
                         val key = cells[INDEX_KEY]
                         val path = androidx.compose.ui.graphics.vector.PathParser()
                             .parsePathString(cells[INDEX_DATA])
@@ -177,13 +172,23 @@ object AdiposeGeometry {
     private const val STROKE_FACTOR = 2f
 
     /**
+     * How wide a seam between two muscle paths is closed before the band is built:
+     * 24 viewBox units (about 5.6 dp on a 300 dp figure), wide enough to bridge the gaps
+     * in the MuscleMap paths, including the neck and shoulder seams, and far narrower
+     * than a limb.
+     */
+    const val SEAM_UNITS = 24f
+
+    /**
      * The adipose layer: one band around the body's outline, never under a muscle and
      * never inside the silhouette (`DESIGN.md` §9.1.1).
      *
-     * A single rim is built from the union of every muscle, so the body keeps one outline
-     * instead of one per limb; a region thicker than the thinnest one adds an outward
-     * ring beyond that rim, which is how a waist reads thicker than a forearm. The result
-     * is cut against the muscle union, so the band exists **only** outside the muscles.
+     * The muscle paths do not touch, so the raw union's outline runs down every seam
+     * between neighbouring muscles. Closing that union with a narrow ring before the
+     * band is built fills those seams into the silhouette, so the band is drawn only on
+     * the body's outside edge and never as a gold line between two abs. A region thicker
+     * than the thinnest one adds an outward ring beyond that rim, which is how a waist
+     * reads thicker than a forearm.
      */
     fun layer(view: GeometryView, thickness: Map<MuscleRegion, Float>): AndroidPath {
         val muscleUnion = AndroidPath().apply {
@@ -191,8 +196,12 @@ object AdiposeGeometry {
                 part.paths.forEach(::addPath)
             }
         }
+        val silhouette = AndroidPath().apply {
+            addPath(muscleUnion)
+            addPath(strokeOutline(muscleUnion, SEAM_UNITS / 2f))
+        }
         val base = thickness.values.filter { it > 0f }.minOrNull() ?: return AndroidPath()
-        val rim = strokeOutline(muscleUnion, base)
+        val rim = strokeOutline(silhouette, base)
         val byRegion = view.parts
             .filter { it.muscle != null }
             .groupBy { it.muscle!!.region }
@@ -202,10 +211,10 @@ object AdiposeGeometry {
             val union = AndroidPath().apply { parts.forEach { p -> p.paths.forEach(::addPath) } }
             val extra = strokeOutline(union, outward)
             extra.op(rim, AndroidPath.Op.DIFFERENCE)
-            extra.op(muscleUnion, AndroidPath.Op.DIFFERENCE)
+            extra.op(silhouette, AndroidPath.Op.DIFFERENCE)
             rim.op(extra, AndroidPath.Op.UNION)
         }
-        rim.op(muscleUnion, AndroidPath.Op.DIFFERENCE)
+        rim.op(silhouette, AndroidPath.Op.DIFFERENCE)
         return rim
     }
 

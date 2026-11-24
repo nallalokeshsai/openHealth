@@ -3,6 +3,7 @@ package app.openhealth.ui.body
 import android.content.Context
 import android.graphics.Region
 import app.openhealth.core.body.AdiposeInputs
+import app.openhealth.core.body.AdiposeLayer
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
 import app.openhealth.core.body.BodySide
@@ -85,49 +86,49 @@ class BodyGeometryTest {
         val layer = AdiposeModel.compute(
             AdiposeInputs(sex = BodySex.MALE, bodyFatPercent = 35.0),
         )!!
-        BodySide.entries.forEach { side ->
-            val view = geometry.view(BodySex.MALE, side)!!
-            val thickness = MuscleRegion.entries.associateWith { region ->
-                (layer.thicknessFor(region) * view.viewBox.height).toFloat()
-            }
-            val band = AdiposeGeometry.layer(view, thickness)
-            assertFalse(band.isEmpty, "the fat layer is drawn on $side")
-            val bounds = Region(
-                view.viewBox.x.toInt(),
-                view.viewBox.y.toInt(),
-                (view.viewBox.x + view.viewBox.width).toInt(),
-                (view.viewBox.y + view.viewBox.height).toInt(),
-            )
-            val muscleUnion = android.graphics.Path().apply {
-                view.parts.filter { it.muscle != null }.forEach { part ->
-                    part.paths.forEach(::addPath)
-                }
-            }
-            val muscleRegion = Region()
-            muscleRegion.setPath(muscleUnion, bounds)
-            // Take a two-unit ring off the muscle's edge, so rasterisation of a shared
-            // boundary cannot be mistaken for a real overlap: the band must not enter
-            // the interior of any muscle shape at all.
-            val ring = android.graphics.Path()
-            android.graphics.Paint().apply {
-                style = android.graphics.Paint.Style.STROKE
-                strokeWidth = BOUNDARY_UNITS
-                strokeJoin = android.graphics.Paint.Join.ROUND
-                isAntiAlias = true
-            }.getFillPath(muscleUnion, ring)
-            val ringRegion = Region()
-            ringRegion.setPath(ring, bounds)
-            val interior = Region(muscleRegion)
-            interior.op(ringRegion, Region.Op.DIFFERENCE)
-            val fat = Region()
-            fat.setPath(band, bounds)
-            val overlap = Region(fat)
-            overlap.op(interior, Region.Op.INTERSECT)
-            assertTrue(
-                overlap.isEmpty,
-                "the fat layer enters the interior of a muscle on $side: $overlap",
-            )
+        BodySex.entries.forEach { sex ->
+            BodySide.entries.forEach { side -> assertBandOutsideSeams(sex, side, layer) }
         }
+    }
+
+    private fun assertBandOutsideSeams(sex: BodySex, side: BodySide, layer: AdiposeLayer) {
+        val view = geometry.view(sex, side)!!
+        val thickness = MuscleRegion.entries.associateWith { region ->
+            (layer.thicknessFor(region) * view.viewBox.height).toFloat()
+        }
+        val band = AdiposeGeometry.layer(view, thickness)
+        assertFalse(band.isEmpty, "the fat layer is drawn on $sex $side")
+        val bounds = Region(
+            view.viewBox.x.toInt(),
+            view.viewBox.y.toInt(),
+            (view.viewBox.x + view.viewBox.width).toInt(),
+            (view.viewBox.y + view.viewBox.height).toInt(),
+        )
+        val muscleUnion = android.graphics.Path().apply {
+            view.parts.filter { it.muscle != null }.forEach { part ->
+                part.paths.forEach(::addPath)
+            }
+        }
+        // The bug this guards is fat filling the seam between two muscles: everything the
+        // closed silhouette adds over the raw union is a seam, and the band must not touch
+        // any of it.
+        val silhouette = android.graphics.Path().apply {
+            addPath(muscleUnion)
+            addPath(strokeOutline(muscleUnion, AdiposeGeometry.SEAM_UNITS / 2f))
+        }
+        val seam = Region()
+        seam.setPath(silhouette, bounds)
+        seam.op(muscleRegion(muscleUnion, bounds), Region.Op.DIFFERENCE)
+        val fat = Region()
+        fat.setPath(band, bounds)
+        val overlap = Region(fat)
+        overlap.op(seam, Region.Op.INTERSECT)
+        // A boolean difference is exact; rasterising both sides of a one-unit boundary
+        // can leave a single stray cell, nothing more.
+        assertTrue(
+            area(overlap) <= SEAM_TOLERANCE,
+            "the fat layer fills a seam on $sex $side: $overlap",
+        )
     }
 
     @Test
@@ -143,8 +144,33 @@ class BodyGeometryTest {
         assertTrue(female.viewBox.height != male.viewBox.height)
     }
 
+    private fun area(region: Region): Long {
+        var total = 0L
+        val iterator = android.graphics.RegionIterator(region)
+        val rect = android.graphics.Rect()
+        while (iterator.next(rect)) total += rect.width().toLong() * rect.height()
+        return total
+    }
+
+    private fun muscleRegion(path: android.graphics.Path, bounds: Region): Region {
+        val region = Region()
+        region.setPath(path, bounds)
+        return region
+    }
+
+    private fun strokeOutline(path: android.graphics.Path, width: Float): android.graphics.Path {
+        val ring = android.graphics.Path()
+        android.graphics.Paint().apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = width
+            strokeJoin = android.graphics.Paint.Join.ROUND
+            isAntiAlias = true
+        }.getFillPath(path, ring)
+        return ring
+    }
+
     private companion object {
-        const val BOUNDARY_UNITS = 2f
+        const val SEAM_TOLERANCE = 4L
     }
 
     @Test

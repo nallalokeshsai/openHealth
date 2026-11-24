@@ -22,6 +22,9 @@ data class LoadedSet(
     val weightKg: Double,
     val reps: Int,
     val isWarmup: Boolean = false,
+    /** The source named on the set, and when the set was recorded (`pr.md` §7.2). */
+    val sourceId: String? = null,
+    val recordedAt: Instant? = null,
 )
 
 /**
@@ -37,6 +40,9 @@ data class MuscleRecoveryState(
     val hardSession: Boolean = false,
     val sets: Double = 0.0,
     val tonnageKg: Double = 0.0,
+    val lastSessionId: String? = null,
+    val lastSourceId: String? = null,
+    val lastRecordedAt: Instant? = null,
 )
 
 /**
@@ -77,7 +83,10 @@ object RecoveryMap {
     }
 
     private data class SessionLoad(
+        val sessionId: String,
         val completedAt: Instant,
+        val recordedAt: Instant?,
+        val sourceId: String?,
         val sets: Double,
         val tonnageKg: Double,
     )
@@ -90,8 +99,12 @@ object RecoveryMap {
             sets += weight
             tonnage += set.weightKg * set.reps * weight
         }
+        val latest = sessionSets.maxBy { it.completedAt }
         return SessionLoad(
-            completedAt = sessionSets.maxOf { it.completedAt },
+            sessionId = latest.sessionId,
+            completedAt = latest.completedAt,
+            recordedAt = sessionSets.mapNotNull { it.recordedAt }.maxOrNull(),
+            sourceId = latest.sourceId,
             sets = sets,
             tonnageKg = tonnage,
         )
@@ -110,7 +123,7 @@ object RecoveryMap {
         val history = historyOf(sessions)
         val hard = history != null &&
             HardSession.isHard(
-                sets = last.sets.toInt(),
+                sets = last.sets,
                 tonnageKg = last.tonnageKg,
                 history = history,
             )
@@ -128,6 +141,9 @@ object RecoveryMap {
             hardSession = hard,
             sets = last.sets,
             tonnageKg = last.tonnageKg,
+            lastSessionId = last.sessionId,
+            lastSourceId = last.sourceId,
+            lastRecordedAt = last.recordedAt,
         )
     }
 

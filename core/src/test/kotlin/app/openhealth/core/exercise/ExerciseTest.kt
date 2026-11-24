@@ -57,7 +57,7 @@ class ExerciseCatalogueTest {
 
     @Test
     fun instructionsAreRedistributableTextNotMarkup() {
-        catalogue.take(50).forEach { exercise ->
+        catalogue.forEach { exercise ->
             exercise.instructions.forEach { step ->
                 assertFalse(step.contains("<"), exercise.id)
                 assertFalse(step.contains("\t"), exercise.id)

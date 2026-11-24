@@ -6,3 +6,10 @@
 ALTER TABLE exercise ADD COLUMN level TEXT;
 ALTER TABLE exercise ADD COLUMN mechanic TEXT;
 ALTER TABLE exercise ADD COLUMN force TEXT;
+
+-- B3's demo corpus wrote muscle names that are not in the whole-muscle taxonomy, so its
+-- sessions would light up nothing on the map. Normalise the two legacy spellings; the
+-- library and every new write use the taxonomy keys (pr.md §6.5).
+UPDATE exercise SET primary_muscles = 'upper-back' WHERE primary_muscles = 'back';
+UPDATE exercise SET primary_muscles = 'deltoids' WHERE primary_muscles = 'shoulders';
+UPDATE exercise SET primary_muscles = 'gluteal' WHERE primary_muscles = 'glutes';

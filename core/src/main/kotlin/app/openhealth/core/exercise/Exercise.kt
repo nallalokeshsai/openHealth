@@ -84,12 +84,15 @@ data class Exercise(
     init {
         require(id.isNotBlank()) { "Exercise id must not be blank" }
         require(name.isNotBlank()) { "Exercise name must not be blank" }
+        require(primary.intersect(secondary.toSet()).isEmpty()) {
+            "A muscle is primary or secondary, never both: ${primary.intersect(secondary.toSet())}"
+        }
     }
 
     /** Primary full and secondary half, as a per-muscle weight (`pr.md` §6.5). */
     fun muscleWeights(): Map<Muscle, Double> = buildMap {
-        primary.forEach { put(it, 1.0) }
         secondary.forEach { put(it, Muscle.SECONDARY_WEIGHT) }
+        primary.forEach { put(it, 1.0) }
     }
 }
 
@@ -115,7 +118,9 @@ object ExerciseAlternatives {
             .asSequence()
             .filter { it.id != target.id }
             .map { candidate -> candidate to score(target, candidate) }
-            .filter { (_, score) -> score > 0.0 }
+            // Same body part or equipment alone is not a substitute; the lift has to
+            // load one of the same primary muscles (`pr.md` §6.5).
+            .filter { (candidate, _) -> candidate.primary.any { it in target.primary } }
             .sortedWith(
                 compareByDescending<Pair<Exercise, Double>> { it.second }
                     .thenBy { it.first.name },

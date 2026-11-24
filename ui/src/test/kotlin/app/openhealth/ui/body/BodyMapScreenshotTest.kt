@@ -10,11 +10,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import app.openhealth.core.body.AdiposeInputs
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
@@ -77,7 +79,7 @@ class BodyMapScreenshotTest {
                     modifier = Modifier
                         .testTag(SHOT)
                         .fillMaxSize()
-                        .background(OhTheme.colors.bg),
+                        .background(OhTheme.colors.surface),
                     contentAlignment = Alignment.Center,
                 ) {
                     OhBodyMap(
@@ -143,6 +145,13 @@ class BodyMapScreenshotTest {
                     sides = setOf(BodySide.FRONT, BodySide.BACK),
                     variant = BodyMapVariant.MINI,
                 ),
+                Shot(
+                    name = "body-mini",
+                    dark = false,
+                    model = Models.recovery(BodySex.MALE),
+                    sides = setOf(BodySide.FRONT, BodySide.BACK),
+                    variant = BodyMapVariant.MINI,
+                ),
             ),
         )
     }
@@ -197,6 +206,46 @@ class BodyMapSemanticsTest {
     }
 
     @Test
+    fun aTouchOnTheDrawnChestSelectsIt() {
+        var opened: Muscle? = null
+        compose.setContent {
+            OhTheme(dark = true) {
+                OhBodyMap(
+                    model = Models.recovery(BodySex.MALE),
+                    geometry = geometry,
+                    sides = setOf(BodySide.FRONT),
+                    onMuscle = { opened = it },
+                    modifier = Modifier.testTag(MAP),
+                )
+            }
+        }
+        val chest = compose.onNodeWithContentDescription("Chest").fetchSemanticsNode()
+        val centre = chest.boundsInRoot.center
+        compose.onNodeWithTag(MAP).performTouchInput { click(centre) }
+        compose.runOnIdle { assertEquals(Muscle.CHEST, opened) }
+    }
+
+    @Test
+    fun aTouchOnTheBackViewUsesItsOwnViewBox() {
+        var opened: Muscle? = null
+        compose.setContent {
+            OhTheme(dark = true) {
+                OhBodyMap(
+                    model = Models.recovery(BodySex.MALE),
+                    geometry = geometry,
+                    sides = setOf(BodySide.BACK),
+                    onMuscle = { opened = it },
+                    modifier = Modifier.testTag(MAP),
+                )
+            }
+        }
+        val glutes = compose.onNodeWithContentDescription("Glutes").fetchSemanticsNode()
+        val centre = glutes.boundsInRoot.center
+        compose.onNodeWithTag(MAP).performTouchInput { click(centre) }
+        compose.runOnIdle { assertEquals(Muscle.GLUTES, opened) }
+    }
+
+    @Test
     fun aMuscleNodeCarriesItsStepAndOpensTheMuscle() {
         var opened: Muscle? = null
         compose.setContent {
@@ -228,8 +277,12 @@ class BodyMapSemanticsTest {
         assertTrue(rows.any { it.stateLabel == "Recovering" })
         assertTrue(rows.any { it.stateLabel == "Easing" })
         assertTrue(rows.any { it.stateLabel == "Ready" })
-        assertTrue(description.startsWith("Recovery map."))
-        assertTrue(description.contains("Last trained:"))
+        assertTrue(description.startsWith("Recovery map:"))
+        assertTrue(description.contains("was trained most recently"))
+    }
+
+    private companion object {
+        const val MAP = "body-map-view"
     }
 }
 
@@ -248,8 +301,8 @@ private object Models {
         instructions = listOf("Do it."),
     )
 
-    private val adipose = AdiposeModel.compute(
-        AdiposeInputs(sex = BodySex.MALE, bodyFatPercent = 22.0),
+    private fun adipose(sex: BodySex) = AdiposeModel.compute(
+        AdiposeInputs(sex = sex, bodyFatPercent = 22.0),
     )!!
 
     fun recovery(sex: BodySex): BodyMapModel {
@@ -290,7 +343,7 @@ private object Models {
         return BodyMapModel.recovery(
             sex = sex,
             states = states,
-            adipose = if (sex == BodySex.MALE) adipose else null,
+            adipose = adipose(sex),
         )
     }
 

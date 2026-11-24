@@ -34,11 +34,18 @@ import kotlinx.datetime.toLocalDateTime
 class AppContainer(
     context: Context,
     documentStore: app.openhealth.android.documents.DocumentStore? = null,
+    /**
+     * The database and vault this container opens. The production app uses the defaults;
+     * an instrumented test names its own, so a run never deletes or decrypts the record
+     * on the owner's phone (`AGENTS.md` "Test device").
+     */
+    databaseName: String = AndroidDatabaseFactory.DEFAULT_DATABASE,
+    vaultPreferences: String = DEFAULT_VAULT,
 ) {
     val context: Context = context.applicationContext
     private val appContext = this.context
-    private val vault = AndroidSecretVault(appContext)
-    private val opened = lazy { AndroidDatabaseFactory(appContext, vault).open() }
+    private val vault = AndroidSecretVault(appContext, vaultPreferences)
+    private val opened = lazy { AndroidDatabaseFactory(appContext, vault, databaseName).open() }
 
     /**
      * Opening SQLCipher and running the integrity check is local work, but it is not
@@ -170,6 +177,7 @@ class AppContainer(
 
     companion object {
         const val DEMO_DAYS = 90
+        const val DEFAULT_VAULT = "openhealth.vault"
         val MANUAL_SOURCE = app.openhealth.core.ids.SourceId("manual")
         val LIBRARY_SOURCE = app.openhealth.core.ids.SourceId("exercise-library")
         private const val PRE_RESTORE = "pre-restore.ohe"

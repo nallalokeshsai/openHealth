@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import app.openhealth.core.body.BodySex
 import app.openhealth.core.body.BodySide
 import app.openhealth.core.body.Muscle
 import app.openhealth.core.body.MuscleRegion
@@ -85,12 +86,14 @@ fun OhBodyMap(
     var loaded by remember { mutableStateOf(geometry ?: BodyGeometry.cached()) }
     LaunchedEffect(geometry) {
         if (loaded == null) {
-            loaded = withContext(Dispatchers.IO) { BodyGeometry.load(context) }
+            loaded = withContext(Dispatchers.IO) {
+                runCatching { BodyGeometry.load(context) }.getOrNull()
+            }
         }
     }
     val drawings = loaded
     if (drawings == null) {
-        Placeholder(variant = variant, modifier = modifier)
+        Placeholder(variant = variant, sex = model.sex, modifier = modifier)
         return
     }
     val front = drawings.view(model.sex, BodySide.FRONT)?.takeIf { BodySide.FRONT in sides }
@@ -178,14 +181,60 @@ fun OhBodyMap(
 }
 
 @Composable
-private fun Placeholder(variant: BodyMapVariant, modifier: Modifier) {
-    val height = when (variant) {
-        BodyMapVariant.FULL -> OhTheme.dims.bodyMapMax
+private fun Placeholder(variant: BodyMapVariant, sex: BodySex, modifier: Modifier) {
+    val fixed = when (variant) {
+        BodyMapVariant.FULL -> null
         BodyMapVariant.MINI -> OhTheme.dims.bodyMapMiniHeight
         BodyMapVariant.EVENT_MINI -> OhTheme.dims.bodyMapEventMini
     }
-    Box(modifier = modifier.fillMaxWidth().height(height))
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val gap = if (variant == BodyMapVariant.FULL) {
+            OhTheme.dims.bodyMapPairGap
+        } else {
+            OhTheme.dims.bodyMapMiniGap
+        }
+        // The same arithmetic the drawn pair uses, from the known viewBox ratios, so the
+        // card does not jump when the geometry arrives (DESIGN.md Appendix B).
+        val ratios = if (sex == BodySex.MALE) {
+            MALE_RATIO_SUM
+        } else {
+            FEMALE_RATIO_SUM
+        }
+        val maxHeight = fixed ?: minOf(
+            LocalConfiguration.current.screenHeightDp.dp * OhTheme.dims.bodyMapMaxFraction,
+            OhTheme.dims.bodyMapMax,
+        )
+        val height = minOf(maxHeight, (maxWidth - gap) / ratios)
+        Box(modifier = Modifier.fillMaxWidth().height(height))
+    }
 }
+
+/**
+ * At 44 dp a muscle is one finger wide even when the shape is a few dp across
+ * (`DESIGN.md` §11.1): a tap that misses every path falls back to the nearest muscle
+ * whose bounds, grown by half a touch target, contain it.
+ */
+private fun GeometryView.nearestWithin(x: Float, y: Float, reach: Float): Muscle? =
+    parts.asSequence()
+        .filter { it.muscle != null }
+        .filter { part ->
+            x >= part.bounds.left - reach &&
+                x <= part.bounds.right + reach &&
+                y >= part.bounds.top - reach &&
+                y <= part.bounds.bottom + reach
+        }
+        .minByOrNull { part ->
+            val dx = (part.bounds.left + part.bounds.right) / 2f - x
+            val dy = (part.bounds.top + part.bounds.bottom) / 2f - y
+            dx * dx + dy * dy
+        }
+        ?.muscle
+
+/** Half a 44 dp target (`DESIGN.md` §11.1), in dp. */
+private const val TOUCH_REACH_DP = 22f
+
+private const val MALE_RATIO_SUM = 2 * 727f / 1280f
+private const val FEMALE_RATIO_SUM = 2 * 650f / 1450f
 
 data class AnimatedPaint(val track: Color, val overlay: Color?)
 
@@ -264,7 +313,7 @@ private fun ViewPanel(
     val strokeDp = if (mini) dims.bodyMapMiniStroke else dims.bodyMapStroke
     val selectedStrokeDp = if (mini) dims.bodyMapMiniStroke else dims.bodyMapSelectedStroke
     val hatchColor = colors.surface.copy(alpha = OhAlpha.bodyHatch)
-    val fatColor = colors.fat.copy(alpha = OhAlpha.bodyFatLayer)
+    val fatColor = colors.fat.copy(alpha = colors.fatLayerAlpha)
     val baseColor = baseFill(colors, variant)
     val fatLayer = remember(view, model.adipose) {
         model.adipose?.let { layer ->
@@ -280,7 +329,21 @@ private fun ViewPanel(
         bodyHitRegions(view)
     }
     val labels = Muscle.entries.associateWith { muscle -> muscleLabel(muscle) }
-    val states = Muscle.entries.associateWith { muscle -> muscleStateLabel(model.shade(muscle)) }
+    val states = Muscle.entries.associateWith { muscle ->
+        when (val shade = model.shade(muscle)) {
+            is MuscleShade.Recovery -> recoveryStateLabel(shade.step, shade.hoursSinceLoad)
+            is MuscleShade.Plan -> stringResource(
+                R.string.body_map_table_weekly_sets,
+                shade.weeklySets,
+            )
+
+            MuscleShade.None -> if (model.type == BodyMapType.PLAN) {
+                stringResource(R.string.body_map_plan_none)
+            } else {
+                stringResource(R.string.recovery_untrained)
+            }
+        }
+    }
 
     Box(modifier = Modifier.height(height).width(width)) {
         Canvas(
@@ -288,11 +351,12 @@ private fun ViewPanel(
                 detectTapGestures { offset ->
                     if (onMuscle == null) return@detectTapGestures
                     val unit = size.height / vb.height
-                    val x = (offset.x / unit + vb.x).toInt()
-                    val y = (offset.y / unit + vb.y).toInt()
+                    val vx = offset.x / unit + vb.x
+                    val vy = offset.y / unit + vb.y
+                    val reach = TOUCH_REACH_DP * vb.height / size.height.toDp().value
                     val touched = hitRegions.entries
-                        .lastOrNull { (_, region) -> region.contains(x, y) }
-                        ?.key
+                        .lastOrNull { (_, region) -> region.contains(vx.toInt(), vy.toInt()) }
+                        ?.key ?: view.nearestWithin(vx, vy, reach)
                     if (touched != null) onMuscle(touched)
                 }
             },
@@ -303,6 +367,14 @@ private fun ViewPanel(
                 scale(scalePx, scalePx, Offset.Zero)
             }) {
                 val strokeUnits = strokeDp.toPx() / scalePx
+                val stroke = Stroke(
+                    width = strokeUnits,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round,
+                )
+                // The untrained base is painted once, for the whole silhouette. A muscle
+                // than has no colour of its own is not filled again on top of it: two
+                // coats of 11 % label would be 21 % (DESIGN.md §9.1).
                 view.parts.forEach { part ->
                     part.paths.forEach { path ->
                         drawPath(path.asComposePath(), color = baseColor)
@@ -311,26 +383,31 @@ private fun ViewPanel(
                 if (!mini) {
                     fatLayer?.let { fat -> drawPath(fat.asComposePath(), color = fatColor) }
                 }
-                view.parts.filter { it.muscle != null }.forEach { part ->
-                    val paint = paints.getValue(part.muscle!!)
-                    part.paths.forEach { path ->
-                        drawPath(path.asComposePath(), color = paint.track)
-                        paint.overlay?.let { overlay ->
-                            drawPath(path.asComposePath(), color = overlay)
+                if (mini) {
+                    // At 46 dp the 3 dp separation stroke is wider than most muscles; the
+                    // fill goes on last so the colour survives (DESIGN.md §9.1).
+                    view.parts.filter { it.muscle != null }.forEach { part ->
+                        part.paths.forEach { path ->
+                            drawPath(path.asComposePath(), color = colors.surface, style = stroke)
                         }
                     }
                 }
                 view.parts.filter { it.muscle != null }.forEach { part ->
-                    part.paths.forEach { path ->
-                        drawPath(
-                            path.asComposePath(),
-                            color = colors.surface,
-                            style = Stroke(
-                                width = strokeUnits,
-                                cap = StrokeCap.Round,
-                                join = StrokeJoin.Round,
-                            ),
-                        )
+                    val paint = paints.getValue(part.muscle!!)
+                    if (paint.track != baseColor) {
+                        part.paths.forEach { path ->
+                            drawPath(path.asComposePath(), color = paint.track)
+                            paint.overlay?.let { overlay ->
+                                drawPath(path.asComposePath(), color = overlay)
+                            }
+                        }
+                    }
+                }
+                if (!mini) {
+                    view.parts.filter { it.muscle != null }.forEach { part ->
+                        part.paths.forEach { path ->
+                            drawPath(path.asComposePath(), color = colors.surface, style = stroke)
+                        }
                     }
                 }
                 if (!mini) {
@@ -393,7 +470,7 @@ private fun ViewPanel(
                     .semantics {
                         contentDescription = labels.getValue(muscle)
                         stateDescription = states.getValue(muscle)
-                        role = Role.Button
+                        if (onMuscle != null) role = Role.Button
                         selected = model.selected == muscle
                         if (onMuscle != null) {
                             onClick(label = labels.getValue(muscle)) {
@@ -438,17 +515,4 @@ private fun DrawScope.drawHatches(
             }
         }
     }
-}
-
-@Composable
-private fun muscleStateLabel(shade: MuscleShade): String = when (shade) {
-    is MuscleShade.Recovery -> when (shade.step) {
-        RecoveryStep.UNTRAINED -> stringResource(R.string.recovery_untrained)
-        RecoveryStep.RECOVERING -> stringResource(R.string.recovery_recovering)
-        RecoveryStep.EASING -> stringResource(R.string.recovery_easing)
-        RecoveryStep.READY -> stringResource(R.string.recovery_ready)
-    }
-
-    is MuscleShade.Plan -> stringResource(R.string.body_map_plan_sets, shade.weeklySets)
-    MuscleShade.None -> stringResource(R.string.recovery_untrained)
 }

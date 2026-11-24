@@ -1362,13 +1362,13 @@ class AppViewModel(
         val fatAllowed = preferences.displayPolicy.shows(
             app.openhealth.core.preferences.SensitiveMetric.BODY_FAT,
         )
-        val bodyFat = store.observations.latest(ObservationType.BODY_FAT_PERCENT)
+        val figure = bodyFatFigure(instant)
         val tape = tapeMeasurements()
         val adipose = if (fatAllowed) {
             AdiposeModel.compute(
                 AdiposeInputs(
                     sex = if (profile.sex_at_birth == "FEMALE") BodySex.FEMALE else BodySex.MALE,
-                    bodyFatPercent = bodyFat?.value?.value,
+                    bodyFatPercent = figure.percent,
                     heightCm = profile.height_cm,
                     tapeCm = tape,
                 ),
@@ -1380,18 +1380,58 @@ class AppViewModel(
             null
         } else {
             app.openhealth.ui.body.FatProvenance(
-                bodyFatPercent = bodyFat?.value?.value,
-                method = bodyFat?.provenance?.method,
-                sourceLabel = bodyFat?.provenance?.sourceId
-                    ?.let { store.sources.byId(it)?.label },
-                tapeSites = tape.keys.toList(),
+                bodyFatPercent = figure.percent,
+                method = figure.method,
+                sourceLabel = figure.sourceLabel,
+                observedAt = figure.observedAt,
+                recordedAt = figure.recordedAt,
+                // A single tape site changed nothing in the model, so the sheet does not
+                // claim it did (AdiposeModel: one measurement is not a reference).
+                tapeSites = if (figure.percent != null && tape.size >= TAPE_SCALE_MINIMUM) {
+                    tape.keys.toList()
+                } else {
+                    emptyList()
+                },
             )
         }
+        val sourceLabels = store.sources.all().associate { it.id.value to it.label }
         return app.openhealth.ui.body.BodyMapModel.recovery(
             sex = if (profile.sex_at_birth == "FEMALE") BodySex.FEMALE else BodySex.MALE,
             states = states,
             adipose = adipose,
             fatProvenance = provenance,
+            extras = app.openhealth.ui.body.BodyMapExtras(
+                sexStated = profile.sex_at_birth == "MALE" || profile.sex_at_birth == "FEMALE",
+                sourceLabels = sourceLabels,
+            ),
+        )
+    }
+
+    /** The day's winning body-fat figure and where it came from (`pr.md` §7.6). */
+    private data class BodyFatFigure(
+        val percent: Double?,
+        val method: MeasurementMethod?,
+        val sourceLabel: String?,
+        val observedAt: Instant?,
+        val recordedAt: Instant?,
+    )
+
+    private fun bodyFatFigure(instant: Instant): BodyFatFigure {
+        val rollup = store.rollups.forTypeRange(
+            ObservationType.BODY_FAT_PERCENT,
+            epochDate,
+            instant.toLocalDateTime(zone).date,
+        ).lastOrNull() ?: return BodyFatFigure(null, null, null, null, null)
+        val observation = store.observations
+            .forDayAndType(rollup.localDate, ObservationType.BODY_FAT_PERCENT)
+            .filter { it.provenance.sourceId == rollup.sourceId }
+            .maxByOrNull { it.provenance.happenedAt }
+        return BodyFatFigure(
+            percent = rollup.value.value,
+            method = observation?.provenance?.method,
+            sourceLabel = rollup.sourceId?.let { store.sources.byId(it)?.label },
+            observedAt = observation?.provenance?.happenedAt,
+            recordedAt = observation?.provenance?.recordedAt,
         )
     }
 
@@ -2094,6 +2134,8 @@ class AppViewModel(
         private const val DEFAULT_RECOVERING_HOURS = 24.0
         private const val DEFAULT_EASING_HOURS = 48.0
         private const val DEFAULT_READY_HOURS = 72.0
+        private const val TAPE_SCALE_MINIMUM = 2
+        private val epochDate = kotlinx.datetime.LocalDate(1970, 1, 1)
         private const val MINUS = '\u2212'
         private val SENSITIVE_TYPES = setOf(
             ObservationType.WEIGHT,

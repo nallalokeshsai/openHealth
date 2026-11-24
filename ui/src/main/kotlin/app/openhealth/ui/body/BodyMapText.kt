@@ -3,6 +3,7 @@ package app.openhealth.ui.body
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,11 +38,14 @@ fun bodyMapDescription(model: BodyMapModel): String = when (model.type) {
         }
         val recovering = steps.count { it.second.step == RecoveryStep.RECOVERING }
         val easing = steps.count { it.second.step == RecoveryStep.EASING }
-        val ready = steps.count { it.second.step == RecoveryStep.READY }
+        val ready = steps.count {
+            it.second.step == RecoveryStep.READY ||
+                (it.second.step == RecoveryStep.UNTRAINED && it.second.hoursSinceLoad != null)
+        }
         val recent = steps
             .filter { it.second.hoursSinceLoad != null }
             .minByOrNull { it.second.hoursSinceLoad ?: Double.MAX_VALUE }
-        if (recovering + easing + ready == 0) {
+        if (recent == null) {
             stringResource(R.string.body_map_desc_recovery_empty)
         } else {
             stringResource(
@@ -49,7 +53,7 @@ fun bodyMapDescription(model: BodyMapModel): String = when (model.type) {
                 recovering,
                 easing,
                 ready,
-                recent?.let { muscleLabel(it.first) }.orEmpty(),
+                muscleLabel(recent.first),
             )
         }
     }
@@ -122,12 +126,12 @@ fun fatProvenanceLine(provenance: FatProvenance): String {
         )
 
         sites.isNotEmpty() -> stringResource(R.string.body_map_fat_estimated_tape, siteList)
-        else -> stringResource(R.string.body_map_fat_estimated)
+        else -> stringResource(R.string.body_map_fat_measured_from_tape)
     }
 }
 
 @Composable
-private fun methodLabel(method: app.openhealth.core.observation.MeasurementMethod?): String =
+fun methodLabel(method: app.openhealth.core.observation.MeasurementMethod?): String =
     stringResource(
         when (method) {
             app.openhealth.core.observation.MeasurementMethod.BIA -> R.string.method_bia
@@ -139,7 +143,7 @@ private fun methodLabel(method: app.openhealth.core.observation.MeasurementMetho
     )
 
 @Composable
-private fun tapeSiteLabel(type: String): String? = when (type) {
+fun tapeSiteLabel(type: String): String? = when (type) {
     "neck" -> stringResource(R.string.site_neck)
     "chest" -> stringResource(R.string.site_chest)
     "waist" -> stringResource(R.string.site_waist)
@@ -168,12 +172,7 @@ fun bodyMapTableRows(model: BodyMapModel): List<BodyMapTableRow> =
                         number(shade.hoursSinceLoad),
                     )
                 },
-                stateLabel = when (shade.step) {
-                    RecoveryStep.UNTRAINED -> stringResource(R.string.recovery_untrained)
-                    RecoveryStep.RECOVERING -> stringResource(R.string.recovery_recovering)
-                    RecoveryStep.EASING -> stringResource(R.string.recovery_easing)
-                    RecoveryStep.READY -> stringResource(R.string.recovery_ready)
-                },
+                stateLabel = recoveryStateLabel(shade.step, shade.hoursSinceLoad),
             )
 
             is MuscleShade.Plan -> BodyMapTableRow(
@@ -187,25 +186,52 @@ fun bodyMapTableRows(model: BodyMapModel): List<BodyMapTableRow> =
 
             MuscleShade.None -> BodyMapTableRow(
                 muscleLabel = muscleLabel(muscle),
-                valueLabel = stringResource(R.string.body_map_table_no_load),
-                stateLabel = stringResource(R.string.recovery_untrained),
+                valueLabel = if (model.type == BodyMapType.PLAN) {
+                    stringResource(R.string.body_map_table_weekly_sets, number(0.0))
+                } else {
+                    stringResource(R.string.body_map_table_no_load)
+                },
+                stateLabel = if (model.type == BodyMapType.PLAN) {
+                    stringResource(R.string.body_map_plan_none)
+                } else {
+                    stringResource(R.string.recovery_untrained)
+                },
             )
         }
     }
 
+/** The word a recovery step carries; a trained muscle past Ready says "Recovered". */
+@Composable
+fun recoveryStateLabel(step: RecoveryStep, hoursSinceLoad: Double?): String = when {
+    step == RecoveryStep.UNTRAINED && hoursSinceLoad != null ->
+        stringResource(R.string.recovery_recovered)
+
+    step == RecoveryStep.UNTRAINED -> stringResource(R.string.recovery_untrained)
+    step == RecoveryStep.RECOVERING -> stringResource(R.string.recovery_recovering)
+    step == RecoveryStep.EASING -> stringResource(R.string.recovery_easing)
+    else -> stringResource(R.string.recovery_ready)
+}
+
 /** The legend every map carries, with the words that carry the meaning (`DESIGN.md` §11.3). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun OhBodyMapLegend(model: BodyMapModel, modifier: Modifier = Modifier) {
     val colors = OhTheme.colors
     when (model.type) {
-        BodyMapType.RECOVERY -> Row(
+        BodyMapType.RECOVERY -> FlowRow(
             modifier = modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(OhSpace.s6),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(OhSpace.s0),
         ) {
             LegendDot(stringResource(R.string.recovery_recovering), colors.recActive)
             LegendDot(stringResource(R.string.recovery_easing), colors.recEasing)
             LegendDot(stringResource(R.string.recovery_ready), colors.recReady)
+            if (model.adipose != null) {
+                LegendDot(
+                    stringResource(R.string.body_map_fat_layer),
+                    colors.fat.copy(alpha = colors.fatLayerAlpha),
+                )
+            }
         }
 
         BodyMapType.PLAN -> Row(

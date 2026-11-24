@@ -17,7 +17,6 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.openhealth.android.data.AndroidDatabaseFactory
 import app.openhealth.android.documents.DocumentStore
 import app.openhealth.android.ui.AppViewModel
 import app.openhealth.android.ui.OpenHealthRoot
@@ -62,12 +61,14 @@ class ShellExitTest {
     @Before
     fun setUp() {
         context = InstrumentationRegistry.getInstrumentation().targetContext
-        val app = context.applicationContext as OpenHealthApp
-        runCatching { app.container.close() }
-        context.deleteDatabase(AndroidDatabaseFactory.DEFAULT_DATABASE)
-        context.getSharedPreferences("openhealth.vault", Context.MODE_PRIVATE)
-            .edit().clear().commit()
-        container = AppContainer(context, TempDocumentStore)
+        context.deleteDatabase(TEST_DATABASE)
+        context.getSharedPreferences(TEST_VAULT, Context.MODE_PRIVATE).edit().clear().commit()
+        container = AppContainer(
+            context,
+            TempDocumentStore,
+            databaseName = TEST_DATABASE,
+            vaultPreferences = TEST_VAULT,
+        )
         viewModel = AppViewModel(container, UnitSystem.METRIC)
     }
 
@@ -78,6 +79,8 @@ class ShellExitTest {
         // cancellation before the driver closes.
         Thread.sleep(300)
         container.close()
+        context.deleteDatabase(TEST_DATABASE)
+        context.getSharedPreferences(TEST_VAULT, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     @Test
@@ -522,6 +525,11 @@ class ShellExitTest {
             "timed out waiting for $what; step=${viewModel.state.value.onboarding.step}, " +
                 "issue=${viewModel.state.value.onboarding.issue}",
         )
+    }
+
+    private companion object {
+        const val TEST_DATABASE = "b3-shell-test.db"
+        const val TEST_VAULT = "openhealth.vault.b3-test"
     }
 }
 

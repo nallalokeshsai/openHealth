@@ -3,7 +3,6 @@ package app.openhealth.android
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import app.openhealth.android.data.AndroidDatabaseFactory
 import app.openhealth.core.exercise.ExerciseCatalogue
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,20 +21,24 @@ class ExerciseLibraryDeviceTest {
     private lateinit var context: Context
     private lateinit var container: AppContainer
 
+    // A database and vault of this test's own: an instrumented run must never touch the
+    // record on the owner's phone (`AGENTS.md` "Test device").
+    private val database = "b4-library-test.db"
+    private val vault = "openhealth.vault.b4-test"
+
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        val app = context.applicationContext as OpenHealthApp
-        runCatching { app.container.close() }
-        context.deleteDatabase(AndroidDatabaseFactory.DEFAULT_DATABASE)
-        context.getSharedPreferences("openhealth.vault", Context.MODE_PRIVATE)
-            .edit().clear().commit()
-        container = AppContainer(context)
+        context.deleteDatabase(database)
+        context.getSharedPreferences(vault, Context.MODE_PRIVATE).edit().clear().commit()
+        container = AppContainer(context, databaseName = database, vaultPreferences = vault)
     }
 
     @After
     fun tearDown() {
         container.close()
+        context.deleteDatabase(database)
+        context.getSharedPreferences(vault, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     @Test
@@ -53,11 +56,13 @@ class ExerciseLibraryDeviceTest {
 
         // A second store on the same database skips the write and duplicates nothing.
         container.close()
-        container = AppContainer(context)
+        container = AppContainer(context, databaseName = database, vaultPreferences = vault)
         assertEquals(first, container.store.training.countExercises())
     }
 
     private companion object {
-        const val SEED_BUDGET_MS = 5_000L
+        // Measured 1 717 ms on the owner's phone for the first open, which also loads
+        // SQLCipher, checks integrity and creates the schema; 3 s is the regression wire.
+        const val SEED_BUDGET_MS = 3_000L
     }
 }

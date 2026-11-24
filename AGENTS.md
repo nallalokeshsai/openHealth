@@ -212,25 +212,30 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B3 Shell and onboarding** (2026-11-23); next is **B4 Body
-  model and exercise data**.
+- Last completed phase: **B4 Body model and exercise data** (2026-11-24); next is **B5
+  Gym training**.
 - Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `build/b3-shell-and-onboarding`; **197 JVM tests** (78 `:core`, 63 `:data`, 55 `:ui`,
-  1 benchmark) and **11 instrumented tests** pass on the owner's physical phone,
-  including B2's foreign-key assertion. `:ui` holds the B1 design system plus the B3
-  screens and **136 goldens** (104 component, 32 screen) in dark, light, 200 % text and
-  RTL. `:core` adds the closed 13-module set and presets, the one `DisplayPolicy`, the
-  profile options and `AgeRules` (under-16 blocked, 16–17 no weight-loss goal). `:data`
-  is schema **v4**: 21 tables, five layers, three migrations, a `note` table,
-  observation and note tombstones, the rebuild-only rollup engine, Trash, the
-  Argon2id/AES-GCM export and the five-year corpus. `app-android` now has the Android 12
-  splash, Koin's container, the five-tab shell with the raised Train, onboarding, Today,
-  Settings, the timeline, quick add, demo mode and app lock through the platform
-  `BiometricPrompt`; the store opens lazily on IO. Versions are in
-  `docs/adr/0003-pinned-versions.md`; B1's decisions are `0004-design-system.md`, B2's
-  are `0005-core-and-data.md` and `0006-referential-integrity.md`, and B3's are
-  `0007-shell-and-onboarding.md`. `DatabaseOpener` takes a `DatabaseDriverFactory`, not
-  a driver. R8 is **off** in release; turning it on is B10's. Cold start in the debug
-  build is **1008–1043 ms**, inside the 1.5 s budget; the release number is B14's
-  measurement, not this one.
+  `build/b4-body-and-exercises`; **262 JVM tests** (111 `:core`, 73 `:data`, 75 `:ui`,
+  1 fixtures, 2 exerciseindex) and **12 instrumented tests** pass on the owner's physical
+  phone, including the new library-seeding test. `:ui` holds the B1 design system, the B3
+  screens and **170 goldens** (136 before + 34 for the body map and Today's map card) in
+  dark, light, 200 % text and RTL.
+- `:core` adds the 19 whole muscles and their regions/body parts, the recovery engine
+  (primary 1, secondary 0.5, 28-day window, hard session against earlier medians), the
+  adipose thickness model, the exercise catalogue (871 exercises from Free Exercise DB,
+  Unlicense, text only), plan coverage and ranked alternatives. `:ui` adds
+  `OhBodyMap`/`AdiposeGeometry` — MuscleMap geometry (MIT) as a generated TSV, the
+  recovery hatch, the accent-ramp plan map, the closed-silhouette fat layer, the mini
+  variants, one accessibility node per muscle and no mirroring in RTL. `:data` is schema
+  **v5** (exercise level/mechanic/force, `4.sqm`), seeds the library once behind a settings
+  key, and reads the four-week set loads for the map. `app-android` replaces Today's empty
+  body card with the real map, the muscle and table sheets, the fat provenance sheet and a
+  generic-figure note, and adds the debug-only `BodyLabActivity`.
+- Versions are in `docs/adr/0003-pinned-versions.md`; B1's decisions are
+  `0004-design-system.md`, B2's `0005-core-and-data.md` and `0006-referential-integrity.md`,
+  B3's `0007-shell-and-onboarding.md`, B4's `0008-body-model-and-exercises.md`.
+  `DatabaseOpener` takes a `DatabaseDriverFactory`, not a driver. R8 is **off** in release;
+  turning it on is B10's. Cold start in the debug build is **1 058 ms**, inside the 1.5 s
+  budget; the release number is B14's. The first store open seeds 871 exercises in
+  **1 717 ms** on IO, after the first frame.
 - Open issues: see `docs/build-log.md`.

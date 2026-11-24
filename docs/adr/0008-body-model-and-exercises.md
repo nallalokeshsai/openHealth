@@ -92,3 +92,44 @@ went beyond either text, so a later phase does not have to rediscover them.
 17. **The debug harness is a debug-only activity** (`BodyLabActivity`) registered in the
     debug manifest, like the B1 gallery; it scrubs body fat, waist and hours and shows the
     library count, and it cannot ship in a release build.
+
+## Review fixes (2026-11-24)
+
+Three independent reviewers read the phase; these are the decisions the fixes changed.
+
+- **The band is built from the closed silhouette.** The muscle paths do not touch, so the
+  raw union's outline runs down every seam; a first version drew a gold line between two
+  abs. A 24-unit closing ring (`AdiposeGeometry.SEAM_UNITS`) fills the seams into the
+  silhouette before the band is cut, and the unit test asserts the band never enters a
+  seam. `DESIGN.md` §9.1.1 records the ring.
+- **The light adipose layer is opaque.** `fat` at 55 % over a white card measured 1.97:1
+  and failed §12.5's 3:1 graphic bar. The light theme draws it at 100 % (3.79:1 on
+  `surface`, 3.39:1 on `bg`); dark stays 55 % (3.96:1). `OhColors.fatLayerAlpha` carries
+  it and `OhContrastTest` measures all three bases.
+- **"Recovered" is not "never loaded".** `RecoveryStep.UNTRAINED` means both, so the card,
+  the table and the muscle sheet now derive their word from `hoursSinceLoad`: a trained
+  muscle past 72 h says "Recovered", and the "no sessions" empty state appears only when
+  nothing was loaded in the four-week window.
+- **An older export restores; a newer one is refused.** Every schema bump would have
+  invalidated every backup. `ExportService` now accepts `schemaVersion <= current`; a
+  missing column (B4's case) takes its default. `OlderSchemaRestoreTest` proves a v4
+  bundle loads into v5 with its rows intact.
+- **The library seed is idempotent and non-destructive.** A re-seed bumps `revision`
+  instead of resetting it and keeps an existing `met_activity` (`coalesce`). Migration
+  `4.sqm` also normalises the muscle names B3's demo wrote (`back`, `shoulders`,
+  `glutes`), which would otherwise light up nothing.
+- **Five upstream exercises are skipped, and said so.** The tool prints the count
+  (871 of 876); the five without instructions are Push Press, Side Bridge, Side
+  Jackknife, Iron Cross and One-Arm Kettlebell Swings. `ExerciseIndexTest` asserts the
+  shipped TSV is exactly what the vendored dataset generates and carries no image path.
+- **Instrumented tests own their storage.** `AppContainer` takes a database name and a
+  vault preference name; `ExerciseLibraryDeviceTest` and `ShellExitTest` use their own and
+  delete only those, so a run can no longer wipe the owner's record.
+- **A 44 dp touch target, not just a 44 dp node.** A tap that misses every path falls back
+  to the nearest muscle within half a touch target; front and back taps are asserted in
+  Robolectric. Two thin muscles (serratus, hip flexors) are still fully covered by their
+  neighbours in the platform's *visible* node dump; Compose has all 19 nodes and the
+  table alternative lists all 19. A dedicated accessibility pass can lay the nodes out
+  without overlap.
+- **Unknown sex at birth is stated.** The figure stays the schematic male body, and the
+  card now says that the profile does not state a sex and the figure is generic.

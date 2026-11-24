@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.core.view.WindowCompat
+import app.openhealth.R as AppR
 import app.openhealth.core.body.AdiposeInputs
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
@@ -90,14 +91,19 @@ class BodyLabActivity : ComponentActivity() {
                 tapeCm = mapOf("waist" to waist.toDouble()),
             ),
         )
+        val plan = remember {
+            BodyMapModel.plan(BodySex.MALE, PlanCoverage.compute(samplePlan()))
+        }
         val model = if (planMode) {
-            BodyMapModel.plan(sex, PlanCoverage.compute(samplePlan()))
+            plan.copy(sex = sex)
         } else {
             BodyMapModel.recovery(
                 sex = sex,
                 states = syntheticRecovery(hours.toDouble()),
                 adipose = adipose.takeIf { showFat },
-                selected = selected?.let { Muscle.fromKey(it) },
+                extras = app.openhealth.ui.body.BodyMapExtras(
+                    selected = selected?.let { Muscle.fromKey(it) },
+                ),
             )
         }
         Column(
@@ -110,13 +116,13 @@ class BodyLabActivity : ComponentActivity() {
             verticalArrangement = Arrangement.spacedBy(OhTheme.space.s4),
         ) {
             Text(
-                text = stringResource(R.string.body_lab_title),
+                text = stringResource(AppR.string.body_lab_title),
                 style = OhTheme.type.large,
                 color = OhTheme.colors.label,
             )
             OhCard {
                 OhCardHeader(
-                    eyebrow = stringResource(R.string.body_lab_map_eyebrow),
+                    eyebrow = stringResource(AppR.string.body_lab_map_eyebrow),
                     title = if (planMode) {
                         stringResource(R.string.body_map_legend_plan)
                     } else {
@@ -131,7 +137,7 @@ class BodyLabActivity : ComponentActivity() {
                 )
                 OhChipStrip {
                     OhChip(
-                        text = stringResource(R.string.body_lab_type),
+                        text = stringResource(AppR.string.body_lab_type),
                         selected = planMode,
                         neutralSelected = true,
                         onClick = { planMode = !planMode },
@@ -145,9 +151,9 @@ class BodyLabActivity : ComponentActivity() {
                     OhChip(
                         text = stringResource(
                             if (sex == BodySex.MALE) {
-                                R.string.body_lab_male
+                                AppR.string.body_lab_male
                             } else {
-                                R.string.body_lab_female
+                                AppR.string.body_lab_female
                             },
                         ),
                         selected = false,
@@ -160,24 +166,24 @@ class BodyLabActivity : ComponentActivity() {
             }
             OhCard {
                 Scrub(
-                    label = stringResource(R.string.body_lab_body_fat),
+                    label = stringResource(AppR.string.body_lab_body_fat),
                     value = bodyFat,
                     range = BODY_FAT_MIN..BODY_FAT_MAX,
                 ) { bodyFat = it }
                 Scrub(
-                    label = stringResource(R.string.body_lab_waist),
+                    label = stringResource(AppR.string.body_lab_waist),
                     value = waist,
                     range = WAIST_MIN..WAIST_MAX,
                 ) { waist = it }
                 Scrub(
-                    label = stringResource(R.string.body_lab_hours),
+                    label = stringResource(AppR.string.body_lab_hours),
                     value = hours,
                     range = HOURS_MIN..HOURS_MAX,
                 ) { hours = it }
                 Spacer(Modifier.height(OhTheme.space.s3))
                 Text(
                     text = stringResource(
-                        R.string.body_lab_step,
+                        AppR.string.body_lab_step,
                         hours.toInt(),
                         MuscleRecovery.stepAtHours(hours.toDouble(), false).label(),
                     ),
@@ -186,7 +192,7 @@ class BodyLabActivity : ComponentActivity() {
                 )
                 Text(
                     text = stringResource(
-                        R.string.body_lab_band,
+                        AppR.string.body_lab_band,
                         number((adipose?.maxThickness ?: 0.0) * 100),
                     ),
                     style = OhTheme.type.footnote,
@@ -194,10 +200,10 @@ class BodyLabActivity : ComponentActivity() {
                 )
                 Text(
                     text = if (catalogued < 0) {
-                        stringResource(R.string.body_lab_reading)
+                        stringResource(AppR.string.body_lab_reading)
                     } else {
                         stringResource(
-                            R.string.body_lab_counts,
+                            AppR.string.body_lab_counts,
                             catalogued,
                             bodyMapTableRows(model).size,
                         )
@@ -218,7 +224,7 @@ class BodyLabActivity : ComponentActivity() {
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = stringResource(R.string.body_lab_value, label, value.toInt()),
+                text = stringResource(AppR.string.body_lab_value, label, value.toInt()),
                 style = OhTheme.type.subhead,
                 color = OhTheme.colors.label,
             )

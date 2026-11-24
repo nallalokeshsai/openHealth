@@ -94,7 +94,11 @@ object ExerciseIndexCli {
         out.parentFile.mkdirs()
         out.writeText(rows, Charsets.UTF_8)
         val exercises = rows.lineSequence().count { it.isNotBlank() && !it.startsWith("#") }
-        println("wrote ${out.absolutePath}: $exercises exercises")
+        val upstreamCount = Json.parseToJsonElement(upstream.readText()).jsonArray.size
+        println(
+            "wrote ${out.absolutePath}: $exercises exercises " +
+                "(${upstreamCount - exercises} upstream entries skipped: no instructions)",
+        )
     }
 
     /** The whole TSV, header included, so a test can compare it with the shipped file. */

@@ -22,13 +22,14 @@ Nothing is copied from Material Icons, SF Symbols or openGym's set.
 
 ### MuscleMap — body diagram geometry (MIT)
 
-The body-map path geometry used from B4 onward is the MIT-licensed MuscleMap set,
-reached through `references/openGym/frontend/src/lib/body-paths.js` and copied, with only
-that path data, into `tools/bodygeometry/upstream/body-paths.js`.
-`tools/bodygeometry/convert.mjs` converts it to `ui/src/main/res/raw/body_paths.tsv`. The
-loader, the renderer, the layers, the recovery engine and the interaction are openHealth's
-own; openGym's own AGPL code, its rendering, and its Gym visual exercise media are not
-used or copied.
+The body-map path geometry used from B4 onward is the MIT-licensed MuscleMap set by
+Melih Colpan. MuscleMap ships its paths as Swift source; openGym converted them to the
+JSON module `references/openGym/frontend/src/lib/body-paths.js` (openGym 1.4.5, commit
+`e4a68a94c`), and that converted copy is what was copied, with only the path data, into
+`tools/bodygeometry/upstream/body-paths.js`. `tools/bodygeometry/convert.mjs` converts it
+to `ui/src/main/res/raw/body_paths.tsv`. The loader, the renderer, the layers, the recovery
+engine and the interaction are openHealth's own; openGym's own AGPL code, its rendering,
+and its Gym visual exercise media are not used or copied.
 
 ```
 MIT License
@@ -57,16 +58,19 @@ SOFTWARE.
 ### Free Exercise DB — exercise library text (Unlicense, public domain)
 
 The bundled exercise library is Free Exercise DB by the yuhonas project and its
-contributors (`https://github.com/yuhonas/free-exercise-db`), released into the public
-domain under the Unlicense. Its `dist/exercises.json` is copied verbatim into
+contributors (`https://github.com/yuhonas/free-exercise-db`, commit
+`f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5`), released into the public domain under the
+Unlicense. Its `dist/exercises.json` is copied verbatim into
 `tools/exerciseindex/upstream/exercises.json`; `tools/exerciseindex` maps its 17 muscle
 names to openHealth's whole muscles, adds the body-part tag it implies, and writes
 `core/src/main/resources/app/openhealth/core/exercise/exercises.tsv`. **Only text is
-used** (name, muscles, equipment, level, mechanic, force, instructions); the dataset's
-images are Everkinetic material with its own share-alike terms and no image is copied,
-hotlinked or derived from. The instructions are redistributed as they are, as the
-Unlicense permits; the enrichment of four muscles with no name in the dataset, the
-alternatives ranking and the body-part tags are openHealth's own.
+used** (name, muscles, equipment, level, mechanic, force, instructions). The vendored JSON
+keeps the dataset's `images` keys and `category`; no image file is copied, referenced at
+runtime, hotlinked or derived from, and the generated library carries no image path or
+URL. The dataset's images are Everkinetic material with its own share-alike terms, which
+is why they are not used. The instructions are redistributed as they are, as the Unlicense
+permits; the enrichment of four muscles with no name in the dataset, the alternatives
+ranking and the body-part tags are openHealth's own.
 
 ```
 This is free and unencumbered software released into the public domain.

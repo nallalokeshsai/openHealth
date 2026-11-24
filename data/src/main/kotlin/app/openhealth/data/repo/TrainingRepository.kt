@@ -125,6 +125,8 @@ class TrainingRepository(private val db: OpenHealthDb) {
                 weightKg = row.weight_kg,
                 reps = row.reps.toInt(),
                 isWarmup = row.is_warmup,
+                sourceId = row.source_id,
+                recordedAt = Instant.fromEpochMilliseconds(row.recorded_at),
             )
         }
 
