@@ -102,15 +102,19 @@ fun OhBodyMap(
                 // A silent failure would leave the card blank forever; name the failure in
                 // the local log (no personal data) and try once more after the first frame.
                 android.util.Log.e(TAG, "Body geometry failed to load", failure)
-                loaded = withContext(Dispatchers.IO) {
-                    runCatching { BodyGeometry.load(context) }.getOrNull()
+                val retry = withContext(Dispatchers.IO) {
+                    runCatching { BodyGeometry.load(context) }
+                }
+                loaded = retry.getOrNull()
+                retry.exceptionOrNull()?.let {
+                    android.util.Log.e(TAG, "Body geometry failed again; the card stays empty", it)
                 }
             }
         }
     }
     val drawings = loaded
     if (drawings == null) {
-        Placeholder(variant = variant, sex = model.sex, modifier = modifier)
+        Placeholder(variant = variant, sex = model.sex, sides = sides, modifier = modifier)
         return
     }
     val front = drawings.view(model.sex, BodySide.FRONT)?.takeIf { BodySide.FRONT in sides }
@@ -200,30 +204,34 @@ fun OhBodyMap(
 }
 
 @Composable
-private fun Placeholder(variant: BodyMapVariant, sex: BodySex, modifier: Modifier) {
+private fun Placeholder(
+    variant: BodyMapVariant,
+    sex: BodySex,
+    sides: Set<BodySide>,
+    modifier: Modifier,
+) {
     val fixed = when (variant) {
         BodyMapVariant.FULL -> null
         BodyMapVariant.MINI -> OhTheme.dims.bodyMapMiniHeight
         BodyMapVariant.EVENT_MINI -> OhTheme.dims.bodyMapEventMini
     }
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val gap = if (variant == BodyMapVariant.FULL) {
+        val pairGap = if (variant == BodyMapVariant.FULL) {
             OhTheme.dims.bodyMapPairGap
         } else {
             OhTheme.dims.bodyMapMiniGap
         }
         // The same arithmetic the drawn pair uses, from the known viewBox ratios, so the
-        // card does not jump when the geometry arrives (DESIGN.md Appendix B).
-        val ratios = if (sex == BodySex.MALE) {
-            MALE_RATIO_SUM
-        } else {
-            FEMALE_RATIO_SUM
-        }
+        // card does not jump when the geometry arrives (DESIGN.md Appendix B). One view
+        // on its own is half the pair's width and has no gap to pay for.
+        val shown = sides.size.coerceAtLeast(1)
+        val available = if (shown > 1) maxWidth - pairGap else maxWidth
+        val ratios = placeholderRatioSum(sex, shown)
         val maxHeight = fixed ?: minOf(
             LocalConfiguration.current.screenHeightDp.dp * OhTheme.dims.bodyMapMaxFraction,
             OhTheme.dims.bodyMapMax,
         )
-        val height = minOf(maxHeight, (maxWidth - gap) / ratios)
+        val height = minOf(maxHeight, available / ratios)
         Box(modifier = Modifier.fillMaxWidth().height(height))
     }
 }
@@ -249,13 +257,21 @@ private fun GeometryView.nearestWithin(x: Float, y: Float, reach: Float): Muscle
         }
         ?.muscle
 
-/** Half a 44 dp target (`DESIGN.md` §11.1), in dp. */
-private const val TOUCH_REACH_DP = 22f
+/** A tap reaches half a touch target past a thin muscle (`DESIGN.md` §11.1). */
+private const val TOUCH_REACH_HALVES = 2f
 
 private const val TAG = "OhBodyMap"
 
-private const val MALE_RATIO_SUM = 2 * 727f / 1280f
-private const val FEMALE_RATIO_SUM = 2 * 650f / 1450f
+private const val MALE_RATIO = 727f / 1280f
+private const val FEMALE_RATIO = 650f / 1450f
+
+/**
+ * The aspect ratios the placeholder reserves before the geometry is parsed: one view's
+ * ratio per side shown. Both views of a sex share a viewBox (`res/raw/body_paths.tsv`),
+ * which `BodyGeometryTest` keeps true.
+ */
+internal fun placeholderRatioSum(sex: BodySex, sides: Int): Float =
+    (if (sex == BodySex.MALE) MALE_RATIO else FEMALE_RATIO) * sides
 
 data class AnimatedPaint(val track: Color, val overlay: Color?)
 
@@ -341,13 +357,17 @@ private fun ViewPanel(
     // silhouette; on a slow device that is seconds of work, so it never runs on the main
     // thread and its result is cached across rotation. The muscles draw first, the band
     // follows a frame or two later.
-    val fatThickness = model.adipose?.let { layer ->
+    // A mini map never draws the band (below), so it is never built for one either.
+    val fatThickness = model.adipose?.takeUnless { mini }?.let { layer ->
         MuscleRegion.entries.associateWith { region ->
             (layer.thicknessFor(region) * vb.height).toFloat()
         }
     }
     val fatLayer by produceState<AndroidPath?>(
         initialValue = null,
+        // The band belongs to a view as much as to a thickness: the same figure seen as
+        // the other sex is a different silhouette, so both are keys.
+        view,
         fatThickness,
     ) {
         // Reset on every key change: a map without an adipose layer (or with the chip
@@ -397,7 +417,8 @@ private fun ViewPanel(
                     val unit = size.height / vb.height
                     val vx = offset.x / unit + vb.x
                     val vy = offset.y / unit + vb.y
-                    val reach = TOUCH_REACH_DP * vb.height / size.height.toDp().value
+                    val reachDp = dims.touchTarget.value / TOUCH_REACH_HALVES
+                    val reach = reachDp * vb.height / size.height.toDp().value
                     val touched = hitRegions.entries
                         .lastOrNull { (_, region) -> region.contains(vx.toInt(), vy.toInt()) }
                         ?.key ?: view.nearestWithin(vx, vy, reach)

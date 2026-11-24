@@ -35,6 +35,7 @@ import app.openhealth.ui.theme.OhTheme
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.runner.RunWith
@@ -282,8 +283,41 @@ class BodyMapSemanticsTest {
         assertTrue(description.contains("was trained most recently"))
     }
 
+    /**
+     * A mini map does not draw the adipose band (`DESIGN.md` §9.1: 46 dp, three dp
+     * strokes), so it must not pay for one either: building the band is seconds of
+     * boolean path work on a slow device.
+     */
+    @Test
+    fun aMiniMapNeverBuildsTheAdiposeBand() {
+        val layer = AdiposeModel.compute(
+            AdiposeInputs(sex = BodySex.MALE, bodyFatPercent = MINI_PROBE_BODY_FAT),
+        )!!
+        val view = geometry.view(BodySex.MALE, BodySide.FRONT)!!
+        val thickness = app.openhealth.core.body.MuscleRegion.entries.associateWith { region ->
+            (layer.thicknessFor(region) * view.viewBox.height).toFloat()
+        }
+        assertNull(AdiposeGeometry.cached(view, thickness), "this thickness is new")
+        compose.setContent {
+            OhTheme(dark = true) {
+                OhBodyMap(
+                    model = Models.recovery(BodySex.MALE).copy(adipose = layer),
+                    geometry = geometry,
+                    sides = setOf(BodySide.FRONT),
+                    variant = BodyMapVariant.MINI,
+                    synchronousLayers = true,
+                )
+            }
+        }
+        compose.waitForIdle()
+        assertNull(AdiposeGeometry.cached(view, thickness), "a mini map built a band")
+    }
+
     private companion object {
         const val MAP = "body-map-view"
+
+        /** A body fat no other shot uses, so the cache probe can only see this test. */
+        const val MINI_PROBE_BODY_FAT = 31.5
     }
 }
 

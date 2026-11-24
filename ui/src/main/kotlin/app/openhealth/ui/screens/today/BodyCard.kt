@@ -25,7 +25,7 @@ import app.openhealth.ui.body.FatProvenance
 import app.openhealth.ui.body.MuscleShade
 import app.openhealth.ui.body.OhBodyMap
 import app.openhealth.ui.body.OhBodyMapLegend
-import app.openhealth.ui.body.bodyMapTableRows
+import app.openhealth.ui.body.OhBodyMapTable
 import app.openhealth.ui.body.methodLabel
 import app.openhealth.ui.body.muscleLabel
 import app.openhealth.ui.body.recoveryStateLabel
@@ -193,7 +193,7 @@ fun BodyCard(
             onDismiss = { showTable = false },
             title = stringResource(R.string.body_map_table_title),
         ) {
-            BodyMapTable(model = map)
+            OhBodyMapTable(model = map)
         }
         OhModalSheet(
             visible = showFatSource && map.fatProvenance != null,
@@ -357,10 +357,16 @@ private fun FatProvenanceSheet(provenance: FatProvenance) {
                 value = methodLabel(provenance.method),
                 showDivider = true,
             )
+        }
+        // An estimate has a source too: the tape readings it was computed from
+        // (`DESIGN.md` §9.1.1 Provenance, `pr.md` §2.2). A recorded figure always names
+        // one, even when the name is only "the source you chose".
+        val unknown = stringResource(R.string.body_map_fat_unknown_source)
+        val source = provenance.sourceLabel ?: unknown.takeIf { percent != null }
+        source?.let { source ->
             OhRow(
                 title = stringResource(R.string.body_map_fat_source_label),
-                value = provenance.sourceLabel
-                    ?: stringResource(R.string.body_map_fat_unknown_source),
+                value = source,
                 showDivider = true,
             )
         }
@@ -385,21 +391,6 @@ private fun FatProvenanceSheet(provenance: FatProvenance) {
         style = OhTheme.type.footnote,
         color = OhTheme.colors.label2,
     )
-}
-
-@Composable
-private fun BodyMapTable(model: BodyMapModel) {
-    val rows = bodyMapTableRows(model)
-    OhInsetGroup {
-        rows.forEachIndexed { index, row ->
-            OhRow(
-                title = row.muscleLabel,
-                subtitle = row.stateLabel,
-                value = row.valueLabel,
-                showDivider = index < rows.lastIndex,
-            )
-        }
-    }
 }
 
 @Composable

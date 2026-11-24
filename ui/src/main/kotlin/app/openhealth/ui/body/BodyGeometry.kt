@@ -35,7 +35,13 @@ data class GeometryPart(
 )
 
 @Immutable
-data class GeometryView(val view: BodyView, val viewBox: ViewBox, val parts: List<GeometryPart>)
+data class GeometryView(val view: BodyView, val viewBox: ViewBox, val parts: List<GeometryPart>) {
+    /**
+     * The hit regions of this view, rasterised once. Building them walks every path, so
+     * it is done on first touch and kept with the view it belongs to (`DESIGN.md` §9.1).
+     */
+    val hitRegions: Map<Muscle, Region> by lazy { buildHitRegions(this) }
+}
 
 data class ViewBox(val x: Float, val y: Float, val width: Float, val height: Float) {
     val aspectRatio: Float get() = width / height
@@ -172,14 +178,28 @@ object AdiposeGeometry {
     private const val STROKE_FACTOR = 2f
     private const val KEY_SCALE = 10f
 
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, AndroidPath>()
+    /**
+     * How many bands are kept. The band is expensive to build and cheap to hold, but a
+     * scrub of body fat or a tape measurement (the debug harness, and the before/after
+     * slider of `DESIGN.md` §9.1.1) asks for a new thickness on every frame, so the
+     * cache is bounded rather than unbounded: four views, twice over, least recently
+     * used first out.
+     */
+    private const val CACHE_ENTRIES = 8
+
+    private val cache = object : LinkedHashMap<String, AndroidPath>(CACHE_ENTRIES, LOAD, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, AndroidPath>): Boolean =
+            size > CACHE_ENTRIES
+    }
+
+    private const val LOAD = 0.75f
 
     /** The band for a view at these thicknesses, cached across recompositions and rotation. */
     fun cached(view: GeometryView, thickness: Map<MuscleRegion, Float>): AndroidPath? =
-        cache[key(view, thickness)]
+        synchronized(cache) { cache[key(view, thickness)] }
 
     fun store(view: GeometryView, thickness: Map<MuscleRegion, Float>, band: AndroidPath) {
-        cache[key(view, thickness)] = band
+        synchronized(cache) { cache[key(view, thickness)] = band }
     }
 
     private fun key(view: GeometryView, thickness: Map<MuscleRegion, Float>): String =
@@ -247,12 +267,11 @@ object AdiposeGeometry {
     }
 }
 
-private val HIT_REGION_CACHE =
-    java.util.concurrent.ConcurrentHashMap<BodyView, Map<Muscle, Region>>()
-
-/** A muscle's tappable area, in viewBox coordinates; built once per view and cached. */
-fun bodyHitRegions(view: GeometryView): Map<Muscle, Region> =
-    HIT_REGION_CACHE.getOrPut(view.view) { buildHitRegions(view) }
+/**
+ * A muscle's tappable area, in viewBox coordinates; built once per parsed view and held
+ * by that view, so a second geometry can never be handed the first one's regions.
+ */
+fun bodyHitRegions(view: GeometryView): Map<Muscle, Region> = view.hitRegions
 
 private fun buildHitRegions(view: GeometryView): Map<Muscle, Region> {
     val bounds = Region(

@@ -116,9 +116,10 @@ class BodyGeometryTest {
             addPath(muscleUnion)
             addPath(strokeOutline(muscleUnion, AdiposeGeometry.SEAM_UNITS / 2f))
         }
+        val muscles = muscleRegion(muscleUnion, bounds)
         val seam = Region()
         seam.setPath(silhouette, bounds)
-        seam.op(muscleRegion(muscleUnion, bounds), Region.Op.DIFFERENCE)
+        seam.op(muscles, Region.Op.DIFFERENCE)
         val fat = Region()
         fat.setPath(band, bounds)
         val overlap = Region(fat)
@@ -129,12 +130,91 @@ class BodyGeometryTest {
             area(overlap) <= SEAM_TOLERANCE,
             "the fat layer fills a seam on $sex $side: $overlap",
         )
+        // The exit test itself (`BUILD-ROADMAP.md` §B4): the band never reaches under a
+        // muscle, so a recovery colour can never sit on fat. The seam check above does
+        // not imply it; a band cut against the seams alone would still cover every
+        // muscle. The intersection is taken on the paths, where the boolean is exact:
+        // rasterising the two shapes separately disagrees by up to a cell along a
+        // shared edge and would need a tolerance to hide it.
+        val underMuscle = android.graphics.Path(band).apply {
+            op(muscleUnion, android.graphics.Path.Op.INTERSECT)
+        }
+        val underRegion = Region().apply { setPath(underMuscle, bounds) }
+        // Skia's boolean operators flatten curves, so the cut leaves hairline slivers
+        // along the shared edge: measured 0, 0, 7 and 94 square viewBox units against
+        // muscle areas of 135 601 to 155 194, the worst 0.07 %. A band that was not cut
+        // against the silhouette at all would overlap by tens of thousands of units, so
+        // a thousandth of the muscle area separates the two cases by three orders of
+        // magnitude.
+        assertTrue(
+            area(underRegion) * UNDER_MUSCLE_BOUND <= area(muscles),
+            "the fat layer reaches under a muscle on $sex $side: " +
+                "${area(underRegion)} of ${area(muscles)}",
+        )
+    }
+
+    /**
+     * The band cache keeps a scrub fast without growing for ever: a slider that walks
+     * through a hundred thicknesses must not hold a hundred paths.
+     */
+    @Test
+    fun theBandCacheIsBoundedAndKeepsTheNewest() {
+        val view = geometry.view(BodySex.MALE, BodySide.FRONT)!!
+        val keys = (1..CACHE_PROBE).map { step ->
+            MuscleRegion.entries.associateWith { CACHE_BASE + step }
+        }
+        keys.forEach { thickness ->
+            AdiposeGeometry.store(view, thickness, android.graphics.Path())
+        }
+        assertEquals(null, AdiposeGeometry.cached(view, keys.first()), "the oldest band is gone")
+        assertNotNull(AdiposeGeometry.cached(view, keys.last()), "the newest band is kept")
+    }
+
+    /** The same thickness is built once; that is what survives a rotation. */
+    @Test
+    fun theSameThicknessIsReturnedFromTheCache() {
+        val view = geometry.view(BodySex.MALE, BodySide.BACK)!!
+        val thickness = MuscleRegion.entries.associateWith { CACHE_BASE }
+        val band = AdiposeGeometry.layer(view, thickness)
+        AdiposeGeometry.store(view, thickness, band)
+        assertTrue(AdiposeGeometry.cached(view, thickness) === band)
     }
 
     @Test
     fun thereIsNoFatBandWithoutEnoughData() {
         val layer = AdiposeModel.compute(AdiposeInputs(sex = BodySex.FEMALE))
         assertEquals(null, layer)
+    }
+
+    /**
+     * The card reserves the map's height before the geometry is parsed, so it does not
+     * jump when it arrives (`DESIGN.md` Appendix B). The reserved ratio has to be the
+     * real one, and one view on its own has to reserve half the pair.
+     */
+    @Test
+    fun theReservedHeightMatchesTheShippedViewBoxes() {
+        BodySex.entries.forEach { sex ->
+            val front = geometry.view(sex, BodySide.FRONT)!!
+            val back = geometry.view(sex, BodySide.BACK)!!
+            assertEquals(
+                front.viewBox.aspectRatio.toDouble(),
+                back.viewBox.aspectRatio.toDouble(),
+                RATIO_TOLERANCE,
+                "$sex: the two views share a viewBox, as the reserve assumes",
+            )
+            assertEquals(
+                (front.viewBox.aspectRatio + back.viewBox.aspectRatio).toDouble(),
+                placeholderRatioSum(sex, 2).toDouble(),
+                RATIO_TOLERANCE,
+                "$sex: the pair reserves both views",
+            )
+            assertEquals(
+                front.viewBox.aspectRatio.toDouble(),
+                placeholderRatioSum(sex, 1).toDouble(),
+                RATIO_TOLERANCE,
+                "$sex: one view reserves one view, not two",
+            )
+        }
     }
 
     @Test
@@ -171,6 +251,14 @@ class BodyGeometryTest {
 
     private companion object {
         const val SEAM_TOLERANCE = 4L
+
+        /** More thicknesses than the cache may hold, so the oldest has to fall out. */
+        const val CACHE_PROBE = 24
+        const val CACHE_BASE = 3f
+        const val RATIO_TOLERANCE = 1e-6
+
+        /** The band may cover at most one thousandth of the muscle area. */
+        const val UNDER_MUSCLE_BOUND = 1_000L
     }
 
     @Test

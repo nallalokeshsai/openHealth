@@ -122,6 +122,9 @@ class ShellExitTest {
         compose.onAllNodesWithText("Note").onLast().performClick()
         compose.onNode(hasSetTextAction()).performTextInput("Knee felt fine today")
         waitFor("note typed") { viewModel.state.value.quickAdd.note.isNotBlank() }
+        // The sheet lifts above the IME; a tap while the keyboard is still animating can
+        // land on the keyboard. Dismiss it first, as a person does, then tap Save.
+        hideKeyboard()
         compose.onNodeWithText("Save").performClick()
         // The sheet closes before its write is observable; asserting the sheet first
         // separates "the tap did nothing" from "the write is slow" in a failure.
@@ -421,6 +424,7 @@ class ShellExitTest {
         }
         compose.onNode(hasSetTextAction()).performTextInput("77")
         closeKeyboard()
+        hideKeyboard()
         compose.onNodeWithText("Save").performClick()
         waitFor("weight stored") {
             container.store.rollups
@@ -535,6 +539,16 @@ class ShellExitTest {
         }
         compose.waitForIdle()
         Thread.sleep(500)
+    }
+
+    /** Put the IME away so a modal sheet's buttons are tappable at their settled bounds. */
+    private fun hideKeyboard() {
+        val imm = context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            ?: return
+        compose.runOnUiThread {
+            imm.hideSoftInputFromWindow(compose.activity.window.decorView.windowToken, 0)
+        }
+        compose.waitForIdle()
     }
 
     private fun waitFor(what: String, timeoutMillis: Long = 30_000, condition: () -> Boolean) {

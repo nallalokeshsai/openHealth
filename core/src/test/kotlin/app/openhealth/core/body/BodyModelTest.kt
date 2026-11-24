@@ -277,6 +277,77 @@ class AdiposeModelTest {
         )
     }
 
+    /**
+     * What the debug harness (`BUILD-ROADMAP.md` §B4 deliverable 5) relies on: with the
+     * person's other sites known, moving the waist moves the midsection band, and the
+     * rest of the figure stays where it was.
+     */
+    @Test
+    fun aWaistScrubMovesTheMidsectionAndNothingElse() {
+        fun layerAt(waistCm: Double) = AdiposeModel.compute(
+            AdiposeInputs(
+                sex = BodySex.MALE,
+                bodyFatPercent = 20.0,
+                tapeCm = mapOf("chest" to 100.0, "hips" to 98.0, "waist" to waistCm),
+            ),
+        )!!
+        val slim = layerAt(80.0)
+        val wide = layerAt(115.0)
+        assertTrue(
+            wide.thicknessFor(MuscleRegion.MIDSECTION) >
+                slim.thicknessFor(MuscleRegion.MIDSECTION),
+            "a wider waist draws a thicker midsection",
+        )
+        assertEquals(
+            slim.thicknessFor(MuscleRegion.ARMS),
+            wide.thicknessFor(MuscleRegion.ARMS),
+            "an unmeasured region does not move with the waist",
+        )
+    }
+
+    /**
+     * Provenance (`DESIGN.md` §9.1.1, `pr.md` §2.2): the sheet may only name the values
+     * that actually shaped the layer, and it must name them whenever there are any.
+     */
+    @Test
+    fun theLayerNamesTheMeasurementsThatShapedIt() {
+        val navy = AdiposeInputs(
+            sex = BodySex.FEMALE,
+            heightCm = 168.0,
+            tapeCm = mapOf("neck" to 32.0, "waist" to 78.0, "hips" to 96.0),
+        )
+        assertNotNull(AdiposeModel.compute(navy), "the Navy estimate draws a layer")
+        assertEquals(
+            listOf("neck", "waist", "hips"),
+            AdiposeModel.provenanceSites(navy),
+            "an estimated layer stands on its tape sites and says so",
+        )
+
+        val scaled = AdiposeInputs(
+            sex = BodySex.MALE,
+            bodyFatPercent = 20.0,
+            tapeCm = mapOf("waist" to 95.0, "upper_arm" to 32.0),
+        )
+        assertEquals(listOf("waist", "upper_arm"), AdiposeModel.provenanceSites(scaled))
+
+        val oneSite = AdiposeInputs(
+            sex = BodySex.MALE,
+            bodyFatPercent = 20.0,
+            tapeCm = mapOf("waist" to 95.0),
+        )
+        assertEquals(
+            emptyList(),
+            AdiposeModel.provenanceSites(oneSite),
+            "one measurement scales nothing, so nothing is claimed",
+        )
+
+        assertEquals(
+            emptyList(),
+            AdiposeModel.provenanceSites(AdiposeInputs(sex = BodySex.MALE)),
+            "no layer, no provenance",
+        )
+    }
+
     @Test
     fun anImpossibleBodyFatIsRejectedRatherThanDrawn() {
         assertNull(AdiposeModel.compute(AdiposeInputs(BodySex.MALE, bodyFatPercent = 0.0)))

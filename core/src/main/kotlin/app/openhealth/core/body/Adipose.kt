@@ -100,6 +100,31 @@ object AdiposeModel {
     }
 
     /**
+     * The person's own measurements that actually shaped this layer, as measurement
+     * types, for the provenance sheet (`DESIGN.md` §9.1.1 Provenance, `pr.md` §2.2).
+     *
+     * With no recorded body fat the layer stands entirely on the tape sites the Navy
+     * estimate consumed, so those are its provenance. With a recorded figure, only the
+     * sites that scaled a region count: one measurement scales nothing, so it is not
+     * claimed to have shaped anything. Empty when there is no layer at all.
+     */
+    fun provenanceSites(inputs: AdiposeInputs): List<String> {
+        val measured = measuredRegions(inputs.tapeCm)
+        val regions = when {
+            compute(inputs) == null -> emptySet()
+            // The estimate stands on exactly the sites the Navy equation consumed.
+            inputs.bodyFatPercent == null -> buildSet {
+                add(MuscleRegion.NECK)
+                add(MuscleRegion.MIDSECTION)
+                if (inputs.sex == BodySex.FEMALE) add(MuscleRegion.HIPS)
+            }
+            measured.size <= SINGLE_MEASUREMENT -> emptySet()
+            else -> measured.keys
+        }
+        return regions.sortedBy { it.ordinal }.map { it.measurementType }
+    }
+
+    /**
      * The recorded percentage, else the Navy tape estimate. The estimate is cited and
      * tagged as one wherever it is shown; it never overwrites a measured value.
      */

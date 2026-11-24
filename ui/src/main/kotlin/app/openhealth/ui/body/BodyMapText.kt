@@ -20,6 +20,8 @@ import androidx.compose.ui.res.stringResource
 import app.openhealth.core.body.Muscle
 import app.openhealth.core.formula.RecoveryStep
 import app.openhealth.ui.R
+import app.openhealth.ui.components.OhInsetGroup
+import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.screens.common.number
 import app.openhealth.ui.theme.OhRamp
 import app.openhealth.ui.theme.OhSpace
@@ -199,6 +201,29 @@ fun bodyMapTableRows(model: BodyMapModel): List<BodyMapTableRow> =
             )
         }
     }
+
+/**
+ * The map's table alternative (`DESIGN.md` §8.6, §14.2: muscle, sets, hours since load,
+ * step). It is the same data the colours carry, so a reader who cannot use the figure
+ * loses nothing.
+ *
+ * The hairline sits **between** rows (`DESIGN.md` §5.3): every row but the first draws
+ * one, so the group never opens or closes on a rule.
+ */
+@Composable
+fun OhBodyMapTable(model: BodyMapModel, modifier: Modifier = Modifier) {
+    val rows = bodyMapTableRows(model)
+    OhInsetGroup(modifier = modifier) {
+        rows.forEachIndexed { index, row ->
+            OhRow(
+                title = row.muscleLabel,
+                subtitle = row.stateLabel,
+                value = row.valueLabel,
+                showDivider = index > 0,
+            )
+        }
+    }
+}
 
 /** The word a recovery step carries; a trained muscle past Ready says "Recovered". */
 @Composable

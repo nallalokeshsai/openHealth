@@ -84,11 +84,19 @@ class BodyLabActivity : ComponentActivity() {
         LaunchedEffect(Unit) {
             catalogued = withContext(Dispatchers.IO) { ExerciseCatalogue.bundled.size }
         }
+        // A region only scales against the median of the person's *own* measured sites,
+        // and one site is never a reference (`DESIGN.md` §9.1.1, `AdiposeModel`). The
+        // harness therefore carries a measured chest and hips, so the waist slider moves
+        // the midsection instead of doing nothing at all.
         val adipose = AdiposeModel.compute(
             AdiposeInputs(
                 sex = sex,
                 bodyFatPercent = bodyFat.toDouble(),
-                tapeCm = mapOf("waist" to waist.toDouble()),
+                tapeCm = mapOf(
+                    "chest" to HARNESS_CHEST_CM,
+                    "hips" to HARNESS_HIPS_CM,
+                    "waist" to waist.toDouble(),
+                ),
             ),
         )
         val plan = remember {
@@ -193,7 +201,14 @@ class BodyLabActivity : ComponentActivity() {
                 Text(
                     text = stringResource(
                         AppR.string.body_lab_band,
-                        number((adipose?.maxThickness ?: 0.0) * 100),
+                        number(
+                            (
+                                adipose?.thicknessFor(
+                                    app.openhealth.core.body.MuscleRegion.MIDSECTION,
+                                ) ?: 0.0
+                                ) * PERCENT,
+                        ),
+                        number((adipose?.maxThickness ?: 0.0) * PERCENT),
                     ),
                     style = OhTheme.type.footnote,
                     color = OhTheme.colors.label2,
@@ -264,5 +279,10 @@ class BodyLabActivity : ComponentActivity() {
         const val WAIST_MAX = 140f
         const val HOURS_MIN = 0f
         const val HOURS_MAX = 96f
+        const val PERCENT = 100.0
+
+        /** Two more measured sites, so the waist has a median of its own to scale against. */
+        const val HARNESS_CHEST_CM = 100.0
+        const val HARNESS_HIPS_CM = 98.0
     }
 }

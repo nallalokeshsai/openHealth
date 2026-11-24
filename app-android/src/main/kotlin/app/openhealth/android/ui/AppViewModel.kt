@@ -17,6 +17,7 @@ import app.openhealth.core.formula.RecoveryThresholds
 import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.ObservationId
+import app.openhealth.core.ids.SourceId
 import app.openhealth.core.ids.TombstoneId
 import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.Observation
@@ -1363,35 +1364,33 @@ class AppViewModel(
             app.openhealth.core.preferences.SensitiveMetric.BODY_FAT,
         )
         val figure = bodyFatFigure(instant)
-        val tape = tapeMeasurements()
-        val adipose = if (fatAllowed) {
-            AdiposeModel.compute(
-                AdiposeInputs(
-                    sex = if (profile.sex_at_birth == "FEMALE") BodySex.FEMALE else BodySex.MALE,
-                    bodyFatPercent = figure.percent,
-                    heightCm = profile.height_cm,
-                    tapeCm = tape,
-                ),
-            )
-        } else {
-            null
-        }
+        val tapeRows = tapeRows()
+        val tape = tapeRows.mapValues { (_, row) -> row.value_ }
+        val inputs = AdiposeInputs(
+            sex = if (profile.sex_at_birth == "FEMALE") BodySex.FEMALE else BodySex.MALE,
+            bodyFatPercent = figure.percent,
+            heightCm = profile.height_cm,
+            tapeCm = tape,
+        )
+        val adipose = if (fatAllowed) AdiposeModel.compute(inputs) else null
         val provenance = if (adipose == null) {
             null
         } else {
+            // Which of the person's own values shaped the layer is the model's rule, not
+            // the screen's: a single tape site scales nothing and is not claimed, and an
+            // estimate with no recorded figure stands entirely on its tape sites.
+            val sites = AdiposeModel.provenanceSites(inputs)
+            val newestSite = sites.mapNotNull { tapeRows[it] }.maxByOrNull { it.recorded_at }
             app.openhealth.ui.body.FatProvenance(
                 bodyFatPercent = figure.percent,
                 method = figure.method,
-                sourceLabel = figure.sourceLabel,
-                observedAt = figure.observedAt,
-                recordedAt = figure.recordedAt,
-                // A single tape site changed nothing in the model, so the sheet does not
-                // claim it did (AdiposeModel: one measurement is not a reference).
-                tapeSites = if (figure.percent != null && tape.size >= TAPE_SCALE_MINIMUM) {
-                    tape.keys.toList()
-                } else {
-                    emptyList()
-                },
+                sourceLabel = figure.sourceLabel
+                    ?: newestSite?.let { store.sources.byId(SourceId(it.source_id))?.label },
+                observedAt = figure.observedAt
+                    ?: newestSite?.let { Instant.fromEpochMilliseconds(it.happened_at) },
+                recordedAt = figure.recordedAt
+                    ?: newestSite?.let { Instant.fromEpochMilliseconds(it.recorded_at) },
+                tapeSites = sites,
             )
         }
         val sourceLabels = store.sources.all().associate { it.id.value to it.label }
@@ -1436,10 +1435,10 @@ class AppViewModel(
     }
 
     /** The newest reading of each tape site the adipose model uses (`DESIGN.md` §9.1.1). */
-    private fun tapeMeasurements(): Map<String, Double> = MuscleRegion.entries
+    private fun tapeRows(): Map<String, app.openhealth.data.db.Measurement> = MuscleRegion.entries
         .mapNotNull { region ->
             store.body.latestMeasurementOfType(region.measurementType)?.let { row ->
-                region.measurementType to row.value_
+                region.measurementType to row
             }
         }
         .toMap()
@@ -2134,7 +2133,6 @@ class AppViewModel(
         private const val DEFAULT_RECOVERING_HOURS = 24.0
         private const val DEFAULT_EASING_HOURS = 48.0
         private const val DEFAULT_READY_HOURS = 72.0
-        private const val TAPE_SCALE_MINIMUM = 2
         private val epochDate = kotlinx.datetime.LocalDate(1970, 1, 1)
         private const val MINUS = '\u2212'
         private val SENSITIVE_TYPES = setOf(

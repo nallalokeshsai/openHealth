@@ -12,6 +12,7 @@ import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DatabaseTest {
@@ -322,6 +323,17 @@ class DatabaseTest {
                 "('legacy','Legacy press','chest','',0,0,0,1)",
             0,
         )
+        // B3's demo corpus wrote muscle names that are not in the whole-muscle taxonomy.
+        // Until 4.sqm normalises them, those sessions colour nothing on the map.
+        LEGACY_MUSCLES.forEach { (id, stored) ->
+            first.execute(
+                null,
+                "INSERT INTO exercise(id, name, primary_muscles, secondary_muscles, " +
+                    "is_custom, created_at, updated_at, revision) VALUES " +
+                    "('$id','$id','$stored','',0,0,0,1)",
+                0,
+            )
+        }
         first.execute(null, "PRAGMA user_version = 4", 0)
         first.close()
 
@@ -343,6 +355,18 @@ class DatabaseTest {
         val row = store.db.trainingQueries.exerciseById("legacy").executeAsOne()
         assertEquals("Legacy press", row.name)
         assertEquals(null, row.level)
+        LEGACY_MUSCLES.keys.forEach { id ->
+            val stored = store.db.trainingQueries.exerciseById(id).executeAsOne().primary_muscles
+            assertEquals(
+                LEGACY_EXPECTED.getValue(id),
+                stored,
+                "$id was not normalised to the taxonomy",
+            )
+            assertNotNull(
+                app.openhealth.core.body.Muscle.fromKey(stored),
+                "$id does not name a whole muscle",
+            )
+        }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
         Files.deleteIfExists(directory)
@@ -426,6 +450,19 @@ class DatabaseTest {
     }
 
     private companion object {
+        /** What B3's demo corpus stored, and the taxonomy key 4.sqm has to turn it into. */
+        val LEGACY_MUSCLES = mapOf(
+            "legacy-back" to "back",
+            "legacy-shoulders" to "shoulders",
+            "legacy-glutes" to "glutes",
+        )
+
+        val LEGACY_EXPECTED = mapOf(
+            "legacy-back" to "upper-back",
+            "legacy-shoulders" to "deltoids",
+            "legacy-glutes" to "gluteal",
+        )
+
         /** The inline foreign key clause this schema adds at v3. */
         val REFERENCES = Regex(""" REFERENCES \w+\(\w+\)( ON DELETE (RESTRICT|SET NULL))?""")
 

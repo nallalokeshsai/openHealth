@@ -27,6 +27,8 @@ import app.openhealth.core.preferences.ModulePreset
 import app.openhealth.core.preferences.ProfileGoal
 import app.openhealth.core.preferences.UnitSystem
 import app.openhealth.ui.body.BodyMapModel
+import app.openhealth.ui.body.OhBodyMapTable
+import app.openhealth.ui.screens.common.OhScreen
 import app.openhealth.ui.screens.lock.LockMessage
 import app.openhealth.ui.screens.lock.LockScreen
 import app.openhealth.ui.screens.onboarding.OnboardingAnswers
@@ -231,6 +233,20 @@ class ScreenScreenshotTest {
                 onOpenNutrition = {},
                 synchronousLayers = true,
             )
+        }
+    }
+
+    /**
+     * The map's table alternative (`DESIGN.md` §8.6). It is goldened in its own right:
+     * the card renders only the figure, so a hairline or a 200 % wrap in the table is
+     * invisible to every other shot.
+     */
+    @Test
+    fun bodyMapTableAlternative() {
+        shot("screen-body-table") {
+            OhScreen {
+                OhBodyMapTable(model = bodyMap)
+            }
         }
     }
 

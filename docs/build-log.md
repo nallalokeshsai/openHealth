@@ -1147,3 +1147,69 @@ clean, and the device walk-through was repeated on the final build.
   has 876 exercises; harmless, but B5 may prefer the catalogue ids.
 - **The body-fat rollup range query** starts at 1970 on each rebuild; it is indexed and
   small, but a `latestRollupOfType` query would be cheaper.
+
+---
+
+## B4 audit — phase-wise drift pass (2026-11-24)
+
+**Status:** Completed · **Date:** 2026-11-24 · **Branch:** `build/b4-qa`
+**Goal:** read B0–B4 against the code and the running app, hunting the drift a passing
+build hides: a deliverable quietly reduced, a stub nobody filled, an exit test that is
+ticked but not asserted, an invented value, a provenance or accessibility gap. Seven
+defects were found and fixed with tests; three items are owner decisions and were not
+touched.
+
+### What was found, and what was done
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | The map's table alternative drew its hairline **above every row including the first** and omitted the one before the last (`showDivider = index < rows.lastIndex`, against `DESIGN.md` §5.3 "between rows only" and the `index > 0` every other list uses). No golden covered the sheet, so nothing saw it. | `index > 0`. The table moved out of `BodyCard` into `OhBodyMapTable` in the body package and is goldened in dark, light, 200 % text and RTL (`screen-body-table`); flipping the rule back fails that golden. |
+| 2 | **The B4 exit test for the fat layer did not assert the exit criterion.** `theAdiposeBandIsDrawnOnlyOutsideTheMuscles` compared the band with the *seams* only; a band cut against the seams alone but drawn under every muscle would have passed. | The test now also intersects the band with the muscle union. Measured residue from Skia's curve flattening: 0, 0, 7 and 94 square viewBox units against muscle areas of 135 601 to 155 194 (worst 0.07 %); the bound is a thousandth of the muscle area, three orders of magnitude from a real regression. |
+| 3 | **The adipose band cache the QA sweep added was unbounded.** A scrub (the debug harness, and B7's before/after slider) asks for a new thickness per frame and every band was kept for the life of the process. | An 8-entry LRU behind one lock, with tests that the oldest band is evicted and the newest kept, and that the same thickness comes back as the same instance (the rotation case the cache exists for). |
+| 4 | **A mini map paid for a band it never draws.** `ViewPanel` built the adipose path for `MINI`/`EVENT_MINI` and then skipped drawing it: seconds of boolean path work per mini map on a slow device, and B5's Train root shows one per routine. | The thickness is null for a mini variant. `aMiniMapNeverBuildsTheAdiposeBand` renders a mini with an adipose layer at a body fat no other test uses and asserts nothing was cached; it fails without the fix. |
+| 5 | **B4 deliverable 5's waist slider did nothing.** `BodyLabActivity` passed one tape site, and `AdiposeModel` scales a region only against the median of *two or more* of the person's own sites, so moving the waist could not move the figure. | The harness carries a measured chest and hips, so the waist slider moves the midsection; the readout names the waist band as well as the thickest. `aWaistScrubMovesTheMidsectionAndNothingElse` pins the model behaviour it depends on. |
+| 6 | **The fat layer had no provenance when it was an estimate.** With no recorded body-fat figure the layer is computed entirely from tape, and the sheet then showed one sentence: no sites, no source, no recorded time (`DESIGN.md` §9.1.1 Provenance, `pr.md` §2.2). The screen also guessed the rule with its own `tape.size >= 2`. | `AdiposeModel.provenanceSites` owns the rule in `:core` (the Navy inputs when the figure is estimated; the sites that actually scaled a region otherwise; empty when nothing did), the view model reads the newest contributing measurement for the source and the times, and the sheet shows a source row for an estimate too. Four cases are unit-tested. |
+| 7 | **The v4 → v5 migration's muscle normalisation was untested.** `4.sqm` rewrites B3's `back`/`shoulders`/`glutes` into the taxonomy; without it an upgraded demo database colours nothing, and three `UPDATE`s had no assertion. | `aV4DatabaseGainsTheExerciseColumnsAndKeepsItsRows` now migrates one row per legacy name and asserts each comes back as a key `Muscle.fromKey` resolves. |
+
+Smaller corrections in the same pass: a second geometry load failure is logged instead of
+swallowed, so a blank card always names its cause; the touch reach reads the 44 dp target
+from `OhTheme` instead of a 22 f copy of half of it; the pre-geometry placeholder reserves
+one view's height when one view is shown rather than the pair's (with a test that ties the
+reserved ratios to the shipped viewBoxes); `bodyHitRegions` is held by the parsed view
+rather than a static map keyed by `BodyView`, which could hand a second geometry the
+first one's regions; and the band producer keys on the view as well as the thickness.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL** from a cleaned tree; ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint and **269 JVM tests** (113 `:core`, 73 `:data`, 80 `:ui`, 1 fixtures, 2 exerciseindex), with **174 goldens** (170 + 4 for the table alternative). |
+| `:app-android:connectedDebugAndroidTest` | **13/13** on an Android 16 emulator (the owner's phone was not attached), after one flake described below. |
+| Negative proofs | Each new test was re-run against the unfixed code: the table golden, the mini-map band test and the strengthened fat-layer assertion all fail without their fix. |
+
+### The flaky exit test: traced and fixed
+
+The first full instrumented run on the emulator was **12/13**: B3's exit test
+`freshInstallReachesTheFirstNoteInUnderThreeMinutes` timed out waiting for the note sheet
+to close after Save. It reproduced alone in roughly two runs of five, so it was not a
+one-off. Temporary logging showed `saveQuickAdd` was never called: the Save tap was
+landing on the still-animating keyboard, which covers that part of the modal sheet when it
+has just opened. The test now dismisses the IME before tapping Save (as a person does),
+and the same assertions run unchanged: **10 of 10** consecutive runs pass. Nothing was
+retried or widened; the input timing was made deterministic.
+### Deliberately not changed
+
+- **A switched-off module still shows its root screen** (QA OH-02). Hiding a root needs a
+  surface that `DESIGN.md` does not define; it is a product decision for the owner and
+  stays an open B3 issue.
+- **The light adipose layer is drawn at full opacity** (QA OH-03). §9.1.1's 55 % and
+  §12.5's 3:1 cannot both hold in light; the dated DESIGN edit records the choice and the
+  owner owns the tie-break.
+- **`fatProvenanceLine`** in `ui/.../body/BodyMapText.kt` has had no caller since the
+  review replaced the card's sentence with a row and a sheet. It is left for B7's body
+  composition card rather than deleted blind.
+- **Hours are always spoken in hours**, so a muscle last trained four weeks ago reads
+  "672 h ago" on the card and in the table. A days form is new copy; flagged, not invented.
+- **`synchronousLayers`** is a production parameter on `OhBodyMap`, `BodyCard` and
+  `TodayScreen` that only screenshot tests set. It is honest and documented, but it is
+  test-shaped API on a product surface; B10's reliability pass should take it.

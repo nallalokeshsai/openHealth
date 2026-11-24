@@ -215,11 +215,11 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B4 Body model and exercise data** (2026-11-24); next is **B5
   Gym training**.
 - Build: green. `./gradlew clean check :app-android:assembleDebug` passes on
-  `build/b4-body-and-exercises`; **262 JVM tests** (111 `:core`, 73 `:data`, 75 `:ui`,
-  1 fixtures, 2 exerciseindex) and **12 instrumented tests** pass on the owner's physical
-  phone, including the new library-seeding test. `:ui` holds the B1 design system, the B3
-  screens and **170 goldens** (136 before + 34 for the body map and Today's map card) in
-  dark, light, 200 % text and RTL.
+  `build/b4-qa`; **269 JVM tests** (113 `:core`, 73 `:data`, 80 `:ui`, 1 fixtures,
+  2 exerciseindex) and **13 instrumented tests** pass, the instrumented suite most
+  recently on an Android 16 emulator. `:ui` holds the B1 design system, the B3 screens
+  and **174 goldens** (136 B1/B3 + 34 for the body map and Today's map card + 4 for the
+  map's table alternative) in dark, light, 200 % text and RTL.
 - `:core` adds the 19 whole muscles and their regions/body parts, the recovery engine
   (primary 1, secondary 0.5, 28-day window, hard session against earlier medians), the
   adipose thickness model, the exercise catalogue (871 exercises from Free Exercise DB,
@@ -238,4 +238,12 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   turning it on is B10's. Cold start in the debug build is **1 058 ms**, inside the 1.5 s
   budget; the release number is B14's. The first store open seeds 871 exercises in
   **1 717 ms** on IO, after the first frame.
+- A phase-wise audit of B0-B4 (2026-11-24, `build/b4-qa`) fixed seven defects with
+  tests: the table alternative's hairline rule, the fat-layer exit test asserting only
+  the seams, an unbounded adipose-band cache, a band built for mini maps that never draw
+  one, the debug harness's inert waist slider, no provenance on an estimated fat layer,
+  and the untested v4 muscle-name migration. B3's first-note instrumented test was
+  flaky (the Save tap could land on the animating keyboard) and now dismisses the IME
+  first: 10 of 10 runs pass. Three items stay with the owner (the module-off root
+  surface, the light fat opacity, the hours-only duration copy).
 - Open issues: see `docs/build-log.md`.
