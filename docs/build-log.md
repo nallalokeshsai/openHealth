@@ -1197,6 +1197,7 @@ first one's regions; and the band producer keys on the view as well as the thick
 | `./gradlew clean check :app-android:assembleDebug` | **BUILD SUCCESSFUL** from a cleaned tree; ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint and **269 JVM tests** (113 `:core`, 73 `:data`, 80 `:ui`, 1 fixtures, 2 exerciseindex), with **174 goldens** (170 + 4 for the table alternative). |
 | `:app-android:connectedDebugAndroidTest` | **13/13** on an Android 16 emulator (the owner's phone was not attached), after one flake described below. |
 | Negative proofs | Each new test was re-run against the unfixed code: the table golden, the mini-map band test and the strengthened fat-layer assertion all fail without their fix. |
+| Hosted CI, documentation pull request | The first run failed in `:tools:fixtures:test` on `QueryBenchmarkTest` (`noUiQueryExceedsTheBudgetOnAFiveYearCorpus`); the same commit passed all 269 tests locally and passed on a re-run of the same job. That is the benchmark flakiness B2 recorded: the 16 ms budget is measured against a shared runner, and a query landing near it can fail on a slow minute. The budget is not lowered; the open issue stands and B10/B14 own the measurement environment. |
 
 ### The flaky exit test: traced and fixed
 
