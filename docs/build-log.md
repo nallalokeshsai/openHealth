@@ -1209,6 +1209,20 @@ landing on the still-animating keyboard, which covers that part of the modal she
 has just opened. The test now dismisses the IME before tapping Save (as a person does),
 and the same assertions run unchanged: **10 of 10** consecutive runs pass. Nothing was
 retried or widened; the input timing was made deterministic.
+### A benchmark flake on the hosted runner, and the timeline fix it forced
+
+The documentation pull request's first CI run failed on `QueryBenchmarkTest`; the same
+commit passed locally and passed when the job was re-run, and a later run passed with
+`timelinePage50` at **12.45 ms** against the 16 ms budget. This is the flakiness B2
+predicted, and the budget is not lowered. Printing the per-query times in CI (a test-logging
+line in `tools/fixtures`) showed the page query is the only one near the line, and reading
+the repository showed why: one page was **seven round trips of 50 rows each** through the
+separate `happened_at` indexes. The seven branches now carry their own
+`ORDER BY … LIMIT` inside a single `UNION`, and only the 50 kept rows have their dates
+parsed: **1.0 ms** on the same five-year corpus, so a three-times-slower runner sits at
+around 3 ms. `TimelineRepositoryTest` still passes; the query returns the same rows in the
+same order, with the tie-break now explicit (`happened_at DESC, entity_id`).
+
 ### Deliberately not changed
 
 - **A switched-off module still shows its root screen** (QA OH-02). Hiding a root needs a
