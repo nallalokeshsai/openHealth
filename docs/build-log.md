@@ -1529,7 +1529,7 @@ iOS gate review (`pr.md` §13.17): **not yet**. No change to the deferral.
 |---|---|
 | `./gradlew check :app-android:assembleDebug` | **BUILD SUCCESSFUL**. ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint; **396 JVM tests** (179 `:core`, 100 `:data`, 10 `:integrations`, 97 `:ui`, 7 `tools:foodindex`, 1 fixtures, 2 exerciseindex) and **222 goldens**. |
 | `:app-android:assembleFdroidDebug` | The Play-Services-free APK built. Both `play` and `fdroid` debug APKs exist. |
-| `./gradlew :app-android:connectedPlayDebugAndroidTest` | **BUILD SUCCESSFUL, 29/29** on the owner's phone: 11 B3, 2 B5, B2's encrypted database, B4's library, B5's rest-timer store and **7 B6 scenarios** (barcode to logged, exact day totals, weight-neutral, bundled-index offline search, copy day, undo, the INTERNET permission declared by the app itself). |
+| `./gradlew :app-android:connectedPlayDebugAndroidTest` | **BUILD SUCCESSFUL, 29/29** on the owner's phone: 11 B3, 2 B5, B2's encrypted database, B4's library, B5's rest-timer store and **8 B6 scenarios** (barcode to logged, exact day totals, weight-neutral, bundled-index offline search, copy day, undo, the one-tap water chip without the sheet, and the INTERNET permission declared by the app itself). |
 | Barcode to logged | `NutritionExitTest.barcodeToLoggedTakesUnderFiveSeconds`: a fake OFF transport, manual barcode entry, lookup, portion and Log; **under 5 s** with the stored entry's energy exactly 80 kcal for 40 g of a 200 kcal/100 g product. The camera preview and the permission-at-use dialog were exercised on the phone; the capture itself needs a barcode in front of the lens, which the test cannot position. |
 | A day's totals | `NutritionRepositoryTest.aDayTotalIsTheExactSumOfItsEntries` and `NutritionExitTest.aDaysTotalsEqualTheSumOfItsEntriesExactly`: the rollup and the model equal the left-to-right sum of the stored entries bit for bit; the micro totals ride on the same rollup's detail. |
 | Airplane mode | Manual: airplane mode on, searched the **bundled** index for "oat", logged "Oat bran, raw" (94 g, 1 cup) and saw it in the day; OFF is never called by search (`NutritionExitTest.theBundledIndexSearchesAndLogsWithNoNetwork` also asserts the transport was not called). |
@@ -1592,19 +1592,54 @@ tree.
 
 ### Independent review, invariant audit and plan audit
 
-- Fresh reviewers are run in section 3/4 of the launcher; their confirmed findings are
-  reflected in the milestones and this list. The headless plan audit's findings and fixes
-  are recorded in the final commit's message and in the pull request body.
+Three fresh reviewers saw only the B6 diff and the contract (correctness and tests;
+`AGENTS.md` invariants and licences; `DESIGN.md` conformance). Their confirmed findings
+were fixed here:
+
+- **Invariants and licences.** The Play build's ML Kit dependency pulled
+  `com.google.android.datatransport`/CCT and initialised its telemetry at app start, which
+  the no-telemetry invariant forbids. ML Kit was removed; **ZXing is now the decoder in
+  both store flavours** (ADR 0011, `Tech-Stack.md` §8 version 2.3), and the app declares
+  `INTERNET` itself for the one explicit OFF lookup. Removing a water container was a
+  permanent delete, so the action was removed; copied recipe ingredients are no longer
+  marked "Checked"; the About sheet now carries the USDA/OFF attribution the citation
+  note promised; OFF name search is recorded as deferred rather than implied.
+- **Correctness.** A custom meal copied to another day kept the source day's meal id, so
+  the copies were invisible and the totals disagreed with the rows: `ensureMeal` now
+  checks the day and `copyDay` creates a fresh custom meal (with a custom-meal copy test).
+  The allergen setting was matched case-sensitively, so "Peanuts" never fired: keys,
+  plurals, "tree nuts", "dairy", "seafood" and `en:` tags now normalise. Editing a quick
+  entry minted an orphan blank food; it now keeps `food_id = null`. Quick entries get the
+  "Quick calories" source. The barcode-to-new-food route carries the barcode in the route
+  instead of racing the state. Recipe default serving now uses the filtered ingredient
+  weight, and the serving count is derived when the editor reopens. `insertEntry` ignores
+  only the idempotency key, not a duplicate id. The index cache filename carries the
+  dataset version. A search result is dropped if a newer query has arrived. `:core` no
+  longer uses `java.text.Normalizer`; a Latin fold keeps it KMP-ready. Tests were added
+  for entry update (recorded_at, revision, rebuild), the v6→v7 diary migration, exact
+  micro totals and the custom-meal copy; the excluded-readings rollup test was restored.
+- **Design.** The date strip reads left-to-right in RTL and uses the press fill; meal rows
+  have a visible hairline, one merged accessibility node and no always-present delete
+  text; the ring has one announcement; food rows fill the 50 dp thumbnail; water uses an
+  NBSP and stacks its quick-log button at 200 %; the energy card opens a day provenance
+  sheet; raw allergen keys became labels; the fasting action is a verb; the looking-up
+  state explains itself; and the target fields round.
+
+The headless plan audit did not return a report: the first run was killed at the 30-minute
+limit with no output beyond a sign-in warning, and a second, narrower run is the one this
+entry waits on. The three reviewer passes above are the independent evidence for this
+phase.
+
 - Invariant audit: every value carries source, device, method, `happened_at`,
-  `recorded_at`, local date, zone and idempotency key (entries and meals now both do);
+  `recorded_at`, local date, zone and idempotency key (entries and meals both do);
   backfilled entries rebuild their own day and keep `recorded_at`; rollups are rebuilt by
   the engine and micro totals ride on the rebuilt row; one source wins a day (the rollup
   names the manual source or null); no network happens without the explicit OFF action;
-  no diagnosis or alarm wording; no telemetry; `:core`/`:data`/`:integrations` remain
-  free of `android.*`; the licence split and new assets are recorded; deletion leaves a
-  tombstone and a 30-day Trash; weight-neutral hides calories and energy; the micro panel
-  is a table with a cited source; only existing tokens plus the quoted ring/bar geometry;
-  no cut-list item was built.
+  no diagnosis or alarm wording; no telemetry dependency remains; `:core`/`:data`/
+  `:integrations` remain free of `android.*` and JVM-only normalization; the licence split
+  and new assets are recorded; deletion leaves a tombstone and a 30-day Trash; weight-
+  neutral hides calories and energy; the micro panel is a table with a cited source; only
+  existing tokens plus the quoted ring/bar geometry; no cut-list item was built.
 - iOS gate (`pr.md` §13.17): **not yet**. No change to the deferral.
 
 ### Placeholders and deferred work
