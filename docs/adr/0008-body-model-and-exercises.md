@@ -28,7 +28,9 @@ went beyond either text, so a later phase does not have to rediscover them.
 
 ## The adipose layer
 
-4. **A single rim, not one band per limb.** Stroking every region separately draws a gold
+4. **A single rim, not one band per limb.** *(Superseded by `0009`: the rim is a raster
+   mask now, because Skia's path operators fail on tape-scaled input. The rule itself —
+   one rim, never under a muscle — is unchanged.)* Stroking every region separately draws a gold
    seam between the arm and the torso. The renderer instead builds one rim from the union
    of every muscle, then adds an outward ring only where a region is thicker than the
    thinnest one, and cuts the result against the muscle union. The band is therefore
