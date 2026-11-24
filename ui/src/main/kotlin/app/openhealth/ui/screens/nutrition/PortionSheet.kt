@@ -178,7 +178,7 @@ fun PortionSheet(
                 )
             }
         }
-        val allergenText = model.allergens.joinToString(", ") { it.key }
+        val allergenText = model.allergens.map { allergenLabel(it) }.joinToString(", ")
         if (allergenText.isNotBlank()) {
             Spacer(Modifier.height(OhTheme.space.s4))
             Text(
@@ -214,11 +214,13 @@ fun PortionSheet(
                 )
             }
         }
-        Spacer(Modifier.height(OhTheme.space.s4))
-        OhRow(
-            title = stringResource(R.string.nutrition_portion_per_100g),
-            value = totals[Nutrient.ENERGY]?.let { energyText(it / grams * 100.0) },
-        )
+        if (showKcal) {
+            Spacer(Modifier.height(OhTheme.space.s4))
+            OhRow(
+                title = stringResource(R.string.nutrition_portion_per_100g),
+                value = totals[Nutrient.ENERGY]?.let { energyText(it / grams * 100.0) },
+            )
+        }
         if (model.food.isRecipe) {
             Spacer(Modifier.height(OhTheme.space.s2))
             OhButton(

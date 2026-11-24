@@ -236,6 +236,7 @@ class NutritionRepositoryTest {
         )
         assertNull(repository.openFast())
         assertEquals(1, repository.recentFasts(5).size)
+        assertTrue(store.timeline.page(10).any { it.kind == "fast" })
         store.close()
     }
 

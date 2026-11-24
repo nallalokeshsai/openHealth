@@ -2585,6 +2585,7 @@ class AppViewModel(
             row.kind == TimelineKind.WATER ||
                 row.kind == TimelineKind.NUTRITION ||
                 row.kind == TimelineKind.MEAL ||
+                row.kind == TimelineKind.FAST ||
                 row.kind == TimelineKind.ENTRY
         TimelineFilter.MANUAL -> !row.imported
         // Training rows are their own filter once B9 adds one; today they ride ALL.
@@ -2600,6 +2601,7 @@ class AppViewModel(
         "measurement" -> measurementTimelineRow(item, sources)
         "vital" -> vitalTimelineRow(item, sources)
         "meal" -> mealTimelineRow(item, sources)
+        "fast" -> fastTimelineRow(item, sources)
         "entry" -> entryTimelineRow(item, sources)
         "session" -> sessionTimelineRow(item, sources)
         "work_set" -> setTimelineRow(item, sources)
@@ -2769,6 +2771,29 @@ class AppViewModel(
             ),
             deletable = true,
             sensitive = true,
+        )
+    }
+
+    private fun fastTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.nutrition.fastById(item.entityId)?.let { fast ->
+        TimelineRowModel(
+            kind = TimelineKind.FAST,
+            entityId = fast.id,
+            sourceId = "manual",
+            title = container.context.getString(UiR.string.nutrition_fasting),
+            detail = container.context.getString(UiR.string.timeline_fast_detail),
+            valueText = null,
+            provenance = RowProvenance(
+                sourceLabel = sources["manual"] ?: unknownSource(),
+                happenedAt = fast.window.startEpochMillis.let(Instant::fromEpochMilliseconds),
+                recordedAt = fast.recordedAt,
+                method = null,
+                device = null,
+                edited = false,
+            ),
+            deletable = false,
         )
     }
 

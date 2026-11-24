@@ -1609,6 +1609,14 @@ tree.
 - **Recipe sharing as a file or QR code** (listed in `pr.md` §6.3) is not built; the
   B6 roadmap's recipe deliverable is create/scale/log. The same applies to editing a
   saved meal template from the UI: it can be created and logged, not renamed or deleted.
+- **Open Food Facts name search** is not built. `pr.md` §6.3 lists OFF search in the MVP,
+  while the B6 prompt and roadmap narrow the explicit OFF action to a barcode lookup; the
+  local diary and the bundled USDA index provide search, and OFF names arrive only with a
+  barcode the person chooses to look up.
+- **The day card's provenance** is the entry sheet for every row and the rollup watermark
+  in the data; the energy card itself does not yet open a separate day-summary
+  provenance/formula sheet. That sheet belongs to B9's energy card
+  (`pr.md` §6.4: every figure opens its provenance and formula sheet).
 - **The F-Droid flavour uses ZXing** rather than the proprietary ML Kit model; this is
   recorded in ADR 0011 and `Tech-Stack.md` §8.
 - **The demo corpus is synthetic**, so its micronutrients are absent; real USDA and OFF

@@ -306,6 +306,7 @@
     <string name="timeline_filter_notes">Notes</string>
     <string name="timeline_filter_body">Body</string>
     <string name="timeline_filter_nutrition">Nutrition</string>
+    <string name="timeline_fast_detail">Started a fast</string>
     <string name="timeline_filter_manual">Manual</string>
     <string name="timeline_filter_imported">Imported</string>
     <string name="timeline_provenance_title">Where this came from</string>

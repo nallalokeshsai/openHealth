@@ -111,7 +111,12 @@ fun BarcodeScanScreen(
             BarcodeState.FOUND -> {
                 val product = model.product
                 if (product == null) {
-                    onScanAgain()
+                    OhEmptyState(
+                        title = stringResource(R.string.nutrition_scan_not_found),
+                        body = stringResource(R.string.nutrition_scan_not_found_body),
+                        actionLabel = stringResource(R.string.nutrition_scan_again),
+                        onAction = onScanAgain,
+                    )
                 } else {
                     Text(
                         text = product.name,

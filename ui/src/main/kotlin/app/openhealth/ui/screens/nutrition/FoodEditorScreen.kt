@@ -260,30 +260,33 @@ fun FoodEditorScreen(
                     style = OhTheme.type.footnote,
                     color = OhTheme.colors.label2,
                 )
-                Nutrient.entries.filter { it.group == group }.forEach { nutrient ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "${nutrientLabel(nutrient)} (${unitLabel(nutrient.unit)})",
-                            style = OhTheme.type.footnote,
-                            color = OhTheme.colors.label2,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(OhTheme.space.s2))
-                        OhTextField(
-                            value = nutrientValues[nutrient].orEmpty(),
-                            onValueChange = { nutrientValues[nutrient] = it },
-                            placeholder = "",
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Decimal,
-                            ),
-                            contentDescription = nutrientLabel(nutrient),
-                            modifier = Modifier.width(OhTheme.space.s8 * 4),
-                        )
+                Nutrient.entries
+                    .filter { it.group == group }
+                    .filter { showKcal || it != Nutrient.ENERGY }
+                    .forEach { nutrient ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${nutrientLabel(nutrient)} (${unitLabel(nutrient.unit)})",
+                                style = OhTheme.type.footnote,
+                                color = OhTheme.colors.label2,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(OhTheme.space.s2))
+                            OhTextField(
+                                value = nutrientValues[nutrient].orEmpty(),
+                                onValueChange = { nutrientValues[nutrient] = it },
+                                placeholder = "",
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Decimal,
+                                ),
+                                contentDescription = nutrientLabel(nutrient),
+                                modifier = Modifier.width(OhTheme.space.s8 * 4),
+                            )
+                        }
                     }
-                }
             }
             Spacer(Modifier.height(OhTheme.space.s4))
             val preview = parsedNutrients[Nutrient.ENERGY]

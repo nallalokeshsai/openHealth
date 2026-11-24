@@ -50,6 +50,7 @@ import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.ohHairline
 import app.openhealth.ui.components.ohPressFill
 import app.openhealth.ui.components.rememberInteraction
+import app.openhealth.ui.icons.OhGlyphIcons
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
@@ -500,6 +501,7 @@ private fun TimelineKind.glyph(): ImageVector = when (this) {
     TimelineKind.MEASUREMENT -> OhObjectIcons.scale
     TimelineKind.VITAL -> OhModuleIcons.heart
     TimelineKind.MEAL, TimelineKind.NUTRITION, TimelineKind.ENTRY -> OhObjectIcons.plate
+    TimelineKind.FAST -> OhGlyphIcons.moon
     TimelineKind.SESSION, TimelineKind.SET -> OhObjectIcons.barbell
     TimelineKind.OBSERVATION -> OhIcons.stats
     TimelineKind.OTHER -> OhIcons.info
@@ -512,6 +514,7 @@ private fun TimelineKind.tint() = when (this) {
     TimelineKind.WEIGHT, TimelineKind.MEASUREMENT -> OhTheme.colors.acc
     TimelineKind.VITAL -> OhTheme.colors.teal
     TimelineKind.MEAL, TimelineKind.NUTRITION, TimelineKind.ENTRY -> OhTheme.colors.orange
+    TimelineKind.FAST -> OhTheme.colors.teal
     TimelineKind.SESSION, TimelineKind.SET -> OhTheme.colors.acc
     TimelineKind.OBSERVATION -> OhTheme.colors.teal
     TimelineKind.OTHER -> OhTheme.colors.grey

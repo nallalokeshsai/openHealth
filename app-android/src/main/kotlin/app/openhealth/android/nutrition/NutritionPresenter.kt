@@ -685,7 +685,8 @@ class NutritionPresenter(
             recordedAt = recordedAt,
             quantityG = grams,
             servingLabel = servingLabel,
-            servingG = grams,
+            // The serving's own gram weight, not the total: 2 x 80 g stores 80.
+            servingG = if (servings > 0.0) grams / servings else grams,
             servings = servings,
             foodName = food.name,
             brand = food.brand,
