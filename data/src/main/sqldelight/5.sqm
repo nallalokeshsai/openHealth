@@ -39,6 +39,7 @@ ALTER TABLE work_set ADD COLUMN edit_reason TEXT;
 ALTER TABLE work_set ADD COLUMN edited_at INTEGER;
 ALTER TABLE work_set ADD COLUMN user_edited INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
 
+CREATE INDEX IF NOT EXISTS work_set_happened ON work_set(happened_at);
 CREATE INDEX IF NOT EXISTS session_ended ON session(ended_at);
 CREATE INDEX IF NOT EXISTS session_routine ON session(routine_id);
 

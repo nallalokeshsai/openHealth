@@ -165,6 +165,7 @@ CREATE TABLE work_set (
 
 CREATE INDEX work_set_session ON work_set(session_id, position);
 CREATE INDEX work_set_exercise ON work_set(exercise_id, completed_at);
+CREATE INDEX work_set_happened ON work_set(happened_at);
 
 insertExercise:
 INSERT INTO exercise(
