@@ -38,6 +38,7 @@ CREATE INDEX observation_type_happened ON observation(type, happened_at);
 CREATE INDEX observation_type_local_date ON observation(type, local_date);
 CREATE INDEX observation_happened ON observation(happened_at);
 CREATE INDEX observation_source_date ON observation(source_id, local_date);
+CREATE INDEX observation_date_type ON observation(local_date, type);
 
 insertObservation:
 INSERT OR IGNORE INTO observation(
