@@ -8,6 +8,12 @@ import androidx.lifecycle.viewModelScope
 import app.openhealth.R
 import app.openhealth.android.AppContainer
 import app.openhealth.android.security.LockError
+import app.openhealth.core.body.AdiposeInputs
+import app.openhealth.core.body.AdiposeModel
+import app.openhealth.core.body.BodySex
+import app.openhealth.core.body.MuscleRegion
+import app.openhealth.core.body.RecoveryMap
+import app.openhealth.core.formula.RecoveryThresholds
 import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.ObservationId
@@ -1334,7 +1340,82 @@ class AppViewModel(
             readinessScore = null,
             modules = preferences.modules,
             demo = preferences.demo,
+            bodyMap = buildBodyMap(preferences, profile),
         )
+    }
+
+    /**
+     * The recovery map (`pr.md` §6.5, `DESIGN.md` §9.1): computed from the last four weeks
+     * of logged sets, never stored. The adipose layer is hidden entirely in weight-neutral
+     * mode (`DESIGN.md` §7.6), not blurred.
+     */
+    private fun buildBodyMap(
+        preferences: app.openhealth.android.preferences.Preferences,
+        profile: Profile,
+    ): app.openhealth.ui.body.BodyMapModel? {
+        if (HealthModule.TRAINING !in preferences.modules) return null
+        val instant = now()
+        val sets = store.training.loadedSets(
+            (instant - RECOVERY_WINDOW).toEpochMilliseconds(),
+        )
+        val states = RecoveryMap.compute(instant, sets, thresholds = recoveryThresholds())
+        val fatAllowed = preferences.displayPolicy.shows(
+            app.openhealth.core.preferences.SensitiveMetric.BODY_FAT,
+        )
+        val bodyFat = store.observations.latest(ObservationType.BODY_FAT_PERCENT)
+        val tape = tapeMeasurements()
+        val adipose = if (fatAllowed) {
+            AdiposeModel.compute(
+                AdiposeInputs(
+                    sex = if (profile.sex_at_birth == "FEMALE") BodySex.FEMALE else BodySex.MALE,
+                    bodyFatPercent = bodyFat?.value?.value,
+                    heightCm = profile.height_cm,
+                    tapeCm = tape,
+                ),
+            )
+        } else {
+            null
+        }
+        val provenance = if (adipose == null) {
+            null
+        } else {
+            app.openhealth.ui.body.FatProvenance(
+                bodyFatPercent = bodyFat?.value?.value,
+                method = bodyFat?.provenance?.method,
+                sourceLabel = bodyFat?.provenance?.sourceId
+                    ?.let { store.sources.byId(it)?.label },
+                tapeSites = tape.keys.toList(),
+            )
+        }
+        return app.openhealth.ui.body.BodyMapModel.recovery(
+            sex = if (profile.sex_at_birth == "FEMALE") BodySex.FEMALE else BodySex.MALE,
+            states = states,
+            adipose = adipose,
+            fatProvenance = provenance,
+        )
+    }
+
+    /** The newest reading of each tape site the adipose model uses (`DESIGN.md` §9.1.1). */
+    private fun tapeMeasurements(): Map<String, Double> = MuscleRegion.entries
+        .mapNotNull { region ->
+            store.body.latestMeasurementOfType(region.measurementType)?.let { row ->
+                region.measurementType to row.value_
+            }
+        }
+        .toMap()
+
+    /** The person's own thresholds, or the documented defaults when unset or invalid. */
+    private fun recoveryThresholds(): RecoveryThresholds {
+        fun read(key: String, fallback: Double): Double =
+            store.settings.get(key)?.toDoubleOrNull()?.takeIf { it > 0.0 } ?: fallback
+        val recovering = read(SettingKeys.RECOVERY_RECOVERING_HOURS, DEFAULT_RECOVERING_HOURS)
+        val easing = read(SettingKeys.RECOVERY_EASING_HOURS, DEFAULT_EASING_HOURS)
+        val ready = read(SettingKeys.RECOVERY_READY_HOURS, DEFAULT_READY_HOURS)
+        return if (recovering < easing && easing < ready) {
+            RecoveryThresholds(recovering, easing, ready)
+        } else {
+            RecoveryThresholds()
+        }
     }
 
     private fun buildRecent(
@@ -2009,6 +2090,10 @@ class AppViewModel(
         private const val RECENT_LIMIT = 3
         private const val LAST_HOUR = 23
         private const val NBSP = '\u00A0'
+        private val RECOVERY_WINDOW = kotlin.time.Duration.parse("28d")
+        private const val DEFAULT_RECOVERING_HOURS = 24.0
+        private const val DEFAULT_EASING_HOURS = 48.0
+        private const val DEFAULT_READY_HOURS = 72.0
         private const val MINUS = '\u2212'
         private val SENSITIVE_TYPES = setOf(
             ObservationType.WEIGHT,

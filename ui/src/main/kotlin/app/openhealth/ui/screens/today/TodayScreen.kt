@@ -71,7 +71,7 @@ fun TodayScreen(
             DemoLabel()
         }
         if (HealthModule.TRAINING in model.modules) {
-            BodyCard(onOpenTrain = onOpenTrain)
+            BodyCard(model = model.bodyMap, onOpenTrain = onOpenTrain)
             Spacer(Modifier.height(OhTheme.space.s5))
         }
         if (HealthModule.SLEEP in model.modules || HealthModule.VITALS in model.modules) {
@@ -171,24 +171,6 @@ private fun DemoLabel() {
         color = OhTheme.colors.label2,
         modifier = Modifier.padding(bottom = OhTheme.space.s3),
     )
-}
-
-@Composable
-private fun BodyCard(onOpenTrain: () -> Unit) {
-    OhCard {
-        OhCardHeader(
-            eyebrow = stringResource(R.string.today_body_eyebrow),
-            title = stringResource(R.string.today_body_title),
-            glyph = OhModuleIcons.workout,
-        )
-        Spacer(Modifier.height(OhTheme.space.s2))
-        OhEmptyState(
-            title = stringResource(R.string.today_body_empty_title),
-            body = stringResource(R.string.today_body_empty_body),
-            actionLabel = stringResource(R.string.today_body_empty_action),
-            onAction = onOpenTrain,
-        )
-    }
 }
 
 @Composable

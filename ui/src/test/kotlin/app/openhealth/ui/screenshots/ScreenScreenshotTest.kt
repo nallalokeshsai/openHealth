@@ -14,12 +14,19 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import app.openhealth.core.body.AdiposeInputs
+import app.openhealth.core.body.AdiposeModel
+import app.openhealth.core.body.BodySex
+import app.openhealth.core.body.Muscle
+import app.openhealth.core.body.MuscleRecoveryState
 import app.openhealth.core.formula.ActivityLevel
+import app.openhealth.core.formula.RecoveryStep
 import app.openhealth.core.preferences.DisplayPolicy
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ModulePreset
 import app.openhealth.core.preferences.ProfileGoal
 import app.openhealth.core.preferences.UnitSystem
+import app.openhealth.ui.body.BodyMapModel
 import app.openhealth.ui.screens.lock.LockMessage
 import app.openhealth.ui.screens.lock.LockScreen
 import app.openhealth.ui.screens.onboarding.OnboardingAnswers
@@ -172,6 +179,51 @@ class ScreenScreenshotTest {
         shot("screen-today-empty") {
             TodayScreen(
                 model = today,
+                displayPolicy = DisplayPolicy.Standard,
+                onQuickAdd = {},
+                onOpenTimeline = {},
+                onOpenTrain = {},
+                onOpenNutrition = {},
+            )
+        }
+    }
+
+    private val bodyMap = BodyMapModel.recovery(
+        sex = BodySex.MALE,
+        states = mapOf(
+            Muscle.CHEST to MuscleRecoveryState(
+                Muscle.CHEST,
+                RecoveryStep.RECOVERING,
+                hoursSinceLoad = 6.0,
+                sets = 4.0,
+            ),
+            Muscle.QUADS to MuscleRecoveryState(
+                Muscle.QUADS,
+                RecoveryStep.EASING,
+                hoursSinceLoad = 30.0,
+                sets = 5.0,
+            ),
+            Muscle.GLUTES to MuscleRecoveryState(
+                Muscle.GLUTES,
+                RecoveryStep.READY,
+                hoursSinceLoad = 60.0,
+                sets = 3.0,
+            ),
+        ),
+        adipose = AdiposeModel.compute(AdiposeInputs(BodySex.MALE, bodyFatPercent = 22.0)),
+        fatProvenance = app.openhealth.ui.body.FatProvenance(
+            bodyFatPercent = 22.4,
+            method = app.openhealth.core.observation.MeasurementMethod.BIA,
+            sourceLabel = "Your scale",
+            tapeSites = listOf("waist", "hips"),
+        ),
+    )
+
+    @Test
+    fun todayWithABodyMap() {
+        shot("screen-today-body") {
+            TodayScreen(
+                model = today.copy(status = TodayStatus.LOGGED_TODAY, bodyMap = bodyMap),
                 displayPolicy = DisplayPolicy.Standard,
                 onQuickAdd = {},
                 onOpenTimeline = {},

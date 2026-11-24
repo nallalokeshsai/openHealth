@@ -1,0 +1,8 @@
+-- Migration 4 -> 5 (2026-11-24, B4). The exercise library needs the three descriptive
+-- facts the upstream catalogue carries and the detail screen shows: level, mechanic and
+-- force (pr.md §6.5). They are nullable because a custom exercise may not state them, and
+-- the body part is derived from the primary muscles rather than stored.
+
+ALTER TABLE exercise ADD COLUMN level TEXT;
+ALTER TABLE exercise ADD COLUMN mechanic TEXT;
+ALTER TABLE exercise ADD COLUMN force TEXT;

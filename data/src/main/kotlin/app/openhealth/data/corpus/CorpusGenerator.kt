@@ -395,29 +395,10 @@ class CorpusGenerator(
             ExerciseSeed("Barbell squat", "quadriceps", "WEIGHT_LIFTING_MODERATE", 100.0),
             ExerciseSeed("Bench press", "chest", "WEIGHT_LIFTING_MODERATE", 80.0),
             ExerciseSeed("Deadlift", "hamstrings", "WEIGHT_LIFTING_MODERATE", 130.0),
-            ExerciseSeed("Barbell row", "back", "WEIGHT_LIFTING_MODERATE", 70.0),
-            ExerciseSeed("Overhead press", "shoulders", "WEIGHT_LIFTING_MODERATE", 50.0),
+            ExerciseSeed("Barbell row", "upper-back", "WEIGHT_LIFTING_MODERATE", 70.0),
+            ExerciseSeed("Overhead press", "deltoids", "WEIGHT_LIFTING_MODERATE", 50.0),
         )
-        val exerciseIds = seeds.map { seed ->
-            val id = idGenerator.newId()
-            training.upsertExercise(
-                Exercise(
-                    id = id,
-                    name = seed.name,
-                    primary_muscles = seed.muscle,
-                    secondary_muscles = "",
-                    equipment = "barbell",
-                    instructions = null,
-                    met_activity = seed.met,
-                    is_custom = false,
-                    source_id = "manual",
-                    created_at = now,
-                    updated_at = now,
-                    revision = 1L,
-                ),
-            )
-            id
-        }
+        val exerciseIds = seedCorpusExercises(training, seeds, idGenerator, now)
         val routineId = idGenerator.newId()
         training.upsertRoutine(
             Routine(
@@ -741,4 +722,34 @@ class CorpusGenerator(
         const val WEIGHT_TREND_PER_DAY = 0.0025
         val TRAINING_DAYS = setOf("MONDAY", "WEDNESDAY", "FRIDAY")
     }
+}
+
+/** The demo corpus's five lifts, written as layer-4 exercises with their muscles. */
+private fun seedCorpusExercises(
+    training: TrainingRepository,
+    seeds: List<ExerciseSeed>,
+    idGenerator: IdGenerator,
+    now: Long,
+): List<String> = seeds.map { seed ->
+    val id = idGenerator.newId()
+    training.upsertExercise(
+        Exercise(
+            id = id,
+            name = seed.name,
+            primary_muscles = seed.muscle,
+            secondary_muscles = "",
+            equipment = "barbell",
+            instructions = null,
+            level = "intermediate",
+            mechanic = "compound",
+            force = null,
+            met_activity = seed.met,
+            is_custom = false,
+            source_id = "manual",
+            created_at = now,
+            updated_at = now,
+            revision = 1L,
+        ),
+    )
+    id
 }

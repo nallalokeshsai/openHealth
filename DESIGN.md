@@ -2,7 +2,11 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-23 (third edit) — the object set gains a water droplet
+**Last revision:** 2026-11-24 — B4 gives the body map its two missing engraving
+rules and the dynamic model its arithmetic, no new colour or type role: the Recovering
+hatch (§9.1) and the adipose band's thickness rule, region factors and tap-to-measure
+scaling (§9.1.1); Appendix A records the map's geometry (pair gap, strokes, mini and
+hatch sizes). Previous: 2026-11-23 (third edit) — the object set gains a water droplet
 (§10.2), the only glyph quick add needed and the core set did not name; it is a
 geometric icon on the same 24 dp grid, no colour or size token changed.
 Previous: 2026-11-23 (second edit) — `fat` re-valued from the anatomical
@@ -1190,7 +1194,8 @@ also the part with the clearest licence boundary.
 - **Separation:** every path is stroked 2.5 dp in the **card's surface colour**,
   so neighbouring muscles read as separate forms. There is no outline path of
   its own; without this the body is a blob.
-- **Selected muscle:** stroke 7 dp `label` plus a 2 dp surface glow. The selected
+- **Selected muscle:** stroke 7 dp `label` plus a 2 dp surface glow on each side,
+  drawn as an 11 dp `surface` stroke under the 7 dp label stroke. The selected
   muscle's name appears below the map, never as a floating tooltip.
 - **Recovery view (revised 2026-11-22):** base (untrained) → `green` (Ready) →
   `orange` (Easing) → `red` (Recovering). A muscle trained today is `red`, the
@@ -1200,6 +1205,13 @@ also the part with the clearest licence boundary.
   never the only channel (§11.3): the selected-muscle line states the step and
   hours, and Recovering carries a diagonal hatch for red-green colour blindness.
   The wording never says "pain" or "sore"; soreness is something the person logs.
+- **Hatch (added 2026-11-24):** a Recovering muscle carries a diagonal `surface`
+  hatch at 35 %, a 1.5 dp line every 7 dp, clipped to the muscle and drawn over the
+  red. It is the channel that survives red-green colour blindness; the legend's word
+  and the muscle sheet's step are the other two. No other step is hatched.
+- **Plan view:** the same geometry shaded by the single accent ramp of §8.3, by each
+  muscle's share of the plan's working sets. Plan views never use red, orange or
+  green, so "what the plan trains" and "what is recovering" can never be confused.
 - **Where it may appear:** Today (mini map), Train, Stats. Not on a vital, a
   clinical card or a report (§13.9).
 - **Strength view:** the top band is `yellow` with a 1.5 dp glow; only the
@@ -1236,6 +1248,14 @@ The body map is also a model of the person.
   source and method (BIA, DEXA, Navy, tape) per §9.2 and says when a figure is an
   estimate. Weight-neutral mode hides the adipose layer entirely and draws the
   muscle figure only (§7.6).
+- **Thickness (added 2026-11-24):** base = body-fat fraction × 0.08 of the drawn
+  figure height, clamped to 0.4–3.5 %; then the region factor neck 0.5, chest 0.9,
+  waist 1.0, hips 1.05, thighs 0.95, arms 0.6, calves 0.55. With two or more tape
+  sites measured, a region also scales by its own circumference against the median
+  of that person's measured sites, clamped 0.75–1.3; one measurement changes
+  nothing and no population reference is invented. The band is one rim around the
+  union of the muscles plus an outward ring wherever a region is thicker, cut
+  against the muscle union, so it exists only outside the muscle shapes.
 
 ### 9.2 Body composition card
 
@@ -1899,6 +1919,8 @@ motion  fast 140 / med 220 / push 380 / pop 340 / sheet 340 / dialog 280
 ease    cubic-bezier(.32,.72,0,1)
 press   .97 / .92 small / .985 card
 quick   84 tile / 21 glyph   (§14.2, B3; no new token, quoted here for the guard)
+body    pair gap 6 · stroke 2.5 · selected 7 + 2 glow · mini 46 (event 30) tall,
+        3 stroke, 2 gap · hatch 1.5 / 7 at 35 % · fat 55 %   (§9.1, §9.1.1, B4)
 ```
 
 ---

@@ -77,4 +77,7 @@ object SettingKeys {
     const val GOAL_WEIGHT_KG = "goal.target_weight_kg"
     const val GOAL_TARGET_DATE = "goal.target_date"
     const val LAST_WATER_ML = "quickadd.last_water_ml"
+
+    /** The bundled exercise library's version, so seeding runs once (pr.md §6.5). */
+    const val EXERCISE_CATALOGUE = "exercise.catalogue_version"
 }

@@ -1,6 +1,7 @@
 package app.openhealth.ui.screens.today
 
 import app.openhealth.core.preferences.HealthModule
+import app.openhealth.ui.body.BodyMapModel
 import kotlinx.datetime.LocalDate
 
 /** The part of the day the greeting names (`DESIGN.md` §14.2, Today item 1). */
@@ -30,4 +31,6 @@ data class TodayModel(
     val readinessScore: Int?,
     val modules: Set<HealthModule>,
     val demo: Boolean,
+    /** The recovery map, or null when training is off or no store is open. */
+    val bodyMap: BodyMapModel? = null,
 )

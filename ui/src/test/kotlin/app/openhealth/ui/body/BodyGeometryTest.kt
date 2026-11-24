@@ -1,0 +1,174 @@
+package app.openhealth.ui.body
+
+import android.content.Context
+import android.graphics.Region
+import android.graphics.RegionIterator
+import app.openhealth.core.body.AdiposeInputs
+import app.openhealth.core.body.AdiposeModel
+import app.openhealth.core.body.BodySex
+import app.openhealth.core.body.BodySide
+import app.openhealth.core.body.Muscle
+import app.openhealth.core.body.MuscleRegion
+import app.openhealth.ui.R
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * The geometry and the adipose layer (`DESIGN.md` §9.1, §9.1.1). These tests read the real
+ * shipped TSV and use real Skia paths, so they fail if the resource drifts from the muscle
+ * taxonomy or if the fat band ever reaches under a muscle.
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35])
+class BodyGeometryTest {
+    private val context: Context get() = RuntimeEnvironment.getApplication()
+
+    private val geometry: BodyGeometry by lazy {
+        BodyGeometry.parse(
+            context.resources.openRawResource(R.raw.body_paths)
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText() },
+        )
+    }
+
+    @Test
+    fun allFourViewsParseWithAViewBox() {
+        assertEquals(4, geometry.views.size)
+        BodySex.entries.forEach { sex ->
+            BodySide.entries.forEach { side ->
+                val view = assertNotNull(geometry.view(sex, side), "$sex $side")
+                assertTrue(view.viewBox.width > 0f && view.viewBox.height > 0f)
+                assertTrue(view.parts.isNotEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun everyMuscleIsDrawnSomewhereAndNoPartIsUnknown() {
+        val drawn = geometry.views.values
+            .flatMap { view -> view.parts.mapNotNull { it.muscle } }
+            .toSet()
+        assertEquals(Muscle.entries.toSet(), drawn)
+    }
+
+    @Test
+    fun everyMuscleHasATappableRegion() {
+        val view = geometry.view(BodySex.MALE, BodySide.FRONT)!!
+        val regions = bodyHitRegions(view)
+        assertEquals(
+            view.parts.mapNotNull { it.muscle }.toSet(),
+            regions.keys,
+        )
+        regions.forEach { (muscle, region) ->
+            assertFalse(region.isEmpty, "${muscle.key} has no tappable area")
+        }
+    }
+
+    @Test
+    fun aMuscleIsOneRegionEvenWhenItIsDrawnInManyShapes() {
+        val view = geometry.view(BodySex.MALE, BodySide.FRONT)!!
+        val absParts = view.parts.filter { it.muscle == Muscle.ABS }
+        assertTrue(absParts.sumOf { it.paths.size } > 1, "abs are drawn as several shapes")
+        assertFalse(bodyHitRegions(view).getValue(Muscle.ABS).isEmpty)
+    }
+
+    @Test
+    fun theAdiposeBandIsDrawnOnlyOutsideTheMuscles() {
+        val layer = AdiposeModel.compute(
+            AdiposeInputs(sex = BodySex.MALE, bodyFatPercent = 35.0),
+        )!!
+        BodySide.entries.forEach { side ->
+            val view = geometry.view(BodySex.MALE, side)!!
+            val thickness = MuscleRegion.entries.associateWith { region ->
+                (layer.thicknessFor(region) * view.viewBox.height).toFloat()
+            }
+            val band = AdiposeGeometry.layer(view, thickness)
+            assertFalse(band.isEmpty, "the fat layer is drawn on $side")
+            val bounds = Region(
+                view.viewBox.x.toInt(),
+                view.viewBox.y.toInt(),
+                (view.viewBox.x + view.viewBox.width).toInt(),
+                (view.viewBox.y + view.viewBox.height).toInt(),
+            )
+            val muscleRegion = Region()
+            view.parts.filter { it.muscle != null }.forEach { part ->
+                part.paths.forEach { path ->
+                    val one = Region()
+                    one.setPath(path, bounds)
+                    muscleRegion.op(one, Region.Op.UNION)
+                }
+            }
+            val muscleArea = area(muscleRegion)
+            val fat = Region()
+            fat.setPath(band, bounds)
+            val overlap = Region(fat)
+            overlap.op(muscleRegion, Region.Op.INTERSECT)
+            // The difference is exact in path space; region rasterisation rounds to whole
+            // viewBox units, so only a one-unit sliver along a shared boundary can ever
+            // register. Anything wider is a real overlap.
+            val overlapArea = area(overlap)
+            assertTrue(
+                overlapArea <= muscleArea * BOUNDARY_TOLERANCE,
+                "the fat layer overlaps $overlapArea of $muscleArea muscle units on $side",
+            )
+        }
+    }
+
+    @Test
+    fun thereIsNoFatBandWithoutEnoughData() {
+        val layer = AdiposeModel.compute(AdiposeInputs(sex = BodySex.FEMALE))
+        assertEquals(null, layer)
+    }
+
+    @Test
+    fun aFemaleViewHasItsOwnViewBox() {
+        val female = geometry.view(BodySex.FEMALE, BodySide.FRONT)!!
+        val male = geometry.view(BodySex.MALE, BodySide.FRONT)!!
+        assertTrue(female.viewBox.height != male.viewBox.height)
+    }
+
+    private companion object {
+        const val BOUNDARY_TOLERANCE = 0.02
+    }
+
+    @Test
+    fun everyViewDrawsTheSilhouettePartsThatTakeNoColour() {
+        val view = geometry.view(BodySex.MALE, BodySide.FRONT)!!
+        val inert = view.parts.filter { it.muscle == null }.map { it.key }.toSet()
+        assertTrue("head" in inert && "hands" in inert)
+    }
+
+    private fun area(region: Region): Long {
+        var total = 0L
+        val iterator = RegionIterator(region)
+        val rect = android.graphics.Rect()
+        while (iterator.next(rect)) total += rect.width().toLong() * rect.height()
+        return total
+    }
+
+    /** A path's own bounds are not a hit test; the region is. */
+    @Test
+    fun theRegionKnowsAPointInsideAndOutside() {
+        val view = geometry.view(BodySex.MALE, BodySide.FRONT)!!
+        val chest = bodyHitRegions(view).getValue(Muscle.CHEST)
+        val bounds = view.parts.first { it.muscle == Muscle.CHEST }.bounds
+        val inside =
+            Region(
+                bounds.left.toInt(),
+                bounds.top.toInt(),
+                bounds.right.toInt(),
+                bounds.bottom.toInt(),
+            )
+        inside.op(chest, Region.Op.INTERSECT)
+        assertFalse(inside.isEmpty)
+    }
+}

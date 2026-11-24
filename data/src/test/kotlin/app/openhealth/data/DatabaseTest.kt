@@ -19,7 +19,7 @@ class DatabaseTest {
     fun aNewDatabaseIsCreatedAtTheCurrentSchemaVersion() {
         val store = inMemoryStore()
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
-        assertEquals(4L, store.schemaVersion)
+        assertEquals(5L, store.schemaVersion)
         assertEquals(0L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(0L, store.db.trainingQueries.countWorkSets().executeAsOne())
         store.close()
@@ -46,6 +46,9 @@ class DatabaseTest {
         // 1.sqm adds, so dropping them reproduces the pre-migration state faithfully.
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
+        // every view on a schema change and the view names note.
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
@@ -60,9 +63,9 @@ class DatabaseTest {
         val store = DatabaseOpener(backup).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals("v1-to-v4", backupLabel)
-        assertEquals(4L, store.schemaVersion)
-        assertEquals(4L, userVersion(store.driver))
+        assertEquals("v1-to-v5", backupLabel)
+        assertEquals(5L, store.schemaVersion)
+        assertEquals(5L, userVersion(store.driver))
         V2_INDEXES.forEach { assertEquals(1L, indexCount(store.driver, it), "index $it") }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
@@ -125,6 +128,9 @@ class DatabaseTest {
         val path = directory.resolve("v1.db").toString()
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
+        // every view on a schema change and the view names note.
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
@@ -143,6 +149,9 @@ class DatabaseTest {
         val path = directory.resolve("v1.db").toString()
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        // Drop the v5 columns before anything the timeline view reads: SQLite re-parses
+        // every view on a schema change and the view names note.
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         V2_INDEXES.forEach { first.execute(null, "DROP INDEX $it", 0) }
@@ -172,13 +181,14 @@ class DatabaseTest {
                 "user_edited AS edited FROM observation",
             0,
         )
+        stripV5Columns(first)
         first.execute(null, "PRAGMA user_version = 3", 0)
         first.close()
 
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(4L, store.schemaVersion)
+        assertEquals(5L, store.schemaVersion)
         val view = store.driver.executeQuery(
             null,
             "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
@@ -233,6 +243,7 @@ class DatabaseTest {
         // DDL and rebuild. The fixture therefore tracks the schema instead of drifting.
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        stripV5Columns(first)
         // The note table arrives in v4; this fixture must really be older than it.
         first.execute(null, "DROP TABLE note", 0)
         val ddl = tableDdl(first)
@@ -269,7 +280,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(4L, store.schemaVersion)
+        assertEquals(5L, store.schemaVersion)
         assertEquals(1L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(3, store.db.sourceQueries.allSources().executeAsList().size)
 
@@ -294,6 +305,46 @@ class DatabaseTest {
         Files.deleteIfExists(java.nio.file.Path.of(path))
         Files.deleteIfExists(java.nio.file.Path.of("$path-shm"))
         Files.deleteIfExists(java.nio.file.Path.of("$path-wal"))
+        Files.deleteIfExists(directory)
+    }
+
+    @Test
+    fun aV4DatabaseGainsTheExerciseColumnsAndKeepsItsRows() {
+        val directory = Files.createTempDirectory("openhealth-v4-exercise")
+        val path = directory.resolve("v4.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        stripV5Columns(first)
+        first.execute(
+            null,
+            "INSERT INTO exercise(id, name, primary_muscles, secondary_muscles, is_custom, " +
+                "created_at, updated_at, revision) VALUES " +
+                "('legacy','Legacy press','chest','',0,0,0,1)",
+            0,
+        )
+        first.execute(null, "PRAGMA user_version = 4", 0)
+        first.close()
+
+        val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
+            jdbcFactory("jdbc:sqlite:$path"),
+        )
+        assertEquals(5L, store.schemaVersion)
+        val columns = store.driver.executeQuery(
+            null,
+            "PRAGMA table_info(exercise)",
+            { cursor ->
+                val names = mutableListOf<String>()
+                while (cursor.next().value) names += cursor.getString(1).orEmpty()
+                QueryResult.Value(names)
+            },
+            0,
+        ).value
+        listOf("level", "mechanic", "force").forEach { assertTrue(it in columns, "column $it") }
+        val row = store.db.trainingQueries.exerciseById("legacy").executeAsOne()
+        assertEquals("Legacy press", row.name)
+        assertEquals(null, row.level)
+        store.close()
+        Files.deleteIfExists(java.nio.file.Path.of(path))
         Files.deleteIfExists(directory)
     }
 
@@ -366,6 +417,13 @@ class DatabaseTest {
             },
             0,
         ).value
+
+    /** v5 added three nullable exercise columns; a pre-v5 fixture must not have them. */
+    private fun stripV5Columns(driver: app.cash.sqldelight.db.SqlDriver) {
+        listOf("level", "mechanic", "force").forEach {
+            driver.execute(null, "ALTER TABLE exercise DROP COLUMN $it", 0)
+        }
+    }
 
     private companion object {
         /** The inline foreign key clause this schema adds at v3. */
