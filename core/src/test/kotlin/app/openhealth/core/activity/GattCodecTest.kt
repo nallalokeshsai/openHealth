@@ -3,6 +3,7 @@ package app.openhealth.core.activity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -236,6 +237,37 @@ class GattCodecTest {
             "a scale subscribes to its composition characteristic too",
         )
         assertNull(GattCodec.decode(GattServices.BATTERY, weight, TimeZone.UTC))
+    }
+
+    /**
+     * The two characteristics live in two different services: the SIG puts Weight
+     * Measurement (0x2A9D) in Weight Scale (0x181D) and Body Composition Measurement
+     * (0x2A9C) in Body Composition (0x181B). A scale that measures impedance therefore
+     * carries one in each, and a reader that looks for both inside the service the
+     * device was recognised by finds the weight and never the composition.
+     */
+    @Test
+    fun aScaleIsRecognisedByEitherOfItsTwoServices() {
+        assertEquals(
+            DeviceKind.SCALE,
+            DeviceKind.fromServices(listOf(GattServices.BODY_COMPOSITION)),
+            "a composition-only scale advertises 0x181B and nothing else",
+        )
+        assertEquals(
+            DeviceKind.SCALE,
+            DeviceKind.fromServices(
+                listOf(GattServices.WEIGHT_SCALE, GattServices.BODY_COMPOSITION),
+            ),
+        )
+        assertTrue(
+            GattServices.BODY_COMPOSITION in DeviceKind.SCALE.serviceUuids &&
+                GattServices.WEIGHT_SCALE in DeviceKind.SCALE.serviceUuids,
+        )
+        assertNotEquals(
+            GattServices.WEIGHT_SCALE,
+            GattServices.BODY_COMPOSITION,
+            "the composition characteristic is not in the weight-scale service",
+        )
     }
 
     @Test

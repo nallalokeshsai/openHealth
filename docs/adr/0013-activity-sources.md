@@ -167,3 +167,34 @@ Every reading still names a real `source` row, so provenance is unchanged.
 - **The step service stops rather than crashes.** `startForeground` throws when
   `ACTIVITY_RECOGNITION` has been revoked or the platform refuses a background start; the
   service now stops itself and the counter is recovered on the next app start.
+
+## 10. Amendments from the third audit round
+
+- **The flush tick was postponed by every notification.** `scheduleFlush` cancelled and
+  re-posted the ten-second tick each time a packet decoded, so a strap notifying once a
+  second kept it permanently ten seconds away: the batch landed only on a disconnect or on
+  `close`, and the 1,200-reading buffer silently dropped the oldest samples of anything
+  past twenty minutes. The tick is now started once (`FlushSchedule`), re-posts itself
+  while a device is linked or anything is still waiting, and stops when both are empty so
+  an idle app is not woken every ten seconds.
+- **The buffer was read and written from two threads.** `connectGatt` without a handler
+  delivers its callbacks on a binder thread, while the tick runs on the main looper, so
+  `decode` added to the deque while `flush` drained it. The buffer and the tick's own state
+  are now held under one lock, and the connection map is a `ConcurrentHashMap`.
+- **A batch with nothing to store was retried for ever.** `writeAll` answered "false" both
+  for a write that threw and for a batch that mapped to no observation at all — a
+  composition packet whose fat is the unknown sentinel and that states no weight. The
+  second kind was re-buffered on every tick without ever making progress.
+  `BleWriteOutcome` separates the two answers.
+- **The CCCD queue looked in the wrong service.** Round 2 queued the descriptor writes
+  correctly but searched for both characteristics inside the service the device was
+  recognised by. The Bluetooth SIG puts Weight Measurement (0x2A9D) in Weight Scale
+  (0x181D) and Body Composition Measurement (0x2A9C) in Body Composition (0x181B), so a
+  conformant BIA scale exposes one in each and the composition lookup returned null —
+  body fat was still dropped. A characteristic is now found in whichever discovered
+  service exposes it, and either service identifies a scale.
+- **Notifications take the bytes the platform hands over.** The deprecated two-argument
+  `onCharacteristicChanged` reads `characteristic.value`, one field that the next
+  notification on the same characteristic overwrites. The API 33 value-carrying form is
+  used where it exists and the deprecated one returns early there, so a notification is
+  never counted twice.

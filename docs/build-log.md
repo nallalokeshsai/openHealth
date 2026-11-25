@@ -2293,3 +2293,73 @@ coverage (`BleSessionTest`, `GattCodecTest`) but no executed radio; that is reco
 open. One semantic point is deliberately left for B9: `SLEEP_DURATION` is the whole
 session span, so a staged night's awake time counts as sleep and `SLEEP_IN_BED` repeats the
 same number. Nothing displays sleep yet; B9 settles it before sleep reaches Today.
+
+### Plan audit, round 3 (final)
+
+The third headless round verified round 2's six fixes and found five more, all fixed with
+tests. The verifications first:
+
+- **Body composition (0x2A9C) is right.** Flags, then the mandatory body fat percentage,
+  then the optional fields in flag-bit order; water is read as a mass and becomes a
+  percentage only against the weight in the same packet. The three tests assert the
+  specification's bytes, and the flag words in the fixtures match the fields they claim.
+- **`BleWritePolicy` is right.** A strap streams and is batched; a weight, a composition
+  and a cuff reading are each written the moment they decode.
+- **The CCCD queue's shape is right** — `onServicesDiscovered` fills the deque,
+  `subscribeNext` writes one descriptor, `onDescriptorWrite` starts the next — but it
+  searched the wrong service (below).
+- **`FitTime.expandTruncated16` is right:** the nearest candidate within half a rollover
+  either side. `monitoring-16bit.fit` holds a 24-hour day whose walking stretch runs from
+  the sixth hour to midnight, so it genuinely straddles the 65,536-second wrap, and the
+  importer carries its reference across every message.
+- **`StepTrackingService.onStartCommand` is right:** a refused `startForeground` stops the
+  service and returns `START_NOT_STICKY` rather than throwing, which also avoids the
+  "did not start in time" kill.
+- **The Garmin-over-bus source is right:** `garmin-hc` is registered only inside the group
+  of readings a Garmin device wrote, while `health-connect` is registered once per sync
+  because the bus itself is connected and permitted.
+- **`movePriority` does rebuild the rollups** — `SourceRepository.upsertAll` invokes the
+  rebuild hook — so the B8 exit test holds.
+
+What was wrong:
+
+- **The flush tick never fired while a strap was streaming.** `scheduleFlush` cancelled
+  and re-posted the ten-second tick on every decoded packet, so a 1 Hz strap kept it ten
+  seconds away for the whole session. The batch landed only on a disconnect, and a workout
+  past twenty minutes overflowed the 1,200-reading buffer and dropped its oldest samples
+  without saying so — which defeated round 2's batching entirely.
+  `app-android/.../BleHealthManager.kt:349` and `core/.../BleSession.kt:97` (`FlushSchedule`).
+- **The buffer was unsynchronised across two threads.** `connectGatt` without a handler
+  delivers callbacks on a binder thread; the tick runs on the main looper. `decode` added
+  to the deque while `flush` drained it. One lock now covers the buffer and the tick's
+  state together, and `connections` is a `ConcurrentHashMap`.
+  `app-android/.../BleHealthManager.kt:78`.
+- **A batch with nothing to store was retried for ever.** `writeAll` returned the same
+  "false" for a write that threw and for a batch that mapped to no observation, so a
+  composition packet with no fat and no weight was re-buffered on every tick.
+  `BleWriteOutcome` separates them; `core/.../BleSession.kt:70`.
+- **The CCCD queue looked for both scale characteristics in one service.** The SIG puts
+  Weight Measurement (0x2A9D) in Weight Scale (0x181D) and Body Composition Measurement
+  (0x2A9C) in Body Composition (0x181B), so `getService(0x181D).getCharacteristic(0x2A9C)`
+  returns null on a conformant BIA scale and body fat was still never subscribed. A
+  characteristic is now found in whichever discovered service exposes it, and `DeviceKind`
+  carries a service list so a composition-only scale is recognised too.
+  `core/.../GattProfiles.kt:50` and `app-android/.../BleHealthManager.kt:280`.
+- **Notifications read the deprecated cached value.** `characteristic.value` is one field
+  the next notification overwrites. The API 33 value-carrying `onCharacteristicChanged` is
+  overridden and the deprecated one returns early on 33 and later, so nothing is counted
+  twice. `app-android/.../BleHealthManager.kt:320`.
+
+Four new `:core` tests cover the pure halves: the tick is started once and not postponed,
+it runs on while there is work and stops when there is none, only a failed write keeps its
+batch, and a scale is recognised by either of its two services.
+
+Still the owner's, unchanged: the 24 h battery run, real strap pairing, a genuine Garmin
+export, and the fact that **no radio has executed any of this** — `BleHealthManager` and
+`StepTrackingService` have no JVM coverage, and the device suite has not run since the
+round-1 fixes. Health Connect's own zone offsets are still not carried through.
+
+`./gradlew check` is green: **519 JVM tests** (256 `:core`, 111 `:data`, 27
+`:integrations`, 115 `:ui`, 10 across the three tools) with ktlint, Detekt,
+`checkPortability`, `checkLicences`, `checkDesignTokens` and both lint variants.
+`./gradlew :app-android:assemblePlayDebug :app-android:assembleFdroidDebug` builds both.

@@ -80,6 +80,55 @@ class BleSessionTest {
         assertEquals(listOf(3, 4, 5), buffer.drain())
     }
 
+    /**
+     * The tick is started once and left alone. Restarting it on every notification
+     * postpones it, and a strap notifying once a second postpones a ten-second tick for
+     * ever: the batch would land only on a disconnect, and a session longer than the
+     * buffer holds would drop its oldest samples without saying so.
+     */
+    @Test
+    fun theFlushTickIsStartedOnceAndNotRestartedByEveryReading() {
+        val schedule = FlushSchedule()
+
+        assertTrue(schedule.start(), "the first reading posts the tick")
+        repeat(STREAMING_READINGS) {
+            assertFalse(
+                schedule.start(),
+                "a reading arriving before the tick fires must not postpone it",
+            )
+        }
+        assertTrue(schedule.isScheduled)
+    }
+
+    /** The tick keeps running while a device is linked or anything is still waiting. */
+    @Test
+    fun theFlushTickRunsOnWhileThereIsWorkAndStopsWhenThereIsNone() {
+        val schedule = FlushSchedule()
+        schedule.start()
+
+        assertTrue(schedule.ranAndContinues(linked = true, waiting = 0))
+        assertTrue(schedule.ranAndContinues(linked = false, waiting = 3))
+        assertFalse(
+            schedule.ranAndContinues(linked = false, waiting = 0),
+            "an idle tick stops rather than waking the phone every ten seconds",
+        )
+        assertFalse(schedule.isScheduled)
+        assertTrue(schedule.start(), "the next reading starts it again")
+    }
+
+    /**
+     * "Nothing was written" and "the write failed" are not the same answer. A batch that
+     * mapped to no observation — a composition packet whose fat is the unknown sentinel
+     * and that states no weight — has nothing to store, and re-buffering it would retry
+     * it on every tick for the rest of the session while never making progress.
+     */
+    @Test
+    fun onlyAFailedWriteKeepsItsBatchBuffered() {
+        assertTrue(BleWriteOutcome.FAILED.keepBuffered)
+        assertFalse(BleWriteOutcome.WRITTEN.keepBuffered)
+        assertFalse(BleWriteOutcome.NOTHING_TO_WRITE.keepBuffered)
+    }
+
     @Test
     fun theRetryLadderDoublesToItsCeilingAndStops() {
         assertEquals(BleRetry.FIRST_DELAY, BleRetry.delayFor(1))
@@ -91,5 +140,10 @@ class BleSessionTest {
             BleRetry.shouldRetry(attempt = 1, autoConnect = false),
             "a device the person turned off is not chased",
         )
+    }
+
+    private companion object {
+        /** More readings than a ten-second tick would ever see from a 1 Hz strap. */
+        const val STREAMING_READINGS = 30
     }
 }

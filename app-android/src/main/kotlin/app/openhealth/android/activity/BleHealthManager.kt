@@ -18,10 +18,12 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import app.openhealth.core.activity.BleRetry
+import app.openhealth.core.activity.BleWriteOutcome
 import app.openhealth.core.activity.BleWritePolicy
 import app.openhealth.core.activity.DeviceCapabilities
 import app.openhealth.core.activity.DeviceKind
 import app.openhealth.core.activity.DeviceLinkState
+import app.openhealth.core.activity.FlushSchedule
 import app.openhealth.core.activity.GattCodec
 import app.openhealth.core.activity.GattMeasurement
 import app.openhealth.core.activity.MeasurementBuffer
@@ -55,9 +57,11 @@ import kotlinx.datetime.TimeZone
  * scales and blood-pressure cuffs, all through the three Bluetooth SIG profiles, so any
  * conforming device works and no vendor app is involved.
  *
- * Nothing is lost on a disconnect: a decoded measurement is written to the database the
- * moment it arrives, and only a write that fails is buffered and flushed on reconnect.
- * The reconnect itself follows [BleRetry]. A workout's sets are already persisted by the
+ * Nothing is lost on a disconnect. A single reading — a weight, a composition, a cuff —
+ * is written the moment it is decoded; a strap's stream is batched and written on the
+ * flush tick, and the tick is run again the instant the link drops, so whatever the strap
+ * sent since the last one still lands. A write that fails goes back into the buffer. The
+ * reconnect itself follows [BleRetry]. A workout's sets are already persisted by the
  * training repository, so a strap dropping out costs heart-rate coverage, never a set.
  */
 @Suppress("TooManyFunctions")
@@ -74,8 +78,18 @@ class BleHealthManager(
         get() = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
             ?.adapter
 
-    private val connections = HashMap<String, BluetoothGatt>()
+    // Touched from the main thread (connect, disconnect, close) and from the GATT
+    // callback thread, which `connectGatt` without a handler runs on.
+    private val connections = java.util.concurrent.ConcurrentHashMap<String, BluetoothGatt>()
+
+    /**
+     * The buffer and the tick's own state are read and written from both of those
+     * threads too, so they are held under one lock: "is anything still waiting" has to
+     * be asked and answered without a reading slipping in between.
+     */
+    private val bufferLock = Any()
     private val buffer = MeasurementBuffer<BufferedReading>()
+    private val flushSchedule = FlushSchedule()
     private var scanCallback: ScanCallback? = null
     private var stateListener: ((DeviceLinkState) -> Unit)? = null
     private var foundListener: ((List<FoundDevice>) -> Unit)? = null
@@ -193,9 +207,11 @@ class BleHealthManager(
      * dropped only when the buffer overflows, never because one attempt failed.
      */
     fun flush() {
-        val drained = buffer.drain()
+        val drained = synchronized(bufferLock) { buffer.drain() }
         if (drained.isEmpty()) return
-        if (!writeAll(drained)) drained.forEach(buffer::add)
+        if (writeAll(drained).keepBuffered) {
+            synchronized(bufferLock) { drained.forEach(buffer::add) }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -205,6 +221,7 @@ class BleHealthManager(
         connections.values.forEach { gatt -> runCatching { gatt.close() } }
         connections.clear()
         handler.removeCallbacksAndMessages(null)
+        synchronized(bufferLock) { flushSchedule.stop() }
     }
 
     /** Called once when the app starts, so a paired strap reconnects by itself. */
@@ -265,15 +282,30 @@ class BleHealthManager(
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) return
-            val service = gatt.getService(java.util.UUID.fromString(kind.serviceUuid)) ?: return
             pendingSubscriptions.clear()
             kind.measurementUuids.forEach { uuid ->
-                service.getCharacteristic(java.util.UUID.fromString(uuid))
-                    ?.let(pendingSubscriptions::addLast)
+                characteristic(gatt, uuid)?.let(pendingSubscriptions::addLast)
             }
             subscribeNext(gatt)
             flush()
             scheduleFlush()
+        }
+
+        /**
+         * Finds a measurement characteristic in whichever discovered service exposes it,
+         * rather than inside the one service the device was recognised by. Body
+         * Composition Measurement (0x2A9C) belongs to the Body Composition service
+         * (0x181B) and Weight Measurement (0x2A9D) to the Weight Scale service (0x181D),
+         * so looking for both inside 0x181D finds the weight and never the composition —
+         * which is the silent loss of body fat this queue exists to prevent.
+         */
+        @SuppressLint("MissingPermission")
+        private fun characteristic(
+            gatt: BluetoothGatt,
+            uuid: String,
+        ): BluetoothGattCharacteristic? {
+            val id = java.util.UUID.fromString(uuid)
+            return gatt.services.firstNotNullOfOrNull { it.getCharacteristic(id) }
         }
 
         override fun onDescriptorWrite(
@@ -302,11 +334,32 @@ class BleHealthManager(
             }
         }
 
+        /**
+         * From API 33 the bytes arrive with the callback. The deprecated two-argument
+         * form has to read `characteristic.value`, a single field that the next
+         * notification on the same characteristic overwrites — which is why the platform
+         * deprecated it, and why two samples a strap sends back to back can be read as
+         * the same one twice. The value-carrying form is used wherever the platform
+         * offers it.
+         */
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+        ) {
+            decode(characteristic.uuid.toString(), value, address)
+        }
+
+        /**
+         * The platform still calls this one on API 33 and later for compatibility, so it
+         * returns early there; handling both would count every notification twice.
+         */
         @Suppress("OVERRIDE_DEPRECATION")
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
         ) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
             val value = characteristic.value ?: return
             decode(characteristic.uuid.toString(), value, address)
         }
@@ -316,13 +369,25 @@ class BleHealthManager(
     private val flushTick = object : Runnable {
         override fun run() {
             flush()
-            handler.postDelayed(this, FLUSH_INTERVAL_MILLIS)
+            val again = synchronized(bufferLock) {
+                flushSchedule.ranAndContinues(
+                    linked = connections.isNotEmpty(),
+                    waiting = buffer.size,
+                )
+            }
+            if (again) handler.postDelayed(this, FLUSH_INTERVAL_MILLIS)
         }
     }
 
+    /**
+     * Starts the tick if it is not already pending. It must not be cancelled and
+     * re-posted: that postpones it, and a strap notifying once a second would postpone a
+     * ten-second tick for ever, so the batch would land only on a disconnect and a
+     * session longer than the buffer would drop its oldest samples (see [FlushSchedule]).
+     */
     private fun scheduleFlush() {
-        handler.removeCallbacks(flushTick)
-        handler.postDelayed(flushTick, FLUSH_INTERVAL_MILLIS)
+        val post = synchronized(bufferLock) { flushSchedule.start() }
+        if (post) handler.postDelayed(flushTick, FLUSH_INTERVAL_MILLIS)
     }
 
     /**
@@ -338,9 +403,9 @@ class BleHealthManager(
         }.getOrNull() ?: return
         if (decoded is GattMeasurement.HeartRate) _heartRate.value = decoded.bpm
         val reading = BufferedReading(address, kind(decoded), decoded, clock.now())
-        if (BleWritePolicy.isStreaming(decoded) || !writeAll(listOf(reading))) {
-            buffer.add(reading)
-        }
+        val buffered = BleWritePolicy.isStreaming(decoded) ||
+            writeAll(listOf(reading)).keepBuffered
+        if (buffered) synchronized(bufferLock) { buffer.add(reading) }
         // The batch lands on the next tick rather than retrying in a tight loop on the
         // GATT callback thread.
         scheduleFlush()
@@ -358,10 +423,12 @@ class BleHealthManager(
      * each. Every reading still gets its own layer-1 raw record, referenced from the
      * observation's provenance (`pr.md` §7.1).
      *
-     * Returns false if nothing could be written; the caller keeps the batch buffered.
+     * A batch that threw is [BleWriteOutcome.FAILED] and stays buffered; a batch that
+     * decoded but held no value to store is [BleWriteOutcome.NOTHING_TO_WRITE] and is
+     * finished with, because retrying it would never make progress.
      */
-    private fun writeAll(readings: List<BufferedReading>): Boolean = runCatching {
-        if (readings.isEmpty()) return@runCatching true
+    private fun writeAll(readings: List<BufferedReading>): BleWriteOutcome = runCatching {
+        if (readings.isEmpty()) return@runCatching BleWriteOutcome.NOTHING_TO_WRITE
         val observations = mutableListOf<Observation>()
         val raws = mutableListOf<RawRecord>()
         val touched = LinkedHashMap<String, Instant>()
@@ -395,11 +462,11 @@ class BleHealthManager(
             observations += readingObservations
             device?.let { paired -> touched[paired.id] = recordedAt }
         }
-        if (observations.isEmpty()) return@runCatching false
+        if (observations.isEmpty()) return@runCatching BleWriteOutcome.NOTHING_TO_WRITE
         store.observations.recordAll(observations, raws)
         touched.forEach { (id, at) -> store.devices.touch(id, at, reading = true) }
-        true
-    }.getOrDefault(false)
+        BleWriteOutcome.WRITTEN
+    }.getOrDefault(BleWriteOutcome.FAILED)
 
     private fun ensureSource(sourceId: SourceId, label: String, device: PairedDevice?) {
         if (store.sources.byId(sourceId) != null) return

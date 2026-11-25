@@ -59,6 +59,69 @@ object BleWritePolicy {
 }
 
 /**
+ * What one attempt to write a batch did, so the buffer knows whether to keep it.
+ *
+ * "Nothing was written" and "the write failed" are not the same answer. A batch that
+ * threw is kept and tried again on the next tick; a batch that mapped to no observation
+ * at all — a composition packet whose body fat is the unknown sentinel and that states
+ * no weight — has nothing to store, and keeping it would retry it on every tick for the
+ * rest of the session while never making progress.
+ */
+enum class BleWriteOutcome {
+    /** Rows reached the database. */
+    WRITTEN,
+
+    /** The batch decoded, but held no value to store; it is finished with. */
+    NOTHING_TO_WRITE,
+
+    /** The write did not happen; the batch goes back into the buffer. */
+    FAILED,
+    ;
+
+    val keepBuffered: Boolean get() = this == FAILED
+}
+
+/**
+ * Whether the batched-write tick is pending, and whether a tick that has just run should
+ * post itself again.
+ *
+ * The tick is started once and then left alone. Cancelling and re-posting it on every
+ * notification *postpones* it, and a strap that notifies once a second postpones a
+ * ten-second tick for ever: the batch would then land only on a disconnect, and a
+ * session longer than the buffer holds would drop its oldest samples without saying so.
+ *
+ * It is not thread-safe on purpose; the radio side holds one lock over this and the
+ * buffer together, because "is anything still waiting" has to be asked and answered
+ * without a reading slipping in between.
+ */
+class FlushSchedule {
+    private var scheduled = false
+
+    val isScheduled: Boolean get() = scheduled
+
+    /** True when the caller must post the tick; false when one is already pending. */
+    fun start(): Boolean {
+        if (scheduled) return false
+        scheduled = true
+        return true
+    }
+
+    /**
+     * Called by a tick that has just run. True when it should post itself again: while a
+     * device is linked, or while anything is still waiting to be written. A tick that
+     * stops is restarted by the next reading.
+     */
+    fun ranAndContinues(linked: Boolean, waiting: Int): Boolean {
+        scheduled = linked || waiting > 0
+        return scheduled
+    }
+
+    fun stop() {
+        scheduled = false
+    }
+}
+
+/**
  * A bounded buffer for readings the radio produced while the database was busy or the
  * link had just dropped. It is small on purpose: a heart-rate sample every second for a
  * long workout is the worst case, and a full buffer drops the oldest reading rather than

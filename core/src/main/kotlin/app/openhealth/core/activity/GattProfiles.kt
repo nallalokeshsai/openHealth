@@ -20,6 +20,12 @@ import kotlinx.datetime.toInstant
 object GattServices {
     const val HEART_RATE = "0000180d-0000-1000-8000-00805f9b34fb"
     const val WEIGHT_SCALE = "0000181d-0000-1000-8000-00805f9b34fb"
+
+    /**
+     * Body composition is its own service. A scale that measures impedance exposes both
+     * 0x181D and 0x181B, and the composition characteristic lives in this one.
+     */
+    const val BODY_COMPOSITION = "0000181b-0000-1000-8000-00805f9b34fb"
     const val BLOOD_PRESSURE = "00001810-0000-1000-8000-00805f9b34fb"
     const val BATTERY = "0000180f-0000-1000-8000-00805f9b34fb"
     const val DEVICE_INFORMATION = "0000180a-0000-1000-8000-00805f9b34fb"
@@ -38,24 +44,38 @@ object GattServices {
     const val DEVICE_NAME = "00002a00-0000-1000-8000-00805f9b34fb"
 }
 
-/** What a device is, decided from the services it advertises. */
-enum class DeviceKind(val serviceUuid: String, val measurementUuids: List<String>) {
-    HEART_RATE(GattServices.HEART_RATE, listOf(GattServices.HEART_RATE_MEASUREMENT)),
+/**
+ * What a device is, decided from the services it advertises.
+ *
+ * A kind names every service that identifies it and every measurement characteristic it
+ * is read through. The two lists are not parallel and must not be treated as such: the
+ * Bluetooth SIG puts Weight Measurement (0x2A9D) in the Weight Scale service (0x181D)
+ * and Body Composition Measurement (0x2A9C) in the Body Composition service (0x181B),
+ * so a scale that measures impedance carries one characteristic in each. A characteristic
+ * is therefore looked up across the services the device actually discovered, never inside
+ * the one service the device happened to be recognised by.
+ */
+enum class DeviceKind(val serviceUuids: List<String>, val measurementUuids: List<String>) {
+    HEART_RATE(listOf(GattServices.HEART_RATE), listOf(GattServices.HEART_RATE_MEASUREMENT)),
 
     /**
      * A scale indicates its weight on 0x2A9D and, when it measures impedance, its
      * composition on 0x2A9C. Both are subscribed: a scale that only ever reported the
-     * first would leave body fat behind on a device that sends it.
+     * first would leave body fat behind on a device that sends it. Either service is
+     * enough to recognise one, because a composition-only scale advertises 0x181B alone.
      */
     SCALE(
-        GattServices.WEIGHT_SCALE,
+        listOf(GattServices.WEIGHT_SCALE, GattServices.BODY_COMPOSITION),
         listOf(GattServices.WEIGHT_MEASUREMENT, GattServices.BODY_COMPOSITION_MEASUREMENT),
     ),
     BLOOD_PRESSURE(
-        GattServices.BLOOD_PRESSURE,
+        listOf(GattServices.BLOOD_PRESSURE),
         listOf(GattServices.BLOOD_PRESSURE_MEASUREMENT),
     ),
     ;
+
+    /** The service a device of this kind always advertises. */
+    val serviceUuid: String get() = serviceUuids.first()
 
     /** The characteristic a device of this kind always has. */
     val measurementUuid: String get() = measurementUuids.first()
@@ -64,7 +84,9 @@ enum class DeviceKind(val serviceUuid: String, val measurementUuids: List<String
         /** The first known service wins; a strap that also exposes battery is a strap. */
         fun fromServices(serviceUuids: List<String>): DeviceKind? {
             val normalised = serviceUuids.map(::normaliseUuid).toSet()
-            return entries.firstOrNull { it.serviceUuid in normalised }
+            return entries.firstOrNull { kind ->
+                kind.serviceUuids.any { it in normalised }
+            }
         }
     }
 }
