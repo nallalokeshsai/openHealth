@@ -19,14 +19,21 @@ data class DevicesModel(
 data class StepsSourceModel(
     val available: Boolean,
     val tracking: Boolean,
-    val needsPermission: Boolean,
+    /** True when the Steps module is off, so the figures are hidden and nothing runs. */
+    val moduleOff: Boolean,
     val todayText: String,
     val sourceLine: String?,
+    /** Why the day resolved the way it did when it was not a plain win (`pr.md` §7.6). */
+    val reasonNote: String?,
     val otherSources: List<String>,
     val lastReadingText: String?,
     val canCorrect: Boolean,
     val permissionNote: String,
+    /** The lines the "where this number comes from" sheet shows. */
+    val provenance: List<ProvenanceLine> = emptyList(),
 )
+
+data class ProvenanceLine(val label: String, val detail: String, val value: String?)
 
 data class HealthConnectModel(
     val available: Boolean,
@@ -66,6 +73,7 @@ data class BluetoothModel(
 data class PairedDeviceModel(
     val id: String,
     val name: String,
+    val kind: app.openhealth.core.activity.DeviceKindName,
     val kindLabel: String,
     val statusText: String,
     val lastSeenText: String?,
@@ -92,4 +100,9 @@ data class PriorityRowModel(
 )
 
 /** The permission the surface is about to ask for, launched by the app shell. */
-enum class DevicePermissionRequest { ACTIVITY_RECOGNITION, BLUETOOTH, HEALTH_CONNECT }
+enum class DevicePermissionRequest {
+    ACTIVITY_RECOGNITION,
+    BLUETOOTH,
+    HEALTH_CONNECT,
+    HEALTH_CONNECT_HISTORY,
+}

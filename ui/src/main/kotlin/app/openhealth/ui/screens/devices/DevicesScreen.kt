@@ -2,11 +2,13 @@ package app.openhealth.ui.screens.devices
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -14,34 +16,42 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import app.openhealth.core.activity.DeviceKindName
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonSize
 import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhCard
+import app.openhealth.ui.components.OhDialog
 import app.openhealth.ui.components.OhIconButton
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhTextField
+import app.openhealth.ui.components.ohClickable
+import app.openhealth.ui.components.rememberInteraction
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
 import app.openhealth.ui.icons.OhObjectIcons
 import app.openhealth.ui.screens.common.OhPageHeader
+import app.openhealth.ui.screens.common.OhSectionTitle
 import app.openhealth.ui.theme.OhTheme
 
 /** A half turn puts the down chevron up, so the closed icon set needs no new glyph. */
@@ -51,9 +61,10 @@ private const val UPSIDE_DOWN_DEGREES = 180f
 private const val MAX_STEP_DIGITS = 6
 
 /**
- * Devices and integrations (`DESIGN.md` §14.2 Settings, `BUILD-ROADMAP.md` §B8). One
- * page, grouped lists, hairlines and status inks: the same surface language as Settings,
- * because this is where a source is chosen and explained, not a new root.
+ * Devices and integrations (`DESIGN.md` §14.2 Settings and its Devices recipe,
+ * `BUILD-ROADMAP.md` §B8). One page, grouped lists, hairlines and status inks: the same
+ * surface language as Settings, because this is where a source is chosen and explained,
+ * not a new root.
  */
 @Composable
 fun DevicesScreen(
@@ -73,7 +84,10 @@ fun DevicesScreen(
     onMovePriority: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var correcting by remember { mutableStateOf(false) }
+    var correcting by rememberSaveable { mutableStateOf(false) }
+    var confirmingForget by rememberSaveable { mutableStateOf<String?>(null) }
+    var proving by rememberSaveable { mutableStateOf(false) }
+    val forgetting = model.bluetooth.devices.firstOrNull { it.id == confirmingForget }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -92,18 +106,26 @@ fun DevicesScreen(
                     modifier = Modifier.padding(bottom = OhTheme.space.s3),
                 )
             }
-            StepsCard(model.steps, onToggleSteps, onCorrect = { correcting = true })
-            Spacer(Modifier.height(OhTheme.space.s7))
-            SectionTitle(stringResource(R.string.devices_health_connect))
+            StepsCard(
+                model.steps,
+                onToggleSteps,
+                onCorrect = { correcting = true },
+                onProvenance = { proving = true },
+            )
+            OhSectionTitle(stringResource(R.string.devices_health_connect))
             HealthConnectCard(model.healthConnect, onRequestHealthConnect, onSyncHealthConnect)
-            Spacer(Modifier.height(OhTheme.space.s7))
-            SectionTitle(stringResource(R.string.devices_garmin))
+            OhSectionTitle(stringResource(R.string.devices_garmin))
             GarminCard(model.garmin, onImportGarmin)
-            Spacer(Modifier.height(OhTheme.space.s7))
-            SectionTitle(stringResource(R.string.devices_bluetooth))
-            BluetoothCard(model.bluetooth, onScan, onStopScan, onPair, onUnpair, onConnect)
-            Spacer(Modifier.height(OhTheme.space.s7))
-            SectionTitle(stringResource(R.string.devices_priority))
+            OhSectionTitle(stringResource(R.string.devices_bluetooth))
+            BluetoothCard(
+                model.bluetooth,
+                onScan,
+                onStopScan,
+                onPair,
+                onForget = { id -> confirmingForget = id },
+                onConnect,
+            )
+            OhSectionTitle(stringResource(R.string.devices_priority))
             PriorityCard(model.priority, onMovePriority)
             Spacer(Modifier.height(OhTheme.space.s3))
             Text(
@@ -127,29 +149,44 @@ fun DevicesScreen(
             onExcludeToday()
         },
     )
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = OhTheme.type.footnote,
-        color = OhTheme.colors.label2,
-        modifier = Modifier
-            .padding(start = OhTheme.space.s2, bottom = OhTheme.space.s2)
-            .semantics { heading() },
+    StepsProvenanceSheet(
+        visible = proving,
+        current = model.steps,
+        onDismiss = { proving = false },
+    )
+    OhDialog(
+        visible = forgetting != null,
+        onDismiss = { confirmingForget = null },
+        title = stringResource(R.string.devices_forget_title, forgetting?.name.orEmpty()),
+        message = stringResource(R.string.devices_forget_body),
+        primaryLabel = stringResource(R.string.devices_forget_action),
+        destructive = true,
+        onPrimary = {
+            forgetting?.let { onUnpair(it.id) }
+            confirmingForget = null
+        },
+        cancelLabel = stringResource(R.string.devices_forget_cancel),
+        onCancel = { confirmingForget = null },
     )
 }
 
 @Composable
-private fun StepsCard(model: StepsSourceModel, onToggle: () -> Unit, onCorrect: () -> Unit) {
+private fun StepsCard(
+    model: StepsSourceModel,
+    onToggle: () -> Unit,
+    onCorrect: () -> Unit,
+    onProvenance: () -> Unit,
+) {
     OhCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             Text(
                 text = stringResource(R.string.devices_steps_title),
                 style = OhTheme.type.title3,
                 color = OhTheme.colors.label,
-                modifier = Modifier.weight(1f),
             )
             Text(
                 text = if (model.tracking) {
@@ -158,7 +195,7 @@ private fun StepsCard(model: StepsSourceModel, onToggle: () -> Unit, onCorrect: 
                     stringResource(R.string.devices_off)
                 },
                 style = OhTheme.type.footnote,
-                color = OhTheme.colors.label2,
+                color = if (model.tracking) OhTheme.colors.greenInk else OhTheme.colors.label2,
             )
         }
         Spacer(Modifier.height(OhTheme.space.s2))
@@ -169,11 +206,25 @@ private fun StepsCard(model: StepsSourceModel, onToggle: () -> Unit, onCorrect: 
         )
         model.sourceLine?.let { line ->
             Spacer(Modifier.height(OhTheme.space.s1))
+            // The provenance affordance is the number's own source line, not a second
+            // button: the accent appears once and the tap lands where the fact is
+            // (`DESIGN.md` §7.1).
+            val interaction = rememberInteraction()
             Text(
                 text = line,
                 style = OhTheme.type.footnote,
                 color = OhTheme.colors.accInk,
+                modifier = Modifier
+                    .ohClickable(interaction, role = Role.Button, onClick = onProvenance)
+                    .semantics {
+                        contentDescription = line
+                        role = Role.Button
+                    },
             )
+        }
+        model.reasonNote?.let { note ->
+            Spacer(Modifier.height(OhTheme.space.s0))
+            Text(text = note, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
         }
         model.otherSources.forEach { other ->
             Spacer(Modifier.height(OhTheme.space.s0))
@@ -188,7 +239,7 @@ private fun StepsCard(model: StepsSourceModel, onToggle: () -> Unit, onCorrect: 
             Text(text = last, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
         }
         Spacer(Modifier.height(OhTheme.space.s4))
-        Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
+        Column(verticalArrangement = Arrangement.spacedBy(OhTheme.space.s1)) {
             OhButton(
                 text = if (model.tracking) {
                     stringResource(R.string.devices_steps_stop)
@@ -198,12 +249,12 @@ private fun StepsCard(model: StepsSourceModel, onToggle: () -> Unit, onCorrect: 
                 onClick = onToggle,
                 variant = OhButtonVariant.Secondary,
                 size = OhButtonSize.Small,
-                enabled = model.available,
+                enabled = model.available && !model.moduleOff,
             )
             OhButton(
                 text = stringResource(R.string.devices_steps_correct),
                 onClick = onCorrect,
-                variant = OhButtonVariant.Ghost,
+                variant = OhButtonVariant.Quiet,
                 size = OhButtonSize.Small,
                 enabled = model.canCorrect,
             )
@@ -225,9 +276,11 @@ private fun HealthConnectCard(
 ) {
     OhInsetGroup {
         OhRow(
-            title = stringResource(R.string.devices_health_connect_status),
+            title = stringResource(R.string.devices_health_connect),
             subtitle = model.statusText,
             leadingIcon = OhModuleIcons.activity,
+            leadingTint = OhTheme.colors.surface2,
+            leadingInk = OhTheme.colors.label,
             trailing = {
                 if (!model.enabled && model.available) {
                     OhButton(
@@ -244,6 +297,8 @@ private fun HealthConnectCard(
                 title = stringResource(R.string.devices_health_connect_sync),
                 subtitle = model.lastSyncText,
                 leadingIcon = OhIcons.refresh,
+                leadingTint = OhTheme.colors.surface2,
+                leadingInk = OhTheme.colors.label,
                 showDivider = true,
                 showChevron = true,
                 onClick = { onSync(false) },
@@ -256,6 +311,8 @@ private fun HealthConnectCard(
                     stringResource(R.string.devices_health_connect_history_body)
                 },
                 leadingIcon = OhIcons.timer,
+                leadingTint = OhTheme.colors.surface2,
+                leadingInk = OhTheme.colors.label,
                 showDivider = true,
                 showChevron = true,
                 enabled = !model.historyImported,
@@ -301,6 +358,8 @@ private fun GarminCard(model: GarminModel, onImport: () -> Unit) {
             title = stringResource(R.string.devices_garmin_import),
             subtitle = model.lastImportText ?: stringResource(R.string.devices_garmin_none),
             leadingIcon = OhIcons.export,
+            leadingTint = OhTheme.colors.surface2,
+            leadingInk = OhTheme.colors.label,
             showChevron = true,
             onClick = onImport,
         )
@@ -329,7 +388,7 @@ private fun BluetoothCard(
     onScan: () -> Unit,
     onStopScan: () -> Unit,
     onPair: (FoundDeviceModel) -> Unit,
-    onUnpair: (String) -> Unit,
+    onForget: (String) -> Unit,
     onConnect: (String) -> Unit,
 ) {
     if (model.liveHeartRate != null) {
@@ -339,6 +398,8 @@ private fun BluetoothCard(
                 value = "${model.liveHeartRate}",
                 unit = "bpm",
                 leadingIcon = OhModuleIcons.heart,
+                leadingTint = OhTheme.colors.surface2,
+                leadingInk = OhTheme.colors.label,
             )
         }
         Spacer(Modifier.height(OhTheme.space.s2))
@@ -357,7 +418,9 @@ private fun BluetoothCard(
                     title = device.name,
                     subtitle = device.statusText,
                     value = device.lastSeenText,
-                    leadingIcon = iconFor(device.kindLabel),
+                    leadingIcon = iconFor(device.kind),
+                    leadingTint = OhTheme.colors.surface2,
+                    leadingInk = OhTheme.colors.label,
                     showDivider = index > 0,
                     mergeSemantics = false,
                     onClick = { onConnect(device.id) },
@@ -368,7 +431,8 @@ private fun BluetoothCard(
                                 R.string.devices_forget,
                                 device.name,
                             ),
-                            onClick = { onUnpair(device.id) },
+                            tint = OhTheme.colors.redInk,
+                            onClick = { onForget(device.id) },
                         )
                     },
                 )
@@ -376,23 +440,21 @@ private fun BluetoothCard(
         }
     }
     Spacer(Modifier.height(OhTheme.space.s2))
-    Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
-        if (model.scanning) {
-            OhButton(
-                text = stringResource(R.string.devices_scan_stop),
-                onClick = onStopScan,
-                variant = OhButtonVariant.Secondary,
-                size = OhButtonSize.Small,
-            )
-        } else {
-            OhButton(
-                text = stringResource(R.string.devices_scan),
-                onClick = onScan,
-                variant = OhButtonVariant.Secondary,
-                size = OhButtonSize.Small,
-                enabled = model.available,
-            )
-        }
+    if (model.scanning) {
+        OhButton(
+            text = stringResource(R.string.devices_scan_stop),
+            onClick = onStopScan,
+            variant = OhButtonVariant.Secondary,
+            size = OhButtonSize.Small,
+        )
+    } else {
+        OhButton(
+            text = stringResource(R.string.devices_scan),
+            onClick = onScan,
+            variant = OhButtonVariant.Secondary,
+            size = OhButtonSize.Small,
+            enabled = model.available,
+        )
     }
     if (model.found.isNotEmpty()) {
         Spacer(Modifier.height(OhTheme.space.s2))
@@ -401,7 +463,9 @@ private fun BluetoothCard(
                 OhRow(
                     title = found.name,
                     subtitle = found.kindLabel,
-                    leadingIcon = iconFor(found.kindLabel),
+                    leadingIcon = iconFor(found.kind),
+                    leadingTint = OhTheme.colors.surface2,
+                    leadingInk = OhTheme.colors.label,
                     showDivider = index > 0,
                     mergeSemantics = false,
                     trailing = {
@@ -426,54 +490,69 @@ private fun BluetoothCard(
 
 @Composable
 private fun PriorityCard(model: PriorityModel, onMove: (String, Boolean) -> Unit) {
-    OhInsetGroup {
-        model.rows.forEachIndexed { index, row ->
+    if (model.rows.isEmpty()) {
+        OhInsetGroup {
             OhRow(
-                title = row.label,
-                subtitle = row.detail,
-                leading = {
-                    Text(
-                        text = "${index + 1}",
-                        style = OhTheme.type.footnote,
-                        color = OhTheme.colors.label2,
-                        modifier = Modifier.width(OhTheme.space.s5),
-                    )
-                },
-                showDivider = index > 0,
-                mergeSemantics = false,
-                trailing = {
-                    OhIconButton(
-                        icon = OhIcons.chevronDown,
-                        contentDescription = stringResource(
-                            R.string.devices_move_up,
-                            row.label,
-                        ),
-                        modifier = Modifier.rotate(UPSIDE_DOWN_DEGREES),
-                        enabled = !row.isFirst,
-                        onClick = { onMove(row.sourceId, true) },
-                    )
-                    OhIconButton(
-                        icon = OhIcons.chevronDown,
-                        contentDescription = stringResource(
-                            R.string.devices_move_down,
-                            row.label,
-                        ),
-                        enabled = !row.isLast,
-                        onClick = { onMove(row.sourceId, false) },
-                    )
-                },
+                title = stringResource(R.string.devices_priority_empty),
             )
+        }
+    } else {
+        OhInsetGroup {
+            model.rows.forEachIndexed { index, row ->
+                OhRow(
+                    title = row.label,
+                    subtitle = row.detail,
+                    leading = {
+                        Box(
+                            modifier = Modifier.width(OhTheme.space.s6),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Text(
+                                text = "${index + 1}",
+                                style = OhTheme.type.footnote,
+                                color = if (row.isFirst) {
+                                    OhTheme.colors.accInk
+                                } else {
+                                    OhTheme.colors.label2
+                                },
+                            )
+                        }
+                    },
+                    showDivider = index > 0,
+                    mergeSemantics = false,
+                    trailing = {
+                        OhIconButton(
+                            icon = OhIcons.chevronDown,
+                            contentDescription = stringResource(
+                                R.string.devices_move_up,
+                                row.label,
+                            ),
+                            modifier = Modifier.rotate(UPSIDE_DOWN_DEGREES),
+                            enabled = !row.isFirst,
+                            onClick = { onMove(row.sourceId, true) },
+                        )
+                        OhIconButton(
+                            icon = OhIcons.chevronDown,
+                            contentDescription = stringResource(
+                                R.string.devices_move_down,
+                                row.label,
+                            ),
+                            enabled = !row.isLast,
+                            onClick = { onMove(row.sourceId, false) },
+                        )
+                    },
+                )
+            }
         }
     }
     Spacer(Modifier.height(OhTheme.space.s2))
     Text(text = model.note, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
 }
 
-private fun iconFor(kindLabel: String) = when {
-    kindLabel.contains("heart", ignoreCase = true) -> OhModuleIcons.heart
-    kindLabel.contains("scale", ignoreCase = true) -> OhObjectIcons.scale
-    kindLabel.contains("pressure", ignoreCase = true) -> OhObjectIcons.cuff
-    else -> OhIcons.more
+private fun iconFor(kind: DeviceKindName) = when (kind) {
+    DeviceKindName.HEART_RATE -> OhModuleIcons.heart
+    DeviceKindName.SCALE -> OhObjectIcons.scale
+    DeviceKindName.BLOOD_PRESSURE -> OhObjectIcons.cuff
 }
 
 @Composable
@@ -485,12 +564,16 @@ private fun CorrectStepsSheet(
     onExclude: () -> Unit,
 ) {
     if (!visible) return
-    var text by remember(current.todayText) { mutableStateOf("") }
+    var text by rememberSaveable { mutableStateOf("") }
+    val value = text.toIntOrNull()
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
         title = stringResource(R.string.devices_correct_title),
-        cancelLabel = stringResource(R.string.settings_close),
+        primaryLabel = stringResource(R.string.devices_correct_save),
+        primaryEnabled = value != null && value > 0,
+        onPrimary = { value?.let(onSave) },
+        cancelLabel = stringResource(R.string.devices_correct_cancel),
         onCancel = onDismiss,
     ) {
         Text(
@@ -505,27 +588,50 @@ private fun CorrectStepsSheet(
                 text = entered.filter(Char::isDigit).take(MAX_STEP_DIGITS)
             },
             placeholder = stringResource(R.string.devices_correct_field),
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             contentDescription = stringResource(R.string.devices_correct_field),
         )
-        Spacer(Modifier.height(OhTheme.space.s3))
-        OhButton(
-            text = stringResource(R.string.devices_correct_save),
-            onClick = { text.toIntOrNull()?.let(onSave) },
-            enabled = text.toIntOrNull() != null,
-        )
-        Spacer(Modifier.height(OhTheme.space.s2))
+        Spacer(Modifier.height(OhTheme.space.s4))
         OhButton(
             text = stringResource(R.string.devices_exclude_today),
             onClick = onExclude,
-            variant = OhButtonVariant.Ghost,
+            variant = OhButtonVariant.Quiet,
             size = OhButtonSize.Small,
+            enabled = current.canCorrect,
         )
         Spacer(Modifier.height(OhTheme.space.s1))
         Text(
             text = stringResource(R.string.devices_exclude_body),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+    }
+}
+
+@Composable
+private fun StepsProvenanceSheet(
+    visible: Boolean,
+    current: StepsSourceModel,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) return
+    OhModalSheet(
+        visible = true,
+        onDismiss = onDismiss,
+        title = stringResource(R.string.devices_provenance_title),
+        cancelLabel = stringResource(R.string.devices_close),
+        onCancel = onDismiss,
+    ) {
+        current.provenance.forEach { line ->
+            OhRow(
+                title = line.label,
+                subtitle = line.detail,
+                value = line.value,
+            )
+        }
+        Spacer(Modifier.height(OhTheme.space.s2))
+        Text(
+            text = stringResource(R.string.devices_provenance_body),
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,
         )

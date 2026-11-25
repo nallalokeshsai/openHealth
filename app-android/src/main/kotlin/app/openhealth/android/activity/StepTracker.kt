@@ -14,16 +14,20 @@ import app.openhealth.core.activity.StepInterval
 import app.openhealth.core.activity.StepSampling
 import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.ObservationId
+import app.openhealth.core.ids.RawRecordId
 import app.openhealth.core.ids.SourceId
+import app.openhealth.core.ingestion.RawRecord
 import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.Provenance
+import app.openhealth.core.observation.SourceKind
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.time.TimeProvenance
 import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.LocalStore
+import app.openhealth.data.ingestion.PayloadHash
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
@@ -82,8 +86,37 @@ class StepTracker(
         cached = update.state
         store.devices.saveStepState(update.state)
         if (update.intervals.isEmpty()) return false
-        val observations = update.intervals.map { interval -> observation(interval, sample.at) }
-        return store.observations.recordAll(observations) > 0
+        val payload = buildString {
+            append("counter=").append(sample.count)
+            append(";boot=").append(sample.bootEpochMillis)
+            append(";at=").append(sample.at.toEpochMilliseconds())
+            update.intervals.forEach {
+                append(";interval=").append(it.start.toEpochMilliseconds())
+                append("-").append(it.end.toEpochMilliseconds())
+                append(":").append(it.steps)
+            }
+        }
+        val rawId = RawRecordId(ids.newId())
+        val raw = RawRecord(
+            id = rawId,
+            sourceId = sourceId,
+            sourceKind = SourceKind.DEVICE,
+            receivedAt = sample.at,
+            recordedAt = sample.at,
+            happenedAt = update.intervals.first().start,
+            payloadHash = PayloadHash.sha256(payload),
+            idempotencyKey = "steps-raw:${sample.bootEpochMillis}:" +
+                sample.at.toEpochMilliseconds(),
+            schemaVersion = RAW_SCHEMA,
+            device = "This phone",
+            appVersion = appVersion,
+            payload = payload,
+        )
+        val observations = update.intervals.map { interval ->
+            observation(interval, sample.at, rawId)
+        }
+        // Layer 1 first, in one transaction with the observations (`pr.md` §7.1).
+        return store.observations.recordAll(observations, listOf(raw)) > 0
     }
 
     private fun interval() = StepSampling.interval(
@@ -92,7 +125,11 @@ class StepTracker(
         batteryPercent = battery?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY),
     )
 
-    private fun observation(interval: StepInterval, recordedAt: Instant): Observation {
+    private fun observation(
+        interval: StepInterval,
+        recordedAt: Instant,
+        rawRecordId: RawRecordId,
+    ): Observation {
         val provenance = Provenance(
             sourceId = sourceId,
             time = TimeProvenance.of(interval.start, recordedAt, zone),
@@ -101,6 +138,7 @@ class StepTracker(
             method = MeasurementMethod.DEVICE_SENSOR,
             appVersion = appVersion,
             device = "This phone",
+            rawRecordId = rawRecordId,
         )
         return Observation(
             id = ObservationId(ids.newId()),
@@ -122,6 +160,8 @@ class StepTracker(
     companion object {
         /** One source per phone, not per boot: it is the same sensor throughout. */
         val PHONE_SOURCE = SourceId("phone-steps")
+
+        private const val RAW_SCHEMA = 1
     }
 }
 

@@ -1990,10 +1990,10 @@ stages the file and the final `check` is the one recorded above.
 | Command | Result |
 |---|---|
 | `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, lint for both flavours and every JVM test. |
-| `:core:test` | **238 tests** (41 new in `activity/`): step counter reboots/resets/midnight/clamp plus a property test, GATT decoding in both units and both heart-rate widths, health-bus mapping and idempotency, source-day breakdown, priority reordering. |
+| `:core:test` | **246 tests** (49 new in `activity/`): step counter reboots/resets/midnight/clamp plus a property test, GATT decoding in both units and both heart-rate widths, health-bus mapping and idempotency, source-day breakdown, priority reordering. |
 | `:data:test` | **111 tests**, 8 new: the device registry round-trips, a corrupt registry reads empty, the counter state survives a reopen, the sync book keeps the latest per source. |
-| `:integrations:test` | **26 tests**, 10 new FIT tests against the committed fixtures: a walk (activity, 45 heart rates, 3,000 steps), a daily monitoring file (18,000 steps), big-endian, compressed timestamps, corrupt CRC, truncation, observation mapping and idempotency. |
-| `:ui:testDebugUnitTest` | **121 tests**, including 8 new Devices goldens and 6 semantics tests. **246 goldens** in total. |
+| `:integrations:test` | **25 tests**, 14 new FIT tests against the committed fixtures: a walk (activity, 45 heart rates, 3,000 steps), a daily monitoring file (18,000 steps), big-endian, compressed timestamps, corrupt CRC, truncation, observation mapping and idempotency. |
+| `:ui:testDebugUnitTest` | **115 tests**, including 8 new Devices goldens and 6 semantics tests. **246 goldens** in total. |
 | `:app-android:connectedPlayDebugAndroidTest` on the phone | **40/40**, including the five B8 scenarios. |
 | `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; both `play` and `fdroid` debug variants build. |
 
@@ -2012,3 +2012,191 @@ stages the file and the final `check` is the one recorded above.
 The five B8 scenarios ran on the owner's phone as part of the 40-test instrumented run
 above. The manual walk-through, the battery measurement and the plan audit follow in the
 next sections.
+
+### Device walk-through and the QA sweep (on the owner's phone)
+
+The phone was reconnected after dropping off USB mid-install; the app was installed, cold
+started (`LaunchState: COLD`, no `AndroidRuntime:E` entry) and driven by hand. A fresh
+profile with sample data was used, then real entries.
+
+Walked: Today → Settings → Devices; the steps card; Start counting (the activity
+permission, granted); the step service (foreground, `types=0x00000100` = health, silent
+and ongoing); Correct today (typed a total, saved, the card showed "Corrected by you" and
+the losing Garmin figure); Health Connect Connect (ten data types granted on the platform
+screen, 10/10 shown, automatic sync, "Last sync"); Import a FIT file (the system picker,
+Downloads, `activity-walk.fit` → "3,000 steps, one walk of 45 minutes, 45 heart-rate
+readings"); Bluetooth scan (the permission, granted, a scan that found nothing and stopped
+on its own); the priority list (moved This phone above Garmin, the card re-resolved);
+rotation to landscape and back; process death (`am kill`) and relaunch, which restored the
+Devices page and the running service.
+
+Four issues were found and fixed in the same run; each was re-checked on the phone after
+its fix (details in the issue list below):
+
+1. **Steps invented on first enable (major).** The first reading of a boot attributed the
+   whole since-boot count to today: 14,484 steps appeared on a phone whose boot was days
+   old. A boot before today's local midnight is now a baseline only and attributes nothing;
+   a boot today attributes the since-boot count, which is today's steps. Two unit tests
+   cover both, and the phone showed the day's number unchanged when tracking was enabled.
+2. **Internal family ids in the priority list.** The row subtitle printed "phone",
+   "fitbit", "Garmin" twice. Now "This phone", "Fitbit", "Garmin", "An imported file".
+3. **Settings said "None connected" with tracking on.** `SettingsState.devicesDetail` is
+   built from the live sources and refreshed with the page; the phone reads
+   "This phone · Garmin files".
+4. **A disabled Scan button had no reason.** With the radio off the page now says
+   "Bluetooth is off. Turn it on in Android settings to pair a strap, a scale or a cuff."
+
+### Passive step tracking and the 2 % budget
+
+The phone was on USB power at 100 %, so a 24 h battery-drain measurement could not be
+taken (the platform reports zero drain while powered). What was measured instead, on the
+phone, with the service running and the screen off for 12 min 13 s:
+
+- `/proc/<pid>/stat` CPU delta: **29 ticks = 0.29 s** total (user + system), i.e. about
+  **1.4 s of CPU per hour, 34 s per day**. No app wakelock appears in batterystats.
+- `dumpsys sensorservice`: the step counter is registered **`non-wakeUp`** with a
+  3,000-event FIFO (`minRate=1.00Hz`, batched), so the hardware hub collects the edges and
+  the CPU is not woken for them; the app only persists an interval when it next runs.
+- Projection: 34 s CPU/day at a deliberately conservative 2 W average = 68 J ≈ 0.019 Wh,
+  which is **≈ 0.1 % of the 4,930 mAh battery per day**, before the sensor hub's own
+  low-power cost. The 2 % budget is not in danger, but this is a projection from measured
+  CPU and sensor time, not a 24 h lab run.
+
+**Owner hand-over (battery):** unplug the phone for 24 h with tracking on, compare the
+battery percentage with a 24 h tracking-off baseline, and record both numbers.
+
+## B8 audit — phase-wise drift pass (2026-11-25)
+
+An independent pass over B0–B8 against `BUILD-ROADMAP.md`, `prompts.md`, `pr.md` §6–7,
+`DESIGN.md` §14 and the `AGENTS.md` invariants. The phone was attached at the start of
+the pass and dropped off USB before the instrumented run, so the evidence below is the
+JVM suite and the code; the device sweep is still the owner's hand-over.
+
+### What held
+
+Portability (`checkPortability` passes and no `android.*`/`androidx.*` import appears in
+`core/`, `data/`, `sync/` or `integrations/`), the licence gate (no Garmin FIT SDK code,
+header, profile file or sample anywhere in the tree; every dependency matches
+`gradle/licences/allowed.tsv`), the five-layer writes (every Health Connect and FIT
+import carries a raw record and both timestamps), dedup (one source wins a day, the
+loser stays in layer 2), the rebuild-never-patch rule (a priority change goes through
+`SourceRepository.upsertAll`), no telemetry, no new token or component outside
+Appendix A, and schema v8 unchanged — B8 stores devices as settings, as ADR 0013 §6 says.
+
+### What was wrong, and is now fixed
+
+| Finding | Where | Fix |
+|---|---|---|
+| A monitoring FIT file reported **half** its steps. `monitoring.cycles` (55/3) is `uint32` at scale 2 and a walking cycle is two steps, so the raw field *is* the step count; the importer divided it by two. The golden fixture encoded the same misreading, so the round trip could not see it. | `integrations/.../fit/FitImport.kt:206` | Scale and steps-per-cycle are now separate named conversions (`FitProtocol.kt:166`); the fixture encodes the profile's bytes; `FitImportTest` asserts the **raw** field on disk, so the old arithmetic fails six tests. |
+| A walk's session steps were **a quarter** of the truth. `session.total_cycles` (18/10) has no scale and is `total_strides` for a walking or running sport, so steps are strides × 2; the importer divided by two instead. | `integrations/.../fit/FitImport.kt:151` | `steps = strides × 2`, fixture writes 1,500 strides for the documented 3,000 steps, `aWalkSessionCountsTwoStepsPerStride` asserts both halves. |
+| A compressed timestamp was read as `base + offset`. The protocol replaces the low five bits of the running timestamp and rolls over every 32 s; the two agree only when the base sits on a 32-second boundary, which the old fixture did, so the test passed with the bug. | `integrations/.../fit/FitProtocol.kt:232` | `FitTime.expandCompressed`; the fixture's base now sits 30 s past a boundary and carries a trailing record, so a mis-sized or mis-timed compressed record fails. |
+| A compressed record's length and its field reading disagreed: the decoder skipped the declared timestamp field's bytes but still advanced the record by the full definition size, so any record after it would have been read from the wrong offset. | `integrations/.../fit/FitProtocol.kt:362` | Every declared field is read; the header's offset overrides the timestamp afterwards. The writer now refuses to define a compressed message with field 253, which is how a real file is written. |
+| **A staged night from Health Connect was counted about twice.** Every sleep key mapped to `SLEEP_DURATION`, whose rollup is a SUM, so one night's stages and that night's total landed in the same number — the thing `AndroidHealthBus`'s own comment and ADR 0013 §2 say must not happen. | `core/.../activity/HealthBus.kt:68` | Each sleep key keeps its own observation type, and `sleepReadings` answers one key with one reading. `aStagedNightDoesNotSumItsTotalWithItsParts` covers it. |
+| Blood pressure was decoded as three `uint16`s. The profile stores systolic, diastolic, the mean and the pulse as IEEE-11073 **SFLOAT**s; a cuff reporting tenths or kPa sets the exponent nibble, and 120.5 mmHg would have been stored as 62,645. The kPa test encoded a non-spec value, so it passed. | `core/.../activity/GattProfiles.kt:301` | `GattCodec.readSFloat`, used for all four fields; a reserved mantissa is "no value" rather than zero. Three new tests, including the exponent case and a NaN pulse. |
+| The body-composition characteristic (0x2A9C) was never subscribed. ADR 0013 §4 claims it is read; `GattCodec.decodeBodyComposition` was tested but unreachable, because a scale subscribed only to 0x2A9D and the decoder was chosen by device kind. Body fat from a scale could not arrive. | `app-android/.../BleHealthManager.kt:244` | `DeviceKind.measurementUuids`; every characteristic the kind defines is subscribed, and `GattCodec.decode` picks the decoder by characteristic. |
+| An incremental Health Connect sync started at the previous sync instant, so a watch uploading a backlog — records whose own start times are older than that — was skipped for good. | `app-android/.../ActivityPresenter.kt:419` | The window always reaches back `INCREMENTAL_DAYS`; idempotency keys make the overlap free. |
+| `phoneSource()` was dead code and a second, divergent definition of the phone source with a hard-coded English label, beside the resource-backed one the container actually seeds. | `app-android/.../ActivityPresenter.kt` (end of file) | Deleted. |
+| The documented fixture-regeneration command wrote the goldens into a stray `tools/fixtures/integrations/…` directory: Gradle's `run` resolves a relative path against the subproject. | `tools/fixtures/build.gradle.kts` | `run` now works from the repository root, so the command in `FitFixtureWriter`'s KDoc does what it says. |
+| `DESIGN.md`'s revision line announced "B8 adds the Devices recipe to §14.2", and `DevicesScreen` and `ActivityPresenter` both cite that recipe, but §14.2 never received it: the only B8 change to the file was the revision line. | `DESIGN.md` §14.2 | The recipe is written, describing the screen that was built, with no new colour, type role, spacing value or component. |
+| The B8 test counts in this log were overstated: `:integrations` 26 (actually 21) and `:ui` 121 (actually 115); `:core` was understated at 238 (actually 239). | this file | Corrected above. |
+| `AGENTS.md` said 38 of 41 reference checkouts were present and named `wger` and `xDrip` as missing. All 41 are checked out. | `AGENTS.md` | Corrected. |
+
+### What is left for the owner
+
+- **A real Garmin file.** Every scale above is now read from the published profile and
+  cross-checked against a second independent reading of it, but no genuine Garmin export
+  has been parsed. One day file and one activity file would turn the argument into
+  evidence.
+- **`monitoring.cycles`: delta or cumulative.** The importer treats each monitoring
+  message's cycles as that interval's steps. Some Garmin firmware reports the field as a
+  running total per activity type instead, and summing a cumulative series would
+  overstate a day badly. It is left as it is because guessing without a real file is the
+  worse error; the first real monitoring file settles it.
+- **The device sweep.** The phone dropped off USB during this pass, so the instrumented
+  suite and the visual checks were not re-run after these fixes.
+- **`BleHealthManager` has no automated coverage.** The decoders and the dispatch are
+  pure and tested; the radio path is not, and cannot be without hardware.
+
+`./gradlew check` is green: **505 JVM tests** (244 `:core`, 111 `:data`, 25
+`:integrations`, 115 `:ui`, 10 tools) with ktlint, Detekt, `checkPortability`,
+`checkLicences`, `checkDesignTokens` and both lint variants.
+
+### Headless plan audit (2026-11-25, Claude Code)
+
+The auditor read `AGENTS.md`, `BUILD-ROADMAP.md` B0–B8, the prompts, this log and the
+contracts, and compared the tree against the phase-wise plan. It made fixes directly; every
+one was then re-read, the affected tests re-run, and the ones that were wrong were corrected
+or reverted. Its confirmed findings, kept:
+
+- **Steps were wrong by a factor of two in both FIT paths.** `monitoring.cycles` has scale 2
+  and one cycle is two steps, so the raw field is the step count (Gadgetbridge's importer
+  sums `getCycles() × 2`, i.e. raw); the importer divided, halving a day. `session.total_cycles`
+  is strides for a walk or run, so steps are cycles × 2, not ÷ 2. The fixtures were
+  regenerated and now assert their on-disk raw values, so reverting the scaling fails six
+  tests.
+- **A staged Health Connect night was counted about twice.** Every sleep key mapped to
+  `SLEEP_DURATION`, and the sync reads every key, so a night's stages and its total were
+  summed. Each sleep key now has its own observation type, the total is read once, and time
+  in bed is only emitted when stages exist.
+- **Blood pressure was read as plain integers.** The measurement fields are IEEE-11073
+  16-bit SFLOATs; the decoder now converts the mantissa and exponent, and the kPa test
+  encodes a real SFLOAT. The body-composition characteristic (0x2A9C) is now subscribed, so
+  a BIA scale's body fat can actually arrive.
+- **Compressed timestamps were expanded as `base + offset`.** They replace the low five bits
+  with a 32-second rollover; the fixture now uses a non-aligned base and a trailing record,
+  and the decoder's record length and its field reading agree.
+- **`DESIGN.md` claimed the Devices recipe and did not have it.** The recipe is now in §14.2.
+- An incremental Health Connect sync re-reads the last few days instead of starting at the
+  previous sync, so a watch's late backlog is no longer skipped.
+- Doc corrections: the test counts above, the fixture tool's output path, and all 41
+  reference folders being present in `AGENTS.md`.
+
+Findings from the independent reviewers that were confirmed and fixed by hand after the
+audit:
+
+- **"Import my history" asked for nothing extra.** `READ_HEALTH_DATA_HISTORY` is now a
+  separate request; refusing it says so instead of reading 30 days and marking the import
+  done.
+- **Garmin over the bus was not the Garmin family.** A reading whose device names a Garmin
+  model is imported under `garmin-hc` (kind Garmin, family `garmin`), so it collapses with a
+  FIT import of the same watch (`pr.md` §6.18).
+- **The sensor paths had no layer 1.** The step tracker writes one raw record per interval
+  batch and the BLE manager one per measurement, both referenced from the observation's
+  provenance.
+- **Steps was not gated by its module.** With the module off the service stops and the card
+  says so; the figures and the priority list are hidden, the data kept.
+- **A gap fallback was never shown, and "no source covered the day" was mislabelled as a
+  fallback.** `DedupReason.INCOMPLETE_DAY` splits that case, and both reasons now have a
+  sentence on the card.
+- **A second FIT import claimed a fresh import.** A file whose hash is already in layer 1
+  returns "already in your history" and records no sync.
+- **`startForeground` could crash on a revoked permission**, `reconnectPaired()` was never
+  called, re-pairing the same address made a second row, and heart rate wrote and rebuilt a
+  day per sample; all four are fixed, the last by a 10-second batched flush.
+- **The BLE address was embedded in source ids and idempotency keys.** Source ids now carry
+  an 8-hex tag instead, the registry keeps the address, and the comments/ADR say what leaves
+  the phone (an encrypted export the person makes) and what does not.
+- **UI, from the design review:** the title clipped at 200 % (shared `OhPageHeader` now has a
+  minimum height and wraps), the RTL header collided, the accent was spent on every icon
+  tile, device glyphs were chosen by matching English labels, the correction sheet's primary
+  was inside the scroll, a refresh could wipe the typed total, "Forget" had no confirmation,
+  and the copy invented streaks and spoke in GATT UUIDs. All fixed or reworded; the goldens
+  were re-recorded.
+
+Left open, recorded rather than guessed:
+
+- **A real Garmin export.** The step scales are now read from the published profile and
+  cross-checked against a second independent implementation, but no genuine file has been
+  parsed. Some firmware reports `monitoring.cycles` as a running total per activity type;
+  summing that would overstate a day, so a real file decides it.
+- **The 24 h battery run** (the phone was on USB power) and **real strap pairing** (the owner
+  has none) are hand-over items.
+- **The BLE radio path** has no automated coverage without a second device; the decoders and
+  the persistence path are tested.
+- Health Connect's own zone offsets are still not carried through, so a history imported
+  after a move is filed in the phone's current zone; the FIT local timestamp has the same
+  limitation.
+
+### iOS gate (`pr.md` §13.17)
+
+**Not yet.** No iOS, web, watchOS or desktop work was started.

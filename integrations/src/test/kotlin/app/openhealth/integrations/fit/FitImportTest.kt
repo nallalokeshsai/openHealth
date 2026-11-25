@@ -8,6 +8,7 @@ import java.io.InputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -21,6 +22,12 @@ import kotlinx.datetime.TimeZone
  */
 private const val DAY_START_UNIX_SECONDS = 1_795_420_800L
 private const val WALK_START_OFFSET_SECONDS = 9L * 60 * 60
+private const val COMPRESSED_BASE_OFFSET = 30L
+private const val MONITORING_STEPS_PER_BUCKET = 250L
+private const val WALKING_ACTIVITY_TYPE = 6L
+private const val SLEEP_ACTIVITY_TYPE = 7L
+private const val WALKING_SPORT = 11L
+private const val CYCLING_SPORT = 2L
 
 class FitImportTest {
 
@@ -64,16 +71,63 @@ class FitImportTest {
     }
 
     @Test
-    fun aDailyMonitoringFileCountsHalfStepsAsSteps() {
+    fun aDailyMonitoringFileReadsItsCyclesFieldAtTheProfilesScale() {
         val import = FitImporter.import(fixture("daily-monitoring.fit"), TimeZone.UTC)
 
         assertEquals(FitStepSource.MONITORING, import.stepSource)
         assertEquals(18_000L, import.stepTotal)
         // Only the waking buckets carry steps; the sleeping stretch is buckets with none.
         assertEquals(72, import.steps.size)
-        assertTrue(import.steps.all { it.steps == 250L })
+        assertTrue(import.steps.all { it.steps == MONITORING_STEPS_PER_BUCKET })
         assertTrue(import.steps.all { it.end > it.start })
         assertEquals(18_000L, import.steps.sumOf { it.steps })
+    }
+
+    /**
+     * `monitoring.cycles` (55/3) is `uint32` with scale 2 and a walking cycle is two
+     * steps, so the raw field on disk **is** the step count. Reading the raw value and
+     * then halving it reports half the day, which a round trip through an encoder that
+     * shares the mistake cannot see — so the raw bytes are asserted here.
+     */
+    @Test
+    fun theMonitoringCyclesFieldOnDiskIsTheStepCount() {
+        val file = FitDecoder(fixture("daily-monitoring.fit")).decode()
+        val walking = file.messagesOf(FitGlobal.MONITORING)
+            .filter { it.whole(FitGlobal.Monitoring.ACTIVITY_TYPE) == WALKING_ACTIVITY_TYPE }
+        assertEquals(72, walking.size)
+        assertTrue(
+            walking.all { it.whole(FitGlobal.Monitoring.CYCLES) == MONITORING_STEPS_PER_BUCKET },
+            "the fixture stores the raw cycles field the profile's way",
+        )
+        val import = FitImporter.import(fixture("daily-monitoring.fit"), TimeZone.UTC)
+        assertEquals(
+            walking.sumOf { it.whole(FitGlobal.Monitoring.CYCLES) ?: 0L },
+            import.stepTotal,
+        )
+    }
+
+    /**
+     * `session.total_cycles` (18/10) has no scale and is `total_strides` for a walking
+     * or running sport, so a stride on disk is two steps in the import.
+     */
+    @Test
+    fun aWalkSessionCountsTwoStepsPerStride() {
+        val file = FitDecoder(fixture("activity-walk.fit")).decode()
+        val session = file.messagesOf(FitGlobal.SESSION).single()
+        val strides = assertNotNull(session.whole(FitGlobal.Session.TOTAL_CYCLES))
+        assertEquals(1_500L, strides, "the fixture stores strides, not steps")
+
+        val import = FitImporter.import(fixture("activity-walk.fit"), TimeZone.UTC)
+        assertEquals(strides * 2, import.activities.single().steps)
+        assertEquals(3_000L, import.stepTotal)
+    }
+
+    /** A ride's cycles are pedal revolutions, so they are never read as steps. */
+    @Test
+    fun aSportThatDoesNotWalkContributesNoSteps() {
+        assertTrue(FitActivityTypes.sportCountsSteps(WALKING_SPORT))
+        assertFalse(FitActivityTypes.sportCountsSteps(CYCLING_SPORT))
+        assertFalse(FitActivityTypes.countsSteps(SLEEP_ACTIVITY_TYPE))
     }
 
     @Test
@@ -103,16 +157,35 @@ class FitImportTest {
         )
     }
 
+    /**
+     * The 5-bit offset of a compressed-timestamp header replaces the low five bits of
+     * the running timestamp and rolls over every 32 s; it is not added to it. The
+     * fixture's base sits 30 s past a boundary, so an offset of 3 lands 5 s later, and
+     * the trailing full record only parses if the compressed record was sized right.
+     */
     @Test
-    fun aCompressedTimestampIsRelativeToTheLastTimestamp() {
+    fun aCompressedTimestampRollsOverAgainstTheRunningTimestamp() {
         val import = FitImporter.import(fixture("compressed-timestamp.fit"), TimeZone.UTC)
 
-        assertEquals(2, import.heartRates.size)
-        val base = Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS)
+        assertEquals(3, import.heartRates.size)
+        val base = Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS + COMPRESSED_BASE_OFFSET)
         assertEquals(base, import.heartRates[0].at)
-        assertEquals(base + 3.seconds, import.heartRates[1].at)
+        assertEquals(base + 5.seconds, import.heartRates[1].at)
+        assertEquals(base + 60.seconds, import.heartRates[2].at)
         assertEquals(88, import.heartRates[0].bpm)
         assertEquals(91, import.heartRates[1].bpm)
+        assertEquals(94, import.heartRates[2].bpm)
+    }
+
+    @Test
+    fun theCompressedOffsetIsExpandedNotAdded() {
+        // A base on a 32-second boundary is the one case where adding agrees.
+        assertEquals(3L, FitTime.expandCompressed(0L, 3))
+        assertEquals(64L + 3L, FitTime.expandCompressed(64L, 3))
+        // 30 s past a boundary with an offset of 3: the next 3 is 5 s away, not 3.
+        assertEquals(35L, FitTime.expandCompressed(30L, 3))
+        // An offset at or after the current low bits stays inside this 32-second block.
+        assertEquals(31L, FitTime.expandCompressed(30L, 31))
     }
 
     @Test

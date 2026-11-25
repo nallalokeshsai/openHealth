@@ -28,17 +28,21 @@ import app.openhealth.core.activity.PairedDevice
 import app.openhealth.core.activity.normaliseUuid
 import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.ObservationId
+import app.openhealth.core.ids.RawRecordId
 import app.openhealth.core.ids.SourceId
+import app.openhealth.core.ingestion.RawRecord
 import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.Provenance
+import app.openhealth.core.observation.SourceKind
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.source.SourcePermission
 import app.openhealth.core.time.TimeProvenance
 import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.LocalStore
+import app.openhealth.data.ingestion.PayloadHash
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -197,6 +201,7 @@ class BleHealthManager(
     }
 
     /** Restores the links a person expected to be live when the app opens. */
+    /** Called once when the app starts, so a paired strap reconnects by itself. */
     fun reconnectPaired() {
         store.devices.registry().devices.filter { it.autoConnect }.forEach { device ->
             val kind = device.deviceKind ?: return@forEach
@@ -234,25 +239,36 @@ class BleHealthManager(
             }
         }
 
+        /**
+         * Subscribes to every measurement characteristic the kind defines and the
+         * device actually exposes. A scale with impedance sends its body composition on
+         * a second characteristic, so subscribing only to the first would silently drop
+         * body fat (`pr.md` §6.18, ADR 0013 §4).
+         */
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             val service = gatt.getService(java.util.UUID.fromString(kind.serviceUuid)) ?: return
-            val characteristic = service.getCharacteristic(
-                java.util.UUID.fromString(kind.measurementUuid),
-            ) ?: return
-            gatt.setCharacteristicNotification(characteristic, true)
-            val descriptor = characteristic.getDescriptor(CCCD_UUID)
-            if (descriptor != null) {
-                val indication = characteristic.properties and
-                    BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
-                descriptor.value = if (indication) {
-                    BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-                } else {
-                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                }
-                gatt.writeDescriptor(descriptor)
+            kind.measurementUuids.forEach { uuid ->
+                val characteristic = service.getCharacteristic(java.util.UUID.fromString(uuid))
+                    ?: return@forEach
+                subscribe(gatt, characteristic)
             }
             flush()
+            scheduleFlush()
+        }
+
+        @SuppressLint("MissingPermission")
+        private fun subscribe(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            gatt.setCharacteristicNotification(characteristic, true)
+            val descriptor = characteristic.getDescriptor(CCCD_UUID) ?: return
+            val indication = characteristic.properties and
+                BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+            descriptor.value = if (indication) {
+                BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            } else {
+                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            }
+            gatt.writeDescriptor(descriptor)
         }
 
         @Suppress("OVERRIDE_DEPRECATION")
@@ -261,21 +277,43 @@ class BleHealthManager(
             characteristic: BluetoothGattCharacteristic,
         ) {
             val value = characteristic.value ?: return
-            decode(kind, value, address)
+            decode(characteristic.uuid.toString(), value, address)
         }
     }
 
-    private fun decode(kind: DeviceKind, value: ByteArray, address: String) {
+    /**
+     * The decoder is chosen by the characteristic the packet arrived on, never by the
+     * kind of device: a scale's two characteristics carry two different layouts.
+     */
+    /** A batched write tick: heart rate at 1 Hz must not mean 3,600 DB writes an hour. */
+    private val flushTick = object : Runnable {
+        override fun run() {
+            flush()
+            handler.postDelayed(this, FLUSH_INTERVAL_MILLIS)
+        }
+    }
+
+    private fun scheduleFlush() {
+        handler.removeCallbacks(flushTick)
+        handler.postDelayed(flushTick, FLUSH_INTERVAL_MILLIS)
+    }
+
+    private fun decode(characteristicUuid: String, value: ByteArray, address: String) {
         val decoded = runCatching {
-            when (kind) {
-                DeviceKind.HEART_RATE -> GattCodec.decodeHeartRate(value)
-                DeviceKind.SCALE -> GattCodec.decodeWeight(value, zone)
-                DeviceKind.BLOOD_PRESSURE -> GattCodec.decodeBloodPressure(value, zone)
-            }
+            GattCodec.decode(characteristicUuid, value, zone)
         }.getOrNull() ?: return
         if (decoded is GattMeasurement.HeartRate) _heartRate.value = decoded.bpm
-        val reading = BufferedReading(address, kind, decoded, clock.now())
+        val reading = BufferedReading(address, kind(decoded), decoded, clock.now())
         if (!write(reading)) buffer.add(reading)
+        // A measurement that could not be written waits for the next flush instead of
+        // retrying in a tight loop on the GATT callback thread.
+        scheduleFlush()
+    }
+
+    private fun kind(measurement: GattMeasurement): DeviceKind = when (measurement) {
+        is GattMeasurement.HeartRate -> DeviceKind.HEART_RATE
+        is GattMeasurement.Weight, is GattMeasurement.BodyComposition -> DeviceKind.SCALE
+        is GattMeasurement.BloodPressure -> DeviceKind.BLOOD_PRESSURE
     }
 
     /**
@@ -288,9 +326,27 @@ class BleHealthManager(
         val label = device?.name ?: "Bluetooth device"
         ensureSource(sourceId, label, device)
         val recordedAt = reading.at
-        val observations = observationsFor(reading, sourceId, recordedAt, label)
+        val payload = "device=${reading.address};kind=${reading.kind.name};" +
+            "at=${reading.at.toEpochMilliseconds()};measurement=${reading.measurement}"
+        val rawId = RawRecordId(ids.newId())
+        val raw = RawRecord(
+            id = rawId,
+            sourceId = sourceId,
+            sourceKind = SourceKind.API,
+            receivedAt = recordedAt,
+            recordedAt = recordedAt,
+            happenedAt = reading.at,
+            payloadHash = PayloadHash.sha256(payload),
+            idempotencyKey = "ble-raw:${reading.address}:" +
+                PayloadHash.sha256(payload).take(RAW_KEY_CHARS),
+            schemaVersion = RAW_SCHEMA,
+            device = label,
+            appVersion = appVersion,
+            payload = payload,
+        )
+        val observations = observationsFor(reading, sourceId, recordedAt, label, rawId)
         if (observations.isEmpty()) return@runCatching false
-        store.observations.recordAll(observations)
+        store.observations.recordAll(observations, listOf(raw))
         device?.let { paired ->
             store.devices.touch(paired.id, recordedAt, reading = true)
         }
@@ -322,6 +378,7 @@ class BleHealthManager(
         sourceId: SourceId,
         recordedAt: Instant,
         label: String,
+        rawRecordId: RawRecordId,
     ): List<Observation> {
         val at = when (val measurement = reading.measurement) {
             is GattMeasurement.HeartRate -> recordedAt
@@ -349,6 +406,7 @@ class BleHealthManager(
                 device = label,
                 appVersion = appVersion,
                 method = method,
+                rawRecordId = rawRecordId,
             ),
             groupKey = group,
         )
@@ -449,6 +507,10 @@ class BleHealthManager(
     )
 
     private companion object {
+        const val RAW_SCHEMA = 1
+        const val FLUSH_INTERVAL_MILLIS = 10_000L
+        const val RAW_KEY_CHARS = 16
+
         val CCCD_UUID: java.util.UUID =
             java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 

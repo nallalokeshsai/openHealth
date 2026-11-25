@@ -671,6 +671,14 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                             app.openhealth.android.activity.AndroidHealthBus.readPermissions(),
                         )
 
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest
+                        .HEALTH_CONNECT_HISTORY,
+                    ->
+                        healthPermissions.launch(
+                            app.openhealth.android.activity.AndroidHealthBus
+                                .readPermissionsWithHistory(),
+                        )
+
                     null -> Unit
                 }
             }
@@ -696,7 +704,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onCorrectSteps = viewModel::correctTodaySteps,
                     onExcludeToday = viewModel::excludeTodayFromSteps,
                     onRequestHealthConnect = viewModel::onHealthConnectRequested,
-                    onSyncHealthConnect = viewModel::syncHealthConnect,
+                    onSyncHealthConnect = { backfill -> viewModel.syncHealthConnect(backfill) },
                     onImportGarmin = { openFit.launch(arrayOf("*/*")) },
                     onScan = viewModel::scanForDevices,
                     onStopScan = viewModel::stopScanForDevices,

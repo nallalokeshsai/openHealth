@@ -16,10 +16,12 @@
     <string name="rest_timer_channel">Rest timer</string>
     <string name="devices_phone_source">This phone</string>
     <string name="toast_permission_needed">That needs the permission to work. Nothing was changed.</string>
-    <string name="toast_health_no_permission">Health Connect returned no data types. Nothing was changed.</string>
+    <string name="toast_health_no_history">The history permission was not granted, so nothing older than 30 days was read. Nothing was changed.</string>
+    <string name="toast_health_no_permission">No Health Connect data was shared. Nothing was changed.</string>
     <string name="toast_health_failed">Health Connect could not be read. Nothing was changed.</string>
     <string name="toast_health_none">No new readings in Health Connect.</string>
     <string name="toast_health_synced">Synced with Health Connect.</string>
+    <string name="toast_fit_already_imported">That file is already in your history. Nothing was added.</string>
     <string name="toast_fit_imported">FIT file imported.</string>
     <string name="toast_fit_failed">That file could not be read as FIT. Nothing was changed.</string>
     <string name="health_rationale_title">What openHealth reads</string>

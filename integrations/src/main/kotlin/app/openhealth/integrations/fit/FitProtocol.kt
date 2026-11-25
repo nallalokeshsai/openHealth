@@ -158,16 +158,49 @@ object FitActivityTypes {
     const val WHEELCHAIR_PUSHING = 13
     const val HIKING = 17
 
-    /** `monitoring.cycles` counts half-steps: the profile scales it by two. */
+    /**
+     * One cycle is one stride, and a stride is **two** steps, in both messages that
+     * report cycles. The two messages scale their raw field differently, so each
+     * conversion is spelled out where it is applied:
+     *
+     * - `monitoring.cycles` (55/3) is `uint32` with **scale 2**, units cycles
+     *   ([MONITORING_CYCLES_SCALE]), so `steps = raw / 2 * 2 = raw`. The profile says
+     *   the same thing about `cycles_16` (55/9), whose documented unit is literally
+     *   "2 * cycles (steps)".
+     * - `session.total_cycles` (18/10) has **no scale**, and for a walking or running
+     *   sport its subfield is `total_strides`, so `steps = raw * 2`.
+     *
+     * Halving the raw value in either place loses half the day, which is why the two
+     * scales are named rather than folded into one constant.
+     */
     const val STEPS_PER_CYCLE = 2.0
 
-    fun countsSteps(activityType: Long?): Boolean = activityType != null &&
-        activityType in setOf(
-            RUNNING.toLong(),
-            WALKING.toLong(),
-            WHEELCHAIR_PUSHING.toLong(),
-            HIKING.toLong(),
-        )
+    /** `monitoring.cycles` is stored at twice its value in cycles (profile scale 2). */
+    const val MONITORING_CYCLES_SCALE = 2.0
+
+    /**
+     * A monitoring message's cycles are steps unless the activity it names is clearly not
+     * ambulatory. An unlabelled message counts: a day file that leaves the type out is
+     * still a day of walking, and refusing it silently loses the day. Cycling, swimming,
+     * sleep, sedentary, driving and gym equipment are the explicit exclusions.
+     */
+    fun countsSteps(activityType: Long?): Boolean = when (activityType) {
+        null -> true
+        CYCLING, SWIMMING, SLEEP, SEDENTARY, UNMONITORED, DRIVING, TRANSITION,
+        FITNESS_EQUIPMENT,
+        -> false
+
+        else -> true
+    }
+
+    private const val CYCLING = 2L
+    private const val TRANSITION = 3L
+    private const val FITNESS_EQUIPMENT = 4L
+    private const val SWIMMING = 5L
+    private const val SLEEP = 7L
+    private const val SEDENTARY = 8L
+    private const val UNMONITORED = 9L
+    private const val DRIVING = 10L
 
     /** `session.sport` values that walk or run; a ride's cycles are not steps. */
     fun sportCountsSteps(sport: Long?): Boolean = sport != null &&
@@ -197,6 +230,27 @@ object FitTime {
      */
     fun localInstant(fitSeconds: Long, zone: TimeZone): kotlin.time.Instant =
         EPOCH.toInstant(zone) + fitSeconds.seconds
+
+    /** The 5-bit field of a compressed-timestamp header; it rolls over every 32 s. */
+    const val COMPRESSED_OFFSET_MASK = 0x1FL
+
+    private const val COMPRESSED_ROLLOVER = 0x20L
+
+    /**
+     * Expands a compressed-timestamp header's 5-bit offset against the running
+     * timestamp, as the protocol defines it: the offset replaces the low five bits, and
+     * an offset that has wrapped below the current ones adds a 32-second rollover.
+     *
+     * Adding the offset to the base instead only agrees with this when the base happens
+     * to sit on a 32-second boundary, so a file whose first timestamp is not a multiple
+     * of 32 would drift by up to 31 seconds on every compressed record.
+     */
+    fun expandCompressed(baseFitSeconds: Long, offset: Int): Long {
+        val masked = offset.toLong() and COMPRESSED_OFFSET_MASK
+        val low = baseFitSeconds and COMPRESSED_OFFSET_MASK
+        val rolled = if (masked >= low) 0L else COMPRESSED_ROLLOVER
+        return (baseFitSeconds and COMPRESSED_OFFSET_MASK.inv()) + masked + rolled
+    }
 }
 
 /**
@@ -280,6 +334,7 @@ class FitDecoder(private val data: ByteArray) {
         return cursor + layout.byteSize
     }
 
+    @Suppress("ThrowsCount")
     private fun readDefinition(header: Int, start: Int, dataEnd: Int): Int {
         var cursor = start
         val localNumber = header and LOCAL_NUMBER_MASK
@@ -305,18 +360,27 @@ class FitDecoder(private val data: ByteArray) {
             )
             cursor += FIELD_DEFINITION_BYTES
         }
-        var developerFields = 0
+        val developerFieldSizes = mutableListOf<Int>()
         if (header and DEVELOPER_FLAG != 0) {
-            developerFields = readUInt8(cursor)
+            if (cursor + 1 > dataEnd) throw FitFormatException("developer count truncated")
+            val developerFields = readUInt8(cursor)
             cursor += 1
-            // Each developer field definition is three bytes; their values are skipped.
-            cursor += developerFields * FIELD_DEFINITION_BYTES
+            repeat(developerFields) {
+                if (cursor + FIELD_DEFINITION_BYTES > dataEnd) {
+                    throw FitFormatException("developer field definition truncated")
+                }
+                // field number, size, developer-data index. The size is how many bytes
+                // the value occupies in every data message; a fixed one-byte skip
+                // desynchronises the stream after the first developer field.
+                developerFieldSizes += readUInt8(cursor + 1)
+                cursor += FIELD_DEFINITION_BYTES
+            }
         }
         definitions[localNumber] = FieldLayout(
             globalNumber = globalNumber,
             fields = fields,
             bigEndian = bigEndian,
-            developerFieldCount = developerFields,
+            developerFieldSizes = developerFieldSizes,
         )
         return cursor
     }
@@ -331,25 +395,24 @@ class FitDecoder(private val data: ByteArray) {
         var cursor = start
         val values = LinkedHashMap<Int, FitValue>()
         var timestamp: Long? = null
+        // Every field the definition declares is present in the data, including field
+        // 253 on the rare definition that keeps it under a compressed header. The
+        // record's length is therefore always the definition's byte size, which is what
+        // `readRecord` advances by: skipping a field here but not there would misalign
+        // every record that follows.
         layout.fields.forEach { field ->
             if (cursor + field.size > dataEnd) throw FitFormatException("field value truncated")
-            val isCompressedTimestamp = compressedOffset != null &&
-                field.number == FitGlobal.TIMESTAMP_FIELD
-            if (!isCompressedTimestamp) {
-                val value = decodeValue(field, cursor, layout.bigEndian)
-                values[field.number] = value
-                if (field.number == FitGlobal.TIMESTAMP_FIELD) timestamp = value.whole()
-                // A compressed header replaces the timestamp field, so its bytes are not
-                // in the message at all: the cursor must not skip them.
-                cursor += field.size
-            }
+            val value = decodeValue(field, cursor, layout.bigEndian)
+            values[field.number] = value
+            if (field.number == FitGlobal.TIMESTAMP_FIELD) timestamp = value.whole()
+            cursor += field.size
         }
         // Developer field values follow the normal fields and are skipped, not guessed.
-        cursor += layout.developerFieldCount
+        cursor += layout.developerFieldSizes.sum()
         if (compressedOffset != null) {
             val base = lastTimestampSeconds
                 ?: throw FitFormatException("compressed timestamp without a base time")
-            timestamp = base + compressedOffset
+            timestamp = FitTime.expandCompressed(base, compressedOffset)
             values[FitGlobal.TIMESTAMP_FIELD] = FitValue.Whole(timestamp)
         }
         val stamped = timestamp
@@ -552,7 +615,7 @@ private data class FieldLayout(
     val globalNumber: Int,
     val fields: List<FieldDef>,
     val bigEndian: Boolean,
-    val developerFieldCount: Int,
+    val developerFieldSizes: List<Int>,
 ) {
-    val byteSize: Int = fields.sumOf(FieldDef::size) + developerFieldCount
+    val byteSize: Int = fields.sumOf(FieldDef::size) + developerFieldSizes.sum()
 }

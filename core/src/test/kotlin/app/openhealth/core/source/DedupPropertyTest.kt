@@ -85,6 +85,18 @@ private fun weightObservation(
 
 class StepsDedupPropertyTest {
     @Test
+    fun aDayNobodyCoversIsMarkedIncompleteRatherThanAFallback() {
+        val oneHour = hourlySteps("garmin", List(1) { 500.0 }, startHour = 9)
+        val resolution = OneSourcePerDayPolicy().resolve(
+            oneHour,
+            registry(),
+            app.openhealth.core.time.LocalDay(DAY, ZONE),
+        ) as DayResolution.Selected
+        assertEquals(SourceId("garmin"), resolution.sourceId)
+        assertEquals(DedupReason.INCOMPLETE_DAY, resolution.reason)
+    }
+
+    @Test
     fun dedupNeverSumsTwoSources() {
         runBlocking {
             checkAll(Arb.long(0L..5_000L), Arb.long(0L..5_000L)) { a, b ->

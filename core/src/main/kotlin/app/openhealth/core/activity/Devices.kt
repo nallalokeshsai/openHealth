@@ -6,8 +6,57 @@ import app.openhealth.core.source.Source
 import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
-/** How much of a device address names its source; enough to be unique, not the whole id. */
-private const val SOURCE_ID_ADDRESS_CHARS = 12
+/**
+ * Garmin's own health data reaches the app by two routes, and `pr.md` §6.18 makes them
+ * one source family so a day is never counted twice. Health Connect does not name the
+ * writing app, but it does carry the writing device, so a device name is the one honest
+ * signal available. A name that matches no Garmin model stays with the platform bus
+ * rather than being guessed into the family.
+ */
+object GarminDetector {
+    private val markers = listOf(
+        "garmin",
+        "vivoactive",
+        "vivosmart",
+        "vivomove",
+        "venu",
+        "fenix",
+        "forerunner",
+        "instinct",
+        "epix",
+        "lily",
+        "approach",
+        "tactix",
+        "quatix",
+        "descent",
+        "oregon",
+        "etrex",
+        "montana",
+        "edge ",
+    )
+
+    fun isGarmin(deviceLabel: String?): Boolean {
+        val label = deviceLabel?.lowercase()?.let(::foldAccents) ?: return false
+        return markers.any { label.contains(it) }
+    }
+
+    /** Garmin writes "vívoactive" and "fēnix"; the marker list is plain ASCII. */
+    private fun foldAccents(label: String): String = buildString(label.length) {
+        label.forEach { char ->
+            append(
+                when (char) {
+                    'í', 'ì', 'î', 'ï' -> 'i'
+                    'é', 'è', 'ê', 'ë' -> 'e'
+                    'á', 'à', 'â', 'ä' -> 'a'
+                    'ó', 'ò', 'ô', 'ö' -> 'o'
+                    'ú', 'ù', 'û', 'ü' -> 'u'
+                    'ē' -> 'e'
+                    else -> char
+                },
+            )
+        }
+    }
+}
 
 /**
  * A device the person paired over Bluetooth (`pr.md` §6.18, `BUILD-ROADMAP.md` §B8).
@@ -41,8 +90,12 @@ data class DeviceRegistry(val devices: List<PairedDevice> = emptyList()) {
     fun byAddress(address: String): PairedDevice? =
         devices.firstOrNull { it.address.equals(address, ignoreCase = true) }
 
-    fun upsert(device: PairedDevice): DeviceRegistry =
-        DeviceRegistry(devices.filterNot { it.id == device.id } + device)
+    /** One row per address as well as per id: a re-paired device replaces its old row. */
+    fun upsert(device: PairedDevice): DeviceRegistry = DeviceRegistry(
+        devices.filterNot {
+            it.id == device.id || it.address.equals(device.address, ignoreCase = true)
+        } + device,
+    )
 
     fun remove(id: String): DeviceRegistry = DeviceRegistry(devices.filterNot { it.id == id })
 
@@ -123,6 +176,20 @@ enum class DeviceKindName {
 }
 
 /** What one kind of device contributes, in observation types. */
+/** A stable, non-reversible tag for an address, used only inside a source id. */
+private fun addressStamp(address: String): String {
+    var hash = FNV_OFFSET
+    address.lowercase().forEach { char ->
+        hash = (hash xor char.code.toLong()) * FNV_PRIME
+    }
+    return hash.toULong().toString(HEX_RADIX).padStart(STAMP_HEX_CHARS, '0').take(STAMP_HEX_CHARS)
+}
+
+private const val FNV_OFFSET = -3750763034362895579L // 0xcbf29ce484222325
+private const val FNV_PRIME = 0x100000001b3L
+private const val STAMP_HEX_CHARS = 8
+private const val HEX_RADIX = 16
+
 object DeviceCapabilities {
     fun types(kind: DeviceKind): List<ObservationType> = when (kind) {
         DeviceKind.HEART_RATE -> listOf(
@@ -149,14 +216,17 @@ object DeviceCapabilities {
             DeviceKind.SCALE -> "ble-scale"
             DeviceKind.BLOOD_PRESSURE -> "ble-bp"
         }
-        val suffix = address.lowercase().replace(":", "").take(SOURCE_ID_ADDRESS_CHARS)
+        // A short FNV-1a tag over the address, not the address: the source id is stored
+        // on every observation and can leave the phone in an export, so it must not be a
+        // device identifier (the registry keeps the address itself).
+        val suffix = addressStamp(address)
         return SourceId("$prefix-$suffix")
     }
 
     /** The registry row for a paired device: its family is the device, not the profile. */
     fun source(device: PairedDevice): Source = Source(
         id = SourceId(device.sourceId),
-        kind = app.openhealth.core.observation.SourceKind.API,
+        kind = app.openhealth.core.observation.SourceKind.DEVICE,
         label = device.name?.takeIf { it.isNotBlank() } ?: defaultLabel(device.kind),
         family = "ble",
         device = device.name,

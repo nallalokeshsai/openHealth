@@ -29,3 +29,11 @@ tasks.withType<Test>().configureEach {
         showStandardStreams = true
     }
 }
+
+// `run` resolves its arguments against the repository root, not `tools/fixtures/`, so
+// the documented regeneration command (`--fit integrations/src/test/resources/fit`)
+// writes the golden fixtures where the tests read them instead of into a stray
+// directory under this module.
+tasks.named<JavaExec>("run") {
+    workingDir = rootProject.projectDir
+}

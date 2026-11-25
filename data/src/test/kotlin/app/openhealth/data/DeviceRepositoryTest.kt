@@ -41,13 +41,12 @@ class DeviceRepositoryTest {
 
     @Test
     fun pairingTheSameAddressTwiceKeepsOneRow() {
-        val first = device("strap-1")
-        val second = first.copy(id = "strap-2", name = "Renamed")
-        store.devices.save(app.openhealth.core.activity.DeviceRegistry(listOf(first, second)))
-        store.devices.save(app.openhealth.core.activity.DeviceRegistry(listOf(second)))
+        store.devices.pair(device("strap-1"))
+        val renamed = device("strap-2").copy(address = device("strap-1").address)
+        store.devices.pair(renamed)
 
         assertEquals(1, store.devices.registry().devices.size)
-        assertEquals("Renamed", store.devices.registry().devices.single().name)
+        assertEquals("Scale strap-2", store.devices.registry().devices.single().name)
     }
 
     @Test

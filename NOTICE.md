@@ -270,7 +270,8 @@ never writes to it.
 ### Garmin FIT: an independent decoder, no SDK
 
 The FIT importer in `integrations/` is written from the published FIT protocol
-(`FitProtocol.md`): the container format, the CRC and the field numbers of five messages.
+(`FitProtocol.md`): the container format, the CRC and the field numbers of the four
+messages it reads (`file_id`, `session`, `record`, `monitoring`).
 **No Garmin FIT SDK code, header, profile file or sample file is used, copied or bundled.**
 The SDK is source-available and its licence forbids redistribution and open-source
 licensing, which a public Apache-2.0 repository cannot satisfy

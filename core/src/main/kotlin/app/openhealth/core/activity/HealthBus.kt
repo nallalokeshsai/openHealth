@@ -58,23 +58,33 @@ object HealthBusTypes {
         BODY_FAT,
     )
 
-    /** The observation a bus key becomes, or null when the key is not one we read. */
-    fun observationType(key: String): ObservationType? = when (key) {
-        STEPS -> ObservationType.STEPS
-        DISTANCE -> ObservationType.DISTANCE
-        ACTIVE_CALORIES -> ObservationType.ACTIVE_CALORIES
-        ACTIVE_MINUTES -> ObservationType.ACTIVE_MINUTES
-        FLOORS -> ObservationType.FLIGHTS_CLIMBED
-        HEART_RATE -> ObservationType.HEART_RATE
-        RESTING_HEART_RATE -> ObservationType.RESTING_HEART_RATE
-        SLEEP, SLEEP_DEEP, SLEEP_LIGHT, SLEEP_REM, SLEEP_AWAKE, SLEEP_IN_BED ->
-            ObservationType.SLEEP_DURATION
+    /**
+     * The observation a bus key becomes, or null when the key is not one we read.
+     *
+     * Every sleep key keeps a type of its own. Collapsing them into `SLEEP_DURATION`
+     * would land one night's stages and that same night's total in one SUM rollup, so
+     * a staged night would be counted about twice (`pr.md` §7.6).
+     */
+    fun observationType(key: String): ObservationType? = OBSERVATION_TYPES[key]
 
-        EXERCISE -> ObservationType.ACTIVE_MINUTES
-        WEIGHT -> ObservationType.WEIGHT
-        BODY_FAT -> ObservationType.BODY_FAT_PERCENT
-        else -> null
-    }
+    private val OBSERVATION_TYPES: Map<String, ObservationType> = mapOf(
+        STEPS to ObservationType.STEPS,
+        DISTANCE to ObservationType.DISTANCE,
+        ACTIVE_CALORIES to ObservationType.ACTIVE_CALORIES,
+        ACTIVE_MINUTES to ObservationType.ACTIVE_MINUTES,
+        FLOORS to ObservationType.FLIGHTS_CLIMBED,
+        HEART_RATE to ObservationType.HEART_RATE,
+        RESTING_HEART_RATE to ObservationType.RESTING_HEART_RATE,
+        SLEEP to ObservationType.SLEEP_DURATION,
+        SLEEP_DEEP to ObservationType.SLEEP_DEEP,
+        SLEEP_LIGHT to ObservationType.SLEEP_LIGHT,
+        SLEEP_REM to ObservationType.SLEEP_REM,
+        SLEEP_AWAKE to ObservationType.SLEEP_AWAKE,
+        SLEEP_IN_BED to ObservationType.SLEEP_IN_BED,
+        EXERCISE to ObservationType.ACTIVE_MINUTES,
+        WEIGHT to ObservationType.WEIGHT,
+        BODY_FAT to ObservationType.BODY_FAT_PERCENT,
+    )
 
     /** The unit a bus reading of this key arrives in, as UCUM. */
     fun unit(key: String): UcumUnit? = when (key) {

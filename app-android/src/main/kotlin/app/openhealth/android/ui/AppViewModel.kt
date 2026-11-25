@@ -358,13 +358,19 @@ class AppViewModel(
         refresh()
     }
 
+    @Suppress("LongMethod")
     private suspend fun rebuild() = withContext(Dispatchers.IO) {
+        reconnectAndReconcile()
         val preferences = container.preferences.snapshot()
         val profile = store.profile.active()
         val complete = preferences.onboardingComplete && profile != null
         val today = profile?.let { buildToday(preferences, it) }
         val settings = buildSettings(preferences, profile)
-        val devices = activity.model(found = _state.value.foundDevices)
+        val devices = activity.model(
+            stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
+                preferences.modules,
+            found = _state.value.foundDevices,
+        )
         val timeline = buildTimeline(preferences)
         val trash = buildTrash(preferences)
         val recent = buildRecent(preferences)
@@ -402,7 +408,12 @@ class AppViewModel(
             )
             _state.update { it.copy(vitalDetail = detail) }
         }
-        if (store.devices.stepTrackingEnabled() && container.activity.phoneSensorPresent) {
+        val stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
+            preferences.modules
+        if (!stepsModuleOn) {
+            // A module is hidden, never deleted: the data stays, the service stops.
+            app.openhealth.android.activity.StepTrackingService.ensureStopped(container.context)
+        } else if (store.devices.stepTrackingEnabled() && container.activity.phoneSensorPresent) {
             // The counter keeps counting while nothing runs; starting the service makes
             // the next sensor event persist the interval (`pr.md` §6.6).
             app.openhealth.android.activity.StepTrackingService.ensureRunning(container.context)
@@ -2431,7 +2442,14 @@ class AppViewModel(
 
     fun openDevices() {
         _state.update {
-            it.copy(devices = activity.model(found = it.foundDevices), pendingPermission = null)
+            it.copy(
+                devices = activity.model(
+                    stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
+                        it.preferences.modules,
+                    found = it.foundDevices,
+                ),
+                pendingPermission = null,
+            )
         }
     }
 
@@ -2485,20 +2503,45 @@ class AppViewModel(
     }
 
     fun onHealthPermissionResult(granted: Set<String>) {
+        val requestedHistory = _state.value.pendingPermission ==
+            app.openhealth.ui.screens.devices.DevicePermissionRequest.HEALTH_CONNECT_HISTORY
         _state.update { it.copy(pendingPermission = null) }
         if (granted.isEmpty()) {
             showToast(R.string.toast_permission_needed, undo = false)
             refreshDevices()
             return
         }
-        syncHealthConnect(backfill = false)
+        if (requestedHistory &&
+            "android.permission.health.READ_HEALTH_DATA_HISTORY" !in granted
+        ) {
+            // Reading a year without the history grant would silently return 30 days;
+            // say so instead of marking the import done.
+            showToast(R.string.toast_health_no_history, undo = false)
+            refreshDevices()
+            return
+        }
+        syncHealthConnectNow(backfill = requestedHistory)
     }
 
     fun syncHealthConnect(backfill: Boolean) {
+        if (backfill) {
+            // The year-long read needs its own grant, so the request comes first and the
+            // sync is launched by its result, never before it (`pr.md` §6.18).
+            _state.update {
+                it.copy(
+                    pendingPermission = app.openhealth.ui.screens.devices
+                        .DevicePermissionRequest.HEALTH_CONNECT_HISTORY,
+                )
+            }
+            return
+        }
+        syncHealthConnectNow(backfill = false)
+    }
+
+    private fun syncHealthConnectNow(backfill: Boolean) {
         launchGuarded {
             val outcome = withContext(Dispatchers.IO) {
                 activity.syncHealthConnect(backfill)
-                    .also { if (it.ok) store.engine.rebuildAll() }
             }
             val message = when {
                 outcome.error == app.openhealth.android.activity.ActivityPresenter.NO_PERMISSION ->
@@ -2509,17 +2552,19 @@ class AppViewModel(
                 else -> R.string.toast_health_synced
             }
             refreshDevices()
-            if (outcome.ok) showToast(message, undo = false) else showToast(message, undo = false)
+            showToast(message, undo = false)
         }
     }
 
     fun importFit(uri: android.net.Uri) {
         launchGuarded {
             val outcome = withContext(Dispatchers.IO) { activity.importFit(uri) }
-            showToast(
-                if (outcome.ok) R.string.toast_fit_imported else R.string.toast_fit_failed,
-                undo = false,
-            )
+            val message = when {
+                outcome.alreadyImported -> R.string.toast_fit_already_imported
+                outcome.ok -> R.string.toast_fit_imported
+                else -> R.string.toast_fit_failed
+            }
+            showToast(message, undo = false)
             refreshDevices()
             refresh()
         }
@@ -2606,10 +2651,30 @@ class AppViewModel(
         }
     }
 
+    private var reconnected = false
+
+    private suspend fun reconnectAndReconcile() {
+        if (!reconnected) {
+            reconnected = true
+            runCatching { container.ble.reconnectPaired() }
+        }
+        // A grant survives a reinstall on the same phone but not a restore onto a new
+        // one, so the stored set is refreshed from the platform rather than trusted.
+        if (store.devices.healthConnectEnabled() && container.healthBus.isAvailable()) {
+            val granted = runCatching { container.healthBus.grantedPermissions() }
+                .getOrDefault(emptySet())
+            if (granted.isNotEmpty()) store.devices.setHealthConnectGranted(granted)
+        }
+    }
+
     private fun refreshDevices() {
         _state.update { current ->
             current.copy(
-                devices = activity.model(found = current.foundDevices),
+                devices = activity.model(
+                    stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
+                        current.preferences.modules,
+                    found = current.foundDevices,
+                ),
                 // The Settings row names what is connected, so it moves with the page.
                 settings = buildSettings(current.preferences, current.profile),
             )

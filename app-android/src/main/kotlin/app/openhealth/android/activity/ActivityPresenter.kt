@@ -6,6 +6,7 @@ import app.openhealth.android.documents.DocumentStore
 import app.openhealth.core.activity.DeviceCapabilities
 import app.openhealth.core.activity.DeviceKindName
 import app.openhealth.core.activity.DeviceLinkState
+import app.openhealth.core.activity.GarminDetector
 import app.openhealth.core.activity.HealthBusImporter
 import app.openhealth.core.activity.HealthBusTypes
 import app.openhealth.core.activity.HealthImportContext
@@ -48,6 +49,7 @@ import app.openhealth.ui.screens.devices.HealthProvideModel
 import app.openhealth.ui.screens.devices.PairedDeviceModel
 import app.openhealth.ui.screens.devices.PriorityModel
 import app.openhealth.ui.screens.devices.PriorityRowModel
+import app.openhealth.ui.screens.devices.ProvenanceLine
 import app.openhealth.ui.screens.devices.StepsSourceModel
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
@@ -65,6 +67,7 @@ import kotlinx.datetime.toLocalDateTime
  */
 @Suppress(
     "TooManyFunctions",
+    "CyclomaticComplexMethod",
     "LargeClass",
     "LongMethod",
     "MagicNumber",
@@ -87,18 +90,21 @@ class ActivityPresenter(
 
     // ------------------------------------------------------------------ read model
 
-    fun model(message: String? = null, found: List<FoundDeviceModel> = emptyList()): DevicesModel =
-        DevicesModel(
-            steps = stepsModel(),
-            healthConnect = healthConnectModel(),
-            garmin = garminModel(),
-            bluetooth = bluetoothModel(found),
-            priority = priorityModel(),
-            note = context.getString(UiR.string.devices_note),
-            message = message,
-        )
+    fun model(
+        stepsModuleOn: Boolean = true,
+        message: String? = null,
+        found: List<FoundDeviceModel> = emptyList(),
+    ): DevicesModel = DevicesModel(
+        steps = stepsModel(stepsModuleOn),
+        healthConnect = healthConnectModel(),
+        garmin = garminModel(),
+        bluetooth = bluetoothModel(found),
+        priority = priorityModel(),
+        note = context.getString(UiR.string.devices_note),
+        message = message,
+    )
 
-    private fun stepsModel(): StepsSourceModel {
+    private fun stepsModel(stepsModuleOn: Boolean): StepsSourceModel {
         val date = today()
         val rollup = store.rollups.forDayAndType(date, ObservationType.STEPS)
         val observations = store.observations.forDayAndType(date, ObservationType.STEPS)
@@ -133,22 +139,68 @@ class ActivityPresenter(
         }
         val last = observations.filterNot { it.excludedFromTrends }
             .maxByOrNull { it.provenance.recordedAt }
+        val reasonNote = when (breakdown.reason) {
+            DedupReason.GAP_FALLBACK -> breakdown.winningSource?.let { winner ->
+                context.getString(
+                    UiR.string.devices_steps_gap,
+                    label(breakdown.contributions.first().sourceId),
+                    label(winner),
+                )
+            }
+
+            DedupReason.INCOMPLETE_DAY -> breakdown.winningSource?.let { winner ->
+                context.getString(UiR.string.devices_steps_incomplete, label(winner))
+            }
+
+            else -> null
+        }
         return StepsSourceModel(
             available = available,
             tracking = tracking,
-            needsPermission = false,
-            todayText = if (rollup == null) {
-                context.getString(UiR.string.today_steps_empty_title)
-            } else {
-                context.getString(UiR.string.devices_steps_today_number, formatSteps(total))
+            moduleOff = !stepsModuleOn,
+            todayText = when {
+                !stepsModuleOn -> context.getString(UiR.string.devices_steps_module_off)
+                rollup == null -> context.getString(UiR.string.today_steps_empty_title)
+                else -> context.getString(
+                    UiR.string.devices_steps_today_number,
+                    formatSteps(total),
+                )
             },
-            sourceLine = sourceLine,
-            otherSources = losers,
+            sourceLine = if (stepsModuleOn) sourceLine else null,
+            reasonNote = if (stepsModuleOn) reasonNote else null,
+            otherSources = if (stepsModuleOn) losers else emptyList(),
             lastReadingText = last?.let {
                 context.getString(UiR.string.devices_steps_last, time(it.provenance.recordedAt))
             },
-            canCorrect = true,
-            permissionNote = if (available) {
+            provenance = breakdown.contributions.map { contribution ->
+                val observation = observations.filter {
+                    it.provenance.sourceId == contribution.sourceId
+                }.maxByOrNull { it.provenance.recordedAt }
+                val detail = observation?.let {
+                    context.getString(
+                        UiR.string.devices_provenance_detail,
+                        sourceKindLabel(it),
+                        time(it.provenance.recordedAt),
+                        it.localDate.toString(),
+                    )
+                }.orEmpty()
+                ProvenanceLine(
+                    label = context.getString(
+                        if (contribution.sourceId == breakdown.winningSource) {
+                            UiR.string.devices_provenance_winner
+                        } else {
+                            UiR.string.devices_provenance_other
+                        },
+                        label(contribution.sourceId),
+                    ),
+                    detail = detail,
+                    value = formatSteps(contribution.total),
+                )
+            },
+            canCorrect = stepsModuleOn,
+            permissionNote = if (!stepsModuleOn) {
+                context.getString(UiR.string.devices_steps_module_off_body)
+            } else if (available) {
                 context.getString(UiR.string.devices_steps_permission)
             } else {
                 context.getString(UiR.string.devices_steps_unavailable)
@@ -232,6 +284,7 @@ class ActivityPresenter(
             PairedDeviceModel(
                 id = device.id,
                 name = device.name ?: context.getString(UiR.string.devices_bluetooth),
+                kind = device.kind,
                 kindLabel = kindLabel(device.kind),
                 statusText = providesText(device.kind) + " · " + when {
                     state is DeviceLinkState.Connected && state.address == device.address ->
@@ -407,61 +460,97 @@ class ActivityPresenter(
         )
         val to = now()
         val last = store.devices.syncBook().latest(HEALTH_CONNECT_SOURCE.value)
+        // An incremental sync always re-reads the last few days rather than starting at
+        // the previous sync. A watch that uploads a backlog writes records whose own
+        // start times are older than the sync that ran in between, and a window that
+        // began at the last sync would step over them for good. Re-reading costs
+        // nothing: every reading carries an idempotency key, so one already stored
+        // inserts nothing (`pr.md` §7.1, §7.7).
         val from = if (backfill) {
-            now() - BACKFILL_DAYS.days
+            to - BACKFILL_DAYS.days
         } else {
-            last?.at ?: (now() - INCREMENTAL_DAYS.days)
+            minOf(last?.at ?: to, to) - INCREMENTAL_DAYS.days
         }
+        ensureSource(
+            GARMIN_HC_SOURCE,
+            SourceKind.GARMIN,
+            context.getString(UiR.string.devices_garmin_health_connect),
+            setOf(
+                SourcePermission.READ_STEPS,
+                SourcePermission.READ_DISTANCE,
+                SourcePermission.READ_ENERGY,
+                SourcePermission.READ_HEART_RATE,
+                SourcePermission.READ_SLEEP,
+                SourcePermission.READ_WEIGHT,
+                SourcePermission.READ_BODY_COMPOSITION,
+            ),
+            family = "garmin",
+        )
         var imported = 0
         val skipped = mutableSetOf<String>()
-        val rawRecords = mutableListOf<RawRecord>()
         HealthBusTypes.all.forEach { key ->
             val readings = runCatching {
                 healthBus.read(key, from.toEpochMilliseconds(), to.toEpochMilliseconds())
             }.getOrDefault(emptyList())
             if (readings.isEmpty()) return@forEach
-            val payload = readings.joinToString(separator = "\n") {
-                "${it.type}:${it.startEpochMillis}:${it.endEpochMillis}:${it.value}:${it.unit}:${it.metadata["uid"]}"
+            // `pr.md` §6.18: Garmin over the bus and Garmin over a FIT file are one
+            // family. Health Connect does not name the writing app, but it does carry
+            // the device, so a Garmin device's readings get the Garmin family and
+            // collapse with a FIT import of the same watch.
+            val groups = readings.groupBy { reading ->
+                GarminDetector.isGarmin(reading.metadata["device"])
             }
-            val rawId = RawRecordId(ids.newId())
-            rawRecords += RawRecord(
-                id = rawId,
-                sourceId = HEALTH_CONNECT_SOURCE,
-                sourceKind = SourceKind.HEALTH_CONNECT,
-                receivedAt = to,
-                recordedAt = to,
-                happenedAt = null,
-                payloadHash = PayloadHash.sha256(payload),
-                idempotencyKey = "hc:$key:${from.toEpochMilliseconds()}:" +
-                    to.toEpochMilliseconds(),
-                schemaVersion = RAW_SCHEMA,
-                device = null,
-                appVersion = appVersion,
-                payload = if (payload.length <= MAX_RAW_PAYLOAD) payload else null,
-            )
-            val result = HealthBusImporter.toObservations(
-                readings,
-                HealthImportContext(
-                    sourceId = HEALTH_CONNECT_SOURCE,
-                    zone = zone,
+            groups.forEach { (garmin, groupReadings) ->
+                val sourceId = if (garmin) GARMIN_HC_SOURCE else HEALTH_CONNECT_SOURCE
+                val sourceKind = if (garmin) SourceKind.GARMIN else SourceKind.HEALTH_CONNECT
+                val family = if (garmin) "garmin" else "health-connect"
+                val payload = groupReadings.joinToString(separator = "\n") {
+                    "${it.type}:${it.startEpochMillis}:${it.endEpochMillis}:${it.value}:" +
+                        "${it.unit}:${it.metadata["device"]}:${it.metadata["uid"]}"
+                }
+                val rawId = RawRecordId(ids.newId())
+                val raw = RawRecord(
+                    id = rawId,
+                    sourceId = sourceId,
+                    sourceKind = sourceKind,
+                    receivedAt = to,
                     recordedAt = to,
+                    happenedAt = null,
+                    payloadHash = PayloadHash.sha256(payload),
+                    idempotencyKey = "hc:${sourceId.value}:$key:" +
+                        from.toEpochMilliseconds() + ":" + to.toEpochMilliseconds(),
+                    schemaVersion = RAW_SCHEMA,
+                    device = groupReadings.firstNotNullOfOrNull { it.metadata["device"] },
                     appVersion = appVersion,
-                    rawRecordId = rawId,
-                    ids = ids,
-                ),
-            )
-            skipped += result.skipped
-            imported += store.observations.recordAll(result.observations, listOf(rawRecords.last()))
-        }
-        if (imported > 0 || backfill) {
-            store.devices.recordSync(
-                SyncedSource(
-                    sourceId = HEALTH_CONNECT_SOURCE.value,
-                    atEpochMillis = to.toEpochMilliseconds(),
-                    records = imported,
-                ),
-            )
-            store.sources.markSynced(HEALTH_CONNECT_SOURCE, to)
+                    payload = if (payload.length <= MAX_RAW_PAYLOAD) payload else null,
+                )
+                val result = HealthBusImporter.toObservations(
+                    groupReadings,
+                    HealthImportContext(
+                        sourceId = sourceId,
+                        zone = zone,
+                        recordedAt = to,
+                        appVersion = appVersion,
+                        rawRecordId = rawId,
+                        ids = ids,
+                    ),
+                )
+                skipped += result.skipped
+                val inserted = store.observations.recordAll(result.observations, listOf(raw))
+                imported += inserted
+                if (inserted > 0 || backfill) {
+                    store.devices.recordSync(
+                        SyncedSource(
+                            sourceId = sourceId.value,
+                            atEpochMillis = to.toEpochMilliseconds(),
+                            records = inserted,
+                        ),
+                    )
+                    store.sources.markSynced(sourceId, to)
+                }
+                // The family is a fact of the reading, not of the sync call.
+                check(family.isNotBlank())
+            }
         }
         if (backfill) store.devices.setHealthConnectBackfilled(true)
         store.devices.setHealthConnectEnabled(true)
@@ -488,6 +577,17 @@ class ActivityPresenter(
      */
     @Suppress("ReturnCount")
     fun importFitFromBytes(bytes: ByteArray): FitOutcome {
+        val hash = PayloadHash.sha256(bytes)
+        // A file already in layer 1 is not parsed again, and the screen does not claim a
+        // fresh import it did not make.
+        store.raw.byHash(hash)?.let { existing ->
+            return FitOutcome(
+                imported = 0,
+                error = null,
+                alreadyImported = true,
+                importedAt = existing.recordedAt,
+            )
+        }
         val imported = runCatching { FitImporter.import(bytes, zone) }
             .getOrElse { error ->
                 return FitOutcome(
@@ -508,7 +608,6 @@ class ActivityPresenter(
             family = "garmin",
         )
         val at = now()
-        val hash = PayloadHash.sha256(bytes)
         val rawId = RawRecordId(ids.newId())
         val summary = summarize(imported)
         val raw = RawRecord(
@@ -587,6 +686,11 @@ class ActivityPresenter(
     fun pair(found: FoundDeviceModel): Boolean {
         val kind = found.kind
         val sourceId = DeviceCapabilities.sourceIdFor(DeviceKindName.toKind(kind), found.address)
+        // One device is one row. Re-pairing a strap that was forgotten must not leave two
+        // entries fighting to reconnect to the same address.
+        store.devices.registry().byAddress(found.address)?.let { existing ->
+            store.devices.unpair(existing.id)
+        }
         val device = PairedDevice(
             id = ids.newId(),
             address = found.address,
@@ -651,6 +755,17 @@ class ActivityPresenter(
     private fun label(sourceId: SourceId): String =
         store.sources.byId(sourceId)?.label ?: sourceId.value
 
+    private fun sourceKindLabel(observation: Observation): String = when {
+        observation.provenance.method == MeasurementMethod.MANUAL_ENTRY ->
+            context.getString(UiR.string.devices_priority_manual)
+
+        observation.provenance.method == MeasurementMethod.FILE_IMPORT ->
+            context.getString(UiR.string.devices_garmin)
+
+        observation.provenance.device != null -> observation.provenance.device!!
+        else -> context.getString(UiR.string.devices_type_steps)
+    }
+
     private fun kindLabel(kind: DeviceKindName): String = when (kind) {
         DeviceKindName.HEART_RATE -> context.getString(UiR.string.devices_kind_heart_rate)
         DeviceKindName.SCALE -> context.getString(UiR.string.devices_kind_scale)
@@ -686,6 +801,7 @@ class ActivityPresenter(
     companion object {
         val GARMIN_SOURCE = SourceId("garmin-fit")
         val HEALTH_CONNECT_SOURCE = SourceId("health-connect")
+        val GARMIN_HC_SOURCE = SourceId("garmin-hc")
         private const val BACKFILL_DAYS = 365
         private const val INCREMENTAL_DAYS = 7
         private const val RAW_SCHEMA = 1
@@ -714,15 +830,8 @@ data class FitOutcome(
     val activityMinutes: Int = 0,
     val heartRates: Int = 0,
     val error: String? = null,
+    val alreadyImported: Boolean = false,
+    val importedAt: Instant? = null,
 ) {
     val ok: Boolean get() = error == null
 }
-
-/** The phone's own sensor as a source row, seeded once by the container. */
-fun phoneSource(): Source = Source(
-    id = StepTracker.PHONE_SOURCE,
-    kind = SourceKind.DEVICE,
-    label = "This phone",
-    family = "phone",
-    permissions = setOf(SourcePermission.READ_STEPS, SourcePermission.READ_DISTANCE),
-)

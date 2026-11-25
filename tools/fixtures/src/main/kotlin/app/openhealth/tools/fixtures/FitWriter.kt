@@ -47,18 +47,23 @@ class FitWriter(
     }
 
     /**
-     * A data message with the compressed-timestamp header: the 5-bit offset replaces the
-     * timestamp field, so the definition must carry field 253 as its first field.
+     * A data message with the compressed-timestamp header: the 5-bit offset in the
+     * header carries the time, which is why such a message is defined **without** field
+     * 253. The body is every field the definition declares, exactly as a normal data
+     * message is, so the record's length on disk is the definition's byte size.
      */
     fun compressedData(localType: Int, timeOffset: Int, values: Map<Int, Any>) {
         val definition = definitions[localType]
             ?: error("local type $localType has no definition")
+        require(definition.fields.none { it.number == TIMESTAMP_FIELD }) {
+            "a compressed-timestamp message takes its time from the header, so local " +
+                "type $localType must be defined without field $TIMESTAMP_FIELD"
+        }
         body.write(
             COMPRESSED_FLAG or (localType shl COMPRESSED_LOCAL_SHIFT) or
                 (timeOffset and COMPRESSED_OFFSET_MASK),
         )
         definition.fields.forEach { field ->
-            if (field.number == TIMESTAMP_FIELD) return@forEach
             writeValue(field, values[field.number])
         }
     }
@@ -253,6 +258,11 @@ class FitWriter(
             FieldSpecNumbers.RECORD_DISTANCE to BASE_UINT32,
         )
 
+        /** The same record without field 253, for compressed-timestamp messages. */
+        val RECORD_TIMED_BY_HEADER = RECORD.filterNot {
+            it.first == FieldSpecNumbers.RECORD_TIMESTAMP
+        }
+
         val MONITORING = listOf(
             FieldSpecNumbers.MONITORING_TIMESTAMP to BASE_UINT32,
             FieldSpecNumbers.MONITORING_LOCAL_TIMESTAMP to BASE_UINT32,
@@ -377,7 +387,9 @@ object FitFixtures {
                     WALK_MINUTES * SECONDS_PER_MINUTE * MILLIS_PER_SECOND,
                 FitWriter.FieldSpecNumbers.SESSION_TOTAL_DISTANCE to
                     WALK_MINUTES * DISTANCE_PER_MINUTE_CENTIMETRES,
-                FitWriter.FieldSpecNumbers.SESSION_TOTAL_CYCLES to WALK_STEPS * STEPS_PER_CYCLE,
+                // `session.total_cycles` is `total_strides` for a walk, and a stride
+                // is two steps, so the file stores half the step count.
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_CYCLES to WALK_STEPS / STEPS_PER_CYCLE,
                 FitWriter.FieldSpecNumbers.SESSION_TOTAL_CALORIES to WALK_CALORIES,
                 FitWriter.FieldSpecNumbers.SESSION_AVG_HR to WALK_AVG_HEART_RATE,
                 FitWriter.FieldSpecNumbers.SESSION_MAX_HR to WALK_MAX_HEART_RATE,
@@ -387,9 +399,13 @@ object FitFixtures {
     }
 
     /**
-     * A daily monitoring file: 48 quarter-hour buckets from 08:00, each 500 cycles while
-     * walking (250 steps), plus a sleeping stretch with no steps. The expected total is
-     * derived from these constants by the test, not copy-pasted.
+     * A daily monitoring file: quarter-hour buckets from 08:00, each carrying one
+     * bucket's worth of steps while walking, plus a sleeping stretch with no steps.
+     *
+     * `monitoring.cycles` is written as the published profile stores it: scale 2 takes
+     * the raw field to cycles and a walking cycle is two steps, so the raw value is the
+     * step count. The expected total is derived from these constants by the test, not
+     * copy-pasted.
      */
     fun dailyMonitoring(): ByteArray {
         val writer = FitWriter()
@@ -427,7 +443,7 @@ object FitFixtures {
                         ACTIVITY_TYPE_SLEEP
                     },
                     FitWriter.FieldSpecNumbers.MONITORING_CYCLES to if (walking) {
-                        CYCLES_PER_BUCKET
+                        MONITORING_RAW_CYCLES_PER_BUCKET
                     } else {
                         0
                     },
@@ -461,27 +477,52 @@ object FitFixtures {
         return writer.toByteArray()
     }
 
-    /** Two heart-rate records, the second sent with a compressed timestamp. */
+    /**
+     * Three heart-rate records: a full one, one with a compressed-timestamp header, and
+     * a full one after it.
+     *
+     * The base timestamp deliberately does **not** sit on a 32-second boundary, so the
+     * 5-bit offset has to be expanded against the running timestamp rather than added
+     * to it, and the trailing record only lands in the right place if the compressed
+     * record's length was read correctly.
+     */
     fun compressedTimestamp(): ByteArray {
         val writer = FitWriter()
+        val base = DAY_START_SECONDS + COMPRESSED_BASE_OFFSET_SECONDS
         writer.define(
             localType = 0,
             globalNumber = FitWriter.Numbers.GLOBAL_RECORD,
             fields = FitWriter.Fields.specs(FitWriter.Fields.RECORD),
         )
+        // A compressed-timestamp message takes its time from the header, so its
+        // definition carries no field 253 (that is the point of compressing it).
+        writer.define(
+            localType = 1,
+            globalNumber = FitWriter.Numbers.GLOBAL_RECORD,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.RECORD_TIMED_BY_HEADER),
+        )
         writer.data(
             0,
             mapOf(
-                FitWriter.FieldSpecNumbers.RECORD_TIMESTAMP to DAY_START_SECONDS,
+                FitWriter.FieldSpecNumbers.RECORD_TIMESTAMP to base,
                 FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to COMPRESSED_FIRST_HEART_RATE,
                 FitWriter.FieldSpecNumbers.RECORD_DISTANCE to 0,
             ),
         )
         writer.compressedData(
-            localType = 0,
+            localType = 1,
             timeOffset = COMPRESSED_OFFSET_SECONDS,
             values = mapOf(
                 FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to COMPRESSED_SECOND_HEART_RATE,
+                FitWriter.FieldSpecNumbers.RECORD_DISTANCE to 0,
+            ),
+        )
+        writer.data(
+            0,
+            mapOf(
+                FitWriter.FieldSpecNumbers.RECORD_TIMESTAMP to
+                    base + COMPRESSED_TRAILING_OFFSET_SECONDS,
+                FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to COMPRESSED_THIRD_HEART_RATE,
                 FitWriter.FieldSpecNumbers.RECORD_DISTANCE to 0,
             ),
         )
@@ -507,21 +548,46 @@ object FitFixtures {
     const val DISTANCE_PER_MINUTE_CENTIMETRES = 5300L
     const val SECONDS_PER_MINUTE = 60L
     const val MILLIS_PER_SECOND = 1000L
+
+    /** One cycle (one stride) is two steps, in both messages that report cycles. */
     const val STEPS_PER_CYCLE = 2L
 
     const val MONITORING_BUCKETS = 96
     const val MONITORING_BUCKET_SECONDS = 15 * 60L
     const val AWAKE_FROM_BUCKET = 0
     const val ASLEEP_FROM_BUCKET = 72
-    const val CYCLES_PER_BUCKET = 500L
     const val CALORIES_PER_BUCKET = 21L
 
-    /** 72 awake buckets × 500 cycles ÷ 2 = 18,000 steps in the fixture. */
-    const val EXPECTED_MONITORING_STEPS = (ASLEEP_FROM_BUCKET * CYCLES_PER_BUCKET) / STEPS_PER_CYCLE
+    /** Steps in one waking bucket. */
+    const val STEPS_PER_BUCKET = 250L
+
+    /**
+     * What `monitoring.cycles` holds on disk for [STEPS_PER_BUCKET]: scale 2 divides the
+     * raw field into cycles and a walking cycle is two steps, so the raw field is the
+     * step count itself (the profile's unit for `cycles_16` says as much).
+     */
+    const val MONITORING_RAW_CYCLES_PER_BUCKET = STEPS_PER_BUCKET
+
+    /** 72 waking buckets × 250 steps = 18,000 steps in the fixture. */
+    const val EXPECTED_MONITORING_STEPS = ASLEEP_FROM_BUCKET * STEPS_PER_BUCKET
 
     const val BIG_ENDIAN_HEART_RATE = 77
 
     const val COMPRESSED_FIRST_HEART_RATE = 88
     const val COMPRESSED_SECOND_HEART_RATE = 91
+    const val COMPRESSED_THIRD_HEART_RATE = 94
     const val COMPRESSED_OFFSET_SECONDS = 3
+
+    /**
+     * 30 s past a 32-second boundary, so the header's 5-bit offset of 3 wraps: the
+     * expanded time is 5 s after the base, not 3 s. A decoder that simply adds the
+     * offset gets a different answer, which is the point of the fixture.
+     */
+    const val COMPRESSED_BASE_OFFSET_SECONDS = 30L
+
+    /** Where the rollover lands the compressed record, relative to the base. */
+    const val COMPRESSED_EXPANDED_SECONDS = 5L
+
+    /** The trailing full record, which only parses if the compressed one was sized right. */
+    const val COMPRESSED_TRAILING_OFFSET_SECONDS = 60L
 }

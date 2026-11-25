@@ -97,7 +97,8 @@ class DevicesScreenshotTest {
             StepsSourceModel(
                 available = false,
                 tracking = false,
-                needsPermission = false,
+                moduleOff = false,
+                reasonNote = null,
                 todayText = "No step source yet",
                 sourceLine = null,
                 otherSources = emptyList(),
@@ -109,9 +110,10 @@ class DevicesScreenshotTest {
             StepsSourceModel(
                 available = true,
                 tracking = true,
-                needsPermission = false,
+                moduleOff = false,
+                reasonNote = null,
                 todayText = "8,412 steps today",
-                sourceLine = "This phone won today",
+                sourceLine = "Steps today come from This phone",
                 otherSources = listOf("Garmin reported 9,110, kept in your history"),
                 lastReadingText = "Last reading 14:32",
                 canCorrect = true,
@@ -151,6 +153,7 @@ class DevicesScreenshotTest {
                 PairedDeviceModel(
                     id = "1",
                     name = "Polar H10",
+                    kind = DeviceKindName.HEART_RATE,
                     kindLabel = "Heart-rate strap",
                     statusText = "Heart rate · Connected",
                     lastSeenText = "Seen 09:20",
@@ -160,6 +163,7 @@ class DevicesScreenshotTest {
                 PairedDeviceModel(
                     id = "2",
                     name = "Scale",
+                    kind = DeviceKindName.SCALE,
                     kindLabel = "Scale",
                     statusText = "Weight and body composition · Not connected",
                     lastSeenText = null,

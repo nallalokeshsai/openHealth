@@ -276,10 +276,19 @@ class ActivityExitTest {
                 endEpochMillis = null,
                 metadata = mapOf("uid" to "hc-weight-1"),
             ),
+            // A watch's own reading: it must land in the garmin family, not the bus's.
+            HealthReading(
+                type = HealthBusTypes.STEPS,
+                value = 500.0,
+                unit = "{steps}",
+                startEpochMillis = start.plus(2.hours).toEpochMilliseconds(),
+                endEpochMillis = start.plus(3.hours).toEpochMilliseconds(),
+                metadata = mapOf("uid" to "hc-steps-garmin", "device" to "vívoactive 5"),
+            ),
         )
         val first = runBlocking { container.activity.syncHealthConnect(backfill = false) }
         assertTrue(first.ok, "sync error ${first.error}")
-        assertEquals(2, first.imported)
+        assertEquals(3, first.imported)
 
         val stored = container.store.observations.forDayAndType(day, ObservationType.STEPS)
             .filter {
@@ -287,6 +296,13 @@ class ActivityExitTest {
                     app.openhealth.android.activity.ActivityPresenter.HEALTH_CONNECT_SOURCE
             }
         assertEquals(1_200.0, stored.single().value.value, 1e-6)
+        // pr.md §6.18: the watch's readings join the Garmin family even via the bus.
+        val garmin = container.store.observations.forDayAndType(day, ObservationType.STEPS)
+            .filter {
+                it.provenance.sourceId ==
+                    app.openhealth.android.activity.ActivityPresenter.GARMIN_HC_SOURCE
+            }
+        assertEquals(500.0, garmin.single().value.value, 1e-6)
 
         // The same readings on a second sync are duplicates, not a second copy.
         val second = runBlocking { container.activity.syncHealthConnect(backfill = false) }

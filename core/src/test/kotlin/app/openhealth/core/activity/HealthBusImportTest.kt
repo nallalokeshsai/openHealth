@@ -11,6 +11,7 @@ import app.openhealth.core.source.SourceRegistry
 import app.openhealth.core.units.UcumUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
@@ -98,7 +99,7 @@ class HealthBusImportTest {
     }
 
     @Test
-    fun aSleepStageStaysASleepDurationWithItsStage() {
+    fun aSleepStageKeepsItsOwnTypeRatherThanTheNightsTotal() {
         val observation = HealthBusImporter.toObservations(
             listOf(
                 HealthReading(
@@ -114,9 +115,58 @@ class HealthBusImportTest {
             ),
             context(),
         ).observations.single()
-        assertEquals(ObservationType.SLEEP_DURATION, observation.type)
+        assertEquals(ObservationType.SLEEP_REM, observation.type)
         assertEquals(5_400.0, observation.value.convertTo(UcumUnit.SECOND).value, 1e-9)
     }
+
+    /**
+     * A night's stages, its asleep total and its time in bed all describe the same
+     * minutes. The sleep rollup sums what it is given, so each has to land under its
+     * own observation type or a staged night is counted about twice (`pr.md` §7.6).
+     */
+    @Test
+    fun aStagedNightDoesNotSumItsTotalWithItsParts() {
+        val night = listOf(
+            sleepReading(HealthBusTypes.SLEEP, 25_200.0, 0, 480),
+            sleepReading(HealthBusTypes.SLEEP_DEEP, 5_400.0, 0, 90),
+            sleepReading(HealthBusTypes.SLEEP_LIGHT, 12_600.0, 90, 300),
+            sleepReading(HealthBusTypes.SLEEP_REM, 7_200.0, 300, 420),
+            sleepReading(HealthBusTypes.SLEEP_AWAKE, 3_600.0, 420, 480),
+            sleepReading(HealthBusTypes.SLEEP_IN_BED, 28_800.0, 0, 480),
+        )
+        val observations = HealthBusImporter.toObservations(night, context()).observations
+
+        assertEquals(night.size, observations.size)
+        assertEquals(
+            night.size,
+            observations.map { it.type }.distinct().size,
+            "every sleep key keeps a type of its own",
+        )
+        val durations = observations.filter { it.type == ObservationType.SLEEP_DURATION }
+        assertEquals(1, durations.size)
+        assertEquals(25_200.0, durations.single().value.convertTo(UcumUnit.SECOND).value, 1e-9)
+        assertEquals(
+            ObservationType.SLEEP_IN_BED,
+            observations.single { it.value.convertTo(UcumUnit.SECOND).value == 28_800.0 }.type,
+        )
+    }
+
+    private fun sleepReading(
+        type: String,
+        seconds: Double,
+        fromMinute: Long,
+        toMinute: Long,
+    ): HealthReading = HealthReading(
+        type = type,
+        value = seconds,
+        unit = "s",
+        startEpochMillis = start.plus(
+            kotlin.time.Duration.parse("${fromMinute}m"),
+        ).toEpochMilliseconds(),
+        endEpochMillis = start.plus(
+            kotlin.time.Duration.parse("${toMinute}m"),
+        ).toEpochMilliseconds(),
+    )
 
     @Test
     fun anExerciseSessionBecomesActiveMinutes() {
@@ -197,6 +247,16 @@ class HealthBusImportTest {
             startEpochMillis = Instant.parse(at).toEpochMilliseconds(),
             endEpochMillis = null,
         )
+
+    @Test
+    fun aGarminDeviceNameMarksTheReadingAsTheGarminFamily() {
+        assertTrue(GarminDetector.isGarmin("vívoactive 5"))
+        assertTrue(GarminDetector.isGarmin("Garmin Forerunner 265"))
+        assertTrue(GarminDetector.isGarmin("FENIX 7X"))
+        assertFalse(GarminDetector.isGarmin("Pixel Watch 3"))
+        assertFalse(GarminDetector.isGarmin("Withings Body+"))
+        assertFalse(GarminDetector.isGarmin(null))
+    }
 
     @Test
     fun aGarminReadingKeepsItsOwnFamilySoNoDayIsCountedTwice() {

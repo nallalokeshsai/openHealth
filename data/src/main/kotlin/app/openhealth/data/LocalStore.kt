@@ -10,6 +10,7 @@ import app.openhealth.data.repo.NoteRepository
 import app.openhealth.data.repo.NutritionRepository
 import app.openhealth.data.repo.ObservationRepository
 import app.openhealth.data.repo.ProfileRepository
+import app.openhealth.data.repo.RawRecordRepository
 import app.openhealth.data.repo.RollupRepository
 import app.openhealth.data.repo.SettingsRepository
 import app.openhealth.data.repo.SourceRepository
@@ -48,6 +49,7 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
     val devices = DeviceRepository(db, settings, clock)
     val trash = TrashService(db, clock)
     val notes = NoteRepository(db)
+    val raw = RawRecordRepository(db)
     val timeline = TimelineRepository(db, driver)
 
     init {

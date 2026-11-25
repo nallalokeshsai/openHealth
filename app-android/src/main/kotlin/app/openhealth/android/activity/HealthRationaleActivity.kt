@@ -32,8 +32,8 @@ import app.openhealth.ui.theme.OhTheme
  */
 class HealthRationaleActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             OhTheme(dark = isSystemInDarkThemeCompat()) {
                 Column(

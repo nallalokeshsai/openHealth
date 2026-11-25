@@ -1726,6 +1726,40 @@ formula and its inputs (`pr.md` §6.4).
 integrations, Data and backups, Appearance, Privacy and security, About. A
 destructive action is its own group at the bottom, 22 dp away, in `red-ink`.
 
+**Devices and integrations** (pushed from the Settings row, not a root). One scrolling
+page in the Settings surface language: a page header with a back chevron, then five
+groups separated by 22 dp, each introduced by a 13/600 `label-2` title that is a
+heading to the screen reader.
+
+1. **Steps.** A card, not an inset group, because one number leads it: the title row
+   carries an On/Off word in `label-2`, the day's total is the `display` role, and under
+   it the winning source sits on the single line of accent this page is allowed
+   (`Counted by …`). Every losing source follows in `label-2`, one 2 dp-spaced line
+   each, with its own figure — a loser is named and kept, never summed in and never
+   hidden (`pr.md` §7.6). The last reading's time closes the block. Two small buttons
+   10 dp below: Start/Stop counting (secondary) and Correct today (ghost). A footnote
+   says what the permission is for, or that the phone has no counter.
+2. **Health Connect.** An inset group: a status row (granted of total, or off, or not
+   on this phone), a last-sync row, one row per data type with a granted tick, then
+   Connect and Import my history. A footnote names what Garmin publishes to the bus and
+   what stays in Garmin, and says the app only ever reads.
+3. **Garmin files.** An inset group with the last import, its summary line, where the
+   steps in that file came from (a day's monitoring or the workout) and an Import a FIT
+   file row that opens the system picker.
+4. **Bluetooth.** An inset group: Scan (secondary, disabled with a reason in `label`
+   when the radio is off), the paired devices with what each provides and whether the
+   link is idle, connecting, reconnecting or connected, then anything the scan found.
+5. **Which source wins.** An inset group of the sources that report the type, in
+   priority order: a rank number in a 12 dp leading slot, the source's name, a plain
+   human description beneath it (never an internal family key), and two 44 dp chevron
+   buttons that move the row up or down. Moving a row rewrites the order and rebuilds
+   the affected days, so the Steps card above re-resolves in place.
+
+Correct today is a modal sheet with a number field, a Save and a quiet "Leave today out"
+that excludes the day without deleting it. No colour, type role, spacing value,
+component or icon beyond Appendix A appears on this page; the accent is spent once, on
+the winning source.
+
 **Global: quick add.** Opens from the top-bar plus (§4.4). A 3 × 2 grid of 84 dp tiles
 (`surface`, radius 14, 21 dp accent glyph over a 13/500 label), then "Recent" as
 46 dp rows with the source line, and a "Backdate" row at the bottom. A recent

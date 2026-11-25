@@ -146,7 +146,9 @@ object FitImporter {
         val sport = message.whole(FitGlobal.Session.SPORT)
         val cycles = message.whole(FitGlobal.Session.TOTAL_CYCLES)
         val steps = if (cycles != null && FitActivityTypes.sportCountsSteps(sport)) {
-            (cycles / FitActivityTypes.STEPS_PER_CYCLE).roundToLong()
+            // `session.total_cycles` carries no scale and is `total_strides` for a
+            // walking or running sport, so a stride is two steps.
+            (cycles * FitActivityTypes.STEPS_PER_CYCLE).roundToLong()
         } else {
             null
         }
@@ -182,38 +184,64 @@ object FitImporter {
 
     /**
      * A monitoring file reports a delta per message: `cycles` (or the compressed
-     * `cycles_16`) counts half-steps and belongs to the interval since the previous
-     * monitoring message. Sampling `active_time` is not needed for steps, so its absence
-     * does not lose a bucket.
+     * `cycles_16`) belongs to the interval since the previous monitoring message, and
+     * its raw value is the interval's step count ([FitActivityTypes.STEPS_PER_CYCLE]).
+     * Sampling `active_time` is not needed for steps, so its absence does not lose a
+     * bucket.
      */
     private fun monitoringBuckets(file: FitFile, zone: TimeZone): List<FitStepBucket> {
         var previous: Instant? = null
+        var previousFitSeconds: Long? = null
         val buckets = mutableListOf<FitStepBucket>()
         file.messagesOf(FitGlobal.MONITORING).forEach { message ->
-            val end = monitoringTimestamp(message, zone) ?: return@forEach
+            val end = monitoringTimestamp(message, zone, previousFitSeconds) ?: return@forEach
             val activityType = message.whole(FitGlobal.Monitoring.ACTIVITY_TYPE)
             val cycles = message.whole(FitGlobal.Monitoring.CYCLES)
                 ?: message.whole(FitGlobal.Monitoring.CYCLES_16)
             val start = previous ?: (end - DEFAULT_BUCKET_MINUTES)
             previous = end
+            previousFitSeconds = message.timestampSeconds ?: previousFitSeconds
             if (cycles == null || !FitActivityTypes.countsSteps(activityType)) return@forEach
-            val steps = (cycles / FitActivityTypes.STEPS_PER_CYCLE).roundToLong()
+            // Scale 2 takes the raw field to cycles; two steps to the cycle takes it
+            // back, so the raw value is the step count. Dividing here would report
+            // half the day.
+            val steps = (
+                cycles / FitActivityTypes.MONITORING_CYCLES_SCALE *
+                    FitActivityTypes.STEPS_PER_CYCLE
+                ).roundToLong()
             if (steps <= 0) return@forEach
             buckets += FitStepBucket(start, end, steps)
         }
         return buckets
     }
 
-    /** `timestamp`, else the local timestamp, else the 16-bit compressed one. */
-    private fun monitoringTimestamp(message: FitMessage, zone: TimeZone): Instant? =
-        message.timestampSeconds
-            ?.let { Instant.fromEpochSeconds(FitTime.unixSeconds(it)) }
-            ?: message.whole(FitGlobal.Monitoring.LOCAL_TIMESTAMP)
-                ?.let { FitTime.localInstant(it, zone) }
-            ?: message.whole(FitGlobal.Monitoring.TIMESTAMP_16)
-                ?.let { Instant.fromEpochSeconds(FitTime.unixSeconds(it and TIMESTAMP_16_MASK)) }
+    /**
+     * `timestamp`, else the local timestamp, else the 16-bit compressed one. The 16-bit
+     * field is a truncated timestamp, not an absolute one: it is resolved against the
+     * previous full timestamp the same way a compressed header is (32-second rollover),
+     * so it can never be read as a date in 1989.
+     */
+    @Suppress("ReturnCount")
+    private fun monitoringTimestamp(
+        message: FitMessage,
+        zone: TimeZone,
+        previousFitSeconds: Long?,
+    ): Instant? {
+        message.timestampSeconds?.let { return Instant.fromEpochSeconds(FitTime.unixSeconds(it)) }
+        message.whole(FitGlobal.Monitoring.LOCAL_TIMESTAMP)?.let {
+            return FitTime.localInstant(it, zone)
+        }
+        val truncated = message.whole(FitGlobal.Monitoring.TIMESTAMP_16) ?: return null
+        val base = previousFitSeconds ?: return null
+        var candidate = (base and TIMESTAMP_16_MASK.inv()) or
+            (truncated and TIMESTAMP_16_MASK)
+        if (candidate < base - TIMESTAMP_16_HALF) candidate += TIMESTAMP_16_ROLLOVER
+        return Instant.fromEpochSeconds(FitTime.unixSeconds(candidate))
+    }
 
     private const val TIMESTAMP_16_MASK = 0xFFFFL
+    private const val TIMESTAMP_16_ROLLOVER = 0x10000L
+    private const val TIMESTAMP_16_HALF = 0x8000L
 }
 
 /** Where an import's values came from, so provenance is built the same way as elsewhere. */

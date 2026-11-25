@@ -109,3 +109,30 @@ Every reading still names a real `source` row, so provenance is unchanged.
   imports if the owner asks.
 - No route, GPS or imported-activity screen: B11 owns those. B8 stores the activity's
   duration, distance, calories and heart rate so B11 can render it.
+
+## 8. Amendments from the verification cycle
+
+- **FIT steps.** `monitoring.cycles` has scale 2 and one cycle is two steps, so the raw
+  field is the day's step count; `session.total_cycles` is strides, so steps are cycles × 2.
+  The first implementation divided both by two and halved every import; the fixtures now
+  assert their on-disk raw values.
+- **Sleep types.** Each Health Connect sleep key has its own observation type. Collapsing
+  all six into `SLEEP_DURATION` summed a night's stages with its total.
+- **Blood pressure** fields are IEEE-11073 SFLOATs, not integers; the decoder converts them.
+  A scale's body-composition characteristic (0x2A9C) is subscribed alongside its weight.
+- **The Garmin family** is decided per reading from the writing device's name. Health
+  Connect does not name the app, so a reading whose device names a Garmin model is imported
+  under `garmin-hc` (kind Garmin, family `garmin`) and collapses with a FIT import; any other
+  device stays with the platform bus rather than being guessed into the family.
+- **History is a separate grant.** `READ_HEALTH_DATA_HISTORY` is requested only by "Import
+  my history", and a refusal is reported instead of importing 30 days and calling it done.
+- **Layer 1 covers the sensors.** The step tracker and the BLE manager write a raw record per
+  batch/measurement and reference it from the observation's provenance.
+- **The module gates the service.** Turning Steps off stops the service and hides the
+  figures; the data stays.
+- **No device address in ids.** A source id carries an 8-hex tag derived from the address;
+  the address itself lives only in the paired-device registry. That registry and the Health
+  Connect consent are settings, so they do travel in an encrypted export the person makes;
+  a restore on another phone refreshes the granted set from the platform.
+- **A day nobody covers is `INCOMPLETE_DAY`,** not a gap fallback, and both reasons are shown
+  on the Steps card.

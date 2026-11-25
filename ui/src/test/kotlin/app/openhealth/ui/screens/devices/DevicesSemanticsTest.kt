@@ -42,9 +42,10 @@ class DevicesSemanticsTest {
         steps = StepsSourceModel(
             available = true,
             tracking = true,
-            needsPermission = false,
+            moduleOff = false,
+            reasonNote = null,
             todayText = "8,412 steps today",
-            sourceLine = "This phone won today",
+            sourceLine = "Steps today come from This phone",
             otherSources = listOf("Garmin reported 9,110, kept in your history"),
             lastReadingText = "Last reading 14:32",
             canCorrect = true,
@@ -128,7 +129,7 @@ class DevicesSemanticsTest {
         compose.onAllNodesWithText("Health Connect").fetchSemanticsNodes().isNotEmpty()
         compose.onAllNodesWithText("Garmin files").fetchSemanticsNodes().isNotEmpty()
         compose.onAllNodesWithText("Bluetooth devices").fetchSemanticsNodes().isNotEmpty()
-        compose.onAllNodesWithText("Which source wins").fetchSemanticsNodes().isNotEmpty()
+        compose.onAllNodesWithText("Which source to use").fetchSemanticsNodes().isNotEmpty()
         assertTrue(
             compose.onAllNodesWithText(
                 "Devices and integrations",
@@ -140,7 +141,7 @@ class DevicesSemanticsTest {
     fun theStepsCardShowsTheWinnerAndTheLoser() {
         screen()
         compose.onNodeWithText("8,412 steps today").assertIsDisplayed()
-        compose.onNodeWithText("This phone won today").assertIsDisplayed()
+        compose.onNodeWithText("Steps today come from This phone").assertIsDisplayed()
         compose.onNodeWithText("Garmin reported 9,110, kept in your history").assertIsDisplayed()
     }
 

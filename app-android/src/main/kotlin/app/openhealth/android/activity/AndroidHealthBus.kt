@@ -230,7 +230,16 @@ class AndroidHealthBus(private val context: Context) : HealthBus {
         ).records.flatMap(map)
     }.getOrDefault(emptyList())
 
+    /**
+     * A staged night is read once per key, and each key keeps its own type: the night's
+     * duration is `SLEEP`, a stage is its own type, and time in bed is only reported when
+     * the platform gave stages (a summary-only night is one duration, not a duration and
+     * a bed time that are the same number). Nothing is emitted twice.
+     */
     private fun sleepReadings(requested: String, record: SleepSessionRecord): List<HealthReading> {
+        val totalSeconds =
+            (record.endTime.toEpochMilli() - record.startTime.toEpochMilli()) /
+                MILLIS_PER_SECOND.toDouble()
         val stages = record.stages.mapNotNull { stage ->
             val key = when (stage.stage) {
                 SleepSessionRecord.STAGE_TYPE_DEEP -> HealthBusTypes.SLEEP_DEEP
@@ -250,20 +259,17 @@ class AndroidHealthBus(private val context: Context) : HealthBus {
                     mapOf("stage" to key),
             )
         }
-        // A staged night is reported as its stages; a summary-only night as one in-bed
-        // reading. Emitting both would sum a total and its parts (pr.md §7.6).
-        val inBed = HealthReading(
-            type = HealthBusTypes.SLEEP_IN_BED,
-            value = (record.endTime.toEpochMilli() - record.startTime.toEpochMilli()) /
-                MILLIS_PER_SECOND.toDouble(),
+        val total = HealthReading(
+            type = requested,
+            value = totalSeconds,
             unit = "s",
             startEpochMillis = record.startTime.toEpochMilli(),
             endEpochMillis = record.endTime.toEpochMilli(),
-            metadata = metadata(record, group = record.metadata.id) + mapOf("stage" to "in_bed"),
+            metadata = metadata(record, group = record.metadata.id) + mapOf("stage" to "total"),
         )
         return when (requested) {
-            HealthBusTypes.SLEEP -> if (stages.isEmpty()) listOf(inBed) else stages
-            HealthBusTypes.SLEEP_IN_BED -> listOf(inBed)
+            HealthBusTypes.SLEEP -> listOf(total)
+            HealthBusTypes.SLEEP_IN_BED -> if (stages.isNotEmpty()) listOf(total) else emptyList()
             else -> stages.filter { it.type == requested }
         }
     }
@@ -304,6 +310,14 @@ class AndroidHealthBus(private val context: Context) : HealthBus {
             .readKeys
             .mapNotNull(::permissionFor)
             .toSet()
+
+        /**
+         * The same set plus the history grant. The platform limits a fresh grant to the
+         * 30 days before it, so "Import my history" asks for the extra permission in its
+         * own request: a day-one install is never asked for a year it is not using.
+         */
+        fun readPermissionsWithHistory(): Set<String> =
+            readPermissions() + HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 
         /** The read permission for one bus key, for the rationale screen. */
         fun permissionFor(key: String): String? = when (key) {

@@ -1,5 +1,7 @@
 package app.openhealth.core.activity
 
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -37,11 +39,26 @@ object GattServices {
 }
 
 /** What a device is, decided from the services it advertises. */
-enum class DeviceKind(val serviceUuid: String, val measurementUuid: String) {
-    HEART_RATE(GattServices.HEART_RATE, GattServices.HEART_RATE_MEASUREMENT),
-    SCALE(GattServices.WEIGHT_SCALE, GattServices.WEIGHT_MEASUREMENT),
-    BLOOD_PRESSURE(GattServices.BLOOD_PRESSURE, GattServices.BLOOD_PRESSURE_MEASUREMENT),
+enum class DeviceKind(val serviceUuid: String, val measurementUuids: List<String>) {
+    HEART_RATE(GattServices.HEART_RATE, listOf(GattServices.HEART_RATE_MEASUREMENT)),
+
+    /**
+     * A scale indicates its weight on 0x2A9D and, when it measures impedance, its
+     * composition on 0x2A9C. Both are subscribed: a scale that only ever reported the
+     * first would leave body fat behind on a device that sends it.
+     */
+    SCALE(
+        GattServices.WEIGHT_SCALE,
+        listOf(GattServices.WEIGHT_MEASUREMENT, GattServices.BODY_COMPOSITION_MEASUREMENT),
+    ),
+    BLOOD_PRESSURE(
+        GattServices.BLOOD_PRESSURE,
+        listOf(GattServices.BLOOD_PRESSURE_MEASUREMENT),
+    ),
     ;
+
+    /** The characteristic a device of this kind always has. */
+    val measurementUuid: String get() = measurementUuids.first()
 
     companion object {
         /** The first known service wins; a strap that also exposes battery is a strap. */
@@ -122,7 +139,26 @@ object GattCodec {
     private const val HEIGHT_RESOLUTION_METRES = 0.01
     private const val KILOJOULES_PER_KILOCALORIE = 4.184
     private const val KILOPASCAL_TO_MMHG = 7.500615
-    private const val KPA_DECIMALS = 10.0
+
+    /**
+     * Decodes whichever characteristic the packet arrived on. The Android side only
+     * moves bytes, so the choice of decoder is made here, by characteristic, rather
+     * than by what kind of device is attached: a scale sends its weight on 0x2A9D and
+     * its composition on 0x2A9C, and the two layouts are not interchangeable.
+     *
+     * An unknown characteristic returns null and is ignored, never guessed at.
+     */
+    fun decode(
+        characteristicUuid: String,
+        bytes: ByteArray,
+        zone: TimeZone = TimeZone.UTC,
+    ): GattMeasurement? = when (normaliseUuid(characteristicUuid)) {
+        GattServices.HEART_RATE_MEASUREMENT -> decodeHeartRate(bytes)
+        GattServices.WEIGHT_MEASUREMENT -> decodeWeight(bytes, zone)
+        GattServices.BODY_COMPOSITION_MEASUREMENT -> decodeBodyComposition(bytes, zone)
+        GattServices.BLOOD_PRESSURE_MEASUREMENT -> decodeBloodPressure(bytes, zone)
+        else -> null
+    }
 
     fun decodeHeartRate(bytes: ByteArray): GattMeasurement.HeartRate {
         if (bytes.isEmpty()) throw GattDecodeException("empty heart-rate packet")
@@ -271,17 +307,24 @@ object GattCodec {
         }
         val flags = readUInt8(bytes, 0)
         val inKilopascals = flags and BP_FLAG_KILOPASCAL != 0
-        fun pressure(raw: Int): Double = if (inKilopascals) {
-            raw / KPA_DECIMALS * KILOPASCAL_TO_MMHG
-        } else {
-            raw.toDouble()
+
+        // Systolic, diastolic and the mean arterial pressure are IEEE-11073 16-bit
+        // SFLOATs, not plain integers: the top nibble is a base-10 exponent. A cuff
+        // that reports 120.5 mmHg, or any value in kPa, sets that exponent, and reading
+        // the word as a uint16 then turns 120.5 into 62,645.
+        fun pressure(at: Int, name: String): Double {
+            val value = readSFloat(bytes, at)
+            if (!value.isFinite()) {
+                throw GattDecodeException("the cuff reported no $name pressure")
+            }
+            return if (inKilopascals) value * KILOPASCAL_TO_MMHG else value
         }
         var index = 1
-        val systolic = pressure(readUInt16(bytes, index))
+        val systolic = pressure(index, "systolic")
         index += 2
-        val diastolic = pressure(readUInt16(bytes, index))
+        val diastolic = pressure(index, "diastolic")
         index += 2
-        val mean = pressure(readUInt16(bytes, index))
+        val mean = pressure(index, "mean arterial")
         index += 2
         var at: Instant? = null
         if (flags and BP_FLAG_TIMESTAMP != 0) {
@@ -290,7 +333,11 @@ object GattCodec {
         }
         var pulse: Int? = null
         if (flags and BP_FLAG_PULSE != 0 && index + 1 < bytes.size) {
-            pulse = readUInt16(bytes, index).takeIf { it != 0 && it != UINT16_UNKNOWN }
+            // The pulse rate is an SFLOAT too, and it is optional, so a special value
+            // means "the cuff did not measure it" rather than a reading of zero.
+            pulse = readSFloat(bytes, index)
+                .takeIf { it.isFinite() && it > 0 }
+                ?.roundToInt()
             index += 2
         }
         return GattMeasurement.BloodPressure(systolic, diastolic, mean, pulse, at)
@@ -338,8 +385,61 @@ object GattCodec {
         return low or (high shl BYTE_SHIFT)
     }
 
+    /**
+     * The IEEE-11073 16-bit SFLOAT the medical GATT profiles use for a measured value:
+     * a 4-bit signed base-10 exponent over a 12-bit signed mantissa, so the value is
+     * `mantissa x 10^exponent`. The reserved mantissas (NaN, NRes, the two infinities
+     * and the reserved pattern) say the device has no value, and come back as a
+     * non-finite double so the caller decides what that means for a mandatory field and
+     * for an optional one.
+     *
+     * Reading the word as a plain `uint16` only agrees with this when the exponent is
+     * zero, which is why a cuff reporting tenths, or reporting in kPa, would otherwise
+     * come out thousands of units wrong.
+     */
+    fun readSFloat(bytes: ByteArray, index: Int): Double {
+        val raw = readUInt16(bytes, index)
+        val rawMantissa = raw and SFLOAT_MANTISSA_MASK
+        val reserved = SFLOAT_RESERVED_MANTISSAS[rawMantissa]
+        if (reserved != null) return reserved
+        val mantissa = if (rawMantissa >= SFLOAT_MANTISSA_SIGN) {
+            rawMantissa - SFLOAT_MANTISSA_RANGE
+        } else {
+            rawMantissa
+        }
+        val rawExponent = (raw shr SFLOAT_EXPONENT_SHIFT) and SFLOAT_EXPONENT_MASK
+        val exponent = if (rawExponent >= SFLOAT_EXPONENT_SIGN) {
+            rawExponent - SFLOAT_EXPONENT_RANGE
+        } else {
+            rawExponent
+        }
+        return mantissa * TEN.pow(exponent)
+    }
+
+    /** The mantissas the profile reserves; none of them is a measured value. */
+    private val SFLOAT_RESERVED_MANTISSAS: Map<Int, Double> = mapOf(
+        SFLOAT_NAN to Double.NaN,
+        SFLOAT_NRES to Double.NaN,
+        SFLOAT_RESERVED to Double.NaN,
+        SFLOAT_POSITIVE_INFINITY to Double.POSITIVE_INFINITY,
+        SFLOAT_NEGATIVE_INFINITY to Double.NEGATIVE_INFINITY,
+    )
+
     private const val DATE_TIME_BYTES = 7
     private const val BYTE_SHIFT = 8
+    private const val TEN = 10.0
+    private const val SFLOAT_MANTISSA_MASK = 0x0FFF
+    private const val SFLOAT_MANTISSA_SIGN = 0x0800
+    private const val SFLOAT_MANTISSA_RANGE = 0x1000
+    private const val SFLOAT_EXPONENT_SHIFT = 12
+    private const val SFLOAT_EXPONENT_MASK = 0x0F
+    private const val SFLOAT_EXPONENT_SIGN = 0x08
+    private const val SFLOAT_EXPONENT_RANGE = 0x10
+    private const val SFLOAT_NAN = 0x07FF
+    private const val SFLOAT_NRES = 0x0800
+    private const val SFLOAT_POSITIVE_INFINITY = 0x07FE
+    private const val SFLOAT_NEGATIVE_INFINITY = 0x0802
+    private const val SFLOAT_RESERVED = 0x0801
     private const val MIN_MONTH = 1
     private const val MAX_MONTH = 12
     private const val MIN_DAY = 1
