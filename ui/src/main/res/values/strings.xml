@@ -414,6 +414,7 @@
     <string name="devices_live_heart_rate">Heart rate</string>
     <string name="devices_forget">Forget %1$s</string>
     <string name="devices_scan">Scan for devices</string>
+    <string name="devices_bluetooth_off">Bluetooth is off. Turn it on in Android settings to pair a strap, a scale or a cuff.</string>
     <string name="devices_scan_stop">Stop scanning</string>
     <string name="devices_pair">Pair</string>
     <string name="devices_kind_heart_rate">Heart-rate strap</string>
@@ -432,6 +433,13 @@
     <string name="devices_priority_type">Steps priority</string>
     <string name="devices_priority_note">One source wins a day and the others stay in your history. A source with a gap longer than an hour hands the whole day to the next one; two sources are never added together.</string>
     <string name="devices_priority_manual">You</string>
+    <string name="devices_priority_phone">This phone</string>
+    <string name="devices_priority_fitbit">Fitbit</string>
+    <string name="devices_priority_file">An imported file</string>
+    <plurals name="devices_summary_bluetooth">
+        <item quantity="one">%1$d Bluetooth device</item>
+        <item quantity="other">%1$d Bluetooth devices</item>
+    </plurals>
     <string name="devices_priority_family">Garmin</string>
     <string name="devices_priority_empty">No source reports steps yet.</string>
     <string name="devices_move_up">Move %1$s up</string>

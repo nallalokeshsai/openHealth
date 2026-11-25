@@ -260,7 +260,43 @@ class ActivityPresenter(
             found = found,
             liveHeartRate = ble.heartRate.value,
             note = context.getString(UiR.string.devices_bluetooth_note),
+            offNote = if (ble.isAvailable()) {
+                null
+            } else {
+                context.getString(UiR.string.devices_bluetooth_off)
+            },
         )
+    }
+
+    /** One line for the Settings row, so it never says "None connected" when a source is. */
+    fun summary(): String {
+        val parts = buildList {
+            if (store.devices.stepTrackingEnabled()) {
+                add(
+                    context.getString(UiR.string.devices_priority_phone),
+                )
+            }
+            if (store.devices.healthConnectEnabled() &&
+                store.devices.healthConnectGranted().isNotEmpty()
+            ) {
+                add(context.getString(UiR.string.devices_health_connect))
+            }
+            if (store.devices.registry().devices.isNotEmpty()) {
+                add(
+                    context.resources.getQuantityString(
+                        UiR.plurals.devices_summary_bluetooth,
+                        store.devices.registry().devices.size,
+                        store.devices.registry().devices.size,
+                    ),
+                )
+            }
+            if (store.devices.syncBook().latest(GARMIN_SOURCE.value) != null) {
+                add(context.getString(UiR.string.devices_garmin))
+            }
+        }
+        return parts.joinToString(" · ").ifEmpty {
+            context.getString(UiR.string.settings_devices_detail)
+        }
     }
 
     private fun priorityModel(): PriorityModel {
@@ -276,7 +312,10 @@ class ActivityPresenter(
                     SourceKind.GARMIN -> context.getString(UiR.string.devices_priority_family)
                     SourceKind.HEALTH_CONNECT ->
                         context.getString(UiR.string.devices_health_connect)
-                    else -> source.family
+                    SourceKind.DEVICE -> context.getString(UiR.string.devices_priority_phone)
+                    SourceKind.FITBIT -> context.getString(UiR.string.devices_priority_fitbit)
+                    SourceKind.CSV -> context.getString(UiR.string.devices_priority_file)
+                    else -> source.device ?: source.label
                 },
                 isFirst = index == 0,
                 isLast = index == order.lastIndex,

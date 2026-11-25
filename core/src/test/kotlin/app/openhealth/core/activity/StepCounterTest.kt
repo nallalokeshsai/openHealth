@@ -15,7 +15,6 @@ import kotlin.time.Instant
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 
@@ -108,19 +107,34 @@ class StepCounterTest {
     }
 
     @Test
-    fun theFirstSampleOfABootIsAttributedToTheDayItIsReadOn() {
-        // Booted three days ago: the count is large, and only today's part is stored.
+    fun aBootFromAnEarlierDayIsOnlyABaselineNotTodaysSteps() {
+        // Booted three days ago: the 42,000 steps cover three days, so attributing them
+        // to today would invent a number the person never walked.
         val now = Instant.parse("2026-11-23T12:00:00Z")
-        val sample = StepCounterSample(42_000, boot.minus(72.hours).toEpochMilliseconds(), now)
-        val update = StepCounter.apply(StepCounterState(), sample, zone)
-        val dayStart = now.toLocalDateTime(zone).date.atStartOfDayIn(zone)
-        assertEquals(dayStart, update.intervals.first().start)
-        assertEquals(now, update.intervals.last().end)
-        assertTrue(update.repaired)
-        assertTrue(
-            update.intervals.sumOf { it.steps } <= 12.hours.inWholeMinutes *
-                StepCounter.MAX_STEPS_PER_MINUTE.toLong(),
+        val oldBoot = now.minus(72.hours).toEpochMilliseconds()
+        val update = StepCounter.apply(
+            StepCounterState(),
+            StepCounterSample(42_000, oldBoot, now),
+            zone,
         )
+        assertTrue(update.intervals.isEmpty())
+        assertEquals(42_000, update.state.lastCount)
+        assertTrue(update.repaired)
+    }
+
+    @Test
+    fun aBootTodayAttributesTheStepsSinceBoot() {
+        // Booted at 09:00 today: the counter is today's steps since then.
+        val booted = Instant.parse("2026-11-23T09:00:00Z")
+        val now = Instant.parse("2026-11-23T12:00:00Z")
+        val update = StepCounter.apply(
+            StepCounterState(),
+            StepCounterSample(3_200, booted.toEpochMilliseconds(), now),
+            zone,
+        )
+        assertEquals(3_200, update.intervals.sumOf { it.steps })
+        assertEquals(booted, update.intervals.first().start)
+        assertEquals(now, update.intervals.last().end)
     }
 
     @Test

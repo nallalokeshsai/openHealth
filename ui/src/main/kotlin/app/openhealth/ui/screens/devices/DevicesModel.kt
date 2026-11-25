@@ -59,6 +59,8 @@ data class BluetoothModel(
     val found: List<FoundDeviceModel>,
     val liveHeartRate: Int?,
     val note: String,
+    /** Shown when the radio is off, so a disabled Scan button has a reason on screen. */
+    val offNote: String? = null,
 )
 
 data class PairedDeviceModel(

@@ -2607,7 +2607,13 @@ class AppViewModel(
     }
 
     private fun refreshDevices() {
-        _state.update { it.copy(devices = activity.model(found = it.foundDevices)) }
+        _state.update { current ->
+            current.copy(
+                devices = activity.model(found = current.foundDevices),
+                // The Settings row names what is connected, so it moves with the page.
+                settings = buildSettings(current.preferences, current.profile),
+            )
+        }
     }
 
     private fun activityRecognitionGranted(): Boolean =
@@ -3013,6 +3019,7 @@ class AppViewModel(
         } ?: true,
         hasRestoreSnapshot = container.hasPreRestoreSnapshot(),
         modules = preferences.modules,
+        devicesDetail = activity.summary(),
         preset = preferences.preset,
         weightNeutral = preferences.weightNeutral,
         displayPolicy = preferences.displayPolicy,

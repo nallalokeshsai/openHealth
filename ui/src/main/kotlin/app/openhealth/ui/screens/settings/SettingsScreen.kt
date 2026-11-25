@@ -146,7 +146,7 @@ fun SettingsScreen(
                 )
                 GroupRow(
                     title = stringResource(R.string.settings_devices),
-                    detail = stringResource(R.string.settings_devices_detail),
+                    detail = state.devicesDetail,
                     icon = OhModuleIcons.integrations,
                     showDivider = true,
                     onClick = onOpenDevices,

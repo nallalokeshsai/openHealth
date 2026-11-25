@@ -112,23 +112,36 @@ object StepCounter {
 
     /**
      * The first reading of a boot. The counter restarted at zero, so its whole value is
-     * steps since boot. Only the part that falls on the day of the reading is kept: an
-     * app that was not running for days cannot know how those steps were spread, and
-     * inventing a spread would be worse than a smaller, honest number.
+     * steps since boot — but only if the boot happened today. A phone that has been on
+     * for three days reports three days of steps, and attributing that to the day the app
+     * was first opened would invent a number the person never walked. So the rule is:
+     *
+     * - boot on the same local day as the reading → the count is today's steps since
+     *   boot, so it is attributed (clipped to the day, reset at the last reading);
+     * - boot on an earlier day → the counter is only a baseline. Nothing is attributed,
+     *   and steps start accruing from this reading.
+     *
+     * This is what makes a restart of the app, or a reboot, safe without ever inventing
+     * the past (`pr.md` §6.6).
      */
+    @Suppress("ReturnCount")
     private fun firstOfBoot(
         state: StepCounterState,
         sample: StepCounterSample,
         zone: TimeZone,
     ): StepCounterUpdate {
         val boot = Instant.fromEpochMilliseconds(sample.bootEpochMillis)
-        // A reset after earlier readings has already counted the part before them; only
-        // the part since the last reading may be attributed again.
-        val from = minOf(maxOf(boot, dayStart(sample.at, zone), state.lastAt ?: boot), sample.at)
+        val dayStart = dayStart(sample.at, zone)
         // The high-water mark never moves back: a sample that arrives with an earlier
         // clock must not let the next one re-cover an interval already counted.
         val lastAt = maxOf(state.lastAt ?: sample.at, sample.at)
         val started = StepCounterState(sample.bootEpochMillis, sample.count, lastAt)
+        if (boot < dayStart) {
+            return StepCounterUpdate(intervals = emptyList(), state = started, repaired = true)
+        }
+        // A reset after earlier readings has already counted the part before them; only
+        // the part since the last reading may be attributed again.
+        val from = minOf(maxOf(boot, dayStart, state.lastAt ?: boot), sample.at)
         if (from >= sample.at) {
             return StepCounterUpdate(intervals = emptyList(), state = started)
         }
@@ -136,9 +149,7 @@ object StepCounter {
         return StepCounterUpdate(
             intervals = split(from, sample.at, kept, zone),
             state = started,
-            // The count covers the whole boot; only the part on this day is stored, so
-            // the value is honest but not the whole of what the sensor saw.
-            repaired = kept != sample.count || from > boot,
+            repaired = kept != sample.count,
         )
     }
 

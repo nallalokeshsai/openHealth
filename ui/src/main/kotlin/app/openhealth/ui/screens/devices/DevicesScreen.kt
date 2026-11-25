@@ -416,6 +416,10 @@ private fun BluetoothCard(
             }
         }
     }
+    model.offNote?.let { off ->
+        Spacer(Modifier.height(OhTheme.space.s2))
+        Text(text = off, style = OhTheme.type.footnote, color = OhTheme.colors.label)
+    }
     Spacer(Modifier.height(OhTheme.space.s2))
     Text(text = model.note, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
 }
