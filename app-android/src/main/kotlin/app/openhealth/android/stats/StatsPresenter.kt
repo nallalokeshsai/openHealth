@@ -73,7 +73,15 @@ class StatsPresenter(
 ) {
     private val numberFormat: NumberFormat = NumberFormat.getNumberInstance()
 
+    /**
+     * The nights behind one Stats build. The Sleep segment asks for them five times (the
+     * three KPIs, the duration card and the stage card) and each ask is six observation
+     * range queries; they are read once per [model] and thrown away with it.
+     */
+    private var sleepCache: Pair<LocalDate, List<SleepSession>>? = null
+
     fun model(segment: StatsSegment, preferences: Preferences): StatsModel {
+        sleepCache = null
         val date = today()
         val hidden = preferences.displayPolicy
         val modules = preferences.modules
@@ -897,6 +905,7 @@ class StatsPresenter(
     }
 
     private fun sleepSessions(date: LocalDate): List<SleepSession> {
+        sleepCache?.takeIf { it.first == date }?.let { return it.second }
         val from = date.minus(DatePeriod(days = NIGHTS + 3)).atStartOfDayIn(zone)
         val to = date.plus(DatePeriod(days = 2)).atStartOfDayIn(zone)
         val samples = SLEEP_TYPES.flatMap { type ->
@@ -912,9 +921,11 @@ class StatsPresenter(
         }
         // One source wins a night, by the same priority list the rollups use (`pr.md` §7.6).
         val registry = store.sources.registry()
-        return SleepSessions.collect(samples) { sourceId ->
+        val sessions = SleepSessions.collect(samples) { sourceId ->
             registry.priorityOf(SourceId(sourceId), ObservationType.SLEEP_DURATION)
         }
+        sleepCache = date to sessions
+        return sessions
     }
 
     private fun sleepDebt(date: LocalDate): app.openhealth.core.formula.SleepDebtResult? {

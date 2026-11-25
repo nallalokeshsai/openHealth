@@ -219,8 +219,8 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
 - Last completed phase: **B9 Today and Stats** (2026-11-25); next is **B10 Hardening and MVP
   release**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **567 JVM tests**
-  (292 `:core`, 111 `:data`, 27 `:integrations`, 127 `:ui`, 10 across the three tools) and
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **573 JVM tests**
+  (296 `:core`, 111 `:data`, 27 `:integrations`, 129 `:ui`, 10 across the three tools) and
   **266 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body map,
   the B5 Train surfaces, the B6 Nutrition surfaces, the B7 Vitals surfaces, the B8 Devices
   page and the B9 Today and Stats surfaces are in `:ui`. Both the `play` and `fdroid` debug
@@ -242,10 +242,18 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   seed; no synthetic data can enter the owner's record.
 - B9's decisions are `docs/adr/0014-today-and-stats.md`; `DESIGN.md` §5.6 gained the
   12 sp range line in a dated 0.3 revision.
-- Open issues (see `docs/build-log.md`): a saved what-if target can leave macro rows
-  without targets; the five-tab labels clip at 200 % text; Stats is kilograms-only; the
-  owner's phone reports `DEVICE-TRACING-MISCONFIGURED`, so Macrobenchmark was reported
-  from the emulator and flagged, while the phone was measured with `am start -W`; the
+- An independent B0–B9 audit (2026-11-25) fixed six defects a passing build hid: sleep
+  bypassed source dedup (two sources became two nights, or were summed), Today's steps
+  provenance read a losing source's observation, every Stats KPI opened the first card's
+  table, a saved what-if target dropped its macro targets, the wording gate did not scan
+  `app-android`'s strings, and Stats re-read the nights five times per build. It left
+  three things for the owner: imported workout energy is still absent from Today's "out"
+  and needs a decision on double-counting with step energy, `:tools:benchmark` sits
+  outside every guard, and demo data is written under real source ids.
+- Open issues (see `docs/build-log.md`): the five-tab labels clip at 200 % text; Stats is
+  kilograms-only; the owner's phone reports `DEVICE-TRACING-MISCONFIGURED`, so
+  Macrobenchmark was reported from the emulator and flagged, while the phone was measured
+  with `am start -W` (re-measured after the audit: cold 515–536 ms, warm 24–152 ms); the
   full instrumented suite has five B3/B6 tests that fail only in class sequence and pass
   alone (test isolation, B10); B8's battery run, real strap pairing and Garmin export
   remain owner hand-overs.

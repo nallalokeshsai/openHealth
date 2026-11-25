@@ -2522,3 +2522,135 @@ rather than executed radio; that is recorded as open, not claimed.
   showing a scroll affordance; chart-table state is `remember` rather than
   `rememberSaveable`; the sensor/BLE paths have no radio coverage; the phone's
   Macrobenchmark tracing is misconfigured.
+
+## B9 audit — independent phase-wise pass (2026-11-25)
+
+An independent audit of B0–B9 against `BUILD-ROADMAP.md`, `prompts.md` and the contract
+sections those name, hunting for drift a passing build hides. No closed decision, design
+token, cut-list entry, test, gate or budget was changed; nothing was pushed.
+
+### What held
+
+- **Portability.** No `android.*` or `androidx.*` in `:core`, `:data`, `:sync` or
+  `:integrations`. The B0 guard was re-proved: a planted `import android.os.Bundle` in
+  `:core` fails `checkPortability` with the file and line, and `check` is green once it
+  is removed.
+- **Design tokens.** The B1 guard was re-proved the same way: a planted
+  `Color(0xFFFF0000)` in a `:ui` screen fails `checkDesignTokens`. No colour, `.dp`,
+  `.sp` or `MaterialTheme` literal exists outside `ui/theme`.
+- **Rollups are rebuilt, never patched.** `RollupEngine` exposes only `rebuildDay`,
+  `rebuildAll` and `onObservationWritten`; nothing in `:data` or `:app-android` writes a
+  rollup row directly.
+- **The benchmark corpus cannot touch the record.** The seed activity lives only in
+  `app-android/src/benchmark/`, and the `benchmark` build type carries
+  `applicationIdSuffix = ".bench"`. Installed on the phone it appears as
+  `app.openhealth.bench` with its own data directory, verified by
+  `cmd package list packages`; it was uninstalled again at the end of the audit.
+- **Charts.** Every chart drawn on Today and Stats carries a `ChartId`, a table and a
+  sentence; `ChartTableModel`, `StatsCard` and `TodayChartModel` reject an empty table or
+  a blank sentence at construction.
+- **Copy.** `MedicalWordingTest` scans every string, so B9's new copy is covered; no
+  product string uses a verdict word.
+- **No stubs.** No `TODO`, `FIXME` or "not implemented" anywhere in the shipped source.
+
+### What was wrong, and is now fixed (commit `eeea570`, and the gate in the next commit)
+
+1. **Sleep bypassed source dedup entirely.** `SleepSessions.collect`
+   (`core/.../formula/SleepSessions.kt`) grouped readings by Health Connect session id
+   alone. Two sources describing the same night became **two nights** — the Stats sleep
+   average, the sleep debt and the bar chart all counted it twice — and two sources with
+   no session id were **added together**, which is exactly the sum `pr.md` §7.6 forbids.
+   It now groups by source as well and resolves a day the way `MostDetailedPolicy` does:
+   most detailed wins, then the configured priority, never the sum and never the largest
+   value. `TodayPresenter` and `StatsPresenter` pass the registry's sleep priority.
+   Tests: `twoSourcesOnOneNightAreNeverSummed`,
+   `theHigherPrioritySourceWinsAnEquallyDetailedNight`,
+   `twoSourcesWithoutASessionIdAreNotAddedTogether`, `oneSourceStillKeepsEveryNightItReports`.
+2. **Today's steps provenance could show the wrong source's facts.**
+   `TodayPresenter.provenances` read `observations.forDayAndType(...).lastOrNull()` for
+   steps while weight used the `winningObservation` filter, so the sheet could pair the
+   winning source's name with a losing source's device, method and timestamps — on the
+   one type B8 most often has two sources for. It now uses `winningObservation` too.
+3. **Every Stats KPI opened the first card's table.** `StatsKpi.chart` was declared in B9
+   and never populated, and `StatsScreen` fell back to `model.cards.firstOrNull()?.table`,
+   so tapping "Sets" or "Debt" opened the volume or duration table. `StatsPresenter` now
+   names each figure's chart, and the new `tableForKpi` opens nothing when a figure has no
+   chart of its own. Test: `aKpiOpensItsOwnTableOrNone`.
+4. **The what-if Save dropped the macro targets** (the open issue recorded above). It read
+   `profile.weight_kg` only, while Today's energy card reads the measured weight first, so
+   a profile whose `weight_kg` was never filled in saved a kcal-only row and left the macro
+   bars without targets. `AppViewModel.saveGoalTarget` now resolves the weight the same way.
+5. **The wording gate did not cover the app module.** `MedicalWordingTest` scanned
+   `ui/`'s strings only; the 54 strings in `app-android/` (toasts, the lock prompt, the
+   startup error) could have said "Warning:" and passed. The test now scans both, and
+   `ui/build.gradle.kts` declares the second file as a test input. Proved by planting a
+   banned string in the app module and watching the test fail with its name.
+6. **Stats re-read the nights five times per build.** The Sleep segment asked for the
+   same six observation range queries from three KPIs, the duration card and the stage
+   card. `StatsPresenter` now reads them once per `model()` call.
+
+### What was found and deliberately not changed
+
+- **Imported workout energy is not in Today's "out".** `WorkoutEnergy.fromKcal` exists in
+  `:core` and is exercised only by `:core` tests; no production code calls it. `pr.md`
+  §6.4 says out is "BMR plus non-exercise activity from steps plus logged **and imported**
+  workouts", and ADR 0014 §2 says a workout contributes its MET estimate "or an imported
+  kcal figure". Wiring the day's `ACTIVE_CALORIES` rollup in would double-count the step
+  energy, because a Health Connect active-calorie figure already includes walking. Closing
+  this needs an owner decision on how the two are reconciled, so it is reported rather
+  than invented. Today currently counts an imported run only through its steps, at the
+  3 MET walking rate, which is an undercount rather than an omission.
+- **`:tools:benchmark` sits outside every guard.** It applies `com.android.test` directly,
+  so it gets no ktlint, Detekt, `checkPortability`, `checkLicences` or `checkDesignTokens`.
+  It is test-only and ships in no APK, but a future phase that grows it should wire it in.
+- **Demo data is indistinguishable from real data.** `CorpusGenerator` writes its sample
+  observations under the source ids `garmin`, `fitbit`, `scale` and `manual` — the same
+  identities a real device uses — so a person who tries demo mode and later connects a
+  real Garmin cannot tell the two apart or remove one. Demo mode is an explicit choice on
+  an empty profile, so this is B3's design, not a B9 defect, but it is worth a decision
+  before release.
+- **`SettingsMessage.DEMO_ADDED` is never emitted** and `settings_add_demo_body` is a dead
+  string: there is no "Add sample data" row in Settings, only the onboarding path.
+- **Two `pr.md` §6.16 MVP items are not built**: simple correlations with their
+  "correlation is not causation" note, and exporting a chart as an image. B12 reads §6.16
+  again and is where they belong.
+- **`pr.md` §6.6 asks for a weekly step average**; Stats shows a 30-day one.
+- Stats is still kilograms-only, the tab labels still clip at 200 % text, and chart-table
+  state is still `remember` — all already recorded above as B10 work.
+
+### What was run
+
+| Command | Result |
+|---|---|
+| `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, both lint variants, **573 JVM tests** (296 `:core`, 111 `:data`, 27 `:integrations`, 129 `:ui`, 10 tools) and **266 goldens** in dark, light, 200 % text and RTL |
+| `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**: both `play` and `fdroid` debug APKs |
+| `connectedPlayDebugAndroidTest`, class `TodayStatsExitTest` | **2/2 pass on the owner's phone** |
+| `checkPortability` guard probe | fails on a planted `android.os.Bundle`, green once removed |
+| `checkDesignTokens` guard probe | fails on a planted `Color(0xFF…)`, green once removed |
+| `MedicalWordingTest` gate probe | fails on a planted banned string in `app-android`, green once removed |
+| Cold start, phone, release-shaped `benchmark` build, five-year `.bench` corpus | `am start -W` **531 / 536 / 515 ms**, `LaunchState: COLD` — inside the 1.5 s budget |
+| Warm Today, same build and corpus | `am start -W` **39 / 152 / 34 / 36 / 24 ms**, `LaunchState: HOT` — inside the 300 ms budget |
+
+The phone still reports `DEVICE-TRACING-MISCONFIGURED`, so Macrobenchmark still cannot run
+on it and these are direct activity-start measurements, as in B9 itself. The B9 numbers
+(484–495 ms cold) and these (515–536 ms) are the same order and both well inside budget.
+
+### B9 exit tests, re-checked
+
+| Exit test | Result |
+|---|---|
+| Warm Today under 300 ms, cold start under 1.5 s over the five-year corpus | **holds** — measured again on the phone after the fixes |
+| Every chart has a table, a sentence and a formula sheet | **holds, and is now stronger**: a KPI that names no chart opens nothing instead of another chart's table |
+| ETA says "not enough data yet" on day 13 and gives a window on day 14 | **holds** — `FormulaTest.dayThirteenHasNoEtaAndDayFourteenHasAWindow` |
+
+### Note on the working tree
+
+At the start of this audit `core/.../SleepSessions.kt` and its test were untracked while
+`TodayPresenter` and `StatsPresenter` at `HEAD` already imported them, so `HEAD` did not
+compile. A concurrent OpenCode session committed them as `27d0871` at 21:16 while the
+audit was reading; nothing was lost. Worth remembering that a phase is only finished when
+its files are committed, not when the working tree is green.
+
+### iOS gate (`pr.md` §13.17)
+
+Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
