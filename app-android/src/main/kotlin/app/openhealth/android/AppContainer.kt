@@ -31,6 +31,7 @@ import kotlinx.datetime.toLocalDateTime
  *
  * Constructed by Koin in [OpenHealthApp]; nothing here performs network I/O.
  */
+@Suppress("TooManyFunctions")
 class AppContainer(
     context: Context,
     documentStore: app.openhealth.android.documents.DocumentStore? = null,
@@ -58,6 +59,7 @@ class AppContainer(
     private val storeLazy = lazy {
         val local = LocalStore(opened.value.driver, opened.value.db)
         ensureManualSource(local)
+        ensureImportSource(local)
         ensureExerciseLibrary(local)
         local.trash.purgeExpired()
         local
@@ -76,7 +78,15 @@ class AppContainer(
         app.openhealth.android.training.AndroidRestTimer(appContext)
     }
     val export: ExportService by lazy {
-        ExportService(store.driver, store.db, Argon2ExportCipher(), clock)
+        ExportService(
+            driver = store.driver,
+            db = store.db,
+            cipher = Argon2ExportCipher(),
+            clock = clock,
+            includePhotos = {
+                store.settings.get(SettingKeys.BODY_PHOTOS_IN_EXPORT) == "true"
+            },
+        )
     }
     val documents = documentStore ?: AndroidDocumentStore(appContext)
     val zone: TimeZone = TimeZone.currentSystemDefault()
@@ -99,6 +109,19 @@ class AppContainer(
                 kind = SourceKind.MANUAL,
                 label = "Manual",
                 permissions = SourcePermission.entries.toSet(),
+            ),
+        )
+    }
+
+    /** The source a CSV or file import names, so it is never labelled as a manual entry. */
+    private fun ensureImportSource(local: LocalStore) {
+        if (local.sources.byId(IMPORT_SOURCE) != null) return
+        local.sources.upsert(
+            Source(
+                id = IMPORT_SOURCE,
+                kind = SourceKind.CSV,
+                label = "Imported file",
+                permissions = setOf(SourcePermission.WRITE_WEIGHT),
             ),
         )
     }
@@ -191,6 +214,7 @@ class AppContainer(
         const val DEMO_DAYS = 90
         const val DEFAULT_VAULT = "openhealth.vault"
         val MANUAL_SOURCE = app.openhealth.core.ids.SourceId("manual")
+        val IMPORT_SOURCE = app.openhealth.core.ids.SourceId("file-import")
         val LIBRARY_SOURCE = app.openhealth.core.ids.SourceId("exercise-library")
         private const val PRE_RESTORE = "pre-restore.ohe"
     }

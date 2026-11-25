@@ -16,7 +16,8 @@ import kotlin.test.assertTrue
  * a reading "abnormal" fails the build even if no test remembered to visit its screen.
  */
 class MedicalWordingTest {
-    private val banned = Regex("\\brisks?\\b|\\bwarnings?\\b|diagnos|abnormal", RegexOption.IGNORE_CASE)
+    private val banned =
+        Regex("\\brisks?\\b|\\bwarnings?\\b|diagnos|abnormal", RegexOption.IGNORE_CASE)
 
     /** The two sentences whose whole job is to deny that this app diagnoses. */
     private val allowed = setOf("onb_welcome_disclaimer", "settings_about_medical")
@@ -39,7 +40,10 @@ class MedicalWordingTest {
     fun noProductStringUsesAVerdict() {
         val file = File("src/main/res/values/strings.xml")
         assertTrue(file.exists(), "expected ${file.absolutePath}")
-        val entries = Regex("""<string name="([^"]+)">(.*?)</string>""", RegexOption.DOT_MATCHES_ALL)
+        val entries = Regex(
+            """<string name="([^"]+)">(.*?)</string>""",
+            RegexOption.DOT_MATCHES_ALL,
+        )
             .findAll(file.readText())
             .map { it.groupValues[1] to it.groupValues[2] }
             .toList()

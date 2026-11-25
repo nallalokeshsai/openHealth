@@ -1,3 +1,7 @@
+// Published thresholds are literal facts; the citation beside each one is what makes it
+// meaningful, and moving 3.9 into a constant would hide which range owns it.
+@file:Suppress("MagicNumber", "ReturnCount")
+
 package app.openhealth.core.vitals
 
 import app.openhealth.core.citation.CitationKey
@@ -25,6 +29,8 @@ data class ReferenceRange(
     val statement: String,
     /** The population and setting, e.g. "adults, home measurement". */
     val population: String,
+    /** True when the published range includes its upper bound ("60-100", "36.2-37.0"). */
+    val highInclusive: Boolean = false,
 ) {
     init {
         require(unit.dimension == type.canonicalUnit.dimension) {
@@ -33,13 +39,14 @@ data class ReferenceRange(
         require(low != null || high != null) { "a range needs at least one bound" }
     }
 
-    fun contains(value: Double): Boolean =
-        (low == null || value >= low) && (high == null || value < high)
+    fun contains(value: Double): Boolean = (low == null || value >= low) &&
+        (high == null || value < high || (highInclusive && value == high))
 
     /** Where a reading sits. Neutral: never a diagnosis, never an alarm. */
     fun position(value: Double): RangePosition = when {
         low != null && value < low -> RangePosition.BELOW
-        high != null && value >= high -> RangePosition.ABOVE
+        high != null && (value > high || (!highInclusive && value == high)) ->
+            RangePosition.ABOVE
         else -> RangePosition.WITHIN
     }
 
@@ -109,6 +116,7 @@ object VitalRanges {
         citation = CitationKey.AHA_RESTING_HEART_RATE,
         statement = "60-100",
         population = "adults at rest",
+        highInclusive = true,
     )
 
     private val OXYGEN_SATURATION = ReferenceRange(
@@ -123,12 +131,13 @@ object VitalRanges {
 
     private val BODY_TEMPERATURE = ReferenceRange(
         type = ObservationType.BODY_TEMPERATURE,
-        low = 36.2,
-        high = 37.0,
+        low = 35.7,
+        high = 37.5,
         unit = UcumUnit.CELSIUS,
         citation = CitationKey.GENEVA_BODY_TEMPERATURE_2019,
-        statement = "36.2-37.0",
-        population = "adults, any measurement site",
+        statement = "35.7-37.5",
+        population = "adults, any measurement site (mean +/- 2 SD)",
+        highInclusive = true,
     )
 
     private val GLUCOSE_FASTING = ReferenceRange(
@@ -192,14 +201,14 @@ object VitalRanges {
      */
     fun scaleFor(type: ObservationType, context: String?): List<RangeBand>? = when (type) {
         ObservationType.BLOOD_PRESSURE_SYSTOLIC -> listOf(
-            RangeBand(RangeBandLabel.LOW, null, 90.0, CitationKey.ESH_HYPERTENSION_2023),
+            RangeBand(RangeBandLabel.LOW, null, 90.0, CitationKey.AHA_LOW_BLOOD_PRESSURE),
             RangeBand(RangeBandLabel.NORMAL, 90.0, 135.0, CitationKey.ESH_HYPERTENSION_2023),
             RangeBand(RangeBandLabel.RAISED, 135.0, 140.0, CitationKey.ESH_HYPERTENSION_2023),
             RangeBand(RangeBandLabel.HIGH, 140.0, null, CitationKey.ESH_HYPERTENSION_2023),
         )
 
         ObservationType.BLOOD_PRESSURE_DIASTOLIC -> listOf(
-            RangeBand(RangeBandLabel.LOW, null, 60.0, CitationKey.ESH_HYPERTENSION_2023),
+            RangeBand(RangeBandLabel.LOW, null, 60.0, CitationKey.AHA_LOW_BLOOD_PRESSURE),
             RangeBand(RangeBandLabel.NORMAL, 60.0, 85.0, CitationKey.ESH_HYPERTENSION_2023),
             RangeBand(RangeBandLabel.RAISED, 85.0, 90.0, CitationKey.ESH_HYPERTENSION_2023),
             RangeBand(RangeBandLabel.HIGH, 90.0, null, CitationKey.ESH_HYPERTENSION_2023),

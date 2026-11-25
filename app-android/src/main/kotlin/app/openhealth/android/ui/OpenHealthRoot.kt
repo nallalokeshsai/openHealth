@@ -7,7 +7,6 @@ import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -49,7 +48,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.openhealth.R
 import app.openhealth.android.AppContainer
-import app.openhealth.android.body.PhotoCodec
 import app.openhealth.android.nutrition.BarcodeCameraPreview
 import app.openhealth.android.preferences.ThemeMode
 import app.openhealth.core.observation.ObservationType
@@ -80,15 +78,14 @@ import app.openhealth.ui.screens.shell.OhRootShell
 import app.openhealth.ui.screens.timeline.TimelineScreen
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayScreen
-import app.openhealth.ui.screens.vitals.PhotoCompareSheet
-import app.openhealth.ui.screens.vitals.VitalDetailScreen
-import app.openhealth.ui.screens.vitals.VitalsRootScreen
 import app.openhealth.ui.screens.train.ExerciseHistoryScreen
 import app.openhealth.ui.screens.train.LiveSessionScreen
 import app.openhealth.ui.screens.train.RoutineDetailScreen
 import app.openhealth.ui.screens.train.RoutineEditorScreen
 import app.openhealth.ui.screens.train.SessionSummaryScreen
 import app.openhealth.ui.screens.train.TrainRootScreen
+import app.openhealth.ui.screens.vitals.PhotoCompareSheet
+import app.openhealth.ui.screens.vitals.VitalDetailScreen
 import app.openhealth.ui.theme.OhTheme
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -254,11 +251,14 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                             nav.navigate(VitalDetailRoute(type.name))
                         },
                         onSaveReading = viewModel::saveVitalReading,
-                        onSaveMeasurement = viewModel::saveMeasurement,
+                        onSaveMeasurement = { type, value, method ->
+                            viewModel.saveMeasurement(type, value, method)
+                        },
                         onAddPhoto = { bytes -> viewModel.addPhoto(bytes, null) },
                         onOpenPhoto = viewModel::openPhotoCompare,
                         onDeletePhoto = viewModel::deletePhoto,
                         onPhotosHidden = viewModel::setPhotosHidden,
+                        onPhotosInExport = viewModel::setPhotosInExport,
                         onExportCsv = viewModel::exportVitalsCsv,
                         onImportCsv = viewModel::importVitalsCsv,
                         onOpenSettings = { nav.navigate(SettingsRoute) },
@@ -925,67 +925,6 @@ private fun SessionEnded(onBack: () -> Unit) {
             onClick = onBack,
         )
     }
-}
-
-/**
- * The Vitals tab with its two document pickers and the system photo picker. The pickers
- * are the only place a file or a gallery image enters the app: the CSV is read into memory,
- * the photo is decoded and re-encoded before it is stored, and neither needs a storage
- * permission (`pr.md` §6.25, `DESIGN.md` §9.4).
- */
-@Composable
-private fun VitalsRouteContent(
-    model: app.openhealth.ui.screens.vitals.VitalsModel,
-    onLogWeight: () -> Unit,
-    onOpenDetail: (ObservationType) -> Unit,
-    onSaveReading: (app.openhealth.ui.screens.vitals.VitalDraft) -> Unit,
-    onSaveMeasurement: (app.openhealth.core.body.MeasurementSite, String) -> Unit,
-    onAddPhoto: (ByteArray) -> Unit,
-    onOpenPhoto: (String) -> Unit,
-    onDeletePhoto: (String) -> Unit,
-    onPhotosHidden: (Boolean) -> Unit,
-    onExportCsv: (android.net.Uri) -> Unit,
-    onImportCsv: (android.net.Uri) -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    val context = LocalContext.current
-    val createCsv = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv"),
-    ) { uri ->
-        if (uri != null) onExportCsv(uri)
-    }
-    val openCsv = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) onImportCsv(uri)
-    }
-    val pickPhoto = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
-            PhotoCodec.read(context, uri)?.let(onAddPhoto)
-        }
-    }
-    VitalsRootScreen(
-        model = model,
-        onLogWeight = onLogWeight,
-        onOpenDetail = onOpenDetail,
-        onSaveReading = onSaveReading,
-        onSaveMeasurement = onSaveMeasurement,
-        onAddPhoto = {
-            pickPhoto.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-            )
-        },
-        onOpenPhoto = onOpenPhoto,
-        onDeletePhoto = onDeletePhoto,
-        onPhotosHidden = onPhotosHidden,
-        onExportCsv = { createCsv.launch("openHealth-body.csv") },
-        onImportCsv = {
-            openCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
-        },
-        onOpenSettings = onOpenSettings,
-    )
 }
 
 /**

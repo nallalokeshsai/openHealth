@@ -381,6 +381,7 @@ data class OhKpiFigure(
     val label: String,
     val unit: String? = null,
     val ink: Color? = null,
+    val onClick: (() -> Unit)? = null,
 )
 
 /**
@@ -412,16 +413,27 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                     )
                     Spacer(Modifier.height(OhTheme.space.s3))
                 }
-                Text(text = figure.label, style = type.footnote, color = colors.label2)
-                Text(
-                    text = figure.value,
-                    style = type.display.copy(fontWeight = OhWeight.semibold)
-                        .tabular()
-                        .ltrFigures(),
-                    color = figure.ink ?: colors.label,
-                )
-                figure.unit?.let {
-                    Text(text = it, style = type.caption, color = colors.label2)
+                val figureInteraction = rememberInteraction()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .ohClickable(
+                            interactionSource = figureInteraction,
+                            enabled = figure.onClick != null,
+                            onClick = { figure.onClick?.invoke() },
+                        ),
+                ) {
+                    Text(text = figure.label, style = type.footnote, color = colors.label2)
+                    Text(
+                        text = figure.value,
+                        style = type.display.copy(fontWeight = OhWeight.semibold)
+                            .tabular()
+                            .ltrFigures(),
+                        color = figure.ink ?: colors.label,
+                    )
+                    figure.unit?.let {
+                        Text(text = it, style = type.caption, color = colors.label2)
+                    }
                 }
                 Spacer(Modifier.height(OhTheme.space.s3))
             }
@@ -439,8 +451,15 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                                 .background(colors.sep),
                         )
                     }
+                    val figureInteraction = rememberInteraction()
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .ohClickable(
+                                interactionSource = figureInteraction,
+                                enabled = figure.onClick != null,
+                                onClick = { figure.onClick?.invoke() },
+                            ),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {

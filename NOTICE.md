@@ -208,10 +208,10 @@ guideline text is reproduced. A range without a citation does not ship (`pr.md` 
 
 | Reading | Range shown | Source |
 |---|---|---|
-| Home blood pressure | below 135/85 mmHg (office 140/90; home protocol: duplicate morning and evening readings for 7 days, 3 minimum, first day discarded) | Mancia G, Kreutz R, Brunström M, et al. 2023 ESH Guidelines for the management of arterial hypertension. *Journal of Hypertension* 2023;41(12):1874-2071. doi:10.1097/HJH.0000000000003480 |
+| Home blood pressure | below 135/85 mmHg (office 140/90; home protocol: duplicate morning and evening readings for 7 days, 3 minimum, first day discarded); the 90/60 low stop is the AHA's low-blood-pressure threshold | Mancia G, Kreutz R, Brunström M, et al. 2023 ESH Guidelines for the management of arterial hypertension. *Journal of Hypertension* 2023;41(12):1874-2071. doi:10.1097/HJH.0000000000003480 |
 | Resting heart rate | 60-100 bpm | American Heart Association, *All About Heart Rate*, reviewed 13 May 2024 |
 | Oxygen saturation | 95-100 % at sea level | World Health Organization, *Pulse Oximetry Training Manual*, 2011, ISBN 978 92 4 150113 2 |
-| Body temperature | 36.2-37.0 °C (the review's mean +/- 2 SD across sites, 36.16-37.02 °C) | Geneva II, Cuzzo B, Fazili T, Javaid W. Normal Body Temperature: A Systematic Review. *Open Forum Infectious Diseases* 2019;6(4):ofz032. doi:10.1093/ofid/ofz032 |
+| Body temperature | 35.7-37.5 °C (the review's pooled 36.59 +/- 0.43 °C, mean +/- 2 SD across sites) | Geneva II, Cuzzo B, Fazili T, Javaid W. Normal Body Temperature: A Systematic Review. *Open Forum Infectious Diseases* 2019;6(4):ofz032. doi:10.1093/ofid/ofz032 |
 | Blood glucose | fasting 3.9-5.6 mmol/L; two-hour 75 g oral glucose test below 7.8 mmol/L | American Diabetes Association Professional Practice Committee. 2. Diagnosis and Classification of Diabetes: Standards of Care in Diabetes-2026. *Diabetes Care* 2026;49(Suppl 1):S27-S49. doi:10.2337/dc26-S002 (the 3.9 mmol/L low threshold is Table 6.4 of the same standards, dc26-S006) |
 
 The US Navy body-fat estimate (`pr.md` §6.8) is Hodgdon JA, Beckett MB. *Prediction of

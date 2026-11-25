@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import app.openhealth.ui.R
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonVariant
@@ -66,6 +67,7 @@ fun OhPageHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifie
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.statusBars)
             .height(OhTheme.dims.touchTarget),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -80,6 +82,7 @@ fun OhPageHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifie
             style = OhTheme.type.title3.copy(fontWeight = OhWeight.semibold),
             color = OhTheme.colors.label,
             modifier = Modifier.weight(1f).semantics { heading() },
+            textAlign = TextAlign.Start,
         )
     }
     Spacer(Modifier.height(OhTheme.space.s3))

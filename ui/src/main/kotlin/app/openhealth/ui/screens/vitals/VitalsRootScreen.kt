@@ -26,20 +26,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.MeasurementSite
+import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.vitals.RangePosition
 import app.openhealth.ui.R
 import app.openhealth.ui.body.OhBodyMap
-import app.openhealth.ui.body.OhBodyMapTable
 import app.openhealth.ui.body.measurementSiteLabel
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonVariant
@@ -64,7 +62,6 @@ import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
 import app.openhealth.ui.theme.ltrFigures
 import app.openhealth.ui.theme.tabular
-import kotlinx.datetime.LocalDate
 
 /**
  * The Vitals root (`DESIGN.md` §14.2 Vitals): the weight lead card, the dynamic body model
@@ -79,16 +76,18 @@ fun VitalsRootScreen(
     onLogWeight: () -> Unit,
     onOpenDetail: (ObservationType) -> Unit,
     onSaveReading: (VitalDraft) -> Unit,
-    onSaveMeasurement: (MeasurementSite, String) -> Unit,
+    onSaveMeasurement: (String, String, MeasurementMethod) -> Unit,
     onAddPhoto: () -> Unit,
     onOpenPhoto: (String) -> Unit,
     onDeletePhoto: (String) -> Unit,
     onPhotosHidden: (Boolean) -> Unit,
+    onPhotosInExport: (Boolean) -> Unit,
     onExportCsv: () -> Unit,
     onImportCsv: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     synchronousLayers: Boolean = false,
+    geometry: app.openhealth.ui.body.BodyGeometry? = null,
 ) {
     if (!model.bodyModuleOn && !model.vitalsModuleOn) {
         app.openhealth.ui.screens.roots.ModuleOffRoot(
@@ -171,8 +170,8 @@ fun VitalsRootScreen(
                 model = model.body,
                 onAddMeasurement = { addMeasurement = it },
                 onProvenance = { provenance = it },
-                onShowTable = { table = TABLE_BODY },
                 synchronousLayers = synchronousLayers,
+                geometry = geometry,
             )
             if (model.composition.isNotEmpty()) {
                 Spacer(Modifier.height(OhTheme.space.s5))
@@ -185,14 +184,18 @@ fun VitalsRootScreen(
                 onAddMeasurement = { addMeasurement = it },
                 onProvenance = { provenance = it },
             )
-            Spacer(Modifier.height(OhTheme.space.s5))
-            PhotosCard(
-                photos = model.photos,
-                hidden = model.photosHidden,
-                onAddPhoto = onAddPhoto,
-                onOpenPhoto = { photoSheet = it },
-                onPhotosHidden = onPhotosHidden,
-            )
+            if (!model.weightNeutral) {
+                Spacer(Modifier.height(OhTheme.space.s5))
+                PhotosCard(
+                    photos = model.photos,
+                    hidden = model.photosHidden,
+                    photosInExport = model.photosInExport,
+                    onAddPhoto = onAddPhoto,
+                    onOpenPhoto = { photoSheet = it },
+                    onPhotosHidden = onPhotosHidden,
+                    onPhotosInExport = onPhotosInExport,
+                )
+            }
         }
         if (model.vitalsModuleOn) {
             Spacer(Modifier.height(OhTheme.space.s5))
@@ -202,37 +205,32 @@ fun VitalsRootScreen(
                 onOpenDetail = onOpenDetail,
             )
         }
-        Spacer(Modifier.height(OhTheme.space.s7))
-        OhSectionTitle(stringResource(R.string.vitals_csv_title))
-        OhInsetGroup {
-            OhRow(
-                title = stringResource(R.string.vitals_csv_export),
-                subtitle = stringResource(R.string.vitals_csv_export_body),
-                leadingIcon = OhObjectIcons.file,
-                onClick = onExportCsv,
-            )
-            OhRow(
-                title = stringResource(R.string.vitals_csv_import),
-                subtitle = stringResource(R.string.vitals_csv_import_body),
-                leadingIcon = OhObjectIcons.file,
-                onClick = onImportCsv,
-            )
+        if (model.bodyModuleOn && !model.weightNeutral) {
+            Spacer(Modifier.height(OhTheme.space.s7))
+            OhSectionTitle(stringResource(R.string.vitals_csv_title))
+            OhInsetGroup {
+                OhRow(
+                    title = stringResource(R.string.vitals_csv_export),
+                    subtitle = stringResource(R.string.vitals_csv_export_body),
+                    leadingIcon = OhObjectIcons.file,
+                    onClick = onExportCsv,
+                )
+                OhRow(
+                    title = stringResource(R.string.vitals_csv_import),
+                    subtitle = stringResource(R.string.vitals_csv_import_body),
+                    leadingIcon = OhObjectIcons.file,
+                    onClick = onImportCsv,
+                )
+            }
         }
         Spacer(Modifier.height(OhTheme.space.s7))
     }
     if (table == TABLE_WEIGHT && model.weight != null) {
-        WeightTableSheet(model = model.weight, onDismiss = { table = null })
-    }
-    if (table == TABLE_BODY && model.body != null) {
-        OhModalSheet(
-            visible = true,
+        WeightTableSheet(
+            model = model.weight,
+            imperial = model.imperial,
             onDismiss = { table = null },
-            title = stringResource(R.string.vitals_body_show_table),
-            cancelLabel = stringResource(R.string.vitals_table_close),
-            onCancel = { table = null },
-        ) {
-            OhBodyMapTable(model = model.body.current)
-        }
+        )
     }
     if (addReading) {
         AddReadingSheet(
@@ -253,9 +251,9 @@ fun VitalsRootScreen(
             initialSite = site,
             imperial = model.imperial,
             onDismiss = { addMeasurement = null },
-            onSave = { chosen, value ->
+            onSave = { chosen, value, method ->
                 addMeasurement = null
-                onSaveMeasurement(chosen, value)
+                onSaveMeasurement(chosen, value, method)
             },
         )
     }
@@ -284,6 +282,17 @@ fun VitalsRootScreen(
                     style = OhTheme.type.footnote,
                     color = OhTheme.colors.label2,
                 )
+                photo.provenance?.let { source ->
+                    Spacer(Modifier.height(OhTheme.space.s2))
+                    OhRow(
+                        title = stringResource(R.string.vitals_provenance_title),
+                        onClick = {
+                            photoSheet = null
+                            provenance = source
+                        },
+                        showChevron = true,
+                    )
+                }
                 Spacer(Modifier.height(OhTheme.space.s3))
                 if (model.photos.size >= 2) {
                     OhButton(
@@ -309,7 +318,6 @@ fun VitalsRootScreen(
 }
 
 private const val TABLE_WEIGHT = "weight"
-private const val TABLE_BODY = "body"
 
 @Composable
 private fun WeightCard(
@@ -373,7 +381,7 @@ private fun WeightCard(
         }
         Spacer(Modifier.height(OhTheme.space.s1))
         Text(
-            text = changeSentence(model, factor),
+            text = changeSentence(model, factor, unit),
             style = OhTheme.type.footnote,
             color = if (model.changeKg != null && model.changeKg < 0) {
                 OhTheme.colors.greenInk
@@ -395,7 +403,12 @@ private fun WeightCard(
                     unitText = unit,
                     goal = model.goalKg?.times(factor),
                     description = stringResource(
-                        R.string.vitals_weight_latest_line,
+                        R.string.vitals_weight_chart_desc,
+                        changeSentence(model, factor, unit),
+                        number(
+                            (model.points.firstOrNull()?.value ?: model.latestKg) * factor,
+                            1,
+                        ),
                         number(model.latestKg * factor, 1),
                         unit,
                     ),
@@ -414,19 +427,22 @@ private fun WeightCard(
         Spacer(Modifier.height(OhTheme.space.s3))
         val weeklyTitle = stringResource(R.string.vitals_weight_weekly_label)
         val weeklyNone = stringResource(R.string.vitals_weight_weekly_none)
+        val weeklyBody = stringResource(R.string.vitals_weight_weekly_formula)
+        val goalTitle = stringResource(R.string.vitals_weight_goal)
+        val goalBody = stringResource(R.string.vitals_weight_goal_formula)
         OhRow(
             title = weeklyTitle,
             subtitle = model.weeklyRateKg?.let {
-                stringResource(R.string.vitals_weight_weekly, number(it * factor, 2))
+                stringResource(R.string.vitals_weight_weekly, number(it * factor, 2), unit)
             } ?: weeklyNone,
-            onClick = { onFormula(weeklyTitle, weeklyNone, "app") },
+            onClick = { onFormula(weeklyTitle, weeklyBody, "app") },
             showChevron = true,
         )
         OhRow(
             title = stringResource(R.string.vitals_weight_goal),
             subtitle = model.goalKg?.let { "${number(it * factor, 1)} $unit" }
                 ?: stringResource(R.string.vitals_weight_goal_none),
-            onClick = { onProvenance(model.provenance) },
+            onClick = { onFormula(goalTitle, goalBody, "app") },
             showChevron = true,
         )
         Spacer(Modifier.height(OhTheme.space.s3))
@@ -439,19 +455,21 @@ private fun WeightCard(
 }
 
 @Composable
-private fun changeSentence(model: WeightCardModel, factor: Double): String {
+private fun changeSentence(model: WeightCardModel, factor: Double, unit: String): String {
     val change = model.changeKg ?: return stringResource(R.string.vitals_weight_none)
     val days = model.changeDays
     return when {
         change > 0 -> stringResource(
             R.string.vitals_weight_up,
             number(kotlin.math.abs(change) * factor, 1),
+            unit,
             days,
         )
 
         change < 0 -> stringResource(
             R.string.vitals_weight_down,
             number(kotlin.math.abs(change) * factor, 1),
+            unit,
             days,
         )
 
@@ -464,8 +482,8 @@ private fun BodyModelCard(
     model: BodyFigureModel?,
     onAddMeasurement: (MeasurementSite) -> Unit,
     onProvenance: (ValueProvenance) -> Unit,
-    onShowTable: () -> Unit,
     synchronousLayers: Boolean,
+    geometry: app.openhealth.ui.body.BodyGeometry? = null,
 ) {
     var showFat by rememberSaveable { mutableStateOf(true) }
     var scrub by rememberSaveable { mutableStateOf(1f) }
@@ -507,7 +525,8 @@ private fun BodyModelCard(
             ),
             anchors = model.anchors.associate { it.site to it.measured },
             onAnchor = onAddMeasurement,
-            onShowTable = onShowTable,
+            descriptionOverride = stringResource(R.string.vitals_body_model_desc),
+            geometry = geometry,
             synchronousLayers = synchronousLayers,
         )
         Spacer(Modifier.height(OhTheme.space.s4))
@@ -528,11 +547,19 @@ private fun BodyModelCard(
                 style = OhTheme.type.footnote,
                 color = OhTheme.colors.label2,
             )
+            model.fatMethod?.let { method ->
+                Spacer(Modifier.height(OhTheme.space.s0))
+                Text(
+                    text = stringResource(R.string.vitals_body_fat_legend, method),
+                    style = OhTheme.type.footnote,
+                    color = OhTheme.colors.label2,
+                )
+            }
             model.fatSourceLabel?.let { source ->
                 Spacer(Modifier.height(OhTheme.space.s1))
                 OhRow(
                     title = stringResource(R.string.vitals_body_fat_source),
-                    subtitle = source,
+                    subtitle = listOfNotNull(model.fatMethod, source).joinToString(" · "),
                     onClick = { model.provenance?.let(onProvenance) },
                     showChevron = true,
                 )
@@ -725,7 +752,7 @@ private fun MeasurementsCard(
 @Composable
 private fun MeasurementRow(row: MeasurementRowModel, onProvenance: (ValueProvenance) -> Unit) {
     OhRow(
-        title = measurementSiteLabel(row.site),
+        title = row.customLabel ?: row.site?.let { measurementSiteLabel(it) }.orEmpty(),
         subtitle = "${shortDate(row.date)} · ${row.sourceLine}",
         value = stringResource(R.string.vitals_measurements_value, row.valueText, row.unitText),
         onClick = { onProvenance(row.provenance) },
@@ -737,9 +764,11 @@ private fun MeasurementRow(row: MeasurementRowModel, onProvenance: (ValueProvena
 private fun PhotosCard(
     photos: List<PhotoTileModel>,
     hidden: Boolean,
+    photosInExport: Boolean,
     onAddPhoto: () -> Unit,
     onOpenPhoto: (String) -> Unit,
     onPhotosHidden: (Boolean) -> Unit,
+    onPhotosInExport: (Boolean) -> Unit,
 ) {
     OhCard {
         OhCardHeader(
@@ -754,6 +783,13 @@ private fun PhotosCard(
                 OhSwitch(checked = hidden, onCheckedChange = onPhotosHidden)
             },
         )
+        OhRow(
+            title = stringResource(R.string.vitals_photos_export),
+            subtitle = stringResource(R.string.vitals_photos_export_body),
+            trailing = {
+                OhSwitch(checked = photosInExport, onCheckedChange = onPhotosInExport)
+            },
+        )
         if (photos.isEmpty()) {
             OhEmptyState(
                 title = stringResource(R.string.vitals_photos_empty_title),
@@ -765,7 +801,7 @@ private fun PhotosCard(
         }
         Spacer(Modifier.height(OhTheme.space.s3))
         photos.chunked(PHOTO_COLUMNS).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(PHOTO_GAP)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.dims.photoGridGap)) {
                 row.forEach { photo ->
                     PhotoTile(
                         photo = photo,
@@ -776,7 +812,7 @@ private fun PhotosCard(
                 }
                 repeat(PHOTO_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
             }
-            Spacer(Modifier.height(PHOTO_GAP))
+            Spacer(Modifier.height(OhTheme.dims.photoGridGap))
         }
         Spacer(Modifier.height(OhTheme.space.s1))
         Text(
@@ -822,33 +858,41 @@ private fun PhotoTile(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(if (hidden && !revealed) Modifier.blur(18.dp) else Modifier),
+                    .then(
+                        if (hidden &&
+                            !revealed
+                        ) {
+                            Modifier.blur(OhTheme.dims.photoHiddenBlur)
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
         }
         if (hidden && !revealed) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.35f)),
+                    .background(OhTheme.colors.scrim),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = stringResource(R.string.vitals_photos_hidden),
                     style = OhTheme.type.caption,
-                    color = Color.White,
+                    color = OhTheme.colors.knob,
                 )
             }
         }
         Text(
             text = shortDate(photo.date),
             style = OhTheme.type.caption,
-            color = Color.White,
+            color = OhTheme.colors.knob,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(OhTheme.space.s2)
                 .clip(RoundedCornerShape(OhTheme.radius.full))
-                .background(Color.Black.copy(alpha = 0.55f))
-                .padding(horizontal = OhTheme.space.s2, vertical = 2.dp),
+                .background(OhTheme.colors.scrim)
+                .padding(horizontal = OhTheme.space.s2, vertical = OhTheme.space.s0),
         )
     }
 }
@@ -903,7 +947,10 @@ private fun ReadingsCard(
                     } else {
                         OhTheme.colors.label2
                     },
-                    modifier = Modifier.padding(start = OhTheme.dims.rowPadH, bottom = OhTheme.space.s2),
+                    modifier = Modifier.padding(
+                        start = OhTheme.dims.rowPadH,
+                        bottom = OhTheme.space.s2,
+                    ),
                 )
             }
         }
@@ -913,7 +960,7 @@ private fun ReadingsCard(
 }
 
 @Composable
-private fun WeightTableSheet(model: WeightCardModel, onDismiss: () -> Unit) {
+private fun WeightTableSheet(model: WeightCardModel, imperial: Boolean, onDismiss: () -> Unit) {
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
@@ -921,8 +968,14 @@ private fun WeightTableSheet(model: WeightCardModel, onDismiss: () -> Unit) {
         cancelLabel = stringResource(R.string.vitals_table_close),
         onCancel = onDismiss,
     ) {
+        val unit = if (imperial) "lb" else "kg"
+        val factor = if (imperial) KG_TO_LB else 1.0
         Text(
-            text = stringResource(R.string.vitals_weight_latest_line, number(model.latestKg, 1), "kg"),
+            text = stringResource(
+                R.string.vitals_weight_latest_line,
+                number(model.latestKg * factor, 1),
+                unit,
+            ),
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,
         )
@@ -931,13 +984,12 @@ private fun WeightTableSheet(model: WeightCardModel, onDismiss: () -> Unit) {
             model.points.forEach { point ->
                 OhRow(
                     title = shortDate(point.date),
-                    value = "${number(point.value, 1)} kg",
+                    value = "${number(point.value * factor, 1)} $unit",
                 )
             }
         }
     }
 }
 
-private val PHOTO_GAP = 10.dp
 private const val PHOTO_COLUMNS = 3
 private const val KG_TO_LB = 2.2046226218

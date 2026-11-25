@@ -24,6 +24,7 @@ enum class CitationKey {
     OPEN_FOOD_FACTS,
     ESH_HYPERTENSION_2023,
     AHA_RESTING_HEART_RATE,
+    AHA_LOW_BLOOD_PRESSURE,
     WHO_PULSE_OXIMETRY_2011,
     GENEVA_BODY_TEMPERATURE_2019,
     ADA_GLYCEMIC_TARGETS_2026,
@@ -252,6 +253,16 @@ object Citations {
             licenceNote = "A published reference range; no page text is reproduced.",
         ),
         Citation(
+            key = CitationKey.AHA_LOW_BLOOD_PRESSURE,
+            title = "Low Blood Pressure: When Blood Pressure Is Too Low",
+            authors = "American Heart Association",
+            year = 2024,
+            publication = "American Heart Association health topic",
+            url = "https://www.heart.org/en/health-topics/low-blood-pressure",
+            supports = "The 90/60 mmHg lower bound below which a reading is called low",
+            licenceNote = "A published reference bound; no page text is reproduced.",
+        ),
+        Citation(
             key = CitationKey.WHO_PULSE_OXIMETRY_2011,
             title = "Pulse Oximetry Training Manual",
             authors = "World Health Organization",
@@ -269,8 +280,8 @@ object Citations {
             year = 2019,
             publication = "Open Forum Infectious Diseases 6(4):ofz032",
             url = "https://doi.org/10.1093/ofid/ofz032",
-            supports = "The 36.16-37.02 degrees Celsius mean +/- 2 SD adult temperature " +
-                "across measurement sites (shown as 36.2-37.0)",
+            supports = "The 36.59 +/- 0.43 degrees Celsius pooled adult temperature; the " +
+                "mean +/- 2 SD band is approximately 35.7-37.5 across measurement sites",
             licenceNote = "A published reference range; the article text is not reproduced.",
         ),
         Citation(

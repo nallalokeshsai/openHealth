@@ -1,13 +1,13 @@
 package app.openhealth.ui.screens.vitals
 
 import androidx.compose.ui.graphics.ImageBitmap
-import app.openhealth.ui.body.BodyMapModel
 import app.openhealth.core.body.MeasurementSite
 import app.openhealth.core.citation.CitationKey
 import app.openhealth.core.observation.ObservationContext
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.vitals.BpProtocolState
 import app.openhealth.core.vitals.RangePosition
+import app.openhealth.ui.body.BodyMapModel
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 
@@ -106,12 +106,13 @@ data class PhotoCompareModel(
 
 /** One circumference row in the list under the silhouette (§9.3). */
 data class MeasurementRowModel(
-    val site: MeasurementSite,
+    val site: MeasurementSite?,
     val valueText: String,
     val unitText: String,
     val date: LocalDate,
     val sourceLine: String,
     val provenance: ValueProvenance,
+    val customLabel: String? = null,
 )
 
 /** A grouped vital row on the root: the latest reading, its context and its range. */
@@ -154,11 +155,7 @@ data class ScaleModel(
 }
 
 /** The published range line and strip a detail screen draws (`DESIGN.md` §7.5, §8.2.1). */
-data class ScaleReadingModel(
-    val label: String,
-    val value: Double,
-    val scale: ScaleModel,
-)
+data class ScaleReadingModel(val label: String, val value: Double, val scale: ScaleModel)
 
 data class RangeUiModel(
     val statement: String,
@@ -170,11 +167,7 @@ data class RangeUiModel(
     val scale: ScaleModel? = null,
 )
 
-data class TrendSeriesModel(
-    val label: String?,
-    val points: List<TrendPoint>,
-    val role: SeriesRole,
-)
+data class TrendSeriesModel(val label: String?, val points: List<TrendPoint>, val role: SeriesRole)
 
 enum class SeriesRole { SYSTOLIC, DIASTOLIC, SINGLE }
 
@@ -199,10 +192,15 @@ data class VitalReadingModel(
     val homeSlot: String? = null,
 )
 
-data class ContextFilterModel(val context: ObservationContext?, val label: String, val selected: Boolean)
+data class ContextFilterModel(
+    val context: ObservationContext?,
+    val label: String,
+    val selected: Boolean,
+)
 
 data class BpProtocolModel(
     val state: BpProtocolState,
+    val today: LocalDate,
     val averageSystolic: Double? = null,
     val averageDiastolic: Double? = null,
     val averageReadings: Int = 0,
@@ -235,6 +233,7 @@ data class VitalsModel(
     val composition: List<CompositionTileModel>,
     val photos: List<PhotoTileModel>,
     val photosHidden: Boolean = false,
+    val photosInExport: Boolean = false,
     val vitals: List<VitalGroupModel>,
     val measurements: List<MeasurementRowModel>,
     val frameSizes: List<MeasurementRowModel>,
@@ -245,6 +244,11 @@ data class VitalsModel(
     val demo: Boolean,
 ) {
     val empty: Boolean
-        get() = weight == null && composition.isEmpty() && photos.isEmpty() &&
-            vitals.isEmpty() && measurements.isEmpty() && frameSizes.isEmpty() && body == null
+        get() = weight == null &&
+            composition.isEmpty() &&
+            photos.isEmpty() &&
+            vitals.isEmpty() &&
+            measurements.isEmpty() &&
+            frameSizes.isEmpty() &&
+            body == null
 }

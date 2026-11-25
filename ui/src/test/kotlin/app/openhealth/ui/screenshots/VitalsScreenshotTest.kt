@@ -20,7 +20,6 @@ import app.openhealth.core.body.BodySex
 import app.openhealth.core.body.MeasurementSite
 import app.openhealth.core.citation.CitationKey
 import app.openhealth.core.observation.ObservationType
-import app.openhealth.core.vitals.BloodPressureProtocol
 import app.openhealth.core.vitals.BpProtocolState
 import app.openhealth.core.vitals.RangePosition
 import app.openhealth.ui.body.BodyMapModel
@@ -43,11 +42,11 @@ import app.openhealth.ui.screens.vitals.TrendPoint
 import app.openhealth.ui.screens.vitals.TrendSeriesModel
 import app.openhealth.ui.screens.vitals.ValueProvenance
 import app.openhealth.ui.screens.vitals.VitalDetailModel
+import app.openhealth.ui.screens.vitals.VitalDetailScreen
 import app.openhealth.ui.screens.vitals.VitalGroupModel
 import app.openhealth.ui.screens.vitals.VitalReadingModel
 import app.openhealth.ui.screens.vitals.VitalsModel
 import app.openhealth.ui.screens.vitals.VitalsRootScreen
-import app.openhealth.ui.screens.vitals.VitalDetailScreen
 import app.openhealth.ui.screens.vitals.WeightCardModel
 import app.openhealth.ui.theme.OhTheme
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -83,6 +82,12 @@ class VitalsScreenshotTest {
         Light("light", false, 1f, false),
         Text200("text200", true, 2f, false),
         Rtl("rtl", true, 1f, true),
+    }
+
+    private val geometry by lazy {
+        app.openhealth.ui.body.BodyGeometry.load(
+            org.robolectric.RuntimeEnvironment.getApplication(),
+        )
     }
 
     private fun shot(name: String, content: @Composable () -> Unit) {
@@ -350,7 +355,7 @@ class VitalsScreenshotTest {
             range = RangeUiModel(
                 statement = "below 135/85",
                 population = "adults, home measurement",
-                boundsText = "90.0-135.0 mm[Hg]",
+                boundsText = "90-135 mmHg",
                 citation = CitationKey.ESH_HYPERTENSION_2023,
                 citationLabel = "ESH 2023 · European Society of Hypertension",
             ),
@@ -360,10 +365,30 @@ class VitalsScreenshotTest {
                     128.0,
                     ScaleModel(
                         bands = listOf(
-                            ScaleBandModel(ScaleLabel.LOW, null, 90.0, CitationKey.ESH_HYPERTENSION_2023),
-                            ScaleBandModel(ScaleLabel.NORMAL, 90.0, 135.0, CitationKey.ESH_HYPERTENSION_2023),
-                            ScaleBandModel(ScaleLabel.RAISED, 135.0, 140.0, CitationKey.ESH_HYPERTENSION_2023),
-                            ScaleBandModel(ScaleLabel.HIGH, 140.0, null, CitationKey.ESH_HYPERTENSION_2023),
+                            ScaleBandModel(
+                                ScaleLabel.LOW,
+                                null,
+                                90.0,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
+                            ScaleBandModel(
+                                ScaleLabel.NORMAL,
+                                90.0,
+                                135.0,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
+                            ScaleBandModel(
+                                ScaleLabel.RAISED,
+                                135.0,
+                                140.0,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
+                            ScaleBandModel(
+                                ScaleLabel.HIGH,
+                                140.0,
+                                null,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
                         ),
                         domainLow = 65.0,
                         domainHigh = 165.0,
@@ -374,10 +399,30 @@ class VitalsScreenshotTest {
                     78.0,
                     ScaleModel(
                         bands = listOf(
-                            ScaleBandModel(ScaleLabel.LOW, null, 60.0, CitationKey.ESH_HYPERTENSION_2023),
-                            ScaleBandModel(ScaleLabel.NORMAL, 60.0, 85.0, CitationKey.ESH_HYPERTENSION_2023),
-                            ScaleBandModel(ScaleLabel.RAISED, 85.0, 90.0, CitationKey.ESH_HYPERTENSION_2023),
-                            ScaleBandModel(ScaleLabel.HIGH, 90.0, null, CitationKey.ESH_HYPERTENSION_2023),
+                            ScaleBandModel(
+                                ScaleLabel.LOW,
+                                null,
+                                60.0,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
+                            ScaleBandModel(
+                                ScaleLabel.NORMAL,
+                                60.0,
+                                85.0,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
+                            ScaleBandModel(
+                                ScaleLabel.RAISED,
+                                85.0,
+                                90.0,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
+                            ScaleBandModel(
+                                ScaleLabel.HIGH,
+                                90.0,
+                                null,
+                                CitationKey.ESH_HYPERTENSION_2023,
+                            ),
                         ),
                         domainLow = 45.0,
                         domainHigh = 105.0,
@@ -402,8 +447,6 @@ class VitalsScreenshotTest {
                     ),
                 ),
                 unitText = "mmHg",
-                referenceLow = 90.0,
-                referenceHigh = 135.0,
                 description = "Blood pressure, six readings over three weeks.",
             ),
             contexts = listOf(
@@ -416,6 +459,7 @@ class VitalsScreenshotTest {
             ),
             readings = readings,
             protocol = BpProtocolModel(
+                today = LocalDate(2026, 11, 25),
                 state = BpProtocolState(
                     startDate = LocalDate(2026, 11, 18),
                     days = emptyList(),
@@ -441,15 +485,17 @@ class VitalsScreenshotTest {
                 onLogWeight = {},
                 onOpenDetail = {},
                 onSaveReading = {},
-                onSaveMeasurement = { _, _ -> },
+                onSaveMeasurement = { _, _, _ -> },
                 onAddPhoto = {},
                 onOpenPhoto = {},
                 onDeletePhoto = {},
                 onPhotosHidden = {},
+                onPhotosInExport = {},
                 onExportCsv = {},
                 onImportCsv = {},
                 onOpenSettings = {},
                 synchronousLayers = true,
+                geometry = geometry,
             )
         }
     }
@@ -462,15 +508,17 @@ class VitalsScreenshotTest {
                 onLogWeight = {},
                 onOpenDetail = {},
                 onSaveReading = {},
-                onSaveMeasurement = { _, _ -> },
+                onSaveMeasurement = { _, _, _ -> },
                 onAddPhoto = {},
                 onOpenPhoto = {},
                 onDeletePhoto = {},
                 onPhotosHidden = {},
+                onPhotosInExport = {},
                 onExportCsv = {},
                 onImportCsv = {},
                 onOpenSettings = {},
                 synchronousLayers = true,
+                geometry = geometry,
             )
         }
     }
@@ -483,15 +531,17 @@ class VitalsScreenshotTest {
                 onLogWeight = {},
                 onOpenDetail = {},
                 onSaveReading = {},
-                onSaveMeasurement = { _, _ -> },
+                onSaveMeasurement = { _, _, _ -> },
                 onAddPhoto = {},
                 onOpenPhoto = {},
                 onDeletePhoto = {},
                 onPhotosHidden = {},
+                onPhotosInExport = {},
                 onExportCsv = {},
                 onImportCsv = {},
                 onOpenSettings = {},
                 synchronousLayers = true,
+                geometry = geometry,
             )
         }
     }

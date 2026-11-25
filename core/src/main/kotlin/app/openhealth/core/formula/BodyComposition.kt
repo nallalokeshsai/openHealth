@@ -152,7 +152,8 @@ object NavyBodyFat {
  * Fat-free mass index: fat-free mass divided by height squared, and the height-
  * normalised form published by Schutz et al. (`pr.md` §6.8).
  */
-object Ffmi {    private const val REFERENCE_HEIGHT_M = 1.8
+object Ffmi {
+    private const val REFERENCE_HEIGHT_M = 1.8
     private const val NORMALISATION = 6.1
     private const val MIN_KG = 1.0
     private const val MAX_KG = 500.0

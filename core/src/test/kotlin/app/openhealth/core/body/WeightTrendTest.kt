@@ -93,11 +93,21 @@ class BodyCsvTest {
     @Test
     fun aRoundTripKeepsUnitsAndMethods() {
         val rows = listOf(
-            BodyCsvRow(today, BodyCsv.WEIGHT, 82.4, app.openhealth.core.units.UcumUnit.KILOGRAM,
-                app.openhealth.core.observation.MeasurementMethod.SCALE, "morning"),
-            BodyCsvRow(today, "waist", 84.0,
+            BodyCsvRow(
+                today,
+                BodyCsv.WEIGHT,
+                82.4,
+                app.openhealth.core.units.UcumUnit.KILOGRAM,
+                app.openhealth.core.observation.MeasurementMethod.SCALE,
+                "morning",
+            ),
+            BodyCsvRow(
+                today,
+                "waist",
+                84.0,
                 app.openhealth.core.units.UcumUnit.CENTIMETRE,
-                app.openhealth.core.observation.MeasurementMethod.MANUAL_ENTRY),
+                app.openhealth.core.observation.MeasurementMethod.MANUAL_ENTRY,
+            ),
         )
         val parsed = BodyCsv.parse(BodyCsv.export(rows))
         assertTrue(parsed.problems.isEmpty())

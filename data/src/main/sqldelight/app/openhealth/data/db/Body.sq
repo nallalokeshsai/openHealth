@@ -67,6 +67,9 @@ INSERT OR IGNORE INTO measurement(
 measurementById:
 SELECT * FROM measurement WHERE id = :id;
 
+measurementByIdempotencyKey:
+SELECT * FROM measurement WHERE idempotency_key = :key;
+
 measurementsForDay:
 SELECT * FROM measurement WHERE local_date = :localDate ORDER BY happened_at;
 
@@ -174,6 +177,16 @@ INSERT OR IGNORE INTO body_photo(
 photoById:
 SELECT * FROM body_photo WHERE id = :id;
 
+-- The timeline needs a caption, a date and a source, never the image bytes. The gallery
+-- and the timeline both read this shape.
+photoTimeline:
+SELECT id, local_date, zone_id, happened_at, recorded_at, source_id, caption, device,
+    revision
+FROM body_photo WHERE id = :id;
+
+vitalByObservationId:
+SELECT * FROM vital WHERE observation_id = :id LIMIT 1;
+
 photoThumbnailById:
 SELECT thumb_b64, bytes_b64 FROM body_photo WHERE id = :id;
 
@@ -188,7 +201,7 @@ SELECT * FROM body_photo ORDER BY happened_at DESC LIMIT :limit;
 -- The gallery needs a date, a caption and a thumbnail, never the full image: loading every
 -- full photo to draw a 110 dp tile would read megabytes per rebuild (DESIGN.md §9.4).
 photoGallery:
-SELECT id, local_date, happened_at, caption, thumb_b64
+SELECT id, local_date, happened_at, recorded_at, source_id, caption, thumb_b64
 FROM body_photo ORDER BY happened_at DESC LIMIT :limit;
 
 allPhotos:

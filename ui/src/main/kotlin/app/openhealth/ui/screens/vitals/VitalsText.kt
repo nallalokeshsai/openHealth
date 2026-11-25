@@ -1,3 +1,7 @@
+// Unit conversion factors and the reading bounds are physical and clinical constants;
+// their citation lives in :core and is shown beside the value.
+@file:Suppress("MagicNumber")
+
 package app.openhealth.ui.screens.vitals
 
 import androidx.compose.runtime.Composable
@@ -40,6 +44,7 @@ fun citationLabel(key: CitationKey): String = stringResource(
     when (key) {
         CitationKey.ESH_HYPERTENSION_2023 -> R.string.vitals_citation_esh
         CitationKey.AHA_RESTING_HEART_RATE -> R.string.vitals_citation_aha
+        CitationKey.AHA_LOW_BLOOD_PRESSURE -> R.string.vitals_citation_aha
         CitationKey.WHO_PULSE_OXIMETRY_2011 -> R.string.vitals_citation_who
         CitationKey.GENEVA_BODY_TEMPERATURE_2019 -> R.string.vitals_citation_geneva
         CitationKey.ADA_GLYCEMIC_TARGETS_2026 -> R.string.vitals_citation_ada

@@ -30,6 +30,9 @@ class VitalRangesTest {
         assertEquals(RangePosition.ABOVE, range.position(135.0))
         assertEquals(RangePosition.BELOW, range.position(85.0))
         assertEquals("below 135/85", range.statement)
+        val resting = VitalRanges.forReading(ObservationType.RESTING_HEART_RATE, null)!!
+        assertEquals(RangePosition.WITHIN, resting.position(100.0))
+        assertEquals(RangePosition.ABOVE, resting.position(100.1))
     }
 
     @Test
@@ -102,7 +105,7 @@ class BloodPressureProtocolTest {
                 BpProtocolReading(date, HomeSlot.EVENING),
             )
         }
-        val state = BloodPressureProtocol.state(start, LocalDate(2026, 11, 24), readings)
+        val state = BloodPressureProtocol.state(start, readings)
         assertEquals(28, state.recorded)
         assertTrue(state.complete)
         assertEquals(1f, state.fraction)
@@ -112,7 +115,6 @@ class BloodPressureProtocolTest {
     @Test
     fun anIncompleteSlotIsTheNextAction() {
         val state = BloodPressureProtocol.state(
-            start,
             start,
             listOf(BpProtocolReading(start, HomeSlot.MORNING)),
         )

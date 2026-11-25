@@ -35,7 +35,9 @@ enum class MeasurementSite(
     val hasAnchor: Boolean get() = anchorMuscle != null
 
     companion object {
-        private val byType: Map<String, MeasurementSite> = entries.associateBy(MeasurementSite::type)
+        private val byType: Map<String, MeasurementSite> = entries.associateBy(
+            MeasurementSite::type,
+        )
 
         fun fromType(type: String): MeasurementSite? = byType[type.trim().lowercase()]
 

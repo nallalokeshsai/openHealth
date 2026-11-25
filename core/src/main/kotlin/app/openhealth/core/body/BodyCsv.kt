@@ -20,10 +20,7 @@ data class BodyCsvRow(
 
 data class BodyCsvProblem(val line: Int, val reason: String)
 
-data class BodyCsvParseResult(
-    val rows: List<BodyCsvRow>,
-    val problems: List<BodyCsvProblem>,
-) {
+data class BodyCsvParseResult(val rows: List<BodyCsvRow>, val problems: List<BodyCsvProblem>) {
     val ok: Boolean get() = problems.isEmpty() && rows.isNotEmpty()
 }
 
@@ -38,7 +35,6 @@ data class BodyCsvParseResult(
  */
 object BodyCsv {
     const val HEADER = "date,type,value,unit,method,notes"
-    private const val COLUMNS = 6
     private const val MIN_WEIGHT_KG = 1.0
     private const val MAX_WEIGHT_KG = 500.0
     private const val MIN_CM = 1.0
@@ -61,6 +57,7 @@ object BodyCsv {
         return if (body.isEmpty()) "$HEADER\n" else "$HEADER\n$body\n"
     }
 
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "MagicNumber")
     fun parse(text: String): BodyCsvParseResult {
         val rows = mutableListOf<BodyCsvRow>()
         val problems = mutableListOf<BodyCsvProblem>()
@@ -68,7 +65,9 @@ object BodyCsv {
             val lineNumber = index + 1
             if (raw.isBlank()) return@forEachIndexed
             val cells = split(raw)
-            if (index == 0 && cells.firstOrNull()?.trim()?.equals("date", ignoreCase = true) == true) {
+            if (index == 0 &&
+                cells.firstOrNull()?.trim()?.equals("date", ignoreCase = true) == true
+            ) {
                 return@forEachIndexed
             }
             if (cells.size < 4) {
@@ -81,7 +80,8 @@ object BodyCsv {
                 return@forEachIndexed
             }
             val type = cells[1].trim().lowercase()
-            if (type != WEIGHT && MeasurementSite.fromType(type) == null &&
+            if (type != WEIGHT &&
+                MeasurementSite.fromType(type) == null &&
                 CompositionMeasure.fromType(type) == null
             ) {
                 problems += BodyCsvProblem(lineNumber, "not a body metric: $type")
@@ -96,7 +96,8 @@ object BodyCsv {
                 UcumUnit.byUcum(cells[3].trim(), expectedDimension(type))
             }.getOrNull()
             if (unit == null) {
-                problems += BodyCsvProblem(lineNumber, "unit does not fit $type: ${cells[3].trim()}")
+                problems +=
+                    BodyCsvProblem(lineNumber, "unit does not fit $type: ${cells[3].trim()}")
                 return@forEachIndexed
             }
             val canonical = unit.toCanonical(value)

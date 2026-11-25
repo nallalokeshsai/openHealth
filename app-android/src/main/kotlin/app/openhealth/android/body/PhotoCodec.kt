@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber")
+
 package app.openhealth.android.body
 
 import android.content.Context
@@ -22,6 +24,7 @@ import java.security.MessageDigest
  * The original file name and metadata are not kept: EXIF (including any location tag) is
  * dropped by re-encoding, and the person's own caption is the only text stored.
  */
+@Suppress("TooManyFunctions")
 object PhotoCodec {
     const val MAX_SOURCE_BYTES = 30 * 1024 * 1024
     private const val MAX_DIMENSION = 1600
@@ -79,8 +82,7 @@ object PhotoCodec {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
     }.getOrNull()
 
-    fun encodeBase64(bytes: ByteArray): String =
-        Base64.encodeToString(bytes, Base64.NO_WRAP)
+    fun encodeBase64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
 
     fun decodeBase64(text: String?): ByteArray? = runCatching {
         if (text.isNullOrBlank()) null else Base64.decode(text, Base64.NO_WRAP)

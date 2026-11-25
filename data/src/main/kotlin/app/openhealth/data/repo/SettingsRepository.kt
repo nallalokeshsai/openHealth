@@ -94,5 +94,6 @@ object SettingKeys {
     /** B7: the gallery can hide a photo until it is tapped, and the home-BP protocol
      * remembers the day it started so its seven-day grid survives a restart. */
     const val BODY_PHOTOS_HIDDEN = "body.photos_hidden"
+    const val BODY_PHOTOS_IN_EXPORT = "body.photos_in_export"
     const val VITALS_BP_PROTOCOL_START = "vitals.bp_protocol_start"
 }

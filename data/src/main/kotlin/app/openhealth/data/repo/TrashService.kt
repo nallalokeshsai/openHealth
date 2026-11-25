@@ -299,6 +299,7 @@ data class NotePayload(
  * the session; Trash keeps it for 30 days; purge is explicit and only touches rows past
  * their window. No code path here deletes anything without a tombstone.
  */
+@Suppress("LargeClass")
 class TrashService(
     private val db: OpenHealthDb,
     private val clock: ClockSeam = SystemClock,
@@ -444,6 +445,7 @@ class TrashService(
     }
 
     /** Restores one tombstoned row. Returns false when it is gone or already restored. */
+    @Suppress("CyclomaticComplexMethod")
     fun undo(id: TombstoneId): Boolean {
         val tombstone = tombstoneById(id.value)
         val payload = tombstone?.payload
@@ -513,6 +515,7 @@ class TrashService(
     }.getOrDefault(false)
 
     /** A short, human summary of a tombstoned row for the Trash list. */
+    @Suppress("CyclomaticComplexMethod")
     fun preview(row: app.openhealth.data.db.ActiveTombstones): String = runCatching {
         val payload = row.payload ?: return ""
         when (row.entity_table) {
@@ -641,8 +644,7 @@ class TrashService(
 
     private fun vital(id: String): Vital? = db.bodyQueries.vitalById(id).executeAsOneOrNull()
 
-    private fun photo(id: String): Body_photo? =
-        db.bodyQueries.photoById(id).executeAsOneOrNull()
+    private fun photo(id: String): Body_photo? = db.bodyQueries.photoById(id).executeAsOneOrNull()
 
     private fun restorePhoto(payload: String) {
         val row = json.decodeFromString(PhotoPayload.serializer(), payload)

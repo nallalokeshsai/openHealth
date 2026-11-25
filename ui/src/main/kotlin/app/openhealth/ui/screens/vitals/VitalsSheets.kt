@@ -1,3 +1,5 @@
+@file:Suppress("MatchingDeclarationName")
+
 package app.openhealth.ui.screens.vitals
 
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +23,7 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /** What a formula sheet shows: the rule, its inputs and the citation behind it. */
 data class FormulaSheetModel(val title: String, val body: String, val citation: String)
@@ -51,7 +54,7 @@ fun VitalsProvenanceSheet(
             )
             provenance.trendText?.let { trend ->
                 OhRow(
-                    title = stringResource(R.string.vitals_provenance_quality),
+                    title = stringResource(R.string.vitals_provenance_trend),
                     value = trend,
                 )
             }
@@ -92,10 +95,14 @@ fun VitalsProvenanceSheet(
             }
             OhRow(
                 title = stringResource(R.string.vitals_provenance_edited),
-                value = if (provenance.edited) "Yes" else "No",
+                value = if (provenance.edited) {
+                    stringResource(R.string.vitals_provenance_edited_value)
+                } else {
+                    stringResource(R.string.vitals_provenance_as_captured)
+                },
             )
             OhRow(
-                title = stringResource(R.string.vitals_provenance_raw),
+                title = stringResource(R.string.vitals_provenance_raw_title),
                 value = if (provenance.rawRecord) {
                     stringResource(R.string.vitals_provenance_raw)
                 } else {
@@ -117,8 +124,9 @@ fun VitalsProvenanceSheet(
 @Composable
 private fun recordedText(provenance: ValueProvenance): String {
     val delay = provenance.recordedAt - provenance.happenedAt
-    val base = "${shortDate(provenance.localDate)} · " +
-        timeOf(provenance.recordedAt, TimeZone.of(provenance.zoneId))
+    val zone = TimeZone.of(provenance.zoneId)
+    val recordedDate = provenance.recordedAt.toLocalDateTime(zone).date
+    val base = "${shortDate(recordedDate)} · " + timeOf(provenance.recordedAt, zone)
     return if (delay < 1.minutes) {
         base
     } else {
@@ -129,18 +137,30 @@ private fun recordedText(provenance: ValueProvenance): String {
 @Composable
 private fun delayWords(delay: Duration): String = when {
     delay >= 1.days -> {
-        val days = delay.inWholeDays
-        if (days == 1L) "1 day" else "$days days"
+        val days = delay.inWholeDays.toInt()
+        if (days == 1) {
+            stringResource(R.string.vitals_weight_day)
+        } else {
+            stringResource(R.string.vitals_weight_days, days)
+        }
     }
 
     delay >= 1.hours -> {
-        val hours = delay.inWholeHours
-        if (hours == 1L) "1 hour" else "$hours hours"
+        val hours = delay.inWholeHours.toInt()
+        if (hours == 1) {
+            stringResource(R.string.vitals_provenance_hour)
+        } else {
+            stringResource(R.string.vitals_provenance_hours, hours)
+        }
     }
 
     else -> {
-        val minutes = delay.inWholeMinutes.coerceAtLeast(1)
-        if (minutes == 1L) "1 minute" else "$minutes minutes"
+        val minutes = delay.inWholeMinutes.coerceAtLeast(1).toInt()
+        if (minutes == 1) {
+            stringResource(R.string.vitals_provenance_minute)
+        } else {
+            stringResource(R.string.vitals_provenance_minutes, minutes)
+        }
     }
 }
 

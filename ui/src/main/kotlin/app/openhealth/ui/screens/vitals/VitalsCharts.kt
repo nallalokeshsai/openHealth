@@ -1,9 +1,13 @@
+// Chart geometry is quoted from DESIGN.md §8.1-8.2.1; percentages are drawing
+// arithmetic, not theme values.
+@file:Suppress("MagicNumber")
+
 package app.openhealth.ui.screens.vitals
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,24 +32,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.ui.R
 import app.openhealth.ui.components.ohClickable
 import app.openhealth.ui.components.rememberInteraction
@@ -53,18 +62,12 @@ import app.openhealth.ui.screens.common.decimalText
 import app.openhealth.ui.screens.common.number
 import app.openhealth.ui.screens.common.shortDate
 import app.openhealth.ui.theme.OhTheme
-import app.openhealth.ui.theme.OhWeight
 import app.openhealth.ui.theme.tabular
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.datetime.LocalDate
 
-private val CHART_HEIGHT = 160.dp
-private val SCALE_LABEL_WIDTH = 64.dp
-private val AXIS_WIDTH = 46.dp
-private val POINT_RADIUS = 2.5.dp
-private val LAST_POINT_RADIUS = 4.dp
-private val MAX_GAP_DAYS = 14.0
+private const val MAX_GAP_DAYS = 14.0
 
 /**
  * A line chart with the chrome of `DESIGN.md` §8.1: horizontal gridlines only, no border,
@@ -83,6 +86,7 @@ fun OhTrendChart(
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
+    val dims = OhTheme.dims
     val density = LocalDensity.current
     var selected by remember(model.series) { mutableStateOf<LocalDate?>(null) }
     val allDates = model.series.flatMap { series -> series.points.map { it.date } }
@@ -103,8 +107,8 @@ fun OhTrendChart(
     val dash = remember(density) {
         PathEffect.dashPathEffect(
             floatArrayOf(
-                with(density) { 7.dp.toPx() },
-                with(density) { 4.dp.toPx() },
+                with(density) { dims.chartDashOn.toPx() },
+                with(density) { dims.chartDashOff.toPx() },
             ),
         )
     }
@@ -112,8 +116,7 @@ fun OhTrendChart(
     fun xFraction(date: LocalDate): Float =
         ((date.toEpochDays() - minDate.toEpochDays()) / dateSpan).toFloat().coerceIn(0f, 1f)
 
-    fun yFraction(value: Double): Float =
-        (1.0 - (value - yLow) / ySpan).toFloat().coerceIn(0f, 1f)
+    fun yFraction(value: Double): Float = (1.0 - (value - yLow) / ySpan).toFloat().coerceIn(0f, 1f)
 
     Column(modifier = modifier.fillMaxWidth()) {
         // The scrub result is a sentence above the plot, so it is reachable without a
@@ -148,7 +151,7 @@ fun OhTrendChart(
         }
         Row {
             Column(
-                modifier = Modifier.width(AXIS_WIDTH).height(CHART_HEIGHT),
+                modifier = Modifier.width(dims.chartAxisWidth).height(dims.chartHeight),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
@@ -165,7 +168,7 @@ fun OhTrendChart(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(CHART_HEIGHT)
+                    .height(dims.chartHeight)
                     .semantics {
                         contentDescription = model.description
                         if (onShowTable != null) {
@@ -188,7 +191,7 @@ fun OhTrendChart(
                         }
                     }
                     .pointerInput(model.series) {
-                        detectDragGestures(
+                        detectHorizontalDragGestures(
                             onDragStart = { offset ->
                                 selected = nearestDate(
                                     offset.x / size.width,
@@ -217,7 +220,7 @@ fun OhTrendChart(
                             color = colors.sepOp,
                             start = Offset(0f, y),
                             end = Offset(w, y),
-                            strokeWidth = 1.dp.toPx(),
+                            strokeWidth = dims.chartGrid.toPx(),
                         )
                     }
                     // The reference band, green at 18 %, never a hard coloured edge.
@@ -236,7 +239,7 @@ fun OhTrendChart(
                             color = colors.goldInk,
                             start = Offset(0f, y),
                             end = Offset(w, y),
-                            strokeWidth = 1.5.dp.toPx(),
+                            strokeWidth = dims.chartGoal.toPx(),
                             pathEffect = dash,
                         )
                     }
@@ -251,9 +254,9 @@ fun OhTrendChart(
                                 start = Offset(w * xFraction(from.date), h * yFraction(from.value)),
                                 end = Offset(w * xFraction(to.date), h * yFraction(to.value)),
                                 strokeWidth = if (model.series.size == 1) {
-                                    2.5.dp.toPx()
+                                    dims.chartLine.toPx()
                                 } else {
-                                    2.dp.toPx()
+                                    dims.chartSecondLine.toPx()
                                 },
                                 cap = StrokeCap.Round,
                             )
@@ -262,9 +265,9 @@ fun OhTrendChart(
                             drawCircle(
                                 color = ink,
                                 radius = if (point == points.last()) {
-                                    LAST_POINT_RADIUS.toPx()
+                                    dims.chartLastPoint.toPx()
                                 } else {
-                                    POINT_RADIUS.toPx()
+                                    dims.chartPoint.toPx()
                                 },
                                 center = Offset(
                                     w * xFraction(point.date),
@@ -279,7 +282,7 @@ fun OhTrendChart(
                             color = colors.label3,
                             start = Offset(x, 0f),
                             end = Offset(x, h),
-                            strokeWidth = 1.dp.toPx(),
+                            strokeWidth = dims.chartGrid.toPx(),
                             pathEffect = dash,
                         )
                         model.series.forEachIndexed { index, series ->
@@ -287,12 +290,12 @@ fun OhTrendChart(
                                 ?: return@forEachIndexed
                             drawCircle(
                                 color = colors.surface,
-                                radius = 7.dp.toPx(),
+                                radius = dims.chartScrubRing.toPx(),
                                 center = Offset(x, h * yFraction(point.value)),
                             )
                             drawCircle(
                                 color = lineColors[index % lineColors.size],
-                                radius = 5.dp.toPx(),
+                                radius = dims.chartScrubDot.toPx(),
                                 center = Offset(x, h * yFraction(point.value)),
                             )
                         }
@@ -300,7 +303,7 @@ fun OhTrendChart(
                 }
             }
         }
-        Row(modifier = Modifier.fillMaxWidth().padding(start = AXIS_WIDTH)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(start = dims.chartAxisWidth)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -324,7 +327,7 @@ fun OhTrendChart(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier
-                                .size(8.dp)
+                                .size(dims.chartLegendDot)
                                 .clip(CircleShape)
                                 .background(lineColors[index % lineColors.size]),
                         )
@@ -384,10 +387,12 @@ private fun nearestDate(
 fun OhClinicalRangeStrip(
     scale: ScaleModel,
     value: Double,
+    description: String,
     modifier: Modifier = Modifier,
 ) {
     val colors = OhTheme.colors
     val type = OhTheme.type
+    val dims = OhTheme.dims
     val inks = listOf(
         colors.blue.copy(alpha = 0.35f),
         colors.green.copy(alpha = 0.35f),
@@ -395,7 +400,11 @@ fun OhClinicalRangeStrip(
         colors.orange.copy(alpha = 0.55f),
     )
     val labelInks = listOf(colors.blueInk, colors.greenInk, colors.goldInk, colors.orangeInk)
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = description },
+    ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
@@ -409,11 +418,11 @@ fun OhClinicalRangeStrip(
                 )
             }
         }
-        Box(modifier = Modifier.fillMaxWidth().height(16.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().height(dims.rangeStripBox)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(10.dp)
+                    .height(dims.rangeStripTrack)
                     .align(Alignment.Center)
                     .clip(RoundedCornerShape(OhTheme.radius.full)),
             ) {
@@ -435,48 +444,63 @@ fun OhClinicalRangeStrip(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 0.dp)
                     .fillMaxWidth(scale.fractionOf(value))
-                    .height(16.dp),
+                    .height(dims.rangeStripBox),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Box(
                     Modifier
-                        .width(3.dp)
-                        .height(16.dp)
+                        .width(dims.rangeStripTickWidth)
+                        .height(dims.rangeStripBox)
                         .background(colors.label),
                 )
             }
         }
         Spacer(Modifier.height(OhTheme.space.s0))
-        // The four names sit under the ruler at a readable width rather than being squeezed
-        // into the narrow Raised stop; they scroll at 200 % text instead of clipping.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-        ) {
+        // The four names sit under the ruler with equal columns, so a 200 % label wraps
+        // rather than losing a letter; the numbers are the band's own edges.
+        Row(modifier = Modifier.fillMaxWidth()) {
             scale.bands.forEachIndexed { index, band ->
-                Column(modifier = Modifier.width(SCALE_LABEL_WIDTH)) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = scaleLabel(band.label),
                         style = type.caption2,
                         color = labelInks[index % labelInks.size],
-                        maxLines = 1,
+                        maxLines = 2,
                     )
                     Text(
-                        text = number(
-                            if (index == 0) (band.to ?: scale.domainHigh) else (band.from ?: 0.0),
-                            1,
-                        ),
+                        text = bandEdges(index, band, scale),
                         style = type.caption2.tabular(),
                         color = colors.label2,
-                        maxLines = 1,
+                        maxLines = 2,
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+fun scaleDescription(label: String, value: Double, scale: ScaleModel): String =
+    label + " " + number(value, 0) + ". " + scale.bands.joinToString("; ") { band ->
+        scaleLabelText(band.label) + " " + bandEdges(
+            scale.bands.indexOf(band),
+            band,
+            scale,
+        )
+    }
+
+private fun bandEdges(index: Int, band: ScaleBandModel, scale: ScaleModel): String = when {
+    index == 0 -> "below ${band.to ?: scale.domainHigh}"
+    index == scale.bands.lastIndex -> "above ${band.from ?: scale.domainLow}"
+    else -> "${band.from ?: scale.domainLow}-${band.to ?: scale.domainHigh}"
+}
+
+private fun scaleLabelText(label: ScaleLabel): String = when (label) {
+    ScaleLabel.LOW -> "Low"
+    ScaleLabel.NORMAL -> "Normal"
+    ScaleLabel.RAISED -> "Raised"
+    ScaleLabel.HIGH -> "High"
 }
 
 @Composable
@@ -495,18 +519,17 @@ private fun scaleLabel(label: ScaleLabel): String = stringResource(
  * The first photo is always the older one.
  */
 @Composable
-fun OhBeforeAfterSlider(
-    model: PhotoCompareModel,
-    modifier: Modifier = Modifier,
-) {
+fun OhBeforeAfterSlider(model: PhotoCompareModel, modifier: Modifier = Modifier) {
     var fraction by remember(model.beforeId, model.afterId) { mutableStateOf(0.5f) }
     val colors = OhTheme.colors
     val type = OhTheme.type
+    val dims = OhTheme.dims
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val label = stringResource(R.string.vitals_photo_compare_label)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(420.dp)
+            .height(dims.photoCompareMax)
             .semantics {
                 contentDescription = label
                 // A slider, so TalkBack can move the divider with the arrow actions.
@@ -517,6 +540,23 @@ fun OhBeforeAfterSlider(
                 setProgress { increment ->
                     fraction = (fraction + increment).coerceIn(0f, 1f)
                     true
+                }
+            }
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        fraction = (fraction - 0.02f).coerceIn(0f, 1f)
+                        true
+                    }
+
+                    Key.DirectionRight -> {
+                        fraction = (fraction + 0.02f).coerceIn(0f, 1f)
+                        true
+                    }
+
+                    else -> false
                 }
             }
             .pointerInput(model.beforeId, model.afterId) {
@@ -567,39 +607,41 @@ fun OhBeforeAfterSlider(
             }
             val x = size.width * fraction
             drawLine(
-                color = Color.White,
+                color = colors.knob,
                 start = Offset(x, 0f),
                 end = Offset(x, size.height),
-                strokeWidth = 2.dp.toPx(),
+                strokeWidth = dims.photoHandle.toPx(),
             )
             drawCircle(
-                color = Color.White,
-                radius = 12.dp.toPx(),
+                color = colors.knob,
+                radius = dims.photoGrip.toPx(),
                 center = Offset(x, size.height / 2f),
             )
             drawCircle(
-                color = Color.Black.copy(alpha = 0.55f),
-                radius = 3.dp.toPx(),
-                center = Offset(x - 4.dp.toPx(), size.height / 2f),
-                style = Stroke(width = 1.5.dp.toPx()),
+                color = colors.scrim,
+                radius = dims.photoGripDot.toPx(),
+                center = Offset(x - dims.photoGripDotOffset.toPx(), size.height / 2f),
+                style = Stroke(width = dims.photoGripStroke.toPx()),
             )
         }
         DatePill(
             text = shortDate(model.beforeDate),
-            modifier = Modifier.align(Alignment.TopStart).padding(OhTheme.space.s2),
+            modifier = Modifier.align(if (rtl) Alignment.TopEnd else Alignment.TopStart)
+                .padding(OhTheme.space.s2),
         )
         DatePill(
             text = shortDate(model.afterDate),
-            modifier = Modifier.align(Alignment.TopEnd).padding(OhTheme.space.s2),
+            modifier = Modifier.align(if (rtl) Alignment.TopStart else Alignment.TopEnd)
+                .padding(OhTheme.space.s2),
         )
         Text(
             text = stringResource(R.string.vitals_photo_range, model.daysApart),
             style = type.caption,
-            color = Color.White,
+            color = colors.knob,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .clip(RoundedCornerShape(OhTheme.radius.full))
-                .background(Color.Black.copy(alpha = 0.55f))
+                .background(colors.scrim)
                 .padding(horizontal = OhTheme.space.s3, vertical = OhTheme.space.s1),
         )
     }
@@ -610,10 +652,10 @@ private fun DatePill(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = OhTheme.type.caption,
-        color = Color.White,
+        color = OhTheme.colors.knob,
         modifier = modifier
             .clip(RoundedCornerShape(OhTheme.radius.full))
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(OhTheme.colors.scrim)
             .padding(horizontal = OhTheme.space.s3, vertical = OhTheme.space.s1),
     )
 }

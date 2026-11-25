@@ -24,12 +24,11 @@ import app.openhealth.core.ids.ObservationId
 import app.openhealth.core.ids.SourceId
 import app.openhealth.core.ids.TombstoneId
 import app.openhealth.core.observation.MeasurementMethod
-import app.openhealth.core.observation.ObservationContext
 import app.openhealth.core.observation.Observation
+import app.openhealth.core.observation.ObservationContext
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.Provenance
 import app.openhealth.core.observation.SourceKind
-import app.openhealth.core.body.MeasurementSite
 import app.openhealth.core.preferences.AgeRules
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ProfileGoal
@@ -152,7 +151,12 @@ data class QuickAddUi(
             }
 }
 
-data class AppToast(val messageRes: Int, val undo: Boolean, val argument: Int? = null, val second: Int? = null)
+data class AppToast(
+    val messageRes: Int,
+    val undo: Boolean,
+    val argument: Int? = null,
+    val second: Int? = null,
+)
 
 /** One undo slot for the session; the tombstone in Trash is the durable promise. */
 private sealed interface UndoAction {
@@ -240,6 +244,7 @@ class AppViewModel(
             zone = zone,
             ids = container.ids,
             manualSource = AppContainer.MANUAL_SOURCE,
+            importSource = AppContainer.IMPORT_SOURCE,
             appVersion = container.versionName,
         )
     }
@@ -1980,30 +1985,51 @@ class AppViewModel(
     fun deleteTimelineRow(row: TimelineRowModel) {
         if (!row.deletable) return
         launchGuarded {
-            val tombstone = withContext(Dispatchers.IO) {
+            val undo = withContext(Dispatchers.IO) {
                 when (row.kind) {
-                    TimelineKind.NOTE -> store.trash.deleteNote(NoteId(row.entityId))
-                    TimelineKind.WATER, TimelineKind.OBSERVATION ->
+                    TimelineKind.NOTE ->
+                        store.trash.deleteNote(NoteId(row.entityId))?.let(UndoAction::Deleted)
+
+                    TimelineKind.WATER, TimelineKind.OBSERVATION, TimelineKind.WEIGHT ->
                         store.trash.deleteObservation(ObservationId(row.entityId))
-                    TimelineKind.WEIGHT ->
-                        store.trash.deleteObservation(ObservationId(row.entityId))
+                            ?.let(UndoAction::Deleted)
+
                     TimelineKind.MEASUREMENT ->
                         store.trash.deleteMeasurement(
                             app.openhealth.core.ids.MeasurementId(row.entityId),
-                        )
-                    TimelineKind.VITAL ->
-                        store.trash.deleteVital(app.openhealth.core.ids.VitalId(row.entityId))
+                        )?.let(UndoAction::Deleted)
+
+                    TimelineKind.VITAL -> {
+                        val vital = store.body.vitalById(row.entityId)
+                        val observationId = vital?.observation_id
+                        if (observationId != null) {
+                            UndoAction.DeletedMany(body.deleteReading(observationId))
+                        } else {
+                            store.trash.deleteVital(
+                                app.openhealth.core.ids.VitalId(row.entityId),
+                            )?.let(UndoAction::Deleted)
+                        }
+                    }
+
                     TimelineKind.PHOTO ->
                         store.trash.deletePhoto(app.openhealth.core.ids.PhotoId(row.entityId))
-                    TimelineKind.ENTRY -> store.trash.deleteEntry(EntryId(row.entityId))
-                    TimelineKind.SESSION -> store.trash.deleteSession(row.entityId)
+                            ?.let(UndoAction::Deleted)
+
+                    TimelineKind.ENTRY ->
+                        store.trash.deleteEntry(EntryId(row.entityId))?.let(UndoAction::Deleted)
+
+                    TimelineKind.SESSION ->
+                        store.trash.deleteSession(row.entityId)?.let(UndoAction::Deleted)
+
                     TimelineKind.SET ->
                         store.trash.deleteWorkSet(app.openhealth.core.ids.SetId(row.entityId))
+                            ?.let(UndoAction::Deleted)
+
                     else -> null
                 }
             }
-            if (tombstone != null) {
-                undoAction = UndoAction.Deleted(tombstone)
+            if (undo != null) {
+                undoAction = undo
                 toastJob?.cancel()
                 _state.update {
                     it.copy(
@@ -2411,11 +2437,15 @@ class AppViewModel(
         }
     }
 
-    fun saveMeasurement(site: MeasurementSite, value: String) {
+    fun saveMeasurement(
+        type: String,
+        value: String,
+        method: MeasurementMethod = MeasurementMethod.MANUAL_ENTRY,
+    ) {
         val imperial = profileUnits() == UnitSystem.IMPERIAL
         launchGuarded {
             val saved = withContext(Dispatchers.IO) {
-                body.logMeasurement(site, value, now(), imperial)
+                body.logMeasurement(type, value, now(), imperial, method)
             }
             showToast(
                 if (saved != null) R.string.toast_measurement_saved else R.string.toast_not_saved,
@@ -2477,6 +2507,13 @@ class AppViewModel(
     fun setPhotosHidden(hidden: Boolean) {
         launchGuarded {
             withContext(Dispatchers.IO) { body.setPhotosHidden(hidden) }
+            rebuild()
+        }
+    }
+
+    fun setPhotosInExport(include: Boolean) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { body.setPhotosInExport(include) }
             rebuild()
         }
     }
@@ -2925,13 +2962,13 @@ class AppViewModel(
     private fun photoTimelineRow(
         item: app.openhealth.data.repo.TimelineItem,
         sources: Map<String, String>,
-    ): TimelineRowModel? = store.body.photoById(item.entityId)?.let { photo ->
+    ): TimelineRowModel? = store.body.photoTimeline(item.entityId)?.let { photo ->
         val source = sources[photo.source_id] ?: unknownSource()
         TimelineRowModel(
             kind = TimelineKind.PHOTO,
             entityId = photo.id,
             sourceId = photo.source_id,
-            title = photo.caption ?: "Progress photo",
+            title = photo.caption ?: container.context.getString(R.string.photo_timeline_title),
             detail = source,
             valueText = null,
             provenance = RowProvenance(

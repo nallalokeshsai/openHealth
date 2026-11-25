@@ -44,6 +44,9 @@ class BodyRepository(private val db: OpenHealthDb) {
     fun measurementById(id: String): Measurement? =
         db.bodyQueries.measurementById(id).executeAsOneOrNull()
 
+    fun measurementByIdempotencyKey(key: String): Measurement? =
+        db.bodyQueries.measurementByIdempotencyKey(key).executeAsOneOrNull()
+
     fun measurementsForDay(date: LocalDate): List<Measurement> =
         db.bodyQueries.measurementsForDay(date.toString()).executeAsList()
 
@@ -127,6 +130,12 @@ class BodyRepository(private val db: OpenHealthDb) {
 
     fun photoById(id: String): app.openhealth.data.db.Body_photo? =
         db.bodyQueries.photoById(id).executeAsOneOrNull()
+
+    fun photoTimeline(id: String): app.openhealth.data.db.PhotoTimeline? =
+        db.bodyQueries.photoTimeline(id).executeAsOneOrNull()
+
+    fun vitalByObservationId(observationId: String): app.openhealth.data.db.Vital? =
+        db.bodyQueries.vitalByObservationId(observationId).executeAsOneOrNull()
 
     fun photosBetween(from: LocalDate, to: LocalDate): List<app.openhealth.data.db.Body_photo> =
         db.bodyQueries.photosBetween(from.toString(), to.toString()).executeAsList()

@@ -1,19 +1,17 @@
 package app.openhealth.ui.screens.vitals
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,11 +24,8 @@ import app.openhealth.ui.R
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhCard
-import app.openhealth.ui.components.ohClickable
-import app.openhealth.ui.components.rememberInteraction
 import app.openhealth.ui.components.OhCardHeader
 import app.openhealth.ui.components.OhChip
-import app.openhealth.ui.components.OhChipStrip
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhKpiBand
 import app.openhealth.ui.components.OhKpiFigure
@@ -71,6 +66,7 @@ fun VitalDetailScreen(
     var provenance by rememberSaveable { mutableStateOf<String?>(null) }
     var addSlot by rememberSaveable { mutableStateOf<HomeSlot?>(null) }
     var addReading by rememberSaveable { mutableStateOf(false) }
+    var formula by remember { mutableStateOf<FormulaSheetModel?>(null) }
     val provenanceReading = provenance?.let { id -> model.readings.firstOrNull { it.id == id } }
     OhScreen(modifier = modifier) {
         OhPageHeader(title = model.title, onBack = onBack)
@@ -85,38 +81,35 @@ fun VitalDetailScreen(
             }
             return@OhScreen
         }
-        val kpiInteraction = rememberInteraction()
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .ohClickable(
-                    interactionSource = kpiInteraction,
-                    onClick = { provenance = model.readings.firstOrNull()?.id },
-                ),
-        ) {
+        val averageTitle = stringResource(R.string.vitals_detail_average)
+        val averageBody = stringResource(R.string.vitals_average_formula, model.count)
+        val countTitle = stringResource(R.string.vitals_detail_count)
+        val countBody = stringResource(R.string.vitals_count_formula, model.count)
         OhKpiBand(
             figures = listOf(
                 OhKpiFigure(
                     value = model.latestText,
                     label = stringResource(R.string.vitals_detail_latest),
+                    onClick = { provenance = model.readings.firstOrNull()?.id },
                 ),
                 OhKpiFigure(
                     value = model.averageText,
                     label = stringResource(R.string.vitals_detail_average),
+                    onClick = { formula = FormulaSheetModel(averageTitle, averageBody, "app") },
                 ),
                 OhKpiFigure(
                     value = model.count.toString(),
                     label = stringResource(R.string.vitals_detail_count),
+                    onClick = { formula = FormulaSheetModel(countTitle, countBody, "app") },
                 ),
             ),
             footer = model.unitText,
         )
-        }
         model.range?.let { range ->
             Spacer(Modifier.height(OhTheme.space.s5))
             OhCard {
                 OhCardHeader(
-                    eyebrow = stringResource(R.string.vitals_detail_range_title),
+                    eyebrow = stringResource(R.string.vitals_detail_range_eyebrow),
                     title = stringResource(R.string.vitals_detail_range_title),
                     glyph = app.openhealth.ui.icons.OhIcons.info,
                 )
@@ -165,7 +158,15 @@ fun VitalDetailScreen(
                         style = OhTheme.type.caption,
                         color = OhTheme.colors.label2,
                     )
-                    OhClinicalRangeStrip(scale = reading.scale, value = reading.value)
+                    OhClinicalRangeStrip(
+                        scale = reading.scale,
+                        value = reading.value,
+                        description = scaleDescription(
+                            reading.label,
+                            reading.value,
+                            reading.scale,
+                        ),
+                    )
                 }
             }
         }
@@ -244,6 +245,14 @@ fun VitalDetailScreen(
             onCancel = { showTable = false },
         ) {
             OhInsetGroup {
+                model.scaleValues.forEach { scaleValue ->
+                    scaleValue.scale.bands.forEachIndexed { index, band ->
+                        OhRow(
+                            title = scaleValue.label + " · " + band.label.name.lowercase(),
+                            value = bandEdgesForTable(index, band, scaleValue.scale),
+                        )
+                    }
+                }
                 model.readings.forEach { reading ->
                     OhRow(
                         title = shortDate(reading.provenance.localDate),
@@ -265,13 +274,19 @@ fun VitalDetailScreen(
             initialType = model.type,
             imperial = imperial,
             homeSlot = addSlot,
-            onDismiss = { addReading = false; addSlot = null },
+            onDismiss = {
+                addReading = false
+                addSlot = null
+            },
             onSave = { draft ->
                 addReading = false
                 addSlot = null
                 onSaveReading(draft)
             },
         )
+    }
+    formula?.let { sheet ->
+        FormulaSheet(sheet = sheet, onDismiss = { formula = null })
     }
     provenanceReading?.let { reading ->
         VitalsProvenanceSheet(
@@ -345,7 +360,11 @@ private fun BpProtocolSheet(
                     ) + " ${day.morning}/${day.targetPerSlot} · " +
                         stringResource(R.string.vitals_detail_home_protocol_evening) +
                         " ${day.evening}/${day.targetPerSlot}",
-                    value = if (day.complete) "✓" else "",
+                    value = if (day.complete) {
+                        stringResource(R.string.vitals_protocol_done)
+                    } else {
+                        ""
+                    },
                 )
             }
         }
@@ -370,7 +389,7 @@ private fun BpProtocolSheet(
             )
             Spacer(Modifier.height(OhTheme.space.s3))
         }
-        model.state.nextSlot(model.state.startDate)?.let { next ->
+        model.state.nextSlot(model.today)?.let { next ->
             OhButton(
                 text = stringResource(
                     R.string.vitals_detail_home_protocol_next,
@@ -395,29 +414,8 @@ private fun decimals(type: ObservationType): Int = when (type) {
     else -> 0
 }
 
-/** The table alternative of a range or a chart is a list of the same numbers. */
-@Composable
-fun VitalTable(model: VitalDetailModel, imperial: Boolean) {
-    Column(Modifier.fillMaxWidth()) {
-        model.tableHeader.forEach { header ->
-            Text(
-                text = header,
-                style = OhTheme.type.caption,
-                color = OhTheme.colors.label2,
-                modifier = Modifier.padding(vertical = OhTheme.space.s0),
-            )
-        }
-        model.tableRows.forEach { row ->
-            Row(Modifier.fillMaxWidth()) {
-                row.forEach { cell ->
-                    Text(
-                        text = cell,
-                        style = OhTheme.type.footnote,
-                        color = OhTheme.colors.label,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
+private fun bandEdgesForTable(index: Int, band: ScaleBandModel, scale: ScaleModel): String = when {
+    index == 0 -> "below ${band.to ?: scale.domainHigh}"
+    index == scale.bands.lastIndex -> "above ${band.from ?: scale.domainLow}"
+    else -> "${band.from ?: scale.domainLow}-${band.to ?: scale.domainHigh}"
 }

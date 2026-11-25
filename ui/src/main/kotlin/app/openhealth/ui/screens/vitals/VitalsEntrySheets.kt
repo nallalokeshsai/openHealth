@@ -1,13 +1,16 @@
+// Plausibility bounds are deliberately wide; a typo is rejected, a real reading is not.
+@file:Suppress("MatchingDeclarationName", "MagicNumber")
+
 package app.openhealth.ui.screens.vitals
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,8 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
+import app.openhealth.core.body.CompositionMeasure
 import app.openhealth.core.body.MeasurementSite
+import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.vitals.ArmSide
 import app.openhealth.core.vitals.BodyPosition
@@ -75,24 +79,25 @@ fun AddReadingSheet(
     var meal by rememberSaveable(initialType, homeSlot) { mutableStateOf<MealContext?>(null) }
     var note by rememberSaveable(initialType, homeSlot) { mutableStateOf("") }
     val chosen = type
-    val canSave = chosen != null && when (chosen) {
-        ObservationType.BLOOD_PRESSURE_SYSTOLIC ->
-            parse(systolic) in 50.0..300.0 && parse(diastolic) in 30.0..200.0
+    val canSave = chosen != null &&
+        when (chosen) {
+            ObservationType.BLOOD_PRESSURE_SYSTOLIC ->
+                parse(systolic) in 50.0..300.0 && parse(diastolic) in 30.0..200.0
 
-        ObservationType.RESTING_HEART_RATE -> parse(value) in 20.0..250.0
-        ObservationType.BODY_TEMPERATURE -> {
-            val canonical = if (imperial) (parse(value) - 32.0) * 5.0 / 9.0 else parse(value)
-            canonical in 25.0..45.0
+            ObservationType.RESTING_HEART_RATE -> parse(value) in 20.0..250.0
+            ObservationType.BODY_TEMPERATURE -> {
+                val canonical = if (imperial) (parse(value) - 32.0) * 5.0 / 9.0 else parse(value)
+                canonical in 25.0..45.0
+            }
+
+            ObservationType.OXYGEN_SATURATION -> parse(value) in 50.0..100.0
+            ObservationType.BLOOD_GLUCOSE -> {
+                val canonical = if (imperial) parse(value) / 18.0182 else parse(value)
+                canonical in 1.0..50.0
+            }
+
+            else -> false
         }
-
-        ObservationType.OXYGEN_SATURATION -> parse(value) in 50.0..100.0
-        ObservationType.BLOOD_GLUCOSE -> {
-            val canonical = if (imperial) parse(value) / 18.0182 else parse(value)
-            canonical in 1.0..50.0
-        }
-
-        else -> false
-    }
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
@@ -130,7 +135,12 @@ fun AddReadingSheet(
             B7_VITALS.forEach { vital ->
                 OhButton(
                     text = vitalTitle(vital),
-                    onClick = { type = vital; value = ""; systolic = ""; diastolic = "" },
+                    onClick = {
+                        type = vital
+                        value = ""
+                        systolic = ""
+                        diastolic = ""
+                    },
                     variant = OhButtonVariant.Secondary,
                 )
                 Spacer(Modifier.height(OhTheme.space.s2))
@@ -278,21 +288,36 @@ fun AddMeasurementSheet(
     initialSite: MeasurementSite?,
     imperial: Boolean,
     onDismiss: () -> Unit,
-    onSave: (MeasurementSite, String) -> Unit,
+    onSave: (String, String, MeasurementMethod) -> Unit,
 ) {
     if (!visible) return
-    var site by rememberSaveable(initialSite) { mutableStateOf(initialSite ?: MeasurementSite.WAIST) }
+    var choice by rememberSaveable(initialSite) {
+        mutableStateOf(initialSite?.type ?: MeasurementSite.WAIST.type)
+    }
     var value by rememberSaveable(initialSite) { mutableStateOf("") }
+    var customName by rememberSaveable(initialSite) { mutableStateOf("") }
+    var method by rememberSaveable(initialSite) {
+        mutableStateOf(MeasurementMethod.MANUAL_ENTRY)
+    }
     val unit = stringResource(if (imperial) R.string.unit_in else R.string.unit_cm)
     val parsed = value.replace(',', '.').toDoubleOrNull()
-    val canSave = parsed != null && parsed > 0.0
+    val canSave = parsed != null &&
+        parsed > 0.0 &&
+        (choice != CUSTOM || customName.isNotBlank())
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
         title = stringResource(R.string.vitals_add_measurement_title),
         primaryLabel = stringResource(R.string.vitals_add_save),
         primaryEnabled = canSave,
-        onPrimary = { onSave(site, value) },
+        onPrimary = {
+            val type = if (choice == CUSTOM) {
+                "custom:" + customName.trim().lowercase().replace(' ', '_')
+            } else {
+                choice
+            }
+            onSave(type, value, method)
+        },
         cancelLabel = stringResource(R.string.vitals_add_cancel),
         onCancel = onDismiss,
     ) {
@@ -303,10 +328,35 @@ fun AddMeasurementSheet(
             MeasurementSite.entries.forEach { entry ->
                 OhChip(
                     text = measurementSiteLabel(entry),
-                    selected = site == entry,
-                    onClick = { site = entry },
+                    selected = choice == entry.type,
+                    onClick = { choice = entry.type },
                 )
             }
+            OhChip(
+                text = stringResource(R.string.vitals_add_custom),
+                selected = choice == CUSTOM,
+                onClick = { choice = CUSTOM },
+            )
+            CompositionMeasure.entries.forEach { entry ->
+                OhChip(
+                    text = stringResource(
+                        when (entry) {
+                            CompositionMeasure.BODY_FAT -> R.string.vitals_composition_body_fat
+                            CompositionMeasure.BODY_WATER -> R.string.vitals_composition_water
+                        },
+                    ),
+                    selected = choice == entry.type,
+                    onClick = { choice = entry.type },
+                )
+            }
+        }
+        if (choice == CUSTOM) {
+            Spacer(Modifier.height(OhTheme.space.s3))
+            OhTextField(
+                value = customName,
+                onValueChange = { customName = it },
+                placeholder = stringResource(R.string.vitals_add_custom_name),
+            )
         }
         Spacer(Modifier.height(OhTheme.space.s4))
         OhTextField(
@@ -315,13 +365,44 @@ fun AddMeasurementSheet(
             placeholder = stringResource(R.string.vitals_add_measurement_value),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         )
+        if (CompositionMeasure.fromType(choice) != null) {
+            Spacer(Modifier.height(OhTheme.space.s3))
+            Text(
+                text = stringResource(R.string.vitals_add_method),
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2),
+            ) {
+                listOf(
+                    MeasurementMethod.MANUAL_ENTRY,
+                    MeasurementMethod.SCALE,
+                    MeasurementMethod.BIA,
+                    MeasurementMethod.DEXA,
+                ).forEach { candidate ->
+                    OhChip(
+                        text = methodLabel(candidate) ?: candidate.name,
+                        selected = method == candidate,
+                        onClick = { method = candidate },
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(OhTheme.space.s1))
         Text(
-            text = stringResource(R.string.vitals_add_measurement_hint, unit),
+            text = if (CompositionMeasure.fromType(choice) != null) {
+                stringResource(R.string.vitals_composition_body_fat) + " · %"
+            } else {
+                stringResource(R.string.vitals_add_measurement_hint, unit)
+            },
             style = OhTheme.type.caption,
             color = OhTheme.colors.label2,
         )
     }
 }
+
+private const val CUSTOM = "custom"
 
 private fun parse(text: String): Double = text.replace(',', '.').toDoubleOrNull() ?: Double.NaN

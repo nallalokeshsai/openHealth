@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber")
+
 package app.openhealth.core.body
 
 import kotlinx.datetime.LocalDate
@@ -96,8 +98,8 @@ object WeightTrendCalculator {
             changeDays = changeDays,
             weeklyRateKg = rate,
             goalKg = goalKg,
-            checkIns = sorted.size,
-            points = daily,
+            checkIns = inWindow.size,
+            points = inWindow,
         )
     }
 
@@ -119,6 +121,7 @@ object WeightTrendCalculator {
      * days. Null when there are fewer than [MIN_RATE_POINTS] distinct days or the span is
      * shorter than a week: a weekly rate from three consecutive days would be noise.
      */
+    @Suppress("ReturnCount")
     fun weeklyRate(checkIns: List<WeighIn>, today: LocalDate): Double? {
         val daily = daily(checkIns)
         val start = today.minusDays(RATE_WINDOW_DAYS)

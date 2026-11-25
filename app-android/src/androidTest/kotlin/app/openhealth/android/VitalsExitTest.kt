@@ -20,15 +20,16 @@ import app.openhealth.data.db.Profile
 import app.openhealth.ui.screens.vitals.VitalDraft
 import java.io.ByteArrayOutputStream
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.atTime
 import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
-import kotlinx.datetime.atTime
 import kotlinx.datetime.toLocalDateTime
 import org.junit.After
 import org.junit.Before
@@ -79,12 +80,12 @@ class VitalsExitTest {
     @Test
     fun changingWaistOrBodyFatChangesTheFigureAndOffersABeforeAfter() {
         seedProfile(sex = "MALE", height = 180.0)
-        viewModel.saveMeasurement(MeasurementSite.NECK, "38")
-        viewModel.saveMeasurement(MeasurementSite.WAIST, "86")
+        viewModel.saveMeasurement(MeasurementSite.NECK.type, "38")
+        viewModel.saveMeasurement(MeasurementSite.WAIST.type, "86")
         waitFor("body model") { viewModel.state.value.vitals?.body?.current?.adipose != null }
         val thin = viewModel.state.value.vitals!!.body!!.current.adipose!!.maxThickness
 
-        viewModel.saveMeasurement(MeasurementSite.WAIST, "102")
+        viewModel.saveMeasurement(MeasurementSite.WAIST.type, "102")
         waitFor("a thicker layer") {
             (viewModel.state.value.vitals?.body?.current?.adipose?.maxThickness ?: 0.0) > thin
         }
@@ -206,7 +207,7 @@ class VitalsExitTest {
     @Test
     fun aWeightCheckInReplacesTheDaysValueAndTheCsvRoundTrips() {
         seedProfile()
-        viewModel.saveMeasurement(MeasurementSite.WAIST, "84")
+        viewModel.saveMeasurement(MeasurementSite.WAIST.type, "84")
         viewModel.saveWeight("81.0")
         waitFor("first weight") {
             container.store.observations.forDayAndType(
@@ -262,6 +263,12 @@ class VitalsExitTest {
         val decoded = android.util.Base64.decode(photo.bytes_b64, android.util.Base64.NO_WRAP)
         assertEquals(0xFF.toByte(), decoded[0])
         assertEquals(0xD8.toByte(), decoded[1])
+        // The file on disk is SQLCipher: the JPEG magic must not appear in it.
+        val dbBytes = context.getDatabasePath(TEST_DATABASE).readBytes()
+        assertFalse(
+            containsBytes(dbBytes, byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())),
+            "the photo's JPEG header must not be readable from the encrypted database file",
+        )
 
         viewModel.addPhoto(jpeg, "Side")
         waitFor("second photo") { container.store.body.countPhotos() == 2L }
@@ -275,13 +282,23 @@ class VitalsExitTest {
         val photoTombstone = container.store.trash.active()
             .firstOrNull { it.entity_table == "body_photo" }
         assertNotNull(photoTombstone)
-        runBlocking { container.store.trash.undo(app.openhealth.core.ids.TombstoneId(photoTombstone.id)) }
+        runBlocking {
+            container.store.trash.undo(app.openhealth.core.ids.TombstoneId(photoTombstone.id))
+        }
         waitFor("photo restored") { container.store.body.countPhotos() == 2L }
+    }
+
+    private fun containsBytes(haystack: ByteArray, needle: ByteArray): Boolean {
+        if (needle.isEmpty() || haystack.size < needle.size) return false
+        for (index in 0..haystack.size - needle.size) {
+            if (needle.indices.all { haystack[index + it] == needle[it] }) return true
+        }
+        return false
     }
 
     private fun jpegBytes(): ByteArray {
         val bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(android.graphics.Color.rgb(40, 90, 160))
+        bitmap.eraseColor(0xFF285AA0.toInt())
         val output = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 80, output)
         return output.toByteArray()

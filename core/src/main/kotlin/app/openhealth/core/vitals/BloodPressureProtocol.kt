@@ -6,7 +6,7 @@ import kotlinx.datetime.plus
 
 /**
  * The home blood-pressure protocol (`pr.md` §6.9, `DESIGN.md` §14.2 Vitals detail):
- * two readings in the morning and two in the evening for seven days, from the ESC/ESH
+ * two readings in the morning and two in the evening for seven days, from the ESH
  * 2023 guideline recorded in [app.openhealth.core.citation.Citations].
  *
  * The protocol is a reading pattern, not a diagnosis or a target: the average it shows is
@@ -36,13 +36,11 @@ data class BpProtocolState(
     val fraction: Float get() = if (target == 0) 0f else recorded.toFloat() / target
 
     /** The next slot that is short of its target, for the sheet's one action. */
+    @Suppress("ReturnCount")
     fun nextSlot(today: LocalDate): BpSlotTarget? {
-        val day = days.firstOrNull { it.date == today } ?: days.lastOrNull() ?: return null
+        val day = days.firstOrNull { it.date == today } ?: return null
         if (day.morning < targetPerSlot) return BpSlotTarget(day.date, HomeSlot.MORNING)
         if (day.evening < targetPerSlot) return BpSlotTarget(day.date, HomeSlot.EVENING)
-        val later = days.firstOrNull { it.date > today && !it.complete } ?: return null
-        if (later.morning < targetPerSlot) return BpSlotTarget(later.date, HomeSlot.MORNING)
-        if (later.evening < targetPerSlot) return BpSlotTarget(later.date, HomeSlot.EVENING)
         return null
     }
 }
@@ -53,11 +51,7 @@ object BloodPressureProtocol {
     const val DAYS = 7
     const val READINGS_PER_SLOT = 2
 
-    fun state(
-        startDate: LocalDate,
-        today: LocalDate,
-        readings: List<BpProtocolReading>,
-    ): BpProtocolState {
+    fun state(startDate: LocalDate, readings: List<BpProtocolReading>): BpProtocolState {
         val window = (0 until DAYS).map { startDate.plus(DatePeriod(days = it)) }
         val counts = readings.groupBy { it.date to it.slot }
             .mapValues { (_, same) -> same.size }
@@ -84,9 +78,7 @@ object BloodPressureProtocol {
     /** The common home-monitoring average rule: every reading in the window counts once. */
     data class Average(val systolic: Double, val diastolic: Double, val readings: Int)
 
-    fun average(
-        readings: List<Pair<Double, Double>>,
-    ): Average? = if (readings.isEmpty()) {
+    fun average(readings: List<Pair<Double, Double>>): Average? = if (readings.isEmpty()) {
         null
     } else {
         Average(

@@ -1,7 +1,6 @@
 package app.openhealth.android.body
 
 import android.content.Context
-import app.openhealth.ui.R as UiR
 import app.openhealth.core.body.AdiposeInputs
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodyCsv
@@ -16,8 +15,6 @@ import app.openhealth.core.formula.Bmi
 import app.openhealth.core.formula.Ffmi
 import app.openhealth.core.formula.FormulaOutcome
 import app.openhealth.core.formula.LeanMass
-import app.openhealth.core.formula.NavyBodyFat
-import app.openhealth.core.formula.SexAtBirth
 import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.ObservationId
 import app.openhealth.core.ids.PhotoId
@@ -29,6 +26,7 @@ import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationContext
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.Provenance
+import app.openhealth.core.observation.SourceKind
 import app.openhealth.core.preferences.DisplayPolicy
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.SensitiveMetric
@@ -50,6 +48,7 @@ import app.openhealth.data.db.Measurement
 import app.openhealth.data.db.Profile
 import app.openhealth.data.db.Vital
 import app.openhealth.data.repo.SettingKeys
+import app.openhealth.ui.R as UiR
 import app.openhealth.ui.body.BodyMapModel
 import app.openhealth.ui.body.FatProvenance
 import app.openhealth.ui.screens.vitals.B7_VITALS
@@ -85,14 +84,13 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atTime
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.atTime
 
 /**
  * The whole Vitals surface and every write behind it (`BUILD-ROADMAP.md` §B7): weight,
@@ -101,7 +99,19 @@ import kotlinx.datetime.atTime
  * same rollup engine as the rest of the app, and it never touches `android.*` beyond the
  * string resources it prints.
  */
-@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
+// The presenter owns the whole Vitals surface by design (BUILD-ROADMAP.md §B7): one
+// read model, one write path, one place where a vital's context is encoded. The
+// structural limits are waived here for the same reason TrainingPresenter waives
+// LargeClass; the pure rules it calls are small and tested in :core.
+@Suppress(
+    "LargeClass",
+    "TooManyFunctions",
+    "LongParameterList",
+    "LongMethod",
+    "CyclomaticComplexMethod",
+    "ReturnCount",
+    "MagicNumber",
+)
 class BodyPresenter(
     private val context: Context,
     private val store: LocalStore,
@@ -109,6 +119,7 @@ class BodyPresenter(
     private val zone: TimeZone,
     private val ids: IdGenerator,
     private val manualSource: SourceId,
+    private val importSource: SourceId,
     private val appVersion: String,
 ) {
     private fun now(): Instant = clock.now()
@@ -127,9 +138,14 @@ class BodyPresenter(
         val weightNeutral = !policy.shows(SensitiveMetric.WEIGHT)
         val imperial = profile?.units == "imperial"
         val body = if (bodyOn) buildBody(profile, policy) else null
-        val weight = if (bodyOn) buildWeight(policy, profile) else null
+        val weight = if (bodyOn) buildWeight(policy, imperial) else null
         val composition = if (bodyOn) buildComposition(profile, policy) else emptyList()
-        val measurements = if (bodyOn) measurementRows(MeasurementSite.anchors, imperial) else emptyList()
+        val measurements = if (bodyOn) {
+            measurementRows(MeasurementSite.anchors, imperial) +
+                customMeasurementRows(imperial)
+        } else {
+            emptyList()
+        }
         val frames = if (bodyOn) {
             measurementRows(MeasurementSite.frameSizes, imperial)
         } else {
@@ -147,6 +163,7 @@ class BodyPresenter(
             composition = composition,
             photos = photos,
             photosHidden = photosHidden(),
+            photosInExport = photosInExport(),
             vitals = if (vitalsOn) vitalGroups(imperial) else emptyList(),
             measurements = measurements,
             frameSizes = frames,
@@ -158,7 +175,7 @@ class BodyPresenter(
         )
     }
 
-    private fun buildWeight(policy: DisplayPolicy, profile: Profile?): WeightCardModel? {
+    private fun buildWeight(policy: DisplayPolicy, imperial: Boolean): WeightCardModel? {
         if (!policy.shows(SensitiveMetric.WEIGHT)) return null
         val from = now() - WeightTrendCalculator.SPARK_WINDOW_DAYS.days
         val observations = store.observations.forTypeBetween(
@@ -180,10 +197,14 @@ class BodyPresenter(
         val latest = observations.maxWithOrNull(
             compareBy({ it.provenance.happenedAt }, { it.provenance.recordedAt }),
         ) ?: return null
+        val displayFactor = if (imperial) POUNDS_PER_KILOGRAM else 1.0
+        val displayUnit = if (imperial) "lb" else "kg"
         val provenance = provenance(
             observation = latest,
-            valueText = "${format(latest.value.value, 1)} kg",
-            trendText = trend.weeklyRateKg?.let { "${format(it, 2)} kg a week" },
+            valueText = "${format(latest.value.value * displayFactor, 1)} $displayUnit",
+            trendText = trend.weeklyRateKg?.let {
+                "${format(it * displayFactor, 2)} $displayUnit a week"
+            },
         )
         return WeightCardModel(
             latestKg = trend.latestKg ?: latest.value.value,
@@ -251,7 +272,13 @@ class BodyPresenter(
                     sourceLabel = it.sourceLabel,
                     observedAt = it.happenedAt,
                     recordedAt = it.recordedAt,
-                    tapeSites = if (adipose != null) AdiposeModel.provenanceSites(inputs) else emptyList(),
+                    tapeSites = if (adipose !=
+                        null
+                    ) {
+                        AdiposeModel.provenanceSites(inputs)
+                    } else {
+                        emptyList()
+                    },
                 )
             },
             extras = app.openhealth.ui.body.BodyMapExtras(
@@ -259,7 +286,7 @@ class BodyPresenter(
                 sourceLabels = store.sources.all().associate { it.id.value to it.label },
             ),
         )
-        val beforeState = historicalAdipose(profile, latest, bodyFat, fatAllowed)
+        val beforeState = historicalAdipose(profile, fatAllowed)
         val measured = MeasurementSite.anchors.map { site ->
             MeasurementAnchorModel(site, latestMeasurement(site.type) != null)
         }
@@ -271,7 +298,11 @@ class BodyPresenter(
             anchors = measured,
             fatPercent = AdiposeModel.fatPercent(inputs),
             fatLabel = bodyFat?.label,
-            fatSourceLabel = provenance?.sourceLabel,
+            fatSourceLabel = if (bodyFat == null && adipose != null) {
+                context.getString(UiR.string.vitals_method_navy)
+            } else {
+                provenance?.sourceLabel
+            },
             fatMethod = provenance?.method,
             estimate = bodyFat == null && adipose != null,
             provenance = provenance,
@@ -289,31 +320,38 @@ class BodyPresenter(
     )
 
     /** The newest recorded percentage, else the Navy estimate from the newest tape sites. */
+    /** The newest recorded percentage, from either an observation or a measurement. */
     private fun latestBodyFat(): FatReading? {
         val observation = store.observations.latest(ObservationType.BODY_FAT_PERCENT)
             ?.takeIf { !it.excludedFromTrends }
-        if (observation != null) {
-            return FatReading(
-                percent = observation.value.value,
-                method = observation.provenance.method,
-                sourceLabel = sourceLabel(observation.provenance.sourceId.value),
-                happenedAt = observation.provenance.happenedAt,
-                recordedAt = observation.provenance.recordedAt,
-                localDate = observation.localDate,
+        val measurement = store.body.latestMeasurementOfType(CompositionMeasure.BODY_FAT.type)
+        val observationReading = observation?.let {
+            FatReading(
+                percent = it.value.value,
+                method = it.provenance.method,
+                sourceLabel = sourceLabel(it.provenance.sourceId.value),
+                happenedAt = it.provenance.happenedAt,
+                recordedAt = it.provenance.recordedAt,
+                localDate = it.localDate,
                 label = context.getString(UiR.string.vitals_composition_body_fat),
             )
         }
-        val measurement = store.body.latestMeasurementOfType(CompositionMeasure.BODY_FAT.type)
-            ?: return null
-        return FatReading(
-            percent = measurement.value_,
-            method = measurement.method?.let { runCatching { MeasurementMethod.valueOf(it) }.getOrNull() },
-            sourceLabel = sourceLabel(measurement.source_id),
-            happenedAt = Instant.fromEpochMilliseconds(measurement.happened_at),
-            recordedAt = Instant.fromEpochMilliseconds(measurement.recorded_at),
-            localDate = LocalDate.parse(measurement.local_date),
-            label = context.getString(UiR.string.vitals_composition_body_fat),
-        )
+        val measurementReading = measurement?.let {
+            val method = it.method?.let { name ->
+                runCatching { MeasurementMethod.valueOf(name) }.getOrNull()
+            }
+            FatReading(
+                percent = it.value_,
+                method = method,
+                sourceLabel = sourceLabel(it.source_id),
+                happenedAt = Instant.fromEpochMilliseconds(it.happened_at),
+                recordedAt = Instant.fromEpochMilliseconds(it.recorded_at),
+                localDate = LocalDate.parse(it.local_date),
+                label = context.getString(UiR.string.vitals_composition_body_fat),
+            )
+        }
+        return listOfNotNull(observationReading, measurementReading)
+            .maxWithOrNull(compareBy({ it.happenedAt }, { it.recordedAt }))
     }
 
     /**
@@ -349,12 +387,7 @@ class BodyPresenter(
      * figure that existed at least 30 days ago is offered: a scrub across two days is
      * not a before and after.
      */
-    private fun historicalAdipose(
-        profile: Profile?,
-        currentTape: Map<String, Measurement>,
-        currentFat: FatReading?,
-        fatAllowed: Boolean,
-    ): HistoricalAdipose? {
+    private fun historicalAdipose(profile: Profile?, fatAllowed: Boolean): HistoricalAdipose? {
         if (!fatAllowed) return null
         val cutoff = today().minus(DatePeriod(days = 30))
         val oldFatObservation = store.observations.forTypeBetween(
@@ -367,9 +400,22 @@ class BodyPresenter(
             0L,
             cutoff.plusDays(1).atStart().toEpochMilliseconds(),
         ).lastOrNull()
-        val oldFatPercent = oldFatObservation?.value?.value ?: oldFatMeasurement?.value_
-        val oldFatDate = oldFatObservation?.localDate
-            ?: oldFatMeasurement?.local_date?.let(LocalDate::parse)
+        val oldObservationTime = oldFatObservation?.provenance?.happenedAt
+        val oldMeasurementTime = oldFatMeasurement?.let {
+            Instant.fromEpochMilliseconds(it.happened_at)
+        }
+        val useObservation = oldFatObservation != null &&
+            (oldFatMeasurement == null || oldObservationTime!! >= oldMeasurementTime!!)
+        val oldFatPercent = if (useObservation) {
+            oldFatObservation?.value?.value
+        } else {
+            oldFatMeasurement?.value_
+        }
+        val oldFatDate = if (useObservation) {
+            oldFatObservation?.localDate
+        } else {
+            oldFatMeasurement?.local_date?.let(LocalDate::parse)
+        }
         val oldTape = MeasurementSite.entries.mapNotNull { site ->
             val row = store.body.measurementsForTypeBetween(
                 site.type,
@@ -419,11 +465,13 @@ class BodyPresenter(
         }
         if (fatAllowed && weight != null && fat != null) {
             val lean = LeanMass.compute(weight.value.value, fat.percent)
+            val imperial = profile?.units == "imperial"
             (lean as? FormulaOutcome.Computed)?.let { outcome ->
+                val leanValue = if (imperial) outcome.value / POUNDS_PER_KILOGRAM else outcome.value
                 tiles += CompositionTileModel(
                     key = CompositionKey.LEAN_MASS,
-                    valueText = format(outcome.value, 1),
-                    unitText = "kg",
+                    valueText = format(leanValue, 1),
+                    unitText = if (imperial) "lb" else "kg",
                     sourceLine = context.getString(UiR.string.vitals_composition_source_calculated),
                     estimate = fat.method == null,
                     provenance = weightProvenance(weight, "${format(outcome.value, 1)} kg"),
@@ -437,20 +485,26 @@ class BodyPresenter(
                 key = CompositionKey.WAIST,
                 valueText = format(display, 1),
                 unitText = if (imperial) "in" else "cm",
-                sourceLine = methodLabel(waist.method) ?: context.getString(UiR.string.vitals_method_manual),
-                provenance = measurementProvenance(waist, "${format(display, 1)} ${if (imperial) "in" else "cm"}"),
+                sourceLine =
+                methodLabel(waist.method) ?: context.getString(UiR.string.vitals_method_manual),
+                provenance = measurementProvenance(
+                    waist,
+                    "${format(display, 1)} ${if (imperial) "in" else "cm"}",
+                ),
             )
         }
-        store.observations.latest(ObservationType.RESTING_HEART_RATE)?.let { rhr ->
-            tiles += CompositionTileModel(
-                key = CompositionKey.RESTING_HEART_RATE,
-                valueText = format(rhr.value.value, 0),
-                unitText = "bpm",
-                sourceLine = methodLabel(rhr.provenance.method)
-                    ?: context.getString(UiR.string.vitals_provenance_manual),
-                provenance = provenance(rhr, "${format(rhr.value.value, 0)} bpm"),
-            )
-        }
+        store.observations.latest(ObservationType.RESTING_HEART_RATE)
+            ?.takeIf { !it.excludedFromTrends }
+            ?.let { rhr ->
+                tiles += CompositionTileModel(
+                    key = CompositionKey.RESTING_HEART_RATE,
+                    valueText = format(rhr.value.value, 0),
+                    unitText = "bpm",
+                    sourceLine = methodLabel(rhr.provenance.method)
+                        ?: context.getString(UiR.string.vitals_provenance_manual),
+                    provenance = provenance(rhr, "${format(rhr.value.value, 0)} bpm"),
+                )
+            }
         latestMeasurement(CompositionMeasure.BODY_WATER.type)?.let { water ->
             tiles += CompositionTileModel(
                 key = CompositionKey.BODY_WATER,
@@ -473,21 +527,51 @@ class BodyPresenter(
                     )
                 }
             if (fatAllowed && fat != null) {
-                (Ffmi.fromBodyFat(weight.value.value, height, fat.percent)
-                    as? FormulaOutcome.Computed)?.let { outcome ->
+                (
+                    Ffmi.fromBodyFat(weight.value.value, height, fat.percent)
+                        as? FormulaOutcome.Computed
+                    )?.let { outcome ->
                     tiles += CompositionTileModel(
                         key = CompositionKey.FFMI,
                         valueText = format(outcome.value.ffmi, 1),
                         unitText = null,
                         sourceLine = context.getString(UiR.string.vitals_composition_source_ffmi),
                         estimate = fat.method == null,
-                        provenance = fatProvenance(fat).copy(valueText = format(outcome.value.ffmi, 1)),
+                        provenance = fatProvenance(
+                            fat,
+                        ).copy(valueText = format(outcome.value.ffmi, 1)),
                     )
                 }
             }
         }
         return tiles
     }
+
+    /**
+     * A measurement the person named themselves (`pr.md` §6.8): `custom:<name>`, stored
+     * in centimetres like a tape site and shown under that name. It has no anchor.
+     */
+    private fun customMeasurementRows(imperial: Boolean): List<MeasurementRowModel> =
+        store.body.latestMeasurements(200)
+            .filter { it.type.startsWith(CUSTOM_PREFIX) }
+            .distinctBy { it.type }
+            .sortedByDescending { it.happened_at }
+            .map { row ->
+                val display = if (imperial) row.value_ / 2.54 else row.value_
+                MeasurementRowModel(
+                    site = null,
+                    customLabel = row.type.removePrefix(CUSTOM_PREFIX),
+                    valueText = format(display, 1),
+                    unitText = if (imperial) "in" else "cm",
+                    date = LocalDate.parse(row.local_date),
+                    sourceLine = methodLabel(row.method)
+                        ?: context.getString(UiR.string.vitals_method_manual),
+                    provenance = measurementProvenance(
+                        row,
+                        "${format(display, 1)} ${if (imperial) "in" else "cm"}",
+                    ),
+                )
+            }
 
     private fun measurementRows(
         sites: List<MeasurementSite>,
@@ -517,6 +601,15 @@ class BodyPresenter(
             date = LocalDate.parse(row.local_date),
             caption = row.caption,
             thumbnail = bytes?.let(PhotoCodec::decode),
+            provenance = ValueProvenance(
+                sourceLabel = sourceLabel(row.source_id),
+                method = null,
+                happenedAt = Instant.fromEpochMilliseconds(row.happened_at),
+                recordedAt = Instant.fromEpochMilliseconds(row.recorded_at),
+                localDate = LocalDate.parse(row.local_date),
+                zoneId = zone.id,
+                valueText = context.getString(UiR.string.vitals_photos_title),
+            ),
         )
     }
 
@@ -525,18 +618,22 @@ class BodyPresenter(
         val bp = latestBloodPressure()
         if (bp != null) {
             val range = VitalRanges.forReading(ObservationType.BLOOD_PRESSURE_SYSTOLIC, null)!!
-            val outside = listOf(bp.first.value.value, bp.second.value.value).any {
-                range.position(it) != RangePosition.WITHIN
-            }
+            val diastolicRange =
+                VitalRanges.forReading(ObservationType.BLOOD_PRESSURE_DIASTOLIC, null)!!
+            val outside = range.position(bp.first.value.value) != RangePosition.WITHIN ||
+                diastolicRange.position(bp.second.value.value) != RangePosition.WITHIN
             groups += VitalGroupModel(
                 type = ObservationType.BLOOD_PRESSURE_SYSTOLIC,
-                latestText = "${format(bp.first.value.value, 0)}/${format(bp.second.value.value, 0)}",
+                latestText = "${format(
+                    bp.first.value.value,
+                    0,
+                )}/${format(bp.second.value.value, 0)}",
                 unitText = "mmHg",
                 date = bp.first.localDate,
                 count = countReadings(ObservationType.BLOOD_PRESSURE_SYSTOLIC),
-                contextText = contextText(bp.first.context?.name),
+                contextText = contextText(contextOf(bp.first)),
                 position = if (outside) RangePosition.ABOVE else RangePosition.WITHIN,
-                citationLine = rangeLine(range, "mmHg"),
+                citationLine = rangeLine(range, imperial),
                 sourceLabel = sourceLabel(bp.first.provenance.sourceId.value),
             )
         }
@@ -553,28 +650,34 @@ class BodyPresenter(
                 type = type,
                 latestText = format(
                     vitalDisplayValue(type, latest.value.value, imperial),
-                    if (type == ObservationType.BODY_TEMPERATURE) 1 else 0,
+                    decimalsFor(type),
                 ),
                 unitText = vitalDisplayUnit(type, imperial),
                 date = latest.localDate,
                 count = countReadings(type),
-                contextText = latest.context?.let { contextText(it.name) },
+                contextText = contextText(contextOf(latest)),
                 position = range?.position(latest.value.value),
-                citationLine = range?.let { rangeLine(it, vitalDisplayUnit(type, imperial)) },
+                citationLine = range?.let { rangeLine(it, imperial) },
                 sourceLabel = sourceLabel(latest.provenance.sourceId.value),
             )
         }
         return groups
     }
 
-    private fun countReadings(type: ObservationType): Int =
-        store.observations.forTypeBetween(type, today().minus(DatePeriod(days = 90)).atStart(), now())
-            .count { !it.excludedFromTrends }
+    private fun countReadings(type: ObservationType): Int = store.observations.forTypeBetween(
+        type,
+        today().minus(DatePeriod(days = 90)).atStart(),
+        now(),
+    )
+        .count { !it.excludedFromTrends }
 
     private fun rangeLine(
         range: app.openhealth.core.vitals.ReferenceRange,
-        unit: String,
-    ): String = "${range.population} · ${range.statement} $unit"
+        imperial: Boolean,
+    ): String {
+        val unit = vitalDisplayUnit(range.type, imperial)
+        return "${range.population} · ${displayStatement(range, imperial)} $unit"
+    }
 
     // ------------------------------------------------------------------ vital detail
 
@@ -584,7 +687,7 @@ class BodyPresenter(
         imperial: Boolean = false,
     ): VitalDetailModel? {
         if (type !in B7_VITALS) return null
-        val readings = readingsOf(type, filter)
+        val readings = readingsOf(type, filter, imperial)
         val values = readings.map { it.values }
         val canonicalLatest = values.firstOrNull()
         val latestText = when {
@@ -592,10 +695,10 @@ class BodyPresenter(
             type == ObservationType.BLOOD_PRESSURE_SYSTOLIC ->
                 canonicalLatest.joinToString("/") { format(it, 0) }
 
-            type == ObservationType.BODY_TEMPERATURE ->
-                format(vitalDisplayValue(type, canonicalLatest.first(), imperial), 1)
-
-            else -> format(vitalDisplayValue(type, canonicalLatest.first(), imperial), 0)
+            else -> format(
+                vitalDisplayValue(type, canonicalLatest.first(), imperial),
+                decimalsFor(type),
+            )
         }
         val averageText = when {
             values.isEmpty() -> ""
@@ -606,7 +709,16 @@ class BodyPresenter(
             type == ObservationType.BODY_TEMPERATURE ->
                 format(vitalDisplayValue(type, values.map { it.first() }.average(), imperial), 1)
 
-            else -> format(vitalDisplayValue(type, values.map { it.first() }.average(), imperial), 0)
+            else -> format(
+                vitalDisplayValue(
+                    type,
+                    values.map {
+                        it.first()
+                    }.average(),
+                    imperial,
+                ),
+                0,
+            )
         }
         val range = VitalRanges.forReading(type, contextFilterKey(type, filter))
         val position = when {
@@ -634,9 +746,9 @@ class BodyPresenter(
                 range?.position(readings.firstOrNull()?.values?.firstOrNull() ?: return@let null)
             }
         }
-        val scaleValues = range?.let { scaleReadings(type, filter) } ?: emptyList()
-        val chart = chartOf(type, filter)
-        val contexts = contextFilters(type)
+        val scaleValues = range?.let { scaleReadings(type, filter, imperial) } ?: emptyList()
+        val chart = chartOf(type, filter, imperial)
+        val contexts = contextFilters(type, filter)
         return VitalDetailModel(
             type = type,
             title = vitalTitle(type),
@@ -644,7 +756,7 @@ class BodyPresenter(
             unitText = vitalDisplayUnit(type, imperial),
             averageText = averageText,
             count = readings.size,
-            range = range?.let { rangeUi(it, position) },
+            range = range?.let { rangeUi(it, position, imperial) },
             scaleValues = scaleValues,
             chart = chart,
             contexts = contexts,
@@ -663,7 +775,7 @@ class BodyPresenter(
                 listOf(
                     it.provenance.localDate.toString(),
                     it.values.joinToString(" / ") { value ->
-                        format(vitalDisplayValue(type, value, imperial), 0)
+                        format(vitalDisplayValue(type, value, imperial), decimalsFor(type))
                     } + " " + it.unitText,
                     it.contextText ?: "",
                 )
@@ -689,6 +801,7 @@ class BodyPresenter(
     private fun readingsOf(
         type: ObservationType,
         filter: ObservationContext?,
+        imperial: Boolean,
     ): List<VitalReadingModel> {
         if (type == ObservationType.BLOOD_PRESSURE_SYSTOLIC) {
             val systolics = bpObservations(type, filter)
@@ -700,7 +813,7 @@ class BodyPresenter(
                     id = systolic.id.value,
                     values = listOf(systolic.value.value, diastolic.value.value),
                     unitText = "mmHg",
-                    contextText = contextText(systolic.context?.name),
+                    contextText = contextText(contextOf(systolic)),
                     happenedAt = systolic.provenance.happenedAt,
                     provenance = provenance(
                         systolic,
@@ -715,14 +828,14 @@ class BodyPresenter(
             type,
             (today() - 365.days).atStart(),
             now(),
-        ).filter { !it.excludedFromTrends && matches(it.context, filter) }
+        ).filter { !it.excludedFromTrends && matches(it, filter) }
             .sortedByDescending { it.provenance.happenedAt }
             .map { observation ->
                 VitalReadingModel(
                     id = observation.id.value,
                     values = listOf(observation.value.value),
-                    unitText = vitalDisplayUnit(type, false),
-                    contextText = observation.context?.let { contextText(it.name) },
+                    unitText = vitalDisplayUnit(type, imperial),
+                    contextText = contextText(contextOf(observation)),
                     happenedAt = observation.provenance.happenedAt,
                     provenance = provenance(
                         observation,
@@ -732,17 +845,28 @@ class BodyPresenter(
             }
     }
 
-    private fun bpObservations(type: ObservationType, filter: ObservationContext?): List<Observation> =
-        store.observations.forTypeBetween(
-            type,
-            (today() - 365.days).atStart(),
-            now(),
-        ).filter { !it.excludedFromTrends && matches(it.context, filter) }
+    private fun bpObservations(
+        type: ObservationType,
+        filter: ObservationContext?,
+    ): List<Observation> = store.observations.forTypeBetween(
+        type,
+        (today() - 365.days).atStart(),
+        now(),
+    ).filter { !it.excludedFromTrends && matches(it, filter) }
 
-    private fun matches(context: ObservationContext?, filter: ObservationContext?): Boolean {
+    /**
+     * The full context a reading carries. The layer-4 vital row keeps arm, position, meal
+     * and protocol slot together; the observation keeps the one enum that fits its column.
+     * The sheet and the filters read the former, so "Sitting" and "Left arm" both work.
+     */
+    private fun contextOf(observation: Observation): String? =
+        store.body.vitalByObservationId(observation.id.value)?.context
+            ?: observation.context?.name
+
+    private fun matches(observation: Observation, filter: ObservationContext?): Boolean {
         if (filter == null) return true
-        if (context == filter) return true
-        val code = VitalContextCode.decode(context?.name)
+        if (observation.context == filter) return true
+        val code = VitalContextCode.decode(contextOf(observation))
         return when (filter) {
             ObservationContext.LEFT_ARM -> code.arm == app.openhealth.core.vitals.ArmSide.LEFT
             ObservationContext.RIGHT_ARM -> code.arm == app.openhealth.core.vitals.ArmSide.RIGHT
@@ -762,9 +886,16 @@ class BodyPresenter(
         }
     }
 
-    private fun contextFilters(type: ObservationType): List<ContextFilterModel> {
+    private fun contextFilters(
+        type: ObservationType,
+        filter: ObservationContext?,
+    ): List<ContextFilterModel> {
         val all = listOf(
-            ContextFilterModel(null, context.getString(UiR.string.vitals_detail_context_all), true),
+            ContextFilterModel(
+                null,
+                context.getString(UiR.string.vitals_detail_context_all),
+                filter == null,
+            ),
         )
         val options = when (type) {
             ObservationType.BLOOD_PRESSURE_SYSTOLIC -> listOf(
@@ -784,68 +915,105 @@ class BodyPresenter(
             else -> emptyList()
         }
         return all + options.map {
-            ContextFilterModel(it, contextText(it.name).orEmpty(), false)
+            ContextFilterModel(it, contextText(it.name).orEmpty(), filter == it)
         }
     }
 
+    /**
+     * The range context: the chosen filter, or the latest reading's own context when the
+     * person is looking at "All". A post-meal glucose must not be judged against the
+     * fasting range just because no chip is selected.
+     */
     private fun contextFilterKey(type: ObservationType, filter: ObservationContext?): String? =
-        filter?.name ?: if (type == ObservationType.BLOOD_GLUCOSE) null else null
+        filter?.name ?: store.observations.latest(type)?.context?.name
 
     private fun chartOf(
         type: ObservationType,
         filter: ObservationContext?,
+        imperial: Boolean,
     ): TrendChartModel? {
         val points = if (type == ObservationType.BLOOD_PRESSURE_SYSTOLIC) {
+            val chartStart = today().minus(DatePeriod(days = 30))
             val systolics = bpObservations(type, filter)
+                .filter { it.localDate >= chartStart }
                 .groupBy { it.localDate }
                 .mapValues { (_, same) -> same.maxBy { it.provenance.happenedAt } }
             val diastolics = bpObservations(ObservationType.BLOOD_PRESSURE_DIASTOLIC, filter)
+                .filter { it.localDate >= chartStart }
                 .groupBy { it.localDate }
                 .mapValues { (_, same) -> same.maxBy { it.provenance.happenedAt } }
+            if (systolics.size < 2 && diastolics.size < 2) return null
+            val count = maxOf(systolics.size, diastolics.size)
             TrendChartModel(
                 series = listOf(
                     TrendSeriesModel(
                         label = context.getString(UiR.string.vitals_add_systolic),
                         points = systolics.values.sortedBy { it.localDate }
-                            .map { TrendPoint(it.localDate, it.value.value) },
+                            .map {
+                                TrendPoint(
+                                    it.localDate,
+                                    vitalDisplayValue(type, it.value.value, imperial),
+                                )
+                            },
                         role = SeriesRole.SYSTOLIC,
                     ),
                     TrendSeriesModel(
                         label = context.getString(UiR.string.vitals_add_diastolic),
                         points = diastolics.values.sortedBy { it.localDate }
-                            .map { TrendPoint(it.localDate, it.value.value) },
+                            .map {
+                                TrendPoint(
+                                    it.localDate,
+                                    vitalDisplayValue(
+                                        ObservationType.BLOOD_PRESSURE_DIASTOLIC,
+                                        it.value.value,
+                                        imperial,
+                                    ),
+                                )
+                            },
                         role = SeriesRole.DIASTOLIC,
                     ),
                 ),
                 unitText = "mmHg",
-                referenceLow = 90.0,
-                referenceHigh = 135.0,
-                description = context.getString(UiR.string.vitals_detail_30_day),
+                description = if (count == 1) {
+                    context.getString(UiR.string.vitals_chart_desc_one, vitalTitle(type))
+                } else {
+                    context.getString(UiR.string.vitals_chart_desc, vitalTitle(type), count)
+                },
             )
         } else {
             val points = store.observations.forTypeBetween(
                 type,
                 (today() - 90.days).atStart(),
                 now(),
-            ).filter { !it.excludedFromTrends && matches(it.context, filter) }
+            ).filter { !it.excludedFromTrends && matches(it, filter) }
                 .groupBy { it.localDate }
                 .mapValues { (_, same) -> same.maxBy { it.provenance.happenedAt } }
-            if (points.isEmpty()) return null
+            if (points.size < 2) return null
+            val count = points.size
             val range = VitalRanges.forReading(type, contextFilterKey(type, filter))
             TrendChartModel(
                 series = listOf(
                     TrendSeriesModel(
                         label = null,
                         points = points.values.sortedBy { it.localDate }
-                            .map { TrendPoint(it.localDate, it.value.value) },
+                            .map {
+                                TrendPoint(
+                                    it.localDate,
+                                    vitalDisplayValue(type, it.value.value, imperial),
+                                )
+                            },
                         role = SeriesRole.SINGLE,
                     ),
                 ),
-                unitText = vitalDisplayUnit(type, false),
-                referenceLow = range?.low,
-                referenceHigh = range?.high,
-                description = context.getString(UiR.string.vitals_detail_30_day),
-                decimals = if (type == ObservationType.BODY_TEMPERATURE) 1 else 0,
+                unitText = vitalDisplayUnit(type, imperial),
+                referenceLow = range?.low?.let { vitalDisplayValue(type, it, imperial) },
+                referenceHigh = range?.high?.let { vitalDisplayValue(type, it, imperial) },
+                description = if (count == 1) {
+                    context.getString(UiR.string.vitals_chart_desc_one, vitalTitle(type))
+                } else {
+                    context.getString(UiR.string.vitals_chart_desc, vitalTitle(type), count)
+                },
+                decimals = decimalsFor(type),
             )
         }
         return points
@@ -854,8 +1022,13 @@ class BodyPresenter(
     private fun scaleReadings(
         type: ObservationType,
         filter: ObservationContext?,
+        imperial: Boolean,
     ): List<ScaleReadingModel> {
-        val latest = readingsOf(type, filter).firstOrNull() ?: return emptyList()
+        val latest = readingsOf(type, filter, imperial).firstOrNull() ?: return emptyList()
+        fun convert(value: Double): Double = when (type) {
+            ObservationType.BLOOD_GLUCOSE -> if (imperial) value * 18.0182 else value
+            else -> value
+        }
         fun model(bands: List<app.openhealth.core.vitals.RangeBand>): ScaleModel {
             val mapped = bands.map {
                 ScaleBandModel(
@@ -865,8 +1038,8 @@ class BodyPresenter(
                         app.openhealth.core.vitals.RangeBandLabel.RAISED -> ScaleLabel.RAISED
                         app.openhealth.core.vitals.RangeBandLabel.HIGH -> ScaleLabel.HIGH
                     },
-                    from = it.from,
-                    to = it.to,
+                    from = it.from?.let(::convert),
+                    to = it.to?.let(::convert),
                     citation = it.citation,
                 )
             }
@@ -898,8 +1071,8 @@ class BodyPresenter(
             ObservationType.BLOOD_GLUCOSE -> listOf(
                 ScaleReadingModel(
                     context.getString(UiR.string.vitals_type_glucose),
-                    latest.values[0],
-                    model(VitalRanges.scaleFor(type, filter?.name)!!),
+                    convert(latest.values[0]),
+                    model(VitalRanges.scaleFor(type, contextFilterKey(type, filter))!!),
                 ),
             )
 
@@ -907,13 +1080,73 @@ class BodyPresenter(
         }
     }
 
+    /** One range, its bounds converted to the unit the reading is printed in. */
+    private fun displayStatement(
+        range: app.openhealth.core.vitals.ReferenceRange,
+        imperial: Boolean,
+    ): String {
+        val convert = imperial &&
+            (
+                range.type == ObservationType.BODY_TEMPERATURE ||
+                    range.type == ObservationType.BLOOD_GLUCOSE
+                )
+        if (!convert) return range.statement
+        val low = range.low
+        val high = range.high
+        return when {
+            low != null && high != null ->
+                "${format(vitalDisplayValue(range.type, low, true), 1)}-" +
+                    "${format(vitalDisplayValue(range.type, high, true), 1)}"
+
+            low != null -> "from ${format(vitalDisplayValue(range.type, low, true), 1)}"
+            high != null -> "below ${format(vitalDisplayValue(range.type, high, true), 1)}"
+            else -> range.statement
+        }
+    }
+
+    private fun displayBounds(
+        range: app.openhealth.core.vitals.ReferenceRange,
+        imperial: Boolean,
+    ): String {
+        val unit = vitalDisplayUnit(range.type, imperial)
+        val low = range.low
+        val high = range.high
+        val convert = imperial &&
+            (
+                range.type == ObservationType.BODY_TEMPERATURE ||
+                    range.type == ObservationType.BLOOD_GLUCOSE
+                )
+        return if (convert) {
+            when {
+                low != null && high != null ->
+                    "${format(vitalDisplayValue(range.type, low, true), 1)}-" +
+                        "${format(vitalDisplayValue(range.type, high, true), 1)} $unit"
+
+                low != null -> "from ${format(vitalDisplayValue(range.type, low, true), 1)} $unit"
+                high != null -> "below ${format(
+                    vitalDisplayValue(range.type, high, true),
+                    1,
+                )} $unit"
+                else -> range.boundsText()
+            }
+        } else {
+            range.boundsText()
+        }
+    }
+
+    private fun decimalsFor(type: ObservationType): Int = when (type) {
+        ObservationType.BODY_TEMPERATURE, ObservationType.BLOOD_GLUCOSE -> 1
+        else -> 0
+    }
+
     private fun rangeUi(
         range: app.openhealth.core.vitals.ReferenceRange,
         position: RangePosition?,
+        imperial: Boolean,
     ): RangeUiModel = RangeUiModel(
-        statement = range.statement,
+        statement = displayStatement(range, imperial),
         population = range.population,
-        boundsText = range.boundsText(),
+        boundsText = displayBounds(range, imperial),
         citation = range.citation,
         citationLabel = citationLabel(range.citation),
         position = position,
@@ -924,7 +1157,17 @@ class BodyPresenter(
     fun protocolModel(): BpProtocolModel {
         val start = store.settings.get(SettingKeys.VITALS_BP_PROTOCOL_START)
             ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-            ?: return BpProtocolModel(BpProtocolState(LocalDate.parse("1970-01-01"), emptyList(), 2, 0, 28, false))
+            ?: return BpProtocolModel(
+                state = BpProtocolState(
+                    LocalDate.parse("1970-01-01"),
+                    emptyList(),
+                    2,
+                    0,
+                    28,
+                    false,
+                ),
+                today = today(),
+            )
         val readings = bpObservations(ObservationType.BLOOD_PRESSURE_SYSTOLIC, null)
             .filter { it.localDate >= start && it.localDate < start.plus(DatePeriod(days = 7)) }
         val protocolReadings = readings.mapNotNull { observation ->
@@ -933,20 +1176,25 @@ class BodyPresenter(
                 ?.let(HomeSlot::fromKey)
                 ?.let { BpProtocolReading(observation.localDate, it) }
         }
-        val state = BloodPressureProtocol.state(start, today(), protocolReadings)
-        val afterFirst = readings.filter { it.localDate > start }
+        val state = BloodPressureProtocol.state(start, protocolReadings)
+        val afterFirst = readings.filter {
+            it.localDate > start && it.groupKey?.startsWith("bp-home-") == true
+        }
         val diastolics = bpObservations(ObservationType.BLOOD_PRESSURE_DIASTOLIC, null)
             .associateBy { it.provenance.happenedAt }
         val pairs = afterFirst.mapNotNull { systolic ->
-            diastolics[systolic.provenance.happenedAt]?.let { systolic.value.value to it.value.value }
+            diastolics[systolic.provenance.happenedAt]?.let {
+                systolic.value.value to it.value.value
+            }
         }
         val average = BloodPressureProtocol.average(pairs)
         return BpProtocolModel(
             state = state,
+            today = today(),
             averageSystolic = average?.systolic,
             averageDiastolic = average?.diastolic,
             averageReadings = average?.readings ?: 0,
-            active = BloodPressureProtocol.withinWindow(start, today()) || !state.complete,
+            active = BloodPressureProtocol.withinWindow(start, today()) && !state.complete,
         )
     }
 
@@ -980,23 +1228,36 @@ class BodyPresenter(
         return id
     }
 
-    fun logMeasurement(site: MeasurementSite, valueText: String, at: Instant, imperial: Boolean): String? {
+    fun logMeasurement(
+        type: String,
+        valueText: String,
+        at: Instant,
+        imperial: Boolean,
+        method: MeasurementMethod = MeasurementMethod.MANUAL_ENTRY,
+    ): String? {
         val typed = valueText.replace(',', '.').toDoubleOrNull() ?: return null
         if (typed <= 0.0) return null
-        val cm = if (imperial) typed * 2.54 else typed
-        if (cm !in 1.0..400.0) return null
+        val composition = CompositionMeasure.fromType(type)
+        val value = if (composition != null) {
+            if (typed !in 1.0..80.0) return null
+            typed
+        } else {
+            val cm = if (imperial) typed * 2.54 else typed
+            if (cm !in 1.0..400.0) return null
+            cm
+        }
         val recorded = now()
         val row = Measurement(
             id = ids.newId(),
-            type = site.type,
-            value_ = cm,
-            unit = "cm",
+            type = type,
+            value_ = value,
+            unit = if (composition != null) "%" else "cm",
             local_date = at.toLocalDateTime(zone).date.toString(),
             zone_id = zone.id,
             happened_at = at.toEpochMilliseconds(),
             recorded_at = recorded.toEpochMilliseconds(),
             source_id = manualSource.value,
-            method = MeasurementMethod.MANUAL_ENTRY.name,
+            method = method.name,
             notes = null,
             excluded_from_trends = false,
             observation_id = null,
@@ -1025,11 +1286,7 @@ class BodyPresenter(
         else -> null
     }
 
-    fun logReading(
-        draft: VitalDraft,
-        imperial: Boolean,
-        at: Instant,
-    ): List<String> {
+    fun logReading(draft: VitalDraft, imperial: Boolean, at: Instant): List<String> {
         val context = VitalContextCode(
             arm = draft.arm,
             position = draft.position,
@@ -1110,8 +1367,11 @@ class BodyPresenter(
             ObservationType.BODY_TEMPERATURE -> {
                 val typed = draft.value.replace(',', '.').toDoubleOrNull()
                 val celsius = typed?.let {
-                    if (imperial) Measure(it, UcumUnit.FAHRENHEIT).convertTo(UcumUnit.CELSIUS).value
-                    else it
+                    if (imperial) {
+                        Measure(it, UcumUnit.FAHRENHEIT).convertTo(UcumUnit.CELSIUS).value
+                    } else {
+                        it
+                    }
                 }
                 if (celsius != null && celsius in 25.0..45.0) {
                     write(ObservationType.BODY_TEMPERATURE, celsius, MeasurementMethod.MANUAL_ENTRY)
@@ -1145,8 +1405,7 @@ class BodyPresenter(
         return created
     }
 
-    fun deleteVital(id: String): TombstoneId? =
-        store.trash.deleteVital(VitalId(id))
+    fun deleteVital(id: String): TombstoneId? = store.trash.deleteVital(VitalId(id))
 
     /**
      * Deletes a whole reading, not one column of it: a blood-pressure pair (and its
@@ -1156,7 +1415,10 @@ class BodyPresenter(
     fun deleteReading(id: String): List<TombstoneId> {
         val primary = store.observations.byId(ObservationId(id)) ?: return emptyList()
         val related = if (primary.type == ObservationType.BLOOD_PRESSURE_SYSTOLIC) {
-            listOf(ObservationType.BLOOD_PRESSURE_SYSTOLIC, ObservationType.BLOOD_PRESSURE_DIASTOLIC)
+            listOf(
+                ObservationType.BLOOD_PRESSURE_SYSTOLIC,
+                ObservationType.BLOOD_PRESSURE_DIASTOLIC,
+            )
                 .flatMap { type ->
                     store.observations.forDayAndType(primary.localDate, type)
                         .filter {
@@ -1166,12 +1428,12 @@ class BodyPresenter(
                             ) < READ_GROUP_WINDOW_MS
                         }
                 } + store.observations.forDayAndType(primary.localDate, ObservationType.HEART_RATE)
-                    .filter {
-                        kotlin.math.abs(
-                            (it.provenance.happenedAt - primary.provenance.happenedAt)
-                                .inWholeMilliseconds,
-                        ) < READ_GROUP_WINDOW_MS
-                    }
+                .filter {
+                    kotlin.math.abs(
+                        (it.provenance.happenedAt - primary.provenance.happenedAt)
+                            .inWholeMilliseconds,
+                    ) < READ_GROUP_WINDOW_MS
+                }
         } else {
             listOf(primary)
         }
@@ -1183,7 +1445,9 @@ class BodyPresenter(
         val vitalTombstones = store.body.vitalsForDay(primary.localDate)
             .filter {
                 it.type in relatedTypes &&
-                    kotlin.math.abs(it.happened_at - primary.provenance.happenedAt.toEpochMilliseconds()) <
+                    kotlin.math.abs(
+                        it.happened_at - primary.provenance.happenedAt.toEpochMilliseconds(),
+                    ) <
                     READ_GROUP_WINDOW_MS
             }
             .mapNotNull { store.trash.deleteVital(VitalId(it.id)) }
@@ -1220,14 +1484,18 @@ class BodyPresenter(
     }
 
     fun photoCompare(selectedId: String): PhotoCompareModel? {
-        val all = store.body.latestPhotos(PHOTO_COMPARE_LIMIT)
+        // Metadata first: a full-image query would read every photo's bytes just to pick
+        // two of them. Only the chosen older and newer rows are loaded.
+        val all = store.body.photoGallery(PHOTO_COMPARE_LIMIT)
         if (all.size < 2) return null
         val selected = all.firstOrNull { it.id == selectedId } ?: return null
         val oldest = all.minByOrNull { it.happened_at } ?: return null
         val newest = all.maxByOrNull { it.happened_at } ?: return null
-        val before = if (selected.id == oldest.id) oldest else oldest
-        val after = if (selected.id == before.id) newest else selected
-        if (before.id == after.id) return null
+        val beforeId = oldest.id
+        val afterId = if (selected.id == beforeId) newest.id else selected.id
+        if (beforeId == afterId) return null
+        val before = store.body.photoById(beforeId) ?: return null
+        val after = store.body.photoById(afterId) ?: return null
         val beforeBytes = PhotoCodec.decodeBase64(before.bytes_b64) ?: return null
         val afterBytes = PhotoCodec.decodeBase64(after.bytes_b64) ?: return null
         val beforeImage = PhotoCodec.decode(beforeBytes) ?: return null
@@ -1247,11 +1515,16 @@ class BodyPresenter(
         )
     }
 
-    fun photosHidden(): Boolean =
-        store.settings.get(SettingKeys.BODY_PHOTOS_HIDDEN) == "true"
+    fun photosHidden(): Boolean = store.settings.get(SettingKeys.BODY_PHOTOS_HIDDEN) == "true"
 
     fun setPhotosHidden(hidden: Boolean) {
         store.settings.put(SettingKeys.BODY_PHOTOS_HIDDEN, hidden.toString())
+    }
+
+    fun photosInExport(): Boolean = store.settings.get(SettingKeys.BODY_PHOTOS_IN_EXPORT) == "true"
+
+    fun setPhotosInExport(include: Boolean) {
+        store.settings.put(SettingKeys.BODY_PHOTOS_IN_EXPORT, include.toString())
     }
 
     // ------------------------------------------------------------------ CSV
@@ -1333,12 +1606,14 @@ class BodyPresenter(
                 )
                 if (outcome is app.openhealth.data.repo.RecordOutcome.Inserted) imported++
             } else {
-                val sameDay = store.body.latestMeasurementOfType(row.type)
-                if (sameDay != null && sameDay.local_date == row.date.toString() &&
-                    kotlin.math.abs(sameDay.value_ - row.value) < 1e-9
-                ) {
+                val idempotencyKey = "csv-${row.type}-${row.date}-${row.value}"
+                if (store.body.measurementByIdempotencyKey(idempotencyKey) != null) {
                     return@forEach
                 }
+                val alreadyThere = store.body.measurementsForDay(row.date).any {
+                    it.type == row.type && kotlin.math.abs(it.value_ - row.value) < 1e-9
+                }
+                if (alreadyThere) return@forEach
                 val recorded = now()
                 val measurement = Measurement(
                     id = ids.newId(),
@@ -1349,13 +1624,13 @@ class BodyPresenter(
                     zone_id = zone.id,
                     happened_at = at.toEpochMilliseconds(),
                     recorded_at = recorded.toEpochMilliseconds(),
-                    source_id = manualSource.value,
+                    source_id = importSource.value,
                     method = (row.method ?: MeasurementMethod.FILE_IMPORT).name,
                     notes = row.notes,
                     excluded_from_trends = false,
                     observation_id = null,
                     raw_record_id = null,
-                    idempotency_key = "csv-${row.type}-${row.date}-${row.value}",
+                    idempotency_key = idempotencyKey,
                     device = DEVICE,
                     app_version = appVersion,
                     revision = 1L,
@@ -1399,7 +1674,13 @@ class BodyPresenter(
         localDate = fat.localDate,
         zoneId = zone.id,
         valueText = "${format(fat.percent, 1)} %",
-        trendText = if (fat.method == null) context.getString(UiR.string.vitals_method_navy) else null,
+        trendText = if (fat.method ==
+            null
+        ) {
+            context.getString(UiR.string.vitals_method_navy)
+        } else {
+            null
+        },
     )
 
     private fun measurementProvenance(row: Measurement, valueText: String): ValueProvenance =
@@ -1432,9 +1713,14 @@ class BodyPresenter(
         "calf",
     ).mapNotNull { type -> latestMeasurement(type)?.let { type to it } }.toMap()
 
-    private fun sourceLabel(sourceId: String): String =
-        store.sources.byId(SourceId(sourceId))?.label
-            ?: context.getString(UiR.string.vitals_provenance_manual)
+    private fun sourceLabel(sourceId: String): String {
+        val source = store.sources.byId(SourceId(sourceId))
+        return if (source == null || source.kind == SourceKind.MANUAL) {
+            context.getString(UiR.string.vitals_provenance_manual)
+        } else {
+            source.label
+        }
+    }
 
     private fun sexOf(profile: Profile?): BodySex =
         if (profile?.sex_at_birth == "FEMALE") BodySex.FEMALE else BodySex.MALE
@@ -1448,18 +1734,15 @@ class BodyPresenter(
         method = method,
     )
 
-    private fun csvProvenance(
-        at: Instant,
-        method: MeasurementMethod,
-        key: String,
-    ): Provenance = Provenance(
-        sourceId = manualSource,
-        time = TimeProvenance.of(at, now(), zone),
-        idempotencyKey = key,
-        device = DEVICE,
-        appVersion = appVersion,
-        method = method,
-    )
+    private fun csvProvenance(at: Instant, method: MeasurementMethod, key: String): Provenance =
+        Provenance(
+            sourceId = manualSource,
+            time = TimeProvenance.of(at, now(), zone),
+            idempotencyKey = key,
+            device = DEVICE,
+            appVersion = appVersion,
+            method = method,
+        )
 
     private fun methodLabel(method: MeasurementMethod?): String? = when (method) {
         MeasurementMethod.SCALE -> context.getString(UiR.string.vitals_method_scale)
@@ -1550,6 +1833,7 @@ class BodyPresenter(
         when (key) {
             CitationKey.ESH_HYPERTENSION_2023 -> UiR.string.vitals_citation_esh
             CitationKey.AHA_RESTING_HEART_RATE -> UiR.string.vitals_citation_aha
+            CitationKey.AHA_LOW_BLOOD_PRESSURE -> UiR.string.vitals_citation_aha
             CitationKey.WHO_PULSE_OXIMETRY_2011 -> UiR.string.vitals_citation_who
             CitationKey.GENEVA_BODY_TEMPERATURE_2019 -> UiR.string.vitals_citation_geneva
             CitationKey.ADA_GLYCEMIC_TARGETS_2026 -> UiR.string.vitals_citation_ada
@@ -1571,8 +1855,6 @@ class BodyPresenter(
 
     private fun LocalDate.atStart(): Instant = atTime(LocalTime(0, 0)).toInstant(zone)
 
-    private fun LocalDate.atNoon(): Instant = atTime(LocalTime(12, 0)).toInstant(zone)
-
     private fun LocalDate.plusDays(days: Int): LocalDate = this + DatePeriod(days = days)
 
     private operator fun LocalDate.minus(duration: kotlin.time.Duration): LocalDate =
@@ -1583,5 +1865,7 @@ class BodyPresenter(
         const val PHOTO_COMPARE_LIMIT = 200L
         const val MILLIS_PER_DAY = 86_400_000L
         const val READ_GROUP_WINDOW_MS = 2_000L
+        const val POUNDS_PER_KILOGRAM = 2.2046226218
+        const val CUSTOM_PREFIX = "custom:"
     }
 }

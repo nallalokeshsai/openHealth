@@ -3,8 +3,9 @@
 **Date:** 2026-11-25 · **Phase:** B7 · **Status:** accepted
 **Context:** `BUILD-ROADMAP.md` §B7, `pr.md` §6.8–6.9, §6.25, §12.1, `DESIGN.md` §7.5,
 §8.2.1, §9.1.1–9.4, §14.2.
-**Supersedes:** nothing. **Amends:** `Tech-Stack.md` §5 (the photo storage note), `DESIGN.md`
-Appendix A (the measurement anchor geometry).
+**Supersedes:** nothing. **Amends:** `Tech-Stack.md` §5 (the photo storage note),
+`DESIGN.md` Appendix A (the measurement anchor and chart/photo geometry) and §9.4 (the
+photo-export opt-in).
 
 ## 1. Every vital has a cited range, and the range is a fact
 
@@ -16,9 +17,9 @@ Appendix A (the measurement anchor geometry).
   document. The citation and the on-screen label say ESH 2023 and use the home threshold
   of 135/85 mmHg and the 7-day duplicate morning/evening protocol with its first day
   discarded. Calling it ESC/ESH would have been a misattribution.
-- The temperature range is **36.2–37.0 °C**, the mean ± 2 SD across sites reported by
-  Geneva et al. 2019 (36.16–37.02 °C), not the consumer shorthand 36.1–37.2 °C. The
-  systematic review does not support the wider figure.
+- The temperature range is **35.7–37.5 °C**, the pooled 36.59 ± 0.43 °C of Geneva et al.
+  2019 extended to mean ± 2 SD. The review's 36.16–37.02 °C figure is mean ± 1 SD; using
+  it as a reference band would call about a third of healthy adults outside the range.
 - Glucose uses ADA Standards of Care 2026: fasting below 5.6 mmol/L and the two-hour
   75 g OGTT below 7.8 mmol/L; the 3.9 mmol/L low threshold is the same standards' Level 1
   hypoglycaemia threshold. The context (fasting, pre-meal, after a meal) selects the

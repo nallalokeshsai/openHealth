@@ -26,6 +26,7 @@
     <string name="toast_reading_deleted">Reading deleted.</string>
     <string name="toast_measurement_saved">Measurement saved.</string>
     <string name="toast_photo_saved">Photo added.</string>
+    <string name="photo_timeline_title">Progress photo</string>
     <string name="toast_photo_deleted">Photo deleted.</string>
     <string name="toast_csv_saved">CSV saved.</string>
     <string name="toast_csv_failed">The CSV could not be written.</string>
