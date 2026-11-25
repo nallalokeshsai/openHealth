@@ -2383,7 +2383,7 @@ rather than executed radio; that is recorded as open, not claimed.
 
 ## B9 — Today and Stats
 
-**Status:** In progress · **Date:** 2026-11-25 · **Branch:** `build/b9-today-and-stats`
+**Status:** Completed · **Date:** 2026-11-25 · **Branch:** `build/b9-today-and-stats`
 **Goal:** the daily dashboard and the statistics, every number interrogable
 (`BUILD-ROADMAP.md` §B9).
 
@@ -2409,14 +2409,116 @@ rather than executed radio; that is recorded as open, not claimed.
   setting. New `:tools:benchmark` module and a benchmark-only five-year seed activity.
 - **Docs** — ADR 0014, `DESIGN.md` §5.6's 12 sp range line and revision 0.3.
 
+### Decisions taken
+
+- **Sleep is settled before it reaches Today.** A staged night's asleep figure is deep +
+  light + REM; awake minutes never count as sleep, and time in bed is never added. A
+  summary-only night uses its span. `SleepTotalsCalculator` is the one place that decides,
+  and Today, Stats and the stage chart all read it.
+- **Energy is a range assembled from cited parts.** BMR ±5 %, step energy (0.762 m
+  stride at 3 MET) ±25 %, a workout ±20 %; net is in minus out with the range reversed.
+  Goal ETA has five explicit states: needs data, steady, moving away, no goal weight, and
+  a window.
+- **Readiness assembly** uses a 28-day mean with at least seven days for RHR/HRV and a
+  zero-filled 28-day training-load series, because a day without training is a real zero.
+- **The chart registry is a gate.** Every `ChartId` needs a title, formula and citation;
+  `ChartTableModel` rejects an empty table and the card models reject a blank sentence.
+- **The benchmark is test-only.** `:tools:benchmark` targets the release-shaped
+  `benchmark` build; the five-year seed activity lives in `app-android/src/benchmark/`
+  and is absent from debug and release APKs.
+- **Step goal is layer 5.** `goal.steps` with an 8,000 default, edited from Today; no
+  schema change.
+
 ### What was run, and its result
 
 | Command | Result |
 |---|---|
-| `./gradlew check` | to be recorded at the exit |
-| `./gradlew :app-android:assembleDebug` | to be recorded at the exit |
-| Device walk-through | in progress |
+| `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, both lint variants and **567 JVM tests** (292 `:core`, 111 `:data`, 27 `:integrations`, 127 `:ui`, 10 tools); **266 goldens**. |
+| `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**: both `play` and `fdroid` debug APKs build. |
+| Macrobenchmark (emulator, 5-year corpus) | cold start median **3,714 ms** on `sdk_gphone64_x86_64` (API 35), flagged as not the reference device class; warm run could not collect render-thread slices on this emulator |
+| Cold start (owner's phone, benchmark build, 5-year corpus) | **484 / 484 / 495 ms** by `am start -W`, `LaunchState: COLD` |
+| Warm start (owner's phone, same build/corpus) | **24 / 25 / 27 / 34 / 40 ms** by `am start -W`, `LaunchState: HOT` |
+| Macrobenchmark on the phone | refused: the phone reports `DEVICE-TRACING-MISCONFIGURED` (the OS tracing filesystem is not mounted), which Macrobenchmark will not suppress |
+| Device walk-through and B9 instrumented scenarios | recorded at the exit |
+
+### Verification found and fixed
+
+- **A staged sleep night crossed midnight as two fragments.** Health Connect writes the
+  session total on its start day and each stage on the stage's start day, so reading one
+  day's rollups turned a staged night into a fragment. `SleepSessions` now assembles the
+  readings by their session id (or by day when a source has no id), and a 7.5 h staged
+  night is one night even when its stages cross midnight. Stages without a span still make
+  a night. Tests: `SleepSessionsTest`.
+- **The boot receiver opened the encrypted store on the main thread.** The five-year
+  benchmark app's cold start was 4.8 s because a queued boot broadcast opened SQLCipher
+  before the activity; the receiver now reads its setting on its own thread and finishes
+  the pending result when done. Cold start fell to **484–499 ms** on the owner's phone.
+- **The energy card could propose a target below the safety floor.** The daily intake is
+  clamped to `EnergySafety.floors(sex, bmr)` and the card says when the floor is applied;
+  the nutrition suggestion uses the same clamp. The what-if Save writes today's target
+  and no longer rewrites the profile's goal mode.
+- **Provenance could pair the winning source with another source's timestamps.** The
+  observation is now filtered by the rollup's winning source, and the quality row maps
+  every dedup reason to a sentence.
+- **Readiness could claim a 28-day load baseline on first use.** The zero-filled series is
+  still right for gaps, but the baseline day count now comes from the real history span;
+  fewer than seven days still shows no score.
+- **The what-if now needs 14 days**, and its window is a start and an end, never one date.
+- **The body map golden flaked** because the geometry loaded asynchronously; the test path
+  now loads it synchronously when `synchronousLayers` is set.
+- **The Today card footers were one full-width link inside a Row**, which wrapped the
+  second link into a 1,000 px column and left a blank card. Both links now stack at 44 dp.
+- **The chart kit** gained a labelled zero axis, flat-bottomed bars, month labels that are
+  legible at 12 sp, LTR axes in RTL, a goal line only when it does not flatten the series,
+  and chart strokes that use the light-safe ink. The Stats card footers are `label-2`.
+- **The device-only B9 test** now scrolls to its targets, opens a table that has Day and
+  Value, and accepts a muscle description that is present on more than one side.
+- **The benchmark has its own package** (`.bench`) and data directory, so its synthetic
+  corpus can never merge into the owner's record; its seed guard avoids a second seed.
+
+### Measuring the performance exit
+
+- **Macrobenchmark on the owner's phone** refuses to run: the phone reports
+  `DEVICE-TRACING-MISCONFIGURED` (its OS tracing filesystem is not mounted).
+  Macrobenchmark will not suppress that error.
+- **Macrobenchmark on the emulator** (`sdk_gphone64_x86_64`, API 35, `oh35`) reports a
+  cold-start median of **3,714 ms**. It is an emulator number and is not the reference
+  device class. The warm run could not collect render-thread slices on this image.
+- **The owner's phone, same benchmark build and five-year corpus**, measured with
+  `am start -W`: cold **484 / 484 / 495 ms** (`LaunchState: COLD`) and warm
+  **24 / 25 / 27 / 34 / 40 ms** (`LaunchState: HOT`). The five-year corpus is installed in
+  the `.bench` package; the measurements are on the release-shaped `benchmark` build.
+- The B9 exit line asks for Macrobenchmark; the phone's tracing configuration prevents
+  it, so the phone numbers are a direct activity-start measurement and are reported as
+  such, not presented as Macrobenchmark output.
+
+### B9 exit tests (`BUILD-ROADMAP.md` §B9)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| Warm Today under 300 ms and cold start under 1.5 s, over the five-year corpus | Phone, release-shaped `benchmark` build with the five-year `.bench` corpus: `am start -W` cold **484 / 484 / 495 ms**, warm **24 / 25 / 27 / 34 / 40 ms**. Macrobenchmark on the phone refuses (`DEVICE-TRACING-MISCONFIGURED`); the emulator Macrobenchmark cold median is **3,714 ms** and is flagged as not the reference device class. | **pass on the phone by direct measurement; Macrobenchmark phone run blocked by the OS tracing configuration** |
+| Every chart has a table, a one-sentence description and a formula sheet | `ChartRegistryTest` (every `ChartId` has title, formula, citation), `ChartTableModel`/`StatsCard`/`TodayChartModel` reject an empty table or blank sentence; the tables and formulas were opened by hand on the phone. | **pass** |
+| ETA shows “not enough data yet” on day 13 and a window on day 14 | `FormulaTest.dayThirteenHasNoEtaAndDayFourteenHasAWindow`: 13 days returns `NOT_ENOUGH_DATA`, 14 days returns a start < end window. | **pass** |
+
+### Device run and QA sweep
+
+- The B9 instrumented scenarios (`TodayStatsExitTest`) pass **2/2** on the owner's phone.
+- The full instrumented suite ran **42 tests**. `ActivityExitTest`, `TrainingExitTest`, `VitalsExitTest`, `ExerciseLibraryDeviceTest` and both B9 scenarios pass. Five B3/B6 tests (`underSixteen…`, `aSeventeenYearOld…`, `waterGlasses…`, `theOneTapWater…`, `theBundledIndex…`) failed only in the class sequence; each was re-run alone and passed. The failures are test-suite state and the phone's intermittent USB drop (they surfaced as `SQLITE_IOERR_DELETE`), not product failures; this is recorded as an open B10 test-isolation issue.
+- The manual sweep exercised Today (populated, empty via the golden suite, weight-neutral, dark/light/200 %), the readiness explanation, the goal what-if and Save target, the step goal, the chart tables and formula sheets, all five Stats segments, the four states of a card, rotation, process death, back navigation, and the settings surface. Eleven issues were recorded; seven are fixed in this phase and four are moved to open issues below.
+- Device output, screenshots and the issue list lived under `/tmp/openhealth-qa/b9` and were never committed.
+
+### Open issues from QA (moved here)
+
+- **A saved what-if target can leave the macro rows without targets** (`AppViewModel.saveGoalTarget`). The calorie target is written and correct; the macro suggestion is computed but the saved row can still show only kcal, so the bars have no target until Nutrition → Targets is saved. Repro: Today → what-if → Save target on the demo profile.
+- **The five-tab labels are clipped at 200 % text.** The 56 dp bar shows the icons but not the labels; this is B1's component and belongs to B10's accessibility sweep.
+- **Stats is kilograms-only.** Weight and body fat in Stats do not follow the profile's imperial unit while Today does; B10's internationalisation pass.
+- **The phone's Macrobenchmark tracing is misconfigured**; the emulator number is reported and flagged.
 
 ### Placeholders and open issues
 
-- The Macrobenchmark numbers and the device QA sweep are recorded at the exit.
+- The boot receiver's background thread and the cold-start measurement are B9 changes; no radio path is exercised by them.
+- Places that remain B10 work: Stats displays weight and body fat in kilograms only while
+  Today converts to the profile unit; the 200 % segmented control scrolls rather than
+  showing a scroll affordance; chart-table state is `remember` rather than
+  `rememberSaveable`; the sensor/BLE paths have no radio coverage; the phone's
+  Macrobenchmark tracing is misconfigured.

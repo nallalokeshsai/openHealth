@@ -52,6 +52,6 @@
     <string name="toast_csv_imported">Imported %1$d readings.</string>
     <string name="toast_csv_import_problems">Imported %1$d readings; %2$d rows need attention.</string>
     <string name="toast_csv_none">The file had no body readings.</string>
-    <string name="toast_goal_saved">Goal rate saved</string>
+    <string name="toast_goal_saved">Daily target saved</string>
     <string name="toast_step_goal_saved">Step goal saved</string>
 </resources>

@@ -15,6 +15,7 @@ import app.openhealth.core.citation.CitationKey
 import app.openhealth.core.citation.Citations
 import app.openhealth.core.formula.ActivityLevel
 import app.openhealth.core.formula.Bmr
+import app.openhealth.core.formula.EnergySafety
 import app.openhealth.core.formula.FormulaOutcome
 import app.openhealth.core.formula.GoalMode
 import app.openhealth.core.formula.GoalRatePolicy
@@ -379,7 +380,11 @@ class NutritionPresenter(
                     as? FormulaOutcome.Computed
                 )?.value ?: tdee.value
         }
-        val targets = TargetSuggestions.suggest(sex, weight, kcal) as? FormulaOutcome.Computed
+        val floor = (EnergySafety.floors(sex, bmr.value) as? FormulaOutcome.Computed)
+            ?.value?.minimumIntakeKcal
+        val safeKcal = if (floor != null) maxOf(kcal, floor) else kcal
+        val targets = TargetSuggestions.suggest(sex, weight, safeKcal)
+            as? FormulaOutcome.Computed
             ?: return null
         return TargetsSaveModel(
             kcal = targets.value.kcal,

@@ -19,6 +19,7 @@ import app.openhealth.core.formula.ActivityLevel
 import app.openhealth.core.formula.Bmr
 import app.openhealth.core.formula.DailyValue
 import app.openhealth.core.formula.EnergyBalanceCalculator
+import app.openhealth.core.formula.EnergySafety
 import app.openhealth.core.formula.FormulaOutcome
 import app.openhealth.core.formula.GoalEta
 import app.openhealth.core.formula.GoalMode
@@ -27,8 +28,9 @@ import app.openhealth.core.formula.MetActivity
 import app.openhealth.core.formula.Readiness
 import app.openhealth.core.formula.ReadinessSeries
 import app.openhealth.core.formula.SexAtBirth
-import app.openhealth.core.formula.SleepTotals
-import app.openhealth.core.formula.SleepTotalsCalculator
+import app.openhealth.core.formula.SleepSample
+import app.openhealth.core.formula.SleepSession
+import app.openhealth.core.formula.SleepSessions
 import app.openhealth.core.formula.StepEnergy
 import app.openhealth.core.formula.Tdee
 import app.openhealth.core.formula.WeightEntry
@@ -78,6 +80,8 @@ import kotlin.time.Duration.Companion.days
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
@@ -119,9 +123,15 @@ class TodayPresenter(
         }
         val plan = plan(date, profile)
         val sessionCount = sessionsThisWeek(date)
-        val energy = energy(date, profile, weight?.kg, energyKcal)
+        val showsCalories = preferences.displayPolicy.shows(
+            app.openhealth.core.preferences.SensitiveMetric.CALORIES,
+        )
+        val showsWeight = preferences.displayPolicy.shows(
+            app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+        )
+        val energy = if (showsCalories) energy(date, profile, weight?.kg, energyKcal) else null
         val stepsCard = stepsCard(date, steps)
-        val weightCard = weightCard(weight, weightTrend)
+        val weightCard = if (showsWeight) weightCard(weight, weightTrend) else null
         val anything = notes.isNotEmpty() ||
             water != null ||
             weight != null ||
@@ -140,7 +150,7 @@ class TodayPresenter(
             waterMl = water,
             steps = steps,
             energyKcal = energyKcal,
-            weightKg = weight?.kg,
+            weightKg = if (showsWeight) weight?.kg else null,
             unitSystem = app.openhealth.core.preferences.UnitSystem.fromKey(profile.units)
                 ?: app.openhealth.core.preferences.UnitSystem.METRIC,
             readinessScore = readiness?.score,
@@ -156,7 +166,7 @@ class TodayPresenter(
             weightCard = weightCard,
             due = due(date, moduleOn, preferences.weightNeutral),
             charts = charts(date, energy, steps, weight, weightTrend),
-            provenances = provenances(date, energyKcal, steps, weight),
+            provenances = provenances(date, energy, steps, weight),
         )
     }
 
@@ -177,7 +187,7 @@ class TodayPresenter(
         val date = today()
         val rollups = store.rollups.forTypeRange(
             ObservationType.WEIGHT,
-            date.minus(DatePeriod(days = TREND_DAYS)),
+            date.minus(DatePeriod(days = TREND_DAYS - 1)),
             date,
         )
         val latest = rollups.maxByOrNull { it.localDate } ?: return null
@@ -188,7 +198,7 @@ class TodayPresenter(
         val date = today()
         val rollups = store.rollups.forTypeRange(
             ObservationType.WEIGHT,
-            date.minus(DatePeriod(days = TREND_DAYS)),
+            date.minus(DatePeriod(days = TREND_DAYS - 1)),
             date,
         )
         if (rollups.isEmpty()) return null
@@ -198,18 +208,25 @@ class TodayPresenter(
 
     private fun readiness(date: LocalDate): ReadinessCardModel? {
         val yesterday = date.minus(DatePeriod(days = 1))
-        val sleep = sleepTotals(yesterday) ?: sleepTotals(date)
+        val sleep = sleepSessions(date)
+            .lastOrNull { it.localDate >= yesterday.minus(DatePeriod(days = 1)) }
+            ?.totals
         val rhrSeries = dailySeries(
             ObservationType.RESTING_HEART_RATE,
             date,
         )
         val hrvSeries = dailySeries(ObservationType.HEART_RATE_VARIABILITY, date)
             .map { it.copy(value = it.value * MILLIS_PER_SECOND) }
-        val loadByDay = dailySeries(ObservationType.TRAINING_VOLUME, date).associateBy { it.date }
+        val rawLoad = dailySeries(ObservationType.TRAINING_VOLUME, date)
+        val loadByDay = rawLoad.associateBy { it.date }
         val loadSeries = (0 until ReadinessSeries.WINDOW_DAYS).map { offset ->
             val day = date.minus(DatePeriod(days = offset))
             DailyValue(day, loadByDay[day]?.value ?: 0.0)
         }
+        val loadHistoryDays = rawLoad.minOfOrNull { it.date }?.let { first ->
+            (first.daysUntil(date.minus(DatePeriod(days = 1))) + 1)
+                .coerceIn(0, ReadinessSeries.WINDOW_DAYS)
+        } ?: 0
         val rhr = ReadinessSeries.latest(rhrSeries, date)
         val hrvSeconds = ReadinessSeries.latest(hrvSeries, date)
         val recentLoad = loadSeries.filter { it.date >= date.minus(DatePeriod(days = 1)) }
@@ -227,6 +244,7 @@ class TodayPresenter(
             hrvSeries = hrvSeries,
             trainingLoad48h = load48,
             trainingLoadSeries = loadSeries,
+            trainingLoadBaselineDays = loadHistoryDays,
             sleepNeedMinutes = sleepNeed,
         )
         val outcome = Readiness.compute(inputs)
@@ -322,23 +340,25 @@ class TodayPresenter(
         )
     }
 
-    private fun sleepTotals(date: LocalDate): SleepTotals? {
-        fun value(type: ObservationType): Double? =
-            store.rollups.forDayAndType(date, type)?.value?.value
-        val duration = value(ObservationType.SLEEP_DURATION)
-        if (duration == null) return null
-        return SleepTotalsCalculator.of(
-            spanSeconds = duration,
-            inBedSeconds = value(ObservationType.SLEEP_IN_BED),
-            deepSeconds = value(ObservationType.SLEEP_DEEP),
-            lightSeconds = value(ObservationType.SLEEP_LIGHT),
-            remSeconds = value(ObservationType.SLEEP_REM),
-            awakeSeconds = value(ObservationType.SLEEP_AWAKE),
-        )
+    /** Every reading of the last week, assembled by session so midnight cannot split a night. */
+    private fun sleepSessions(date: LocalDate): List<SleepSession> {
+        val from = date.minus(DatePeriod(days = SLEEP_QUERY_DAYS)).atStartOfDayIn(zone)
+        val to = date.plus(DatePeriod(days = 2)).atStartOfDayIn(zone)
+        val samples = SLEEP_TYPES.flatMap { type ->
+            store.observations.forTypeBetween(type, from, to).map { observation ->
+                SleepSample(
+                    groupKey = observation.groupKey,
+                    type = observation.type,
+                    seconds = observation.value.value,
+                    localDate = observation.localDate,
+                )
+            }
+        }
+        return SleepSessions.collect(samples)
     }
 
     private fun dailySeries(type: ObservationType, today: LocalDate): List<DailyValue> =
-        store.rollups.forTypeRange(type, today.minus(DatePeriod(days = TREND_DAYS)), today)
+        store.rollups.forTypeRange(type, today.minus(DatePeriod(days = TREND_DAYS - 1)), today)
             .map { DailyValue(it.localDate, it.value.value) }
 
     private fun week(date: LocalDate): List<TodayWeekDay> {
@@ -457,7 +477,9 @@ class TodayPresenter(
         val goalWeight = store.settings.get(SettingKeys.GOAL_WEIGHT_KG)?.toDoubleOrNull()
         val trend = weightTrend()
         val eta = etaState(goalWeight, trend, date)
-        val whatIf = whatIf(goalWeight, trend, profile)
+        val floorKcal = (EnergySafety.floors(sex, bmr) as? FormulaOutcome.Computed)
+            ?.value?.minimumIntakeKcal ?: MIN_SAFE_KCAL
+        val whatIf = whatIf(goalWeight, trend, profile, floorKcal)
         return TodayEnergyModel(
             intakeKcal = balance.intakeKcal,
             outLowKcal = balance.outKcal.low,
@@ -472,11 +494,28 @@ class TodayPresenter(
                 macro(Nutrient.FAT, targets.fatG),
                 macro(Nutrient.FIBRE, targets.fibreG),
             ),
-            waterMl = store.rollups.forDayAndType(date, ObservationType.WATER)?.value?.value,
+            waterMl = store.rollups.forDayAndType(date, ObservationType.WATER)?.value?.value
+                ?: if (targets.waterMl != null) 0.0 else null,
             waterTargetMl = targets.waterMl,
             goalEta = eta,
             whatIf = whatIf,
             hasIntake = intakeKcal != null,
+            notes = buildList {
+                if (stepKcal == null) {
+                    add(context.getString(UiR.string.today_energy_no_steps))
+                }
+                if (sessions.isEmpty()) {
+                    add(context.getString(UiR.string.today_energy_no_workout))
+                }
+                if (weightKg == null) {
+                    add(context.getString(UiR.string.today_energy_profile_weight))
+                }
+            },
+            floorApplied = targets.kcal != null &&
+                targets.kcal == (
+                    EnergySafety.floors(sex, bmr)
+                        as? FormulaOutcome.Computed
+                    )?.value?.minimumIntakeKcal,
         )
     }
 
@@ -530,7 +569,10 @@ class TodayPresenter(
             (TargetSuggestions.energyForRate(tdee, it.appliedKgPerWeek) as? FormulaOutcome.Computed)
                 ?.value
         } ?: tdee
-        return (TargetSuggestions.suggest(sex, weight, energy) as? FormulaOutcome.Computed)
+        val floor = (EnergySafety.floors(sex, bmr) as? FormulaOutcome.Computed)
+            ?.value?.minimumIntakeKcal
+        val safeEnergy = if (floor != null) maxOf(energy, floor) else energy
+        return (TargetSuggestions.suggest(sex, weight, safeEnergy) as? FormulaOutcome.Computed)
             ?.value ?: MacroTargets.EMPTY
     }
 
@@ -557,8 +599,10 @@ class TodayPresenter(
         goalWeight: Double?,
         trend: app.openhealth.core.formula.WeightTrendSeries?,
         profile: app.openhealth.data.db.Profile,
+        minimumTargetKcal: Double,
     ): GoalWhatIfModel? {
         if (goalWeight == null || goalWeight <= 0.0 || trend == null) return null
+        if (trend.spanDays < GoalEta.MINIMUM_DAYS) return null
         val current = trend.points.last().trendKg
         val mode = when (profile.goal) {
             "lose_fat" -> GoalMode.LOSE
@@ -581,6 +625,7 @@ class TodayPresenter(
                 KCAL_PER_KG / DAYS_PER_WEEK,
             minimumDailyDeltaKcal = minOf(dailyMin, dailyMax, -MIN_WHAT_IF_KCAL),
             maximumDailyDeltaKcal = maxOf(dailyMin, dailyMax, MIN_WHAT_IF_KCAL),
+            minimumTargetKcal = minimumTargetKcal,
         )
     }
 
@@ -600,14 +645,14 @@ class TodayPresenter(
         if (steps == null) return null
         val rollup = store.rollups.forDayAndType(date, ObservationType.STEPS)
         val sourceLabel = rollup?.sourceId?.let { store.sources.byId(it)?.label }
+        fun sameSource(type: ObservationType): Double? = store.rollups.forDayAndType(date, type)
+            ?.takeIf { it.sourceId == rollup?.sourceId }
+            ?.value?.value
         return TodayStepsModel(
             steps = steps,
             goal = stepGoal(),
-            activeMinutes = store.rollups.forDayAndType(date, ObservationType.ACTIVE_MINUTES)
-                ?.value?.value,
-            distanceKm = store.rollups.forDayAndType(date, ObservationType.DISTANCE)
-                ?.value?.value
-                ?.div(METRES_PER_KM),
+            activeMinutes = sameSource(ObservationType.ACTIVE_MINUTES),
+            distanceKm = sameSource(ObservationType.DISTANCE)?.div(METRES_PER_KM),
             sourceLabel = sourceLabel,
         )
     }
@@ -625,7 +670,7 @@ class TodayPresenter(
         val date = today()
         val rollups = store.rollups.forTypeRange(
             ObservationType.WEIGHT,
-            date.minus(DatePeriod(days = SPARK_DAYS)),
+            date.minus(DatePeriod(days = SPARK_DAYS - 1)),
             date,
         )
         val latestRollup = rollups.maxByOrNull { it.localDate }
@@ -634,7 +679,8 @@ class TodayPresenter(
             trendKg = trend?.points?.lastOrNull()?.trendKg,
             weeklyChangeKg = trend?.weeklyRateKg,
             goalKg = store.settings.get(SettingKeys.GOAL_WEIGHT_KG)?.toDoubleOrNull(),
-            spark = rollups.map { ChartPoint(it.localDate, it.value.value) },
+            spark = trend?.points?.map { ChartPoint(it.date, it.trendKg) }
+                ?: rollups.map { ChartPoint(it.localDate, it.value.value) },
             sparkDescription = weightDescription(weight, trend),
             sourceLabel = latestRollup?.sourceId?.let { store.sources.byId(it)?.label },
         )
@@ -771,7 +817,7 @@ class TodayPresenter(
         if (weight != null) {
             val rollups = store.rollups.forTypeRange(
                 ObservationType.WEIGHT,
-                date.minus(DatePeriod(days = SPARK_DAYS)),
+                date.minus(DatePeriod(days = SPARK_DAYS - 1)),
                 date,
             )
             add(
@@ -784,7 +830,9 @@ class TodayPresenter(
                             context.getString(UiR.string.chart_table_date),
                             context.getString(UiR.string.stats_table_weight),
                         ),
-                        rows = rollups.map {
+                        rows = trend?.points?.map {
+                            listOf(it.date.toString(), decimal(it.trendKg, 1))
+                        } ?: rollups.map {
                             listOf(it.localDate.toString(), decimal(it.value.value, 1))
                         },
                         citation = citationFor(ChartId.WEIGHT_SPARKLINE),
@@ -841,10 +889,11 @@ class TodayPresenter(
 
     private fun provenances(
         date: LocalDate,
-        energyKcal: Double?,
+        energy: TodayEnergyModel?,
         steps: Int?,
         weight: WeightReading?,
     ): List<TodayProvenance> = buildList {
+        val energyKcal = energy?.intakeKcal
         if (energyKcal != null) {
             val entries = store.nutrition.entriesForDay(date)
             if (entries.isNotEmpty()) {
@@ -874,6 +923,48 @@ class TodayPresenter(
                 )
             }
         }
+        if (energy != null && energy.hasIntake) {
+            val calculated = ValueProvenance(
+                sourceLabel = context.getString(UiR.string.today_provenance_calculated),
+                method = context.getString(UiR.string.today_provenance_energy_method),
+                happenedAt = clock.now(),
+                recordedAt = clock.now(),
+                localDate = date,
+                zoneId = zone.id,
+                valueText = "${decimal(energy.outLowKcal)}–${decimal(energy.outHighKcal)} " +
+                    context.getString(UiR.string.unit_kcal),
+            )
+            add(TodayProvenance(TodayValue.ENERGY_OUT, calculated))
+            add(
+                TodayProvenance(
+                    TodayValue.ENERGY_NET,
+                    calculated.copy(
+                        valueText = "${decimal(energy.netLowKcal)}–" +
+                            "${decimal(energy.netHighKcal)} " +
+                            context.getString(UiR.string.unit_kcal),
+                    ),
+                ),
+            )
+        }
+        val water = store.rollups.forDayAndType(date, ObservationType.WATER)
+        if (water != null) {
+            add(
+                TodayProvenance(
+                    TodayValue.WATER,
+                    ValueProvenance(
+                        sourceLabel = water.sourceId?.let { store.sources.byId(it)?.label }
+                            ?: context.getString(UiR.string.vitals_provenance_manual),
+                        happenedAt = water.watermark,
+                        recordedAt = water.watermark,
+                        localDate = date,
+                        zoneId = zone.id,
+                        quality = qualityOf(water.dedupReason),
+                        valueText = "${decimal(water.value.value)} " +
+                            context.getString(UiR.string.unit_ml),
+                    ),
+                ),
+            )
+        }
         if (steps != null) {
             val rollup = store.rollups.forDayAndType(date, ObservationType.STEPS)
             val observation = store.observations.forDayAndType(
@@ -887,8 +978,10 @@ class TodayPresenter(
                         sourceLabel = rollup?.sourceId?.let { store.sources.byId(it)?.label }
                             ?: context.getString(UiR.string.vitals_provenance_manual),
                         method = observation?.provenance?.method?.let(::methodLabel),
-                        happenedAt = observation?.provenance?.happenedAt ?: clock.now(),
-                        recordedAt = observation?.provenance?.recordedAt ?: clock.now(),
+                        happenedAt = observation?.provenance?.happenedAt
+                            ?: rollup?.watermark ?: clock.now(),
+                        recordedAt = observation?.provenance?.recordedAt
+                            ?: rollup?.watermark ?: clock.now(),
                         localDate = date,
                         zoneId = zone.id,
                         device = observation?.provenance?.device,
@@ -902,8 +995,11 @@ class TodayPresenter(
         }
         if (weight != null) {
             val rollup = store.rollups.forDayAndType(weight.date, ObservationType.WEIGHT)
-            val observation = store.observations.forDayAndType(weight.date, ObservationType.WEIGHT)
-                .lastOrNull()
+            val observation = winningObservation(
+                ObservationType.WEIGHT,
+                weight.date,
+                rollup,
+            )
             add(
                 TodayProvenance(
                     TodayValue.WEIGHT,
@@ -911,8 +1007,10 @@ class TodayPresenter(
                         sourceLabel = rollup?.sourceId?.let { store.sources.byId(it)?.label }
                             ?: context.getString(UiR.string.vitals_provenance_manual),
                         method = observation?.provenance?.method?.let(::methodLabel),
-                        happenedAt = observation?.provenance?.happenedAt ?: clock.now(),
-                        recordedAt = observation?.provenance?.recordedAt ?: clock.now(),
+                        happenedAt = observation?.provenance?.happenedAt
+                            ?: rollup?.watermark ?: clock.now(),
+                        recordedAt = observation?.provenance?.recordedAt
+                            ?: rollup?.watermark ?: clock.now(),
                         localDate = weight.date,
                         zoneId = zone.id,
                         device = observation?.provenance?.device,
@@ -929,10 +1027,25 @@ class TodayPresenter(
         }
     }
 
+    /** The observation behind the rollup's winning source, never another source's time. */
+    private fun winningObservation(
+        type: ObservationType,
+        date: LocalDate,
+        rollup: app.openhealth.core.rollup.DailyRollup?,
+    ): app.openhealth.core.observation.Observation? = store.observations.forDayAndType(date, type)
+        .filter { rollup?.sourceId == null || it.provenance.sourceId == rollup.sourceId }
+        .maxByOrNull { it.provenance.happenedAt }
+
     private fun qualityOf(reason: String?): String? = when (reason) {
         null -> null
         "ONE_SOURCE_WINS" -> context.getString(UiR.string.today_quality_one_source)
-        "NO_DEDUP" -> context.getString(UiR.string.today_quality_combined)
+        "GAP_FALLBACK" -> context.getString(UiR.string.today_quality_gap)
+        "MANUAL_OVERRIDE" -> context.getString(UiR.string.today_quality_manual)
+        "INCOMPLETE_DAY" -> context.getString(UiR.string.today_quality_incomplete)
+        "LATER_WINS" -> context.getString(UiR.string.today_quality_later)
+        "DUPLICATE_MERGED" -> context.getString(UiR.string.today_quality_merged)
+        "MOST_DETAILED" -> context.getString(UiR.string.today_quality_detailed)
+        "NO_DEDUP" -> context.getString(UiR.string.today_quality_no_dedup)
         else -> reason
     }
 
@@ -952,8 +1065,10 @@ class TodayPresenter(
         },
     )
 
-    private fun citationFor(id: ChartId): String =
-        context.getString(UiR.string.chart_citation, ChartRegistry.of(id).citation.name)
+    private fun citationFor(id: ChartId): String = context.getString(
+        UiR.string.chart_citation,
+        app.openhealth.core.citation.Citations.of(ChartRegistry.of(id).citation).title,
+    )
 
     private fun macroLabelRes(nutrient: Nutrient): Int = when (nutrient) {
         Nutrient.PROTEIN -> UiR.string.nutrient_protein
@@ -998,13 +1113,23 @@ private const val METRES_PER_KM = 1_000.0
 private const val TREND_DAYS = 90
 private const val SPARK_DAYS = 30
 private const val DEFAULT_SLEEP_NEED_MINUTES = 480.0
+private const val SLEEP_QUERY_DAYS = 8
+private val SLEEP_TYPES = listOf(
+    ObservationType.SLEEP_DURATION,
+    ObservationType.SLEEP_IN_BED,
+    ObservationType.SLEEP_DEEP,
+    ObservationType.SLEEP_LIGHT,
+    ObservationType.SLEEP_REM,
+    ObservationType.SLEEP_AWAKE,
+)
 private const val DEFAULT_GOAL_RATE = 0.25
 private const val DEFAULT_STEP_GOAL = 8_000
 private const val MIN_STEP_GOAL = 1_000
 private const val MAX_STEP_GOAL = 50_000
-private const val MAX_DUE = 4
+private const val MAX_DUE = 5
 private const val KCAL_PER_KG = 7_700.0
 private const val DAYS_PER_WEEK = 7.0
 private const val MIN_RATE_KG_PER_WEEK = 0.05
 private const val DEFAULT_WHAT_IF_KCAL = 500.0
 private const val MIN_WHAT_IF_KCAL = 100.0
+private const val MIN_SAFE_KCAL = 1_200.0

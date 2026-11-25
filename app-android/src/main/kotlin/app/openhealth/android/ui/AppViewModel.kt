@@ -23,6 +23,7 @@ import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.ObservationId
 import app.openhealth.core.ids.SourceId
 import app.openhealth.core.ids.TombstoneId
+import app.openhealth.core.nutrition.MacroTargets
 import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationContext
@@ -41,6 +42,7 @@ import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.db.Measurement
 import app.openhealth.data.db.Note
 import app.openhealth.data.db.Profile
+import app.openhealth.data.repo.NutritionTargetRecord
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.data.repo.TrashEntity
 import app.openhealth.ui.R as UiR
@@ -313,22 +315,26 @@ class AppViewModel(
     private var toastJob: Job? = null
 
     init {
-        container.ble.onFound { found ->
-            val mapped = found.map { device ->
-                app.openhealth.ui.screens.devices.FoundDeviceModel(
-                    address = device.address,
-                    name = device.name ?: device.address,
-                    kindLabel = kindLabel(device.kind),
-                    kind = app.openhealth.core.activity.DeviceKindName.of(device.kind),
-                )
+        // The BLE manager opens the encrypted store; construct it off the main thread so
+        // the first frame (and the cold-start budget) never waits for SQLCipher.
+        viewModelScope.launch(Dispatchers.IO) {
+            container.ble.onFound { found ->
+                val mapped = found.map { device ->
+                    app.openhealth.ui.screens.devices.FoundDeviceModel(
+                        address = device.address,
+                        name = device.name ?: device.address,
+                        kindLabel = kindLabel(device.kind),
+                        kind = app.openhealth.core.activity.DeviceKindName.of(device.kind),
+                    )
+                }
+                _state.update { it.copy(foundDevices = mapped) }
             }
-            _state.update { it.copy(foundDevices = mapped) }
-        }
-        container.ble.onState {
-            _state.update { current ->
-                current.copy(
-                    devices = activity.model(found = current.foundDevices),
-                )
+            container.ble.onState {
+                _state.update { current ->
+                    current.copy(
+                        devices = activity.model(found = current.foundDevices),
+                    )
+                }
             }
         }
         refresh()
@@ -356,7 +362,12 @@ class AppViewModel(
 
     /** Stops the state holder's coroutines; tests call this before closing the store. */
     fun stop() {
+        val job = viewModelScope.coroutineContext[Job]
         viewModelScope.cancel()
+        // A test closes the store right after this; joining the cancelled rebuild stops a
+        // late write from racing the database close (B9 found this as an intermittent
+        // SQLITE_IOERR_DELETE in the instrumented suite).
+        if (job != null) kotlinx.coroutines.runBlocking { job.join() }
     }
 
     /**
@@ -487,22 +498,45 @@ class AppViewModel(
     }
 
     /**
-     * The goal-ETA what-if's Save: the daily change becomes the goal rate the nutrition
-     * targets use, through the same safety clamp (`pr.md` §6.4). Nothing else is rewritten.
+     * The goal-ETA what-if's Save: the chosen daily target becomes today's nutrition
+     * target. It never changes the profile's goal mode or the stored goal rate; the
+     * what-if is a target, not a rewrite of the person's goal (`pr.md` §6.4).
      */
-    fun saveGoalRate(dailyDeltaKcal: Double) {
+    fun saveGoalTarget(kcal: Double) {
         launchGuarded {
-            val weekly = dailyDeltaKcal * DAYS_PER_WEEK / KCAL_PER_KG
             withContext(Dispatchers.IO) {
-                store.settings.put(
-                    SettingKeys.GOAL_RATE_KG_PER_WEEK,
-                    kotlin.math.abs(weekly).toString(),
+                val today = container.clock.now().toLocalDateTime(zone).date
+                val existing = store.nutrition.targetFor(today)
+                val safeKcal = kcal.coerceIn(MIN_GOAL_KCAL, MAX_GOAL_KCAL)
+                val profile = store.profile.active()
+                val sex = profile?.sex_at_birth?.let {
+                    runCatching { app.openhealth.core.formula.SexAtBirth.valueOf(it) }.getOrNull()
+                }
+                val weight = profile?.weight_kg
+                val suggested = if (sex != null && weight != null) {
+                    (
+                        app.openhealth.core.nutrition.TargetSuggestions.suggest(
+                            sex,
+                            weight,
+                            safeKcal,
+                        ) as? app.openhealth.core.formula.FormulaOutcome.Computed
+                        )?.value
+                } else {
+                    null
+                }
+                val targets = (suggested ?: existing?.targets ?: MacroTargets.EMPTY)
+                    .copy(kcal = safeKcal)
+                store.nutrition.saveTarget(
+                    NutritionTargetRecord(
+                        id = existing?.id ?: "target-${container.ids.newId()}",
+                        effectiveFrom = today,
+                        targets = targets,
+                        createdAt = existing?.createdAt
+                            ?: container.clock.now().toEpochMilliseconds(),
+                        updatedAt = container.clock.now().toEpochMilliseconds(),
+                        revision = (existing?.revision ?: 0) + 1,
+                    ),
                 )
-            }
-            when {
-                weekly < -FLAT_RATE_KG_PER_WEEK -> profileGoal("lose_fat")
-                weekly > FLAT_RATE_KG_PER_WEEK -> profileGoal("gain_muscle")
-                else -> profileGoal("maintain")
             }
             showToast(R.string.toast_goal_saved, undo = false)
             rebuild()
@@ -520,11 +554,6 @@ class AppViewModel(
             showToast(R.string.toast_step_goal_saved, undo = false)
             rebuild()
         }
-    }
-
-    private fun profileGoal(goal: String) {
-        val profile = store.profile.active() ?: return
-        store.profile.upsert(profile.copy(goal = goal))
     }
 
     fun startPastSession(date: kotlinx.datetime.LocalDate) {
@@ -3827,12 +3856,11 @@ class AppViewModel(
 
     companion object {
         const val DEMO_PROFILE = "profile-demo"
-        private const val KCAL_PER_KG = 7_700.0
-        private const val DAYS_PER_WEEK = 7.0
         private const val MIN_STEP_GOAL = 1_000
         private const val DEMO_WEIGHT_KG = 82.0
         private const val DEMO_GOAL_DROP_KG = 4.0
-        private const val FLAT_RATE_KG_PER_WEEK = 0.01
+        private const val MIN_GOAL_KCAL = 500.0
+        private const val MAX_GOAL_KCAL = 10_000.0
         private const val MAX_STEP_GOAL = 50_000
         private const val TIMELINE_PAGE = 200L
         private const val UNDO_TOAST_MS = 6_000L

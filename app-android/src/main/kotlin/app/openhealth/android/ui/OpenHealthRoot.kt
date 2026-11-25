@@ -235,7 +235,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                                 nav.navigate(LiveSessionRoute())
                             }
                         },
-                        onSaveGoalRate = viewModel::saveGoalRate,
+                        onSaveGoalTarget = viewModel::saveGoalTarget,
                         onSaveStepGoal = viewModel::saveStepGoal,
                         onOpenVitals = { goTab(1) },
                     )

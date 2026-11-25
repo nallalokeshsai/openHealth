@@ -199,6 +199,7 @@ class TodayStatsScreenshotTest {
                 initialDailyDeltaKcal = -275.0,
                 minimumDailyDeltaKcal = -825.0,
                 maximumDailyDeltaKcal = -206.0,
+                minimumTargetKcal = 1_500.0,
             ),
             hasIntake = true,
         ),

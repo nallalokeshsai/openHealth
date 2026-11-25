@@ -191,6 +191,8 @@ data class OhDims(
     // §5.16 sheet
     /** §5.16: a sheet is at most 90 % of the viewport minus the status inset. */
     val sheetMaxHeightFraction: Float = 0.90f,
+    /** §5.16: a long table inside a sheet scrolls in a bounded box. */
+    val tableSheetMax: Dp = 440.dp,
 
     // §5.19 timer bar
     val timerProgress: Dp = 3.dp,

@@ -24,6 +24,9 @@ android {
             matchingFallbacks += listOf("release")
             signingConfig = signingConfigs.getByName("debug")
             isDebuggable = false
+            // A separate package and data directory: a benchmark run must never merge
+            // its synthetic corpus into the record on the owner's phone (ADR 0014).
+            applicationIdSuffix = ".bench"
         }
     }
 

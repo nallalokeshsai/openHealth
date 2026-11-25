@@ -502,7 +502,7 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                         figure.detail?.let {
                             Text(
                                 text = it,
-                                style = type.caption.tabular(),
+                                style = type.caption.tabular().ltrFigures(),
                                 color = colors.label2,
                                 maxLines = 1,
                             )

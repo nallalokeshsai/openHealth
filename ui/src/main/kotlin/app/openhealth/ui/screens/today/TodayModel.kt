@@ -79,6 +79,7 @@ data class GoalWhatIfModel(
     val initialDailyDeltaKcal: Double,
     val minimumDailyDeltaKcal: Double,
     val maximumDailyDeltaKcal: Double,
+    val minimumTargetKcal: Double,
 )
 
 /** In, out and net as ranges, with the ring's remaining figure and the goal line. */
@@ -96,6 +97,8 @@ data class TodayEnergyModel(
     val goalEta: GoalEtaState,
     val whatIf: GoalWhatIfModel?,
     val hasIntake: Boolean,
+    val floorApplied: Boolean = false,
+    val notes: List<String> = emptyList(),
 )
 
 /** The steps card: one ring, active minutes and distance, and the winning source. */

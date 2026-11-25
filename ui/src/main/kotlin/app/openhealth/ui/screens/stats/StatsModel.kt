@@ -11,7 +11,12 @@ import kotlinx.datetime.LocalDate
 enum class StatsSegment { OVERVIEW, BODY, TRAINING, SLEEP, NUTRITION }
 
 /** One figure of the Stats KPI band. */
-data class StatsKpi(val value: String, val label: String, val unit: String? = null)
+data class StatsKpi(
+    val value: String,
+    val label: String,
+    val unit: String? = null,
+    val chart: ChartId? = null,
+)
 
 /** A named segment of a stacked bar; the hue always arrives with its name. */
 data class StatsStackSegment(val name: String, val value: Double, val hue: StatsHue)

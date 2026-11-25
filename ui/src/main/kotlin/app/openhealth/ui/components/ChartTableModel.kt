@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -107,7 +109,7 @@ fun OhChartLink(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
         Text(
             text = text,
             style = OhTheme.type.footnote,
-            color = colors.accInk,
+            color = colors.label2,
         )
     }
 }
@@ -126,7 +128,12 @@ fun ChartTableSheet(model: ChartTableModel, onDismiss: () -> Unit) {
         cancelLabel = stringResource(R.string.vitals_provenance_close),
         onCancel = onDismiss,
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = OhTheme.dims.tableSheetMax)
+                .verticalScroll(rememberScrollState()),
+        ) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 model.columns.forEachIndexed { index, column ->
                     Text(

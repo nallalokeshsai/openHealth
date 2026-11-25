@@ -99,8 +99,17 @@ fun StatsScreen(
         Spacer(Modifier.height(OhTheme.space.s5))
         if (model.kpis.size >= KPI_BAND) {
             OhKpiBand(
-                figures = model.kpis.take(KPI_BAND).map {
-                    OhKpiFigure(value = it.value, label = it.label, unit = it.unit)
+                figures = model.kpis.take(KPI_BAND).map { kpi ->
+                    OhKpiFigure(
+                        value = kpi.value,
+                        label = kpi.label,
+                        unit = kpi.unit,
+                        onClick = {
+                            table = kpi.chart?.let { chart ->
+                                model.cards.firstOrNull { it.chart == chart }?.table
+                            } ?: model.cards.firstOrNull()?.table
+                        },
+                    )
                 },
             )
         } else if (model.kpis.isNotEmpty()) {
@@ -125,21 +134,19 @@ fun StatsScreen(
             }
             val neutral = model.weightNeutral &&
                 (model.segment == StatsSegment.BODY || model.segment == StatsSegment.NUTRITION)
-            Text(
-                text = when {
-                    moduleOff -> stringResource(R.string.stats_module_off_title)
-                    neutral -> stringResource(R.string.today_status_weight_neutral)
-                    else -> stringResource(R.string.stats_empty_title)
-                },
-                style = OhTheme.type.title3,
-                color = OhTheme.colors.label,
-            )
-            if (!moduleOff && !neutral) {
-                Spacer(Modifier.height(OhTheme.space.s1))
-                Text(
-                    text = stringResource(R.string.stats_empty_body),
-                    style = OhTheme.type.footnote,
-                    color = OhTheme.colors.label2,
+            app.openhealth.ui.components.OhCard {
+                app.openhealth.ui.screens.common.OhEmptyState(
+                    title = when {
+                        moduleOff -> stringResource(R.string.stats_module_off_title)
+                        neutral -> stringResource(R.string.today_status_weight_neutral)
+                        else -> stringResource(R.string.stats_empty_title)
+                    },
+                    body = when {
+                        neutral -> stringResource(R.string.stats_weight_neutral_body)
+                        moduleOff -> stringResource(R.string.root_stats_empty_body)
+                        else -> stringResource(R.string.stats_empty_body)
+                    },
+                    glyph = app.openhealth.ui.icons.OhIcons.info,
                 )
             }
         }
@@ -147,6 +154,7 @@ fun StatsScreen(
             Spacer(Modifier.height(OhTheme.space.s5))
             StatsChartCard(
                 card = card,
+                eyebrow = segmentLabel(model.segment),
                 onShowTable = { table = card.table },
                 onShowFormula = { formula = formulas[card.chart] },
             )
@@ -180,10 +188,15 @@ fun StatsScreen(
 }
 
 @Composable
-private fun StatsChartCard(card: StatsCard, onShowTable: () -> Unit, onShowFormula: () -> Unit) {
+private fun StatsChartCard(
+    card: StatsCard,
+    eyebrow: String,
+    onShowTable: () -> Unit,
+    onShowFormula: () -> Unit,
+) {
     OhChartCard(
         title = card.title,
-        eyebrow = stringResource(R.string.root_stats),
+        eyebrow = eyebrow,
         onShowTable = onShowTable,
         onShowFormula = onShowFormula,
         footer = card.footer,

@@ -15,7 +15,10 @@ in `:core` now settles it once:
 - when stages exist, **asleep = deep + light + REM**, and awake is never added;
 - when a source reports only a span, the span is the only honest duration;
 - time in bed is carried beside them and never added to either;
-- an absurd or negative stage is treated as absent, not clamped into a score.
+- an absurd or negative stage is treated as absent, not clamped into a score;
+- readings that share a Health Connect session id are assembled into one night by
+  `SleepSessions`, so a night crossing midnight is not split into a fragment on each
+  local day; stages without a span still make a night.
 
 Today's readiness, the Stats sleep bar and the stage stacked bar all read this one
 function, so the same night cannot be two durations.
@@ -33,7 +36,8 @@ Goal ETA states are explicit: `NeedsData` (fewer than 14 days), `Steady` (14 day
 trend is flatter than 0.05 kg/week), `Away` (the trend moves away from the goal),
 `NoGoalWeight`, and `Window`. The window widens with the trend's uncertainty; there is
 never a single date. Weight-neutral mode removes the whole energy card, not just its
-numbers.
+numbers. Saving the what-if writes a layer-4 target for today and never changes the
+profile's goal mode; the intake is clamped to `EnergySafety.floors(sex, bmr)`.
 
 ## 3. Readiness assembly
 
@@ -67,10 +71,15 @@ the setting is local-first like every other preference.
 ## 6. The benchmark is a separate module and a benchmark-only source set
 
 `:tools:benchmark` is a `com.android.test` module targeting the app's `benchmark` build type
-(release-shaped, debug-signed). The five-year seed activity lives in
+(release-shaped, debug-signed). That build carries `.bench` as its application-id suffix
+and therefore its own data directory, so the synthetic corpus can never merge into the
+record on the owner's phone. The five-year seed activity lives in
 `app-android/src/benchmark/`, so no debug or release APK contains it. The benchmark
 reports cold startup and warm Today; the emulator caveat in the phase exit test is
-handled by reporting the device actually used.
+handled by reporting the device actually used. The owner's phone reports its tracing
+filesystem as misconfigured, which Macrobenchmark refuses; the emulator numbers are
+reported and flagged, and the phone was measured with `am start -W` on the same
+benchmark build and corpus.
 
 ## Consequences
 
@@ -80,3 +89,5 @@ handled by reporting the device actually used.
 - The sample corpus writes resting heart rate and HRV daily so readiness has a baseline,
   and the demo sets a goal weight so the ETA surface can be exercised without pretending
   the trend supports it (it reports `Steady` when it does not).
+- The boot receiver reads its setting off the main thread; this was the hidden cause of
+  the five-year corpus's 4.8 s cold start and is now part of the performance budget.

@@ -106,7 +106,16 @@ fun OhBodyMap(
     synchronousLayers: Boolean = false,
 ) {
     val context = LocalContext.current
-    var loaded by remember { mutableStateOf(geometry ?: BodyGeometry.cached()) }
+    var loaded by remember(geometry, synchronousLayers) {
+        mutableStateOf(
+            geometry ?: BodyGeometry.cached()
+                ?: if (synchronousLayers) {
+                    runCatching { BodyGeometry.load(context) }.getOrNull()
+                } else {
+                    null
+                },
+        )
+    }
     LaunchedEffect(geometry) {
         if (loaded == null) {
             val first = withContext(Dispatchers.IO) {

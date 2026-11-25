@@ -1507,9 +1507,9 @@
     <string name="chart_weight_formula_title">How the weight trend is calculated</string>
     <string name="chart_weight_formula_body">Each weigh-in is entered on its local day. The line is an exponentially weighted trend with a seven-day half-life, so one unusual scale reading moves it little. The weekly change is the trend seven days apart, and the goal estimate divides the remaining weight by that rate. The raw readings stay in the table and in the timeline.</string>
     <string name="chart_energy_formula_title">How energy is calculated</string>
-    <string name="chart_energy_formula_body">In is the energy in the food you logged. Out is your basal metabolic rate from Mifflin-St Jeor plus the energy of your steps plus logged and imported workouts. Step energy uses a 0.762 m stride at a 3 MET walking pace. The burn is shown as a range because none of it is measured directly: 5 %% around basal rate, 25 %% around step energy and 20 %% around a workout. Net is in minus out, so its range runs the other way.</string>
+    <string name="chart_energy_formula_body">In is the energy in the food you logged. Out is your basal metabolic rate from Mifflin-St Jeor plus the energy of your steps plus logged and imported workouts. Step energy uses a 0.762 m stride at a 3 MET walking pace. The burn is shown as a range because none of it is measured directly: five percent around basal rate, 25 percent around step energy and 20 percent around a workout. Net is in minus out, so its range runs the other way.</string>
     <string name="chart_macros_formula_title">How the macro bars are calculated</string>
-    <string name="chart_macros_formula_body">Each bar is the day\'s grams of that macronutrient divided by its target. Targets come from your saved nutrition target, or from the suggestion built from your profile and goal. Fibre is shown beside the three energy macros because it is a target the app tracks, not a source of calories.</string>
+    <string name="chart_macros_formula_body">Each bar is the day\'s grams of that macronutrient divided by its target. Targets come from your saved nutrition target; a day without one shows the bars without a target. Fibre is shown beside the three energy macros because it is a target the app tracks, not a source of calories.</string>
     <string name="chart_steps_formula_title">How steps are calculated</string>
     <string name="chart_steps_formula_body">A day\'s steps come from one source, chosen by your priority list. Raw readings from every source stay in the database. Active minutes and distance are reported by the winning source when it provides them; the app does not estimate them from a step count.</string>
     <string name="chart_volume_formula_title">How training volume is calculated</string>
@@ -1585,7 +1585,7 @@
     <string name="today_goal_sheet_window">Window</string>
     <string name="today_goal_sheet_rate">Weekly rate</string>
     <string name="today_goal_sheet_save">Save target</string>
-    <string name="today_goal_sheet_saved">Saved. New nutrition targets use this rate.</string>
+    <string name="today_goal_sheet_saved">Saved. Today\'s target uses this number.</string>
     <string name="today_goal_sheet_too_fast">That pace is faster than the range this app uses. The saved rate stays inside the cited range.</string>
     <string name="today_goal_what_if_value">%1$s kcal per day</string>
 
@@ -1599,7 +1599,7 @@
     <string name="stats_empty_body">A chart appears once there is something to compare.</string>
     <string name="stats_kpi_sessions">Sessions</string>
     <string name="stats_kpi_steps">Steps a day</string>
-    <string name="stats_kpi_weight">Weight change</string>
+    <string name="stats_kpi_weight">Weight change, 30 days</string>
     <string name="stats_kpi_volume">Volume this week</string>
     <string name="stats_kpi_sets">Sets this week</string>
     <string name="stats_kpi_sleep">Sleep a night</string>
@@ -1617,7 +1617,7 @@
     <string name="stats_card_sleep_title">Sleep, 14 nights</string>
     <string name="stats_card_sleep_stages_title">Last night\'s stages</string>
     <string name="stats_card_macros_title">Macro averages, 7 days</string>
-    <string name="stats_card_prs_title">Personal records</string>
+    <string name="stats_card_prs_title">Personal records, 90 days</string>
     <string name="stats_days_logged">%1$d of %2$d days logged</string>
     <string name="stats_weekly_rate">%1$s per week</string>
     <string name="stats_no_change">No change in the window.</string>
@@ -1642,7 +1642,7 @@
     <string name="today_due_weight_title">Log your weight</string>
     <string name="today_due_weight_body">No weigh-in in the last seven days.</string>
     <string name="today_due_food_title">Log a meal</string>
-    <string name="today_due_food_body">Nothing has been eaten today.</string>
+    <string name="today_due_food_body">No meal is logged today.</string>
     <string name="today_due_water_title">Drink some water</string>
     <string name="today_due_water_body">No water logged today.</string>
     <string name="today_macro_value">%1$s g</string>
@@ -1698,8 +1698,8 @@
     <string name="stats_desc_sleep">Sleep, %1$d nights, an average of %2$s a night.</string>
     <string name="stats_desc_stages">Last night, %1$s asleep, by stage.</string>
     <string name="stats_desc_macros">Macro averages, seven days, beside their targets.</string>
-    <string name="stats_record_row">%1$s · %2$s kg for %3$s</string>
-    <string name="toast_goal_saved">Goal rate saved</string>
+    <string name="stats_record_row">%1$s · best %2$s kg, estimated 1RM %3$s kg</string>
+    <string name="toast_goal_saved">Daily target saved</string>
     <string name="toast_step_goal_saved">Step goal saved</string>
     <string name="today_chip_sleep">Sleep</string>
     <string name="today_chip_hrv">HRV</string>
@@ -1709,5 +1709,25 @@
     <string name="stats_module_off_title">This module is off. Its data is kept.</string>
     <string name="today_goal_window_range">Between %1$s and %2$s</string>
     <string name="today_quality_one_source">One source wins</string>
-    <string name="today_quality_combined">Sources combined</string>
+    <string name="today_quality_gap">Another source covered a gap</string>
+    <string name="today_quality_manual">Corrected by you</string>
+    <string name="today_quality_incomplete">The day is not complete in any source</string>
+    <string name="today_quality_later">The later reading won</string>
+    <string name="today_quality_merged">Duplicate readings merged</string>
+    <string name="today_quality_detailed">The most detailed source won</string>
+    <string name="today_quality_no_dedup">One source for this type</string>
+    <string name="today_energy_floor_note">The target is at the safety floor: the higher of your basal rate and the cited minimum for an adult.</string>
+    <string name="today_energy_no_steps">No step source reported today, so step energy is not in the burn.</string>
+    <string name="today_energy_no_workout">No workout is logged today, so only basal rate and steps are counted.</string>
+    <string name="today_energy_profile_weight">The basal rate uses the weight in your profile; no weigh-in was found.</string>
+    <string name="today_energy_ring_desc_no_target">Energy in %1$s kcal, no target set</string>
+    <string name="chart_goal_label">Goal %1$s %2$s</string>
+    <string name="today_goal_sheet_target">Daily target</string>
+    <string name="today_goal_sheet_citation">The projection uses the 7,700 kcal per kilogram rule of thumb.</string>
+    <string name="stats_desc_body_fat_flat">Body fat, 90 days, one reading at %1$s percent. One reading is not a trend.</string>
+    <string name="today_provenance_calculated">Calculated by openHealth</string>
+    <string name="today_provenance_energy_method">Basal rate plus steps plus logged workouts</string>
+    <string name="today_water_target">/ %1$s ml</string>
+    <string name="stats_weight_neutral_body">Your records are kept; weight, calories, body fat and photos are hidden while the mode is on.</string>
+    <string name="today_step_goal_save">Save goal</string>
 </resources>

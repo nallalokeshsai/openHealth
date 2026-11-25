@@ -66,8 +66,14 @@ fun OhSparkline(
 ) {
     if (points.size < 2) return
     val colors = OhTheme.colors
-    val low = minOf(points.minOf { it.value }, goal ?: points.minOf { it.value })
-    val high = maxOf(points.maxOf { it.value }, goal ?: points.maxOf { it.value })
+    val valueLow = points.minOf { it.value }
+    val valueHigh = points.maxOf { it.value }
+    val valueSpan = (valueHigh - valueLow).takeIf { it > 0.0 } ?: 1.0
+    val goalVisible = goal != null &&
+        goal >= valueLow - valueSpan &&
+        goal <= valueHigh + valueSpan
+    val low = if (goalVisible) minOf(valueLow, goal!!) else valueLow
+    val high = if (goalVisible) maxOf(valueHigh, goal!!) else valueHigh
     val span = (high - low).takeIf { it > 0.0 } ?: 1.0
     Canvas(
         modifier = modifier
@@ -90,14 +96,14 @@ fun OhSparkline(
         }
         drawPath(
             path = path,
-            color = colors.acc,
+            color = colors.accInk,
             style = Stroke(
                 width = OhTheme.dims.chartSparkLine.toPx(),
                 cap = StrokeCap.Round,
                 join = androidx.compose.ui.graphics.StrokeJoin.Round,
             ),
         )
-        if (goal != null) {
+        if (goalVisible) {
             val goalY = (size.height - (goal - low) / span * size.height).toFloat()
             drawLine(
                 color = colors.goldInk,
@@ -115,7 +121,7 @@ fun OhSparkline(
         val last = points.last()
         val lastY = (size.height - (last.value - low) / span * size.height).toFloat()
         drawCircle(
-            color = colors.acc,
+            color = colors.accInk,
             radius = OhTheme.dims.chartSparkPoint.toPx(),
             center = Offset(size.width, lastY),
         )
@@ -296,7 +302,7 @@ fun OhStatBarList(rows: List<StatBarRow>, description: String, modifier: Modifie
                     Text(text = row.label, style = type.footnote, color = colors.label2)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.weight(1f)) {
-                            OhBar(progress = (row.value / maximum).toFloat(), ink = colors.acc)
+                            OhBar(progress = (row.value / maximum).toFloat(), ink = colors.accInk)
                         }
                         Spacer(Modifier.width(OhTheme.space.s3))
                         Text(
@@ -314,7 +320,7 @@ fun OhStatBarList(rows: List<StatBarRow>, description: String, modifier: Modifie
                             modifier = Modifier.width(nameWidth),
                         )
                         Box(modifier = Modifier.weight(1f)) {
-                            OhBar(progress = (row.value / maximum).toFloat(), ink = colors.acc)
+                            OhBar(progress = (row.value / maximum).toFloat(), ink = colors.accInk)
                         }
                         Spacer(Modifier.width(OhTheme.space.s3))
                         Text(

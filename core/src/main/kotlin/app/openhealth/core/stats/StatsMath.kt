@@ -124,8 +124,10 @@ object StatsMath {
     }
 
     /** The first and last day with data inside [range], and the change between them. */
+    @Suppress("ReturnCount")
     fun change(values: List<DailyValue>, range: ClosedRange<LocalDate>): SeriesChange? {
         val counted = inWindow(byDay(values), range)
+        if (counted.size < 2) return null
         val first = counted.firstOrNull() ?: return null
         val last = counted.last()
         return SeriesChange(

@@ -96,14 +96,28 @@ fun OhTrendChart(
     val maxDate = allDates.max()
     val dateSpan = (maxDate.toEpochDays() - minDate.toEpochDays()).toDouble()
         .coerceAtLeast(1.0)
-    val low = listOfNotNull(allValues.min(), model.referenceLow, model.goal).min()
-    val high = listOfNotNull(allValues.max(), model.referenceHigh, model.goal).max()
+    val valueLow = allValues.min()
+    val valueHigh = allValues.max()
+    val valueSpan = (valueHigh - valueLow).takeIf { it > 0.0 } ?: 1.0
+    val goalVisible = model.goal != null &&
+        model.goal >= valueLow - valueSpan &&
+        model.goal <= valueHigh + valueSpan
+    val low = if (model.startAtZero) {
+        0.0
+    } else {
+        listOfNotNull(valueLow, model.referenceLow, if (goalVisible) model.goal else null).min()
+    }
+    val high = listOfNotNull(
+        valueHigh,
+        model.referenceHigh,
+        if (goalVisible) model.goal else null,
+    ).max()
     val padding = ((high - low) * 0.12).takeIf { it > 0.0 } ?: 1.0
-    val yLow = low - padding
+    val yLow = if (model.startAtZero) 0.0 else low - padding
     val yHigh = high + padding
     val ySpan = (yHigh - yLow).coerceAtLeast(0.001)
     val tableLabel = stringResource(R.string.vitals_show_table)
-    val lineColors = listOf(colors.acc, colors.blue)
+    val lineColors = listOf(colors.accInk, colors.blueInk)
     val dash = remember(density) {
         PathEffect.dashPathEffect(
             floatArrayOf(
@@ -236,7 +250,7 @@ fun OhTrendChart(
                                 size = Size(w, (bottom - top).coerceAtLeast(1f)),
                             )
                         }
-                        model.goal?.let { goal ->
+                        model.goal?.takeIf { goalVisible }?.let { goal ->
                             val y = h * yFraction(goal)
                             drawLine(
                                 color = colors.goldInk,
@@ -326,6 +340,18 @@ fun OhTrendChart(
                         color = colors.label2,
                     )
                 }
+            }
+            if (goalVisible && model.goal != null) {
+                Spacer(Modifier.height(OhTheme.space.s1))
+                Text(
+                    text = stringResource(
+                        R.string.chart_goal_label,
+                        number(model.goal, model.decimals),
+                        model.unitText,
+                    ),
+                    style = type.caption.tabular(),
+                    color = colors.label2,
+                )
             }
             if (model.series.size > 1) {
                 Spacer(Modifier.height(OhTheme.space.s1))

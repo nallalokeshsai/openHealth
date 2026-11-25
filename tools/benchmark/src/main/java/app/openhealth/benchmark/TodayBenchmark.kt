@@ -33,7 +33,7 @@ class TodayBenchmark {
     fun seedTheFiveYearCorpus() {
         device.pressHome()
         device.executeShellCommand(
-            "am start -W -n app.openhealth/.BenchmarkSeedActivity",
+            "am start -W -n app.openhealth.bench/app.openhealth.android.BenchmarkSeedActivity",
         )
         val seeded = device.wait(Until.hasObject(By.text("Seeded")), SEED_TIMEOUT_MILLIS)
         if (!seeded) {
@@ -53,7 +53,7 @@ class TodayBenchmark {
     fun coldStartup() = benchmarkRule.measureRepeated(
         packageName = PACKAGE,
         metrics = listOf(StartupTimingMetric()),
-        compilationMode = CompilationMode.Partial(),
+        compilationMode = CompilationMode.None(),
         iterations = ITERATIONS,
         startupMode = StartupMode.COLD,
     ) {
@@ -66,7 +66,7 @@ class TodayBenchmark {
     fun warmToday() = benchmarkRule.measureRepeated(
         packageName = PACKAGE,
         metrics = listOf(StartupTimingMetric(), FrameTimingMetric()),
-        compilationMode = CompilationMode.Partial(),
+        compilationMode = CompilationMode.None(),
         iterations = ITERATIONS,
         startupMode = StartupMode.WARM,
     ) {
@@ -76,7 +76,7 @@ class TodayBenchmark {
     }
 
     private companion object {
-        const val PACKAGE = "app.openhealth"
+        const val PACKAGE = "app.openhealth.bench"
         const val ITERATIONS = 5
         const val SEED_TIMEOUT_MILLIS = 30 * 60 * 1000L
         const val CONTENT_TIMEOUT_MILLIS = 2_000L

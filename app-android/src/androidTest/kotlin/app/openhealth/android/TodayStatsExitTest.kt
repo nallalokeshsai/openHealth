@@ -7,9 +7,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.openhealth.android.documents.DocumentStore
@@ -79,12 +81,12 @@ class TodayStatsExitTest {
         waitFor("Today") {
             compose.onAllNodesWithText("Readiness").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Readiness").assertIsDisplayed()
-        compose.onNodeWithText("Steps").assertIsDisplayed()
-        compose.onNodeWithText("Weight").assertIsDisplayed()
-        compose.onNodeWithText("Energy").assertIsDisplayed()
+        compose.onNodeWithText("Readiness").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Steps").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("Weight").onFirst().performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Energy").performScrollTo().assertIsDisplayed()
 
-        compose.onAllNodesWithText("Show as table").onFirst().performClick()
+        compose.onAllNodesWithText("Show as table").onLast().performScrollTo().performClick()
         waitFor("table") {
             compose.onAllNodesWithText("Day").fetchSemanticsNodes().isNotEmpty() ||
                 compose.onAllNodesWithText("Value").fetchSemanticsNodes().isNotEmpty()
@@ -92,6 +94,7 @@ class TodayStatsExitTest {
         compose.onNodeWithText("Close").performClick()
         compose.onAllNodesWithText("Readiness compares today with your own 28-day baseline.")
             .onFirst()
+            .performScrollTo()
             .performClick()
         assertTrue(compose.onAllNodesWithText("Inputs").fetchSemanticsNodes().isNotEmpty())
     }
@@ -104,7 +107,7 @@ class TodayStatsExitTest {
         waitFor("stats") {
             compose.onAllNodesWithText("Overview").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Sleep").performClick()
+        compose.onNodeWithText("Sleep").performScrollTo().performClick()
         waitFor("sleep") {
             compose.onAllNodesWithText("Sleep, 14 nights").fetchSemanticsNodes().isNotEmpty()
         }
@@ -113,7 +116,7 @@ class TodayStatsExitTest {
             compose.onAllNodesWithText("How sleep is calculated").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Close").performClick()
-        compose.onNodeWithText("Training").performClick()
+        compose.onNodeWithText("Training").performScrollTo().performClick()
         waitFor("training") {
             compose.onAllNodesWithText("Training consistency, 12 weeks")
                 .fetchSemanticsNodes().isNotEmpty() ||

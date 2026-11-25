@@ -17,8 +17,9 @@ import app.openhealth.core.formula.DailyValue
 import app.openhealth.core.formula.FormulaOutcome
 import app.openhealth.core.formula.SleepDebt
 import app.openhealth.core.formula.SleepNight
-import app.openhealth.core.formula.SleepTotals
-import app.openhealth.core.formula.SleepTotalsCalculator
+import app.openhealth.core.formula.SleepSample
+import app.openhealth.core.formula.SleepSession
+import app.openhealth.core.formula.SleepSessions
 import app.openhealth.core.formula.WeightEntry
 import app.openhealth.core.formula.WeightTrend
 import app.openhealth.core.observation.ObservationType
@@ -289,7 +290,7 @@ class StatsPresenter(
             val nights = sleepNights(date, 14)
             listOf(
                 StatsKpi(
-                    value = nights.map { it.asleepMinutes }.average().takeIf { !it.isNaN() }
+                    value = nights.map { it.totals.asleepMinutes }.average().takeIf { !it.isNaN() }
                         ?.let { duration(it) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_sleep),
                 ),
@@ -341,40 +342,48 @@ class StatsPresenter(
     private fun weightCard(date: LocalDate): StatsCard? {
         val rollups = rollups(date, ObservationType.WEIGHT, SEASON_DAYS)
         if (rollups.isEmpty()) return null
-        val change = StatsMath.change(
-            rollups.map { DailyValue(it.first, it.second) },
-            StatsMath.window(date, SEASON_DAYS),
-        )
+        val trend = (
+            WeightTrend.ewma(rollups.map { WeightEntry(it.first, it.second) })
+                as? FormulaOutcome.Computed
+            )?.value
+        val change = trend?.points?.let { points ->
+            if (points.size < 2) null else points.last().trendKg - points.first().trendKg
+        }
         val description = when {
             change == null -> context.getString(UiR.string.stats_desc_weight_flat)
-            abs(change.change) < 0.05 -> context.getString(
+            abs(change) < 0.05 -> context.getString(
                 UiR.string.stats_desc_weight_same,
-                decimal(change.startValue, 1),
+                decimal(trend!!.points.first().trendKg, 1),
             )
 
             else -> context.getString(
-                if (change.change < 0) {
+                if (change < 0) {
                     UiR.string.stats_desc_weight_down
                 } else {
                     UiR.string.stats_desc_weight_up
                 },
-                decimal(abs(change.change), 1),
-                decimal(change.startValue, 1),
-                decimal(change.endValue, 1),
+                decimal(abs(change), 1),
+                decimal(trend!!.points.first().trendKg, 1),
+                decimal(trend.points.last().trendKg, 1),
             )
         }
         return StatsCard(
             chart = ChartId.WEIGHT_TREND,
             title = context.getString(UiR.string.stats_card_weight_title),
             description = description,
-            plot = StatsPlot.Line(rollups.map { ChartPoint(it.first, it.second) }),
+            plot = StatsPlot.Line(
+                trend?.points?.map { ChartPoint(it.date, it.trendKg) }
+                    ?: rollups.map { ChartPoint(it.first, it.second) },
+            ),
             table = table(
                 title = context.getString(UiR.string.stats_card_weight_title),
                 columns = listOf(
                     context.getString(UiR.string.chart_table_date),
                     context.getString(UiR.string.stats_table_weight),
                 ),
-                rows = rollups.map { shortDate(it.first) to decimal(it.second, 1) },
+                rows = trend?.points?.map {
+                    shortDate(it.date) to decimal(it.trendKg, 1)
+                } ?: rollups.map { shortDate(it.first) to decimal(it.second, 1) },
                 chart = ChartId.WEIGHT_TREND,
             ),
             unitText = context.getString(UiR.string.unit_kg),
@@ -406,6 +415,11 @@ class StatsPresenter(
             ),
             unitText = context.getString(UiR.string.stats_unit_steps),
             decimals = 0,
+            footer = context.getString(
+                UiR.string.stats_days_logged,
+                rollups.size,
+                SEASON_DAYS,
+            ),
         )
     }
 
@@ -465,6 +479,11 @@ class StatsPresenter(
                 chart = ChartId.PROTEIN_TREND,
             ),
             unitText = context.getString(UiR.string.unit_g),
+            footer = context.getString(
+                UiR.string.stats_days_logged,
+                rollups.size,
+                SEASON_DAYS,
+            ),
         )
     }
 
@@ -474,11 +493,18 @@ class StatsPresenter(
         return StatsCard(
             chart = ChartId.BODY_FAT_TREND,
             title = context.getString(UiR.string.stats_card_body_fat_title),
-            description = context.getString(
-                UiR.string.stats_desc_body_fat,
-                decimal(rollups.last().second, 1),
-                decimal(rollups.first().second, 1),
-            ),
+            description = if (rollups.size < 2) {
+                context.getString(
+                    UiR.string.stats_desc_body_fat_flat,
+                    decimal(rollups.single().second, 1),
+                )
+            } else {
+                context.getString(
+                    UiR.string.stats_desc_body_fat,
+                    decimal(rollups.last().second, 1),
+                    decimal(rollups.first().second, 1),
+                )
+            },
             plot = StatsPlot.Line(rollups.map { ChartPoint(it.first, it.second) }),
             table = table(
                 title = context.getString(UiR.string.stats_card_body_fat_title),
@@ -498,7 +524,7 @@ class StatsPresenter(
         val values = weeklyValues(date, ObservationType.TRAINING_VOLUME, WEEKS)
         if (values.all { it.value == 0.0 }) return null
         val bars = values.map {
-            ChartBar(shortDate(it.start), it.value)
+            ChartBar(it.start.day.toString(), it.value)
         }
         return StatsCard(
             chart = ChartId.TRAINING_VOLUME,
@@ -595,7 +621,7 @@ class StatsPresenter(
         val nights = sleepNights(date, NIGHTS)
         if (nights.isEmpty()) return null
         val bars = nights.map {
-            ChartBar(shortDate(it.date), it.asleepMinutes / MINUTES_PER_HOUR)
+            ChartBar(shortDate(it.localDate), it.totals.asleepMinutes / MINUTES_PER_HOUR)
         }
         return StatsCard(
             chart = ChartId.SLEEP_DURATION,
@@ -603,7 +629,7 @@ class StatsPresenter(
             description = context.getString(
                 UiR.string.stats_desc_sleep,
                 nights.size,
-                duration(nights.map { it.asleepMinutes }.average()),
+                duration(nights.map { it.totals.asleepMinutes }.average()),
             ),
             plot = StatsPlot.Bars(bars),
             table = table(
@@ -613,7 +639,10 @@ class StatsPresenter(
                     context.getString(UiR.string.stats_table_hours),
                 ),
                 rows = nights.map {
-                    shortDate(it.date) to decimal(it.asleepMinutes / MINUTES_PER_HOUR, 1)
+                    shortDate(it.localDate) to decimal(
+                        it.totals.asleepMinutes / MINUTES_PER_HOUR,
+                        1,
+                    )
                 },
                 chart = ChartId.SLEEP_DURATION,
             ),
@@ -623,8 +652,7 @@ class StatsPresenter(
     }
 
     private fun stagesCard(date: LocalDate): StatsCard? {
-        val night =
-            sleepTotals(date.minus(DatePeriod(days = 1))) ?: sleepTotals(date) ?: return null
+        val night = sleepSessions(date).lastOrNull()?.totals ?: return null
         if (!night.hasStages) return null
         val segments = listOfNotNull(
             night.awakeSeconds?.let {
@@ -709,10 +737,10 @@ class StatsPresenter(
         ).map { row ->
             MacroAverage(
                 name = row.label,
-                grams = average(date, row.type, SEASON_DAYS) ?: 0.0,
+                grams = average(date, row.type, MACRO_DAYS) ?: 0.0,
                 targetGrams = row.target,
                 fraction = row.target?.takeIf { it > 0.0 }?.let { target ->
-                    ((average(date, row.type, SEASON_DAYS) ?: 0.0) / target)
+                    ((average(date, row.type, MACRO_DAYS) ?: 0.0) / target)
                         .coerceIn(0.0, 1.0).toFloat()
                 },
                 hue = row.hue,
@@ -736,8 +764,8 @@ class StatsPresenter(
             unitText = context.getString(UiR.string.unit_g),
             footer = context.getString(
                 UiR.string.stats_days_logged,
-                loggedDays(date, ObservationType.NUTRITION_ENERGY, SEASON_DAYS),
-                SEASON_DAYS,
+                loggedDays(date, ObservationType.NUTRITION_ENERGY, MACRO_DAYS),
+                MACRO_DAYS,
             ),
         )
     }
@@ -849,34 +877,34 @@ class StatsPresenter(
     private fun stepsAverage(date: LocalDate, days: Int): Double? =
         average(date, ObservationType.STEPS, days)
 
-    private fun sleepNights(date: LocalDate, count: Int): List<SleepTotalsWithDate> =
-        (0 until count).mapNotNull { index ->
-            val day = date.minus(DatePeriod(days = index))
-            sleepTotals(day)?.let { SleepTotalsWithDate(day, it) }
-        }.sortedBy { it.date }
-
-    private data class SleepTotalsWithDate(val date: LocalDate, val totals: SleepTotals) {
-        val asleepMinutes: Double get() = totals.asleepMinutes
+    private fun sleepNights(date: LocalDate, count: Int): List<SleepSession> {
+        val earliest = date.minus(DatePeriod(days = count - 1))
+        return sleepSessions(date).filter { it.localDate >= earliest && it.localDate <= date }
+            .takeLast(count)
     }
 
-    private fun sleepTotals(date: LocalDate): SleepTotals? {
-        fun value(type: ObservationType): Double? =
-            store.rollups.forDayAndType(date, type)?.value?.value
-        val span = value(ObservationType.SLEEP_DURATION) ?: return null
-        return SleepTotalsCalculator.of(
-            spanSeconds = span,
-            inBedSeconds = value(ObservationType.SLEEP_IN_BED),
-            deepSeconds = value(ObservationType.SLEEP_DEEP),
-            lightSeconds = value(ObservationType.SLEEP_LIGHT),
-            remSeconds = value(ObservationType.SLEEP_REM),
-            awakeSeconds = value(ObservationType.SLEEP_AWAKE),
-        )
+    private fun sleepSessions(date: LocalDate): List<SleepSession> {
+        val from = date.minus(DatePeriod(days = NIGHTS + 3)).atStartOfDayIn(zone)
+        val to = date.plus(DatePeriod(days = 2)).atStartOfDayIn(zone)
+        val samples = SLEEP_TYPES.flatMap { type ->
+            store.observations.forTypeBetween(type, from, to).map { observation ->
+                SleepSample(
+                    groupKey = observation.groupKey,
+                    type = observation.type,
+                    seconds = observation.value.value,
+                    localDate = observation.localDate,
+                )
+            }
+        }
+        return SleepSessions.collect(samples)
     }
 
     private fun sleepDebt(date: LocalDate): app.openhealth.core.formula.SleepDebtResult? {
         val need = store.settings.get(SettingKeys.SLEEP_NEED_MINUTES)?.toDoubleOrNull()
             ?.takeIf { it >= 60.0 } ?: DEFAULT_SLEEP_NEED_MINUTES
-        val nights = sleepNights(date, NIGHTS).map { SleepNight(it.date, it.asleepMinutes) }
+        val nights = sleepNights(date, NIGHTS).map {
+            SleepNight(it.localDate, it.totals.asleepMinutes)
+        }
         return (SleepDebt.compute(nights, need) as? FormulaOutcome.Computed)?.value
     }
 
@@ -891,7 +919,7 @@ class StatsPresenter(
         rows = rows.map { listOf(it.first, it.second) },
         citation = context.getString(
             UiR.string.chart_citation,
-            ChartRegistry.of(chart).citation.name,
+            app.openhealth.core.citation.Citations.of(ChartRegistry.of(chart).citation).title,
         ),
     )
 
@@ -951,6 +979,7 @@ class StatsPresenter(
 }
 
 private const val SEASON_DAYS = 30
+private const val MACRO_DAYS = 7
 private const val BODY_DAYS = 90
 private const val WEEKS = 12
 private const val NIGHTS = 14
@@ -959,4 +988,12 @@ private const val RECORD_ROWS = 5
 private const val RECORD_DAYS = 90
 private const val MINUTES_PER_HOUR = 60.0
 private const val DEFAULT_SLEEP_NEED_MINUTES = 480.0
+private val SLEEP_TYPES = listOf(
+    ObservationType.SLEEP_DURATION,
+    ObservationType.SLEEP_IN_BED,
+    ObservationType.SLEEP_DEEP,
+    ObservationType.SLEEP_LIGHT,
+    ObservationType.SLEEP_REM,
+    ObservationType.SLEEP_AWAKE,
+)
 private const val DASH = "—"

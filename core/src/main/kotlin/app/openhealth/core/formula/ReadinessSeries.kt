@@ -56,6 +56,8 @@ object ReadinessSeries {
         hrvSeries: List<DailyValue> = emptyList(),
         trainingLoad48h: Double? = null,
         trainingLoadSeries: List<DailyValue> = emptyList(),
+        /** How many days of load history exist; null counts the series entries. */
+        trainingLoadBaselineDays: Int? = null,
         sleepNeedMinutes: Double = ReadinessInputs.DEFAULT_SLEEP_NEED_MINUTES,
     ): ReadinessInputs {
         val windowStart = today.minus(DatePeriod(days = WINDOW_DAYS))
@@ -69,7 +71,7 @@ object ReadinessSeries {
             hrvBaseline = baseline(hrvSeries, today),
             trainingLoad48h = trainingLoad48h,
             trainingLoadDailyAverage28d = loadAverage(trainingLoadSeries, today),
-            trainingLoadBaselineDays = loadDays,
+            trainingLoadBaselineDays = trainingLoadBaselineDays ?: loadDays,
         )
     }
 

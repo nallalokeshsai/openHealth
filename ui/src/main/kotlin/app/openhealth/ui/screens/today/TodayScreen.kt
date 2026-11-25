@@ -82,7 +82,7 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.plus
 
 /** The values on Today that open a provenance sheet. */
-enum class TodayValue { ENERGY_IN, STEPS, WEIGHT }
+enum class TodayValue { ENERGY_IN, ENERGY_OUT, ENERGY_NET, WATER, STEPS, WEIGHT }
 
 /** One number on Today with where it came from. */
 data class TodayProvenance(val value: TodayValue, val provenance: ValueProvenance)
@@ -105,7 +105,7 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     synchronousLayers: Boolean = false,
     onStartPlan: (String?) -> Unit = {},
-    onSaveGoalRate: (Double) -> Unit = {},
+    onSaveGoalTarget: (Double) -> Unit = {},
     onSaveStepGoal: (Int) -> Unit = {},
     onOpenVitals: (app.openhealth.core.observation.ObservationType?) -> Unit = {},
 ) {
@@ -157,6 +157,9 @@ fun TodayScreen(
                     onLogFood = onOpenNutrition,
                     onOpenGoal = { goalSheet = true },
                     onOpenIn = { openProvenance(TodayValue.ENERGY_IN) },
+                    onOpenOut = { openProvenance(TodayValue.ENERGY_OUT) },
+                    onOpenNet = { openProvenance(TodayValue.ENERGY_NET) },
+                    onOpenWater = { openProvenance(TodayValue.WATER) },
                     onShowTable = {
                         model.charts.firstOrNull { it.chart == ChartId.ENERGY_RING }
                             ?.let { table = it.table }
@@ -236,9 +239,10 @@ fun TodayScreen(
         GoalSheet(
             energy = model.energy!!,
             today = model.today,
+            unitSystem = model.unitSystem,
             onDismiss = { goalSheet = false },
-            onSave = { delta ->
-                onSaveGoalRate(delta)
+            onSave = { target ->
+                onSaveGoalTarget(target)
                 goalSheet = false
             },
         )
@@ -395,13 +399,7 @@ private fun WeekStrip(model: TodayModel, onStart: () -> Unit, onOpenTrain: () ->
         OhCardHeader(
             eyebrow = stringResource(R.string.today_week_eyebrow),
             title = stringResource(R.string.today_week_title),
-            trailing = {
-                Text(
-                    text = stringResource(R.string.today_week_sessions, model.sessionCount),
-                    style = OhTheme.type.footnote,
-                    color = OhTheme.colors.label2,
-                )
-            },
+            subtitle = stringResource(R.string.today_week_sessions, model.sessionCount),
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         val firstDay = java.time.temporal.WeekFields.of(observedLocale()).firstDayOfWeek.value
@@ -437,6 +435,7 @@ private fun WeekStrip(model: TodayModel, onStart: () -> Unit, onOpenTrain: () ->
                         model = map,
                         variant = BodyMapVariant.MINI,
                         sides = setOf(BodySide.FRONT),
+                        modifier = Modifier.width(OhTheme.dims.bodyMapMiniHeight),
                     )
                     Spacer(Modifier.width(OhTheme.space.s3))
                 }
@@ -511,6 +510,9 @@ private fun EnergyCard(
     onLogFood: () -> Unit,
     onOpenGoal: () -> Unit,
     onOpenIn: () -> Unit,
+    onOpenOut: () -> Unit,
+    onOpenNet: () -> Unit,
+    onOpenWater: () -> Unit,
     onShowTable: () -> Unit,
     onShowFormula: () -> Unit,
 ) {
@@ -544,14 +546,14 @@ private fun EnergyCard(
                     label = stringResource(R.string.today_energy_out),
                     unit = stringResource(R.string.unit_kcal),
                     detail = rangeText(energy.outLowKcal, energy.outHighKcal),
-                    onClick = onShowFormula,
+                    onClick = onOpenOut,
                 ),
                 OhKpiFigure(
                     value = number((energy.netLowKcal + energy.netHighKcal) / 2.0),
                     label = stringResource(R.string.today_energy_net),
                     unit = stringResource(R.string.unit_kcal),
                     detail = rangeText(energy.netLowKcal, energy.netHighKcal),
-                    onClick = onShowFormula,
+                    onClick = onOpenNet,
                 ),
             ),
         )
@@ -561,10 +563,15 @@ private fun EnergyCard(
                 progress = energy.progress(),
                 centre = energy.remainingKcal?.let { number(it) }
                     ?: number(energy.intakeKcal),
-                contentDescription = stringResource(
-                    R.string.today_energy_ring_desc,
+                contentDescription = energy.targetKcal?.let { target ->
+                    stringResource(
+                        R.string.today_energy_ring_desc,
+                        number(energy.intakeKcal),
+                        number(target),
+                    )
+                } ?: stringResource(
+                    R.string.today_energy_ring_desc_no_target,
                     number(energy.intakeKcal),
-                    energy.targetKcal?.let { number(it) } ?: stringResource(R.string.no_target),
                 ),
             )
             Spacer(Modifier.width(OhTheme.space.s5))
@@ -588,6 +595,7 @@ private fun EnergyCard(
                         },
                         progress = macro.fraction,
                         ink = macroInk(macro.nutrient),
+                        onClick = onOpenIn,
                     )
                     Spacer(Modifier.height(OhTheme.space.s2))
                 }
@@ -596,11 +604,12 @@ private fun EnergyCard(
                         label = stringResource(R.string.nutrient_water),
                         value = stringResource(R.string.nutrition_ml, number(energy.waterMl)),
                         target = energy.waterTargetMl?.let {
-                            stringResource(R.string.nutrition_ml, number(it))
+                            stringResource(R.string.today_water_target, number(it))
                         },
                         progress = energy.waterTargetMl?.takeIf { it > 0.0 }
                             ?.let { (energy.waterMl / it).toFloat().coerceIn(0f, 1f) },
                         ink = OhTheme.colors.tealInk,
+                        onClick = onOpenWater,
                     )
                 }
             }
@@ -642,6 +651,22 @@ private fun EnergyCard(
         }
         if (energy.whatIf != null) {
             CardLink(text = stringResource(R.string.today_energy_what_if), onClick = onOpenGoal)
+        }
+        if (energy.floorApplied) {
+            Spacer(Modifier.height(OhTheme.space.s2))
+            Text(
+                text = stringResource(R.string.today_energy_floor_note),
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
+        }
+        energy.notes.forEach { note ->
+            Spacer(Modifier.height(OhTheme.space.s1))
+            Text(
+                text = note,
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
         }
         Spacer(Modifier.height(OhTheme.space.s2))
         Text(
@@ -793,18 +818,16 @@ private fun WeightCard(
             )
         }
         weight.weeklyChangeKg?.let { change ->
-            val ink = when {
-                change < -WEIGHT_CHANGE_THRESHOLD -> OhTheme.colors.greenInk
-                change > WEIGHT_CHANGE_THRESHOLD -> OhTheme.colors.orangeInk
-                else -> OhTheme.colors.label2
-            }
+            // A change in either direction is neutral unless the person's own goal
+            // makes it good or bad; the card never decides that for them (§2.8).
+            val ink = OhTheme.colors.label2
             Spacer(Modifier.height(OhTheme.space.s0))
             Text(
                 text = stringResource(
                     R.string.today_weight_week,
                     signedMass(change, imperial),
                 ),
-                style = OhTheme.type.footnote.tabular(),
+                style = OhTheme.type.footnote.tabular().ltrFigures(),
                 color = ink,
             )
         }
@@ -863,7 +886,6 @@ private fun DueCard(due: List<TodayDueItem>, onAction: (TodayDueAction) -> Unit)
                     title = item.title,
                     subtitle = item.body,
                     showDivider = index > 0,
-                    showChevron = true,
                     onClick = { onAction(item.action) },
                     trailing = {
                         Text(
@@ -947,7 +969,7 @@ private fun ReadinessSheet(readiness: ReadinessCardModel, onDismiss: () -> Unit)
         Text(
             text = stringResource(R.string.today_readiness_sheet_version, readiness.version),
             style = OhTheme.type.caption,
-            color = OhTheme.colors.label3,
+            color = OhTheme.colors.label2,
         )
         Spacer(Modifier.height(OhTheme.space.s3))
         Text(
@@ -967,6 +989,7 @@ private fun ReadinessSheet(readiness: ReadinessCardModel, onDismiss: () -> Unit)
 private fun GoalSheet(
     energy: TodayEnergyModel,
     today: LocalDate,
+    unitSystem: app.openhealth.core.preferences.UnitSystem,
     onDismiss: () -> Unit,
     onSave: (Double) -> Unit,
 ) {
@@ -993,6 +1016,12 @@ private fun GoalSheet(
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,
         )
+        Spacer(Modifier.height(OhTheme.space.s2))
+        Text(
+            text = stringResource(R.string.today_goal_sheet_citation),
+            style = OhTheme.type.caption,
+            color = OhTheme.colors.label2,
+        )
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
             text = stringResource(R.string.today_goal_sheet_daily),
@@ -1015,7 +1044,22 @@ private fun GoalSheet(
         OhInsetGroup {
             OhRow(
                 title = stringResource(R.string.today_goal_sheet_rate),
-                value = stringResource(R.string.stats_weekly_rate, signedMass(rate, false)),
+                value = stringResource(
+                    R.string.stats_weekly_rate,
+                    signedMass(
+                        rate,
+                        unitSystem == app.openhealth.core.preferences.UnitSystem.IMPERIAL,
+                    ),
+                ),
+            )
+            OhRow(
+                title = stringResource(R.string.today_goal_sheet_target),
+                value = "${number(
+                    (
+                        energy.targetKcal
+                            ?: ((energy.outLowKcal + energy.outHighKcal) / 2.0)
+                        ) + delta,
+                )} ${stringResource(R.string.unit_kcal)}",
             )
             OhRow(
                 title = stringResource(R.string.today_goal_sheet_window),
@@ -1038,7 +1082,15 @@ private fun GoalSheet(
         Spacer(Modifier.height(OhTheme.space.s5))
         OhButton(
             text = stringResource(R.string.today_goal_sheet_save),
-            onClick = { onSave(delta.toDouble()) },
+            onClick = {
+                val base = energy.targetKcal
+                    ?: ((energy.outLowKcal + energy.outHighKcal) / 2.0)
+                onSave(
+                    (base + delta).coerceAtLeast(
+                        maxOf(MIN_GOAL_TARGET_KCAL, whatIf.minimumTargetKcal),
+                    ),
+                )
+            },
         )
     }
 }
@@ -1067,7 +1119,7 @@ private fun StepGoalSheet(current: Int, onDismiss: () -> Unit, onSave: (Int) -> 
         )
         Spacer(Modifier.height(OhTheme.space.s5))
         OhButton(
-            text = stringResource(R.string.today_goal_sheet_save),
+            text = stringResource(R.string.today_step_goal_save),
             onClick = { parsed?.let(onSave) },
             enabled = parsed != null,
         )
@@ -1086,7 +1138,7 @@ private fun CardLink(text: String, onClick: () -> Unit) {
             .padding(vertical = OhTheme.space.s1),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = text, style = OhTheme.type.footnote, color = OhTheme.colors.accInk)
+        Text(text = text, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
     }
 }
 
@@ -1111,10 +1163,10 @@ private fun macroLabel(nutrient: Nutrient): String = stringResource(
 
 @Composable
 private fun macroInk(nutrient: Nutrient) = when (nutrient) {
-    Nutrient.PROTEIN -> OhTheme.colors.greenInk
-    Nutrient.CARBS -> OhTheme.colors.blueInk
+    Nutrient.PROTEIN -> OhTheme.colors.green
+    Nutrient.CARBS -> OhTheme.colors.blue
     Nutrient.FAT -> OhTheme.colors.purple
-    else -> OhTheme.colors.tealInk
+    else -> OhTheme.colors.teal
 }
 
 private fun massIn(kg: Double, imperial: Boolean): Double = if (imperial) {
@@ -1169,6 +1221,6 @@ private const val KCAL_PER_KG = 7_700.0
 private const val MIN_STEP_GOAL = 1_000
 private const val MAX_STEP_GOAL = 50_000
 private const val MAX_GOAL_DIGITS = 5
-private const val WEIGHT_CHANGE_THRESHOLD = 0.05
 private const val TENTHS = 10.0
 private const val TENTHS_HALF = 0.05
+private const val MIN_GOAL_TARGET_KCAL = 500.0
