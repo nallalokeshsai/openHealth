@@ -46,6 +46,9 @@ data class SettingsState(
     val profileMayLoseWeight: Boolean,
     val hasRestoreSnapshot: Boolean,
     val modules: Set<HealthModule>,
+
+    /** What the Devices row says: which sources are on, or nothing yet. */
+    val devicesDetail: String,
     val preset: ModulePreset,
     /** The switch's own state; it is the control, not a display decision. */
     val weightNeutral: Boolean,

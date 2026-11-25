@@ -56,6 +56,7 @@ import app.openhealth.ui.R as UiR
 import app.openhealth.ui.components.OhTabItem
 import app.openhealth.ui.components.OhToast
 import app.openhealth.ui.icons.OhIcons
+import app.openhealth.ui.screens.devices.DevicesScreen
 import app.openhealth.ui.screens.lock.LockScreen
 import app.openhealth.ui.screens.nutrition.BarcodeScanScreen
 import app.openhealth.ui.screens.nutrition.BarcodeState
@@ -622,12 +623,95 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onAppLock = viewModel::setAppLock,
                     onExport = viewModel::export,
                     onRestore = viewModel::restore,
+                    onOpenDevices = { nav.navigate(DevicesRoute) },
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
                     onExternalActivity = viewModel::suppressLockForExternalActivity,
                     onDeleteAllNotes = viewModel::deleteAllNotes,
                     onEmptyTrash = viewModel::emptyTrash,
                     onUndoRestore = viewModel::undoLastRestore,
+                )
+            }
+        }
+        composable<DevicesRoute> {
+            LaunchedEffect(Unit) { viewModel.openDevices() }
+            val activityPermission = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission(),
+            ) { granted -> viewModel.onActivityRecognitionResult(granted) }
+            val bluetoothPermissions = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions(),
+            ) { results -> viewModel.onBluetoothResult(results.values.any { it }) }
+            val healthPermissions = rememberLauncherForActivityResult(
+                contract = androidx.health.connect.client.PermissionController
+                    .createRequestPermissionResultContract(),
+            ) { granted -> viewModel.onHealthPermissionResult(granted) }
+            LaunchedEffect(state.pendingPermission) {
+                when (state.pendingPermission) {
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest
+                        .ACTIVITY_RECOGNITION,
+                    ->
+                        activityPermission.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest.BLUETOOTH -> {
+                        val permissions = if (android.os.Build.VERSION.SDK_INT >=
+                            android.os.Build.VERSION_CODES.S
+                        ) {
+                            arrayOf(
+                                Manifest.permission.BLUETOOTH_SCAN,
+                                Manifest.permission.BLUETOOTH_CONNECT,
+                            )
+                        } else {
+                            arrayOf(Manifest.permission.BLUETOOTH)
+                        }
+                        bluetoothPermissions.launch(permissions)
+                    }
+
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest.HEALTH_CONNECT ->
+                        healthPermissions.launch(
+                            app.openhealth.android.activity.AndroidHealthBus.readPermissions(),
+                        )
+
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest
+                        .HEALTH_CONNECT_HISTORY,
+                    ->
+                        healthPermissions.launch(
+                            app.openhealth.android.activity.AndroidHealthBus
+                                .readPermissionsWithHistory(),
+                        )
+
+                    null -> Unit
+                }
+            }
+            val openFit = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument(),
+            ) { uri ->
+                if (uri != null) {
+                    viewModel.suppressLockForExternalActivity()
+                    viewModel.importFit(uri)
+                }
+            }
+            val model = state.devices
+            if (model == null) {
+                Loading()
+            } else {
+                DevicesScreen(
+                    model = model,
+                    onBack = {
+                        viewModel.closeDevices()
+                        nav.popBackStack()
+                    },
+                    onToggleSteps = viewModel::toggleStepTracking,
+                    onCorrectSteps = viewModel::correctTodaySteps,
+                    onExcludeToday = viewModel::excludeTodayFromSteps,
+                    onRequestHealthConnect = viewModel::onHealthConnectRequested,
+                    onSyncHealthConnect = { backfill -> viewModel.syncHealthConnect(backfill) },
+                    onImportGarmin = { openFit.launch(arrayOf("*/*")) },
+                    onScan = viewModel::scanForDevices,
+                    onStopScan = viewModel::stopScanForDevices,
+                    onPair = viewModel::pairDevice,
+                    onUnpair = viewModel::unpairDevice,
+                    onConnect = viewModel::connectDevice,
+                    onMovePriority = viewModel::moveSourcePriority,
                 )
             }
         }

@@ -26,6 +26,48 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Passive step tracking (pr.md §6.6, BUILD-ROADMAP.md §B8). The activity
+         permission is requested when steps are first started, never at launch. A health
+         foreground service is allowed to keep a health sensor running; it is silent and
+         ongoing, and it holds no wakelock. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Standard-GATT Bluetooth (pr.md §6.18). neverForLocation keeps the scan from being
+         usable for location; on Android 11 and lower the scan needs the legacy pair. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
+    <!-- Health Connect read permissions (Tech-Stack.md §8). openHealth never writes to
+         the platform store. The history permission is requested only when the person
+         chooses to import their history, because the platform limits a fresh grant to
+         the 30 days before it. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_FLOORS_CLIMBED" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+
+    <!-- Health Connect is a system module on Android 14+ and a separate app below. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+
     <application
         android:name="app.openhealth.android.OpenHealthApp"
         android:allowBackup="false"
@@ -46,6 +88,44 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The step counter's service (pr.md §6.6). It starts at boot when the person
+             enabled tracking, and Android may refuse that launch on newer releases; the
+             counter keeps counting either way and the next app start recovers it. -->
+        <service
+            android:name="app.openhealth.android.activity.StepTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="health"
+            android:stopWithTask="false" />
+
+        <receiver
+            android:name="app.openhealth.android.activity.StepBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- The privacy rationale the Health Connect permission screen links to. -->
+        <activity
+            android:name="app.openhealth.android.activity.HealthRationaleActivity"
+            android:exported="true"
+            android:theme="@style/Theme.OpenHealth">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity="app.openhealth.android.activity.HealthRationaleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <service
             android:name="app.openhealth.android.training.RestTimerService"

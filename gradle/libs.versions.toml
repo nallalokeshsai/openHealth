@@ -13,6 +13,10 @@ lifecycle = "2.11.1"
 navigationCompose = "2.10.2"
 camera = "1.7.0"
 zxing = "3.5.4"
+# Health Connect SDK 1.1.0 is the stable channel (1.2.0 is alpha only, verified
+# 2026-08-26). It requires compileSdk 36 and has no Google Play Services dependency, so
+# the F-Droid flavour keeps building.
+healthConnect = "1.1.0"
 sqldelight = "2.4.1"
 koin = "4.2.2"
 ktor = "3.6.1"
@@ -51,6 +55,7 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camera" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+androidx-health-connect = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }
 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 compose-ui = { module = "androidx.compose.ui:ui" }

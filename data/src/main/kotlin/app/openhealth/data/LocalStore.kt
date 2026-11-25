@@ -5,10 +5,12 @@ import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SystemClock
 import app.openhealth.data.db.OpenHealthDb
 import app.openhealth.data.repo.BodyRepository
+import app.openhealth.data.repo.DeviceRepository
 import app.openhealth.data.repo.NoteRepository
 import app.openhealth.data.repo.NutritionRepository
 import app.openhealth.data.repo.ObservationRepository
 import app.openhealth.data.repo.ProfileRepository
+import app.openhealth.data.repo.RawRecordRepository
 import app.openhealth.data.repo.RollupRepository
 import app.openhealth.data.repo.SettingsRepository
 import app.openhealth.data.repo.SourceRepository
@@ -44,8 +46,10 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
     val training = TrainingRepository(db)
     val profile = ProfileRepository(db)
     val settings = SettingsRepository(db, clock)
+    val devices = DeviceRepository(db, settings, clock)
     val trash = TrashService(db, clock)
     val notes = NoteRepository(db)
+    val raw = RawRecordRepository(db)
     val timeline = TimelineRepository(db, driver)
 
     init {

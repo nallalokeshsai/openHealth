@@ -108,7 +108,7 @@ Version 1.0 replaces the stale 0.1 (Hilt, Room, six tabs, WCAG 2.1, Crashlytics,
 
 ### Reference library count
 
-`references/README.md` and `references/MANIFEST.md` index 41 folders (`openGym` plus 40 upstream); the working tree has 38. `references/wger` and `references/xDrip` are missing. Verify with `Test-Path` or a directory listing before citing a project. `references/openGym` is the only full (non-shallow) clone at ~747 MB; every other checkout is `--depth 1`.
+`references/README.md` and `references/MANIFEST.md` index 41 folders (`openGym` plus 40 upstream); all 41 are checked out (`wger` and `xDrip`, missing until 2026-11-25, are present again — verified in the B8 audit). Verify with a directory listing before citing a project. `references/openGym` is the only full (non-shallow) clone at ~747 MB; every other checkout is `--depth 1`.
 
 ## Dead references (do not chase them)
 
@@ -187,7 +187,7 @@ When `adb devices -l` lists the phone as `device`, install and test on it instea
 
 ## Reference library
 
-41 folders are indexed (`references/README.md`, `references/MANIFEST.md`); 38 are checked out, and `openGym/` is the closest reference for the training domain, the sync model and the design language (`DESIGN.md` §0.1). They are read, not imported: most are GPL/AGPL, `SparkyFitness` and `HealthLog` are source-available non-commercial, and food/clinical/media data carry separate terms (`pr.md` §12.2). `openGym`'s code is AGPL and its exercise stills/animations are licensed from Gym visual and **not reusable**; the only asset that may cross is the MIT MuscleMap body geometry (`DESIGN.md` Appendix C).
+41 folders are indexed (`references/README.md`, `references/MANIFEST.md`) and all 41 are checked out; `openGym/` is the closest reference for the training domain, the sync model and the design language (`DESIGN.md` §0.1). They are read, not imported: most are GPL/AGPL, `SparkyFitness` and `HealthLog` are source-available non-commercial, and food/clinical/media data carry separate terms (`pr.md` §12.2). `openGym`'s code is AGPL and its exercise stills/animations are licensed from Gym visual and **not reusable**; the only asset that may cross is the MIT MuscleMap body geometry (`DESIGN.md` Appendix C).
 
 ## Design work
 
@@ -217,31 +217,42 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B7 Body and vitals** (2026-11-25); next is **B8 Activity sources**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **427 JVM tests**
-  (197 `:core`, 103 `:data`, 10 `:integrations`, 107 `:ui`, 7 tools:foodindex, 1 fixtures,
-  2 exerciseindex) and **35 instrumented tests** pass on the owner's phone (the last
-  device run; the phone's USB connection was lost during the B7 sweep, so the final UI
-  edits were checked by the 107 JVM tests and 238 goldens only). `:ui` holds the B1 design
-  system, the B3 screens, the B4 body map, the B5 Train surfaces, the B6 Nutrition
-  surfaces and the B7 Vitals surfaces: **238 goldens** in dark, light, 200 % text and RTL.
+- Last completed phase: **B8 Activity sources** (2026-11-25); next is **B9 Today and Stats**.
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **519 JVM tests**
+  (256 `:core`, 111 `:data`, 27 `:integrations`, 115 `:ui`, 10 across the three tools).
+  **40 instrumented tests** passed on the owner's phone before the round-2 audit fixes;
+  they have not been re-run since, by round 2 or round 3. `:ui` holds the B1 design
+  system, the B3 screens, the B4 body map, the B5 Train surfaces, the B6 Nutrition surfaces, the B7 Vitals
+  surfaces and the B8 Devices page: **246 goldens** in dark, light, 200 % text and RTL.
   Both the `play` and `fdroid` debug APKs build.
-- `:core` adds the body/vitals domain: weight trend and weekly rate, the measurement-site
-  catalogue, CSV, the seven cited reference ranges, the four-zone BP/glucose strip, the
-  home-BP protocol and its day-one exclusion. `:data` is schema **v8** (`7.sqm`):
-  `body_photo`, its timeline branch, export/restore and Trash; a pre-B7 export restores
-  with the photo table empty. `:app-android` adds `BodyPresenter`, the encrypted photo
-  codec, the SAF CSV path, the system photo picker and the Vitals/detail routes. The
-  dynamic body model reads body fat first, then the Navy tape estimate; the photos live
-  in the SQLCipher database and are exported only with the explicit "Include photos in
-  encrypted backups" opt-in.
-- B7's decisions are `docs/adr/0012-body-and-vitals.md`; the reference ranges and their
-  sources are in `NOTICE.md` and `:core/.../vitals/Vitals.kt`. `DESIGN.md` records the
-  B7 chart/photo geometry in Appendix A.
-- Open issues: see `docs/build-log.md` (BSA/muscle/bone from `pr.md` §6.8, the post-meal
-  glucose range being the OGTT threshold, Apple Health XML import, captions, and the light
-  adipose seams inherited from B4). The owner should reconnect the phone for the final
-  visual pass (weight-neutral, photo pick, 200 %/RTL) before treating the device sweep as
-  complete.
-
-
+- `:core` adds the activity domain: the reboot-safe step counter and sampling policy, the
+  health-bus vocabulary and importer, the Bluetooth SIG decoders (heart rate, weight, body
+  composition, blood pressure as SFLOAT), the source-day breakdown, the editable priority
+  plan, the device registry and the Garmin family detector. `SourceKind.DEVICE` is the
+  phone's own sensor.
+- `:integrations` adds an independent FIT decoder (header, CRC, definitions, both
+  endiannesses, developer fields, compressed timestamps) and the activity/heart-rate/step
+  mapper. No Garmin SDK code, file or sample is used (ADR 0013); the golden fixtures are
+  generated by `tools/fixtures`' own encoder.
+- `:data` adds `DeviceRepository` on layer 5 (paired devices, the counter's high-water
+  mark, consent, the sync book) with no schema change; `LocalStore` also exposes the raw
+  repository.
+- `:app-android` adds the Health Connect bus (read-only, `connect-client` 1.1.0), the
+  foreground step service of type `health` with its boot receiver (it stops itself rather
+  than crash when the platform refuses the start), the standard-GATT BLE manager (a
+  strap's samples batched on a 10 s tick, a single measurement written at once, queued
+  CCCD writes found across every discovered service, reconnect), the Devices presenter, the privacy rationale activity and the
+  manifest permissions.
+- `:ui` adds the Devices page, the correction and provenance sheets, the forget
+  confirmation and 8 goldens; `OhPageHeader` now wraps at 200 % text.
+- B8's decisions, and the three audit rounds' amendments, are
+  `docs/adr/0013-activity-sources.md`; `NOTICE.md` records the Health
+  Connect client, the FIT decision and the GATT profiles.
+- Open issues (see `docs/build-log.md`): the 24 h battery run and real strap pairing are
+  the owner's hand-over; no genuine Garmin export has been parsed (the step scales are
+  read from the published profile and cross-checked, but some firmware reports monitoring
+  cycles cumulatively); the BLE batching, the flush tick, the CCCD queue and the
+  foreground-service guard are reviewed but not yet executed on a phone; Health Connect's
+  own zone offsets are not carried through, so a
+  history imported after a move is filed in the current zone; the BLE radio path has no
+  automated coverage without a second device.

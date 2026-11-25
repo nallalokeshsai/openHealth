@@ -29,6 +29,7 @@ live in `gradle/libs.versions.toml`; this file explains them.
 | Kotest | 6.2.7 | 6.2.7 (Maven Central, 2026-11-23) | Property and table tests, JVM only. |
 | Bouncy Castle | 1.87 | 1.87 (Maven Central, 2026-11-23) | Argon2id for the export passphrase; pure Java, Bouncy Castle (MIT-style) licence. |
 | SQLCipher for Android | 4.20.0 | 4.20.0 (Maven Central, 2026-11-23) | Community edition, BSD-3-Clause; encrypted database on device. |
+| Health Connect client | 1.1.0 (added in B8, 2026-11-25) | 1.1.0 stable; 1.2.0-alpha06 is the newest alpha (Google Maven metadata, last updated 2026-08-26) | The stable channel. Requires `compileSdk 36` (the app is on 37), supports API 26+ and has no Google Play Services dependency, so the F-Droid flavour still builds. |
 | AndroidX test | runner 1.7.0, ext:junit 1.3.0 | the same (Google Maven, 2026-11-23) | The instrumented encrypted-database test. |
 
 **SQLite JDBC** is not pinned in the catalogue: `app.cash.sqldelight:sqlite-driver`

@@ -18,6 +18,12 @@ object FixtureCli {
     @JvmStatic
     fun main(args: Array<String>) {
         val options = args.toList()
+        if (options.contains("--fit")) {
+            val dir = valueOf(options, "--fit") ?: FitFixtureWriter.DEFAULT_OUT
+            val files = FitFixtureWriter.write(java.io.File(dir))
+            println("Wrote ${files.size} FIT fixtures to $dir")
+            return
+        }
         val out = valueOf(options, "--out") ?: "openhealth-corpus.db"
         val days = valueOf(options, "--days")?.toIntOrNull() ?: CorpusRequest.FIVE_YEARS_OF_DAYS
         val seed = valueOf(options, "--seed")?.toLongOrNull() ?: DEFAULT_SEED

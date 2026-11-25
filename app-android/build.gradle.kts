@@ -14,6 +14,13 @@ android {
         create("play") { dimension = "store" }
         create("fdroid") { dimension = "store" }
     }
+
+    // The FIT golden fixtures are the same bytes the :integrations tests parse, so a
+    // device test cannot drift from the JVM one. They are read-only test assets, never
+    // shipped in an APK: only the androidTest source set sees them.
+    sourceSets.getByName("androidTest").assets.srcDir(
+        rootProject.file("integrations/src/test/resources"),
+    )
 }
 
 dependencies {
@@ -43,6 +50,11 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.zxing.core)
+
+    // Health Connect: the platform bus (Tech-Stack.md §8). The client library has no
+    // Play Services dependency; the Health Connect app itself is a system module on
+    // Android 14+ and a Play app on 13 and lower.
+    implementation(libs.androidx.health.connect)
 
     // Encrypted storage behind the :core seam (Tech-Stack.md §5). SQLCipher is the
     // community edition; its attribution requirement is recorded in NOTICE.md.

@@ -13,6 +13,9 @@ enum class DedupReason {
     ONE_SOURCE_WINS,
     GAP_FALLBACK,
     MANUAL_OVERRIDE,
+
+    /** The preferred source did not cover the day and no other source did either. */
+    INCOMPLETE_DAY,
     LATER_WINS,
     DUPLICATE_MERGED,
     MOST_DETAILED,
@@ -195,10 +198,10 @@ class OneSourcePerDayPolicy : DedupPolicy {
         val preferred = ordered.first()
         val complete = ordered.firstOrNull { (_, observations) -> covers(observations, day) }
         val chosen = complete ?: preferred
-        val reason = if (complete == null || chosen.key != preferred.key) {
-            DedupReason.GAP_FALLBACK
-        } else {
-            DedupReason.ONE_SOURCE_WINS
+        val reason = when {
+            complete == null -> DedupReason.INCOMPLETE_DAY
+            chosen.key != preferred.key -> DedupReason.GAP_FALLBACK
+            else -> DedupReason.ONE_SOURCE_WINS
         }
         return DayResolution.Selected(
             observations = chosen.value,

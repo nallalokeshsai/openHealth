@@ -91,6 +91,7 @@ fun SettingsScreen(
     onAppLock: (Boolean) -> Unit,
     onExport: (Uri, CharArray) -> Unit,
     onRestore: (Uri, CharArray) -> Unit,
+    onOpenDevices: () -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
     onExternalActivity: () -> Unit,
@@ -145,10 +146,10 @@ fun SettingsScreen(
                 )
                 GroupRow(
                     title = stringResource(R.string.settings_devices),
-                    detail = stringResource(R.string.settings_devices_detail),
+                    detail = state.devicesDetail,
                     icon = OhModuleIcons.integrations,
                     showDivider = true,
-                    onClick = { sheet = SettingsSheet.DEVICES },
+                    onClick = onOpenDevices,
                 )
                 GroupRow(
                     title = stringResource(R.string.settings_data),
@@ -227,9 +228,6 @@ fun SettingsScreen(
         onToggle = onToggleModule,
         onPreset = onPreset,
     )
-    DevicesSheet(visible = sheet == SettingsSheet.DEVICES, onDismiss = {
-        sheet = SettingsSheet.NONE
-    })
     DataSheet(
         visible = sheet == SettingsSheet.DATA,
         state = state,
@@ -613,30 +611,6 @@ private fun ModulesSheet(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun DevicesSheet(visible: Boolean, onDismiss: () -> Unit) {
-    if (!visible) return
-    OhModalSheet(
-        visible = true,
-        onDismiss = onDismiss,
-        title = stringResource(R.string.settings_devices),
-        cancelLabel = stringResource(R.string.settings_close),
-        onCancel = onDismiss,
-    ) {
-        Text(
-            text = stringResource(R.string.settings_devices_empty),
-            style = OhTheme.type.body,
-            color = OhTheme.colors.label,
-        )
-        Spacer(Modifier.height(OhTheme.space.s0))
-        Text(
-            text = stringResource(R.string.settings_devices_body),
-            style = OhTheme.type.footnote,
-            color = OhTheme.colors.label2,
-        )
     }
 }
 

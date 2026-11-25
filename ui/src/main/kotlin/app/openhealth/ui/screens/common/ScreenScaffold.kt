@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -68,7 +69,9 @@ fun OhPageHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifie
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.statusBars)
-            .height(OhTheme.dims.touchTarget),
+            // A minimum, not a fixed height: at 200 % text the title wraps to two or
+            // three lines, and a fixed 44 dp header would clip it (`DESIGN.md` §11.1).
+            .heightIn(min = OhTheme.dims.touchTarget),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         OhIconButton(
@@ -83,6 +86,7 @@ fun OhPageHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifie
             color = OhTheme.colors.label,
             modifier = Modifier.weight(1f).semantics { heading() },
             textAlign = TextAlign.Start,
+            maxLines = 3,
         )
     }
     Spacer(Modifier.height(OhTheme.space.s3))

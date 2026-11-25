@@ -1,0 +1,341 @@
+package app.openhealth.integrations.fit
+
+import app.openhealth.core.ids.SeededIdGenerator
+import app.openhealth.core.ids.SourceId
+import app.openhealth.core.observation.ObservationType
+import app.openhealth.core.units.UcumUnit
+import java.io.InputStream
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
+import kotlinx.datetime.TimeZone
+
+/**
+ * The FIT import against committed golden fixtures (`BUILD-ROADMAP.md` §B8,
+ * `Tech-Stack.md` §10). The fixtures are written by `tools/fixtures`, an independent
+ * encoder, so these assertions prove the parser, not a round trip through itself.
+ */
+private const val DAY_START_UNIX_SECONDS = 1_795_420_800L
+private const val WALK_START_OFFSET_SECONDS = 9L * 60 * 60
+private const val COMPRESSED_BASE_OFFSET = 30L
+private const val MONITORING_STEPS_PER_BUCKET = 250L
+private const val WALKING_ACTIVITY_TYPE = 6L
+private const val SLEEP_ACTIVITY_TYPE = 7L
+private const val WALKING_SPORT = 11L
+private const val CYCLING_SPORT = 2L
+private const val MONITORING_BUCKET_SECONDS = 15L * 60
+private const val ONE_DAY_SECONDS = 24L * 60 * 60
+
+class FitImportTest {
+
+    private fun fixture(name: String): ByteArray {
+        val stream: InputStream? = javaClass.getResourceAsStream("/fit/$name")
+        assertNotNull(stream, "fixture $name is missing from the test resources")
+        return stream.use { it.readBytes() }
+    }
+
+    @Test
+    fun aWalkImportsItsActivityHeartRateAndSteps() {
+        val import = FitImporter.import(fixture("activity-walk.fit"), TimeZone.UTC)
+
+        assertEquals(1, import.activities.size)
+        val walk = import.activities.single()
+        assertEquals(11L, walk.sport)
+        assertEquals(45.0, walk.durationMinutes, 1e-9)
+        assertEquals(2385.0, walk.distanceMetres ?: 0.0, 1e-9)
+        assertEquals(142.0, walk.calories)
+        assertEquals(108, walk.averageHeartRate)
+        assertEquals(124, walk.maximumHeartRate)
+        assertEquals(3000L, walk.steps)
+        assertEquals(FitStepSource.ACTIVITY, import.stepSource)
+        assertEquals(3000L, import.stepTotal)
+        assertEquals("vivoactive 5", import.device)
+        assertEquals(1L, import.manufacturer)
+    }
+
+    @Test
+    fun theHeartRateSeriesKeepsEveryRecord() {
+        val import = FitImporter.import(fixture("activity-walk.fit"), TimeZone.UTC)
+
+        assertEquals(45, import.heartRates.size)
+        assertEquals(96, import.heartRates.first().bpm)
+        // One reading every minute, +1 bpm every five minutes.
+        assertEquals(96 + 44 / 5, import.heartRates.last().bpm)
+        val start = Instant.fromEpochSeconds(
+            DAY_START_UNIX_SECONDS + WALK_START_OFFSET_SECONDS,
+        )
+        assertEquals(start, import.heartRates.first().at)
+    }
+
+    @Test
+    fun aDailyMonitoringFileReadsItsCyclesFieldAtTheProfilesScale() {
+        val import = FitImporter.import(fixture("daily-monitoring.fit"), TimeZone.UTC)
+
+        assertEquals(FitStepSource.MONITORING, import.stepSource)
+        assertEquals(18_000L, import.stepTotal)
+        // Only the waking buckets carry steps; the sleeping stretch is buckets with none.
+        assertEquals(72, import.steps.size)
+        assertTrue(import.steps.all { it.steps == MONITORING_STEPS_PER_BUCKET })
+        assertTrue(import.steps.all { it.end > it.start })
+        assertEquals(18_000L, import.steps.sumOf { it.steps })
+    }
+
+    /**
+     * The shape a watch actually writes a day in: `monitoring_info` carries the only
+     * full timestamp and the monitoring messages that follow abbreviate theirs to
+     * sixteen bits. The file spans 24 hours, which is longer than a 16-bit stamp can
+     * hold, so the stamps roll over once inside it.
+     *
+     * Resolving them against the file's first timestamp instead of the running one
+     * misdates everything past the nine-hour mark; looking only at monitoring messages
+     * for a reference finds none and loses the day outright.
+     */
+    @Test
+    fun aDayOfSixteenBitMonitoringTimestampsResolvesAgainstTheRunningTime() {
+        val import = FitImporter.import(fixture("monitoring-16bit.fit"), TimeZone.UTC)
+
+        assertEquals(FitStepSource.MONITORING, import.stepSource)
+        assertEquals(18_000L, import.stepTotal)
+        assertEquals(72, import.steps.size)
+
+        val dayStart = Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS)
+        // The walking stretch runs from the sixth hour to the end of the day, so it
+        // straddles the point 65,536 s in where the 16-bit stamps wrap.
+        assertEquals(
+            dayStart + (25 * MONITORING_BUCKET_SECONDS).seconds,
+            import.steps.first().end,
+        )
+        assertEquals(
+            dayStart + ONE_DAY_SECONDS.seconds,
+            import.steps.last().end,
+            "the last bucket of the day is read past the 16-bit rollover",
+        )
+        assertTrue(
+            import.steps.all {
+                it.start >= dayStart && it.end <= dayStart + ONE_DAY_SECONDS.seconds
+            },
+            "every bucket lands inside the day the file describes",
+        )
+    }
+
+    /**
+     * The 16-bit expansion itself: the answer is the time nearest the reference, so a
+     * stamp whose low bits have wrapped below the reference's belongs to the next
+     * rollover, and one that has wrapped above belongs to the previous one.
+     */
+    @Test
+    fun aTruncatedTimestampExpandsToTheTimeNearestTheReference() {
+        val reference = 0x0001_FFF0L
+        assertEquals(
+            0x0002_0010L,
+            FitTime.expandTruncated16(reference, 0x0010L),
+            "a stamp just past a rollover is the next one, not 65,520 seconds earlier",
+        )
+        assertEquals(
+            0x0001_FFF5L,
+            FitTime.expandTruncated16(reference, 0xFFF5L),
+            "a stamp in the same rollover stays in it",
+        )
+        assertEquals(
+            0x0001_FFE0L,
+            FitTime.expandTruncated16(0x0002_0005L, 0xFFE0L),
+            "a stamp just before a rollover is the previous one",
+        )
+    }
+
+    /**
+     * `monitoring.cycles` (55/3) is `uint32` with scale 2 and a walking cycle is two
+     * steps, so the raw field on disk **is** the step count. Reading the raw value and
+     * then halving it reports half the day, which a round trip through an encoder that
+     * shares the mistake cannot see — so the raw bytes are asserted here.
+     */
+    @Test
+    fun theMonitoringCyclesFieldOnDiskIsTheStepCount() {
+        val file = FitDecoder(fixture("daily-monitoring.fit")).decode()
+        val walking = file.messagesOf(FitGlobal.MONITORING)
+            .filter { it.whole(FitGlobal.Monitoring.ACTIVITY_TYPE) == WALKING_ACTIVITY_TYPE }
+        assertEquals(72, walking.size)
+        assertTrue(
+            walking.all { it.whole(FitGlobal.Monitoring.CYCLES) == MONITORING_STEPS_PER_BUCKET },
+            "the fixture stores the raw cycles field the profile's way",
+        )
+        val import = FitImporter.import(fixture("daily-monitoring.fit"), TimeZone.UTC)
+        assertEquals(
+            walking.sumOf { it.whole(FitGlobal.Monitoring.CYCLES) ?: 0L },
+            import.stepTotal,
+        )
+    }
+
+    /**
+     * `session.total_cycles` (18/10) has no scale and is `total_strides` for a walking
+     * or running sport, so a stride on disk is two steps in the import.
+     */
+    @Test
+    fun aWalkSessionCountsTwoStepsPerStride() {
+        val file = FitDecoder(fixture("activity-walk.fit")).decode()
+        val session = file.messagesOf(FitGlobal.SESSION).single()
+        val strides = assertNotNull(session.whole(FitGlobal.Session.TOTAL_CYCLES))
+        assertEquals(1_500L, strides, "the fixture stores strides, not steps")
+
+        val import = FitImporter.import(fixture("activity-walk.fit"), TimeZone.UTC)
+        assertEquals(strides * 2, import.activities.single().steps)
+        assertEquals(3_000L, import.stepTotal)
+    }
+
+    /** A ride's cycles are pedal revolutions, so they are never read as steps. */
+    @Test
+    fun aSportThatDoesNotWalkContributesNoSteps() {
+        assertTrue(FitActivityTypes.sportCountsSteps(WALKING_SPORT))
+        assertFalse(FitActivityTypes.sportCountsSteps(CYCLING_SPORT))
+        assertFalse(FitActivityTypes.countsSteps(SLEEP_ACTIVITY_TYPE))
+    }
+
+    @Test
+    fun aDailyFileWithBothMessagesDoesNotDoubleCountItsOwnSteps() {
+        val walk = fixture("activity-walk.fit")
+        val monitoring = fixture("daily-monitoring.fit")
+        val mixed = FitImporter.import(monitoring, TimeZone.UTC)
+
+        // A monitoring file's own steps are the monitoring buckets, never summed with a
+        // session's cycles as well.
+        assertEquals(FitStepSource.MONITORING, mixed.stepSource)
+        assertEquals(18_000L, mixed.stepTotal)
+        // An activity file has no monitoring, so its session cycles are used.
+        assertEquals(FitStepSource.ACTIVITY, FitImporter.import(walk).stepSource)
+        assertEquals(3000L, FitImporter.import(walk).stepTotal)
+    }
+
+    @Test
+    fun aBigEndianDefinitionIsDecodedWithItsArchitecture() {
+        val import = FitImporter.import(fixture("big-endian.fit"), TimeZone.UTC)
+
+        assertEquals(1, import.heartRates.size)
+        assertEquals(77, import.heartRates.single().bpm)
+        assertEquals(
+            Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS),
+            import.heartRates.single().at,
+        )
+    }
+
+    /**
+     * The 5-bit offset of a compressed-timestamp header replaces the low five bits of
+     * the running timestamp and rolls over every 32 s; it is not added to it. The
+     * fixture's base sits 30 s past a boundary, so an offset of 3 lands 5 s later, and
+     * the trailing full record only parses if the compressed record was sized right.
+     */
+    @Test
+    fun aCompressedTimestampRollsOverAgainstTheRunningTimestamp() {
+        val import = FitImporter.import(fixture("compressed-timestamp.fit"), TimeZone.UTC)
+
+        assertEquals(3, import.heartRates.size)
+        val base = Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS + COMPRESSED_BASE_OFFSET)
+        assertEquals(base, import.heartRates[0].at)
+        assertEquals(base + 5.seconds, import.heartRates[1].at)
+        assertEquals(base + 60.seconds, import.heartRates[2].at)
+        assertEquals(88, import.heartRates[0].bpm)
+        assertEquals(91, import.heartRates[1].bpm)
+        assertEquals(94, import.heartRates[2].bpm)
+    }
+
+    @Test
+    fun theCompressedOffsetIsExpandedNotAdded() {
+        // A base on a 32-second boundary is the one case where adding agrees.
+        assertEquals(3L, FitTime.expandCompressed(0L, 3))
+        assertEquals(64L + 3L, FitTime.expandCompressed(64L, 3))
+        // 30 s past a boundary with an offset of 3: the next 3 is 5 s away, not 3.
+        assertEquals(35L, FitTime.expandCompressed(30L, 3))
+        // An offset at or after the current low bits stays inside this 32-second block.
+        assertEquals(31L, FitTime.expandCompressed(30L, 31))
+    }
+
+    @Test
+    fun aCorruptChecksumIsRejectedRatherThanImported() {
+        assertFailsWith<FitFormatException> {
+            FitImporter.import(fixture("corrupt-crc.fit"), TimeZone.UTC)
+        }
+    }
+
+    @Test
+    fun aFileThatIsNotFitIsRejected() {
+        assertFailsWith<FitFormatException> {
+            FitImporter.import(ByteArray(64) { 0x2A }, TimeZone.UTC)
+        }
+        assertFailsWith<FitFormatException> {
+            FitImporter.import(byteArrayOf(12, 0x20, 0, 0, 0, 0), TimeZone.UTC)
+        }
+    }
+
+    @Test
+    fun aTruncatedFileIsRejected() {
+        val bytes = fixture("activity-walk.fit")
+        assertFailsWith<FitFormatException> {
+            FitImporter.import(bytes.copyOfRange(0, bytes.size / 2), TimeZone.UTC)
+        }
+    }
+
+    @Test
+    fun observationsKeepHappenedAtAndRecordedAtApart() {
+        val import = FitImporter.import(fixture("activity-walk.fit"), TimeZone.UTC)
+        val recordedAt = Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS + 3 * 86_400)
+        val observations = FitObservationMapper.toObservations(
+            import,
+            FitImportContext(
+                sourceId = SourceId("garmin-fit"),
+                zone = TimeZone.UTC,
+                recordedAt = recordedAt,
+                device = import.device,
+                ids = SeededIdGenerator(7),
+            ),
+        )
+
+        val steps = observations.filter { it.type == ObservationType.STEPS }
+        assertEquals(1, steps.size)
+        assertEquals(3000.0, steps.single().value.convertTo(UcumUnit.STEP).value, 1e-9)
+        // The walk happened in the morning; it was imported the next day.
+        assertEquals(
+            Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS + WALK_START_OFFSET_SECONDS),
+            steps.single().start,
+        )
+        assertEquals(recordedAt, steps.single().provenance.recordedAt)
+        assertEquals("garmin-fit", steps.single().provenance.sourceId.value)
+        assertTrue(steps.single().provenance.isBackfilled)
+
+        assertEquals(45, observations.count { it.type == ObservationType.HEART_RATE })
+        val activity = observations.filter {
+            it.type == ObservationType.ACTIVE_MINUTES && it.end != null
+        }
+        assertEquals(1, activity.size)
+        assertEquals(45.0, activity.single().value.convertTo(UcumUnit.MINUTE).value, 1e-6)
+        assertEquals(
+            observations.filter { it.groupKey != null }.map { it.groupKey }.distinct().size,
+            1,
+        )
+    }
+
+    @Test
+    fun reimportingTheSameFileProducesTheSameIdempotencyKeys() {
+        val import = FitImporter.import(fixture("activity-walk.fit"), TimeZone.UTC)
+        val context = FitImportContext(
+            sourceId = SourceId("garmin-fit"),
+            zone = TimeZone.UTC,
+            recordedAt = Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS + 3_600),
+            ids = SeededIdGenerator(1),
+        )
+        val first = FitObservationMapper.toObservations(import, context)
+        val second = FitObservationMapper.toObservations(
+            import,
+            context.copy(ids = SeededIdGenerator(99)),
+        )
+
+        assertEquals(
+            first.map { it.provenance.idempotencyKey },
+            second.map { it.provenance.idempotencyKey },
+        )
+        assertEquals(first.size, first.map { it.provenance.idempotencyKey }.distinct().size)
+    }
+}

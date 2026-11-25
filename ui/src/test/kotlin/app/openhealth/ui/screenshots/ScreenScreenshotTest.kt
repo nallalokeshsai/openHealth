@@ -132,6 +132,7 @@ class ScreenScreenshotTest {
 
     private val settings = SettingsState(
         profileName = "Sam",
+        devicesDetail = "None connected",
         profileSubtitle = "Just track · metric",
         profileBirthDate = "1990-04-12",
         profileGoal = ProfileGoal.JUST_TRACK,
@@ -168,6 +169,7 @@ class ScreenScreenshotTest {
         onAppLock = {},
         onExport = { _, _ -> },
         onRestore = { _, _ -> },
+        onOpenDevices = {},
         onOpenTimeline = {},
         onOpenTrash = {},
         onExternalActivity = {},
