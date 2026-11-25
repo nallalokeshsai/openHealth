@@ -191,16 +191,23 @@ object FitImporter {
      */
     private fun monitoringBuckets(file: FitFile, zone: TimeZone): List<FitStepBucket> {
         var previous: Instant? = null
-        var previousFitSeconds: Long? = null
+        var reference: Long? = null
         val buckets = mutableListOf<FitStepBucket>()
-        file.messagesOf(FitGlobal.MONITORING).forEach { message ->
-            val end = monitoringTimestamp(message, zone, previousFitSeconds) ?: return@forEach
+        // Every message is walked, not just the monitoring ones: a real day file puts
+        // its full timestamp on a `monitoring_info` message and then abbreviates the
+        // monitoring messages that follow, so the reference has to come from whichever
+        // message last carried one.
+        file.messages.forEach { message ->
+            message.timestampSeconds?.let { reference = it }
+            if (message.globalNumber != FitGlobal.MONITORING) return@forEach
+            val resolved = monitoringTime(message, zone, reference) ?: return@forEach
+            val end = resolved.at
             val activityType = message.whole(FitGlobal.Monitoring.ACTIVITY_TYPE)
             val cycles = message.whole(FitGlobal.Monitoring.CYCLES)
                 ?: message.whole(FitGlobal.Monitoring.CYCLES_16)
             val start = previous ?: (end - DEFAULT_BUCKET_MINUTES)
             previous = end
-            previousFitSeconds = message.timestampSeconds ?: previousFitSeconds
+            resolved.fitSeconds?.let { reference = it }
             if (cycles == null || !FitActivityTypes.countsSteps(activityType)) return@forEach
             // Scale 2 takes the raw field to cycles; two steps to the cycle takes it
             // back, so the raw value is the step count. Dividing here would report
@@ -216,32 +223,39 @@ object FitImporter {
     }
 
     /**
-     * `timestamp`, else the local timestamp, else the 16-bit compressed one. The 16-bit
-     * field is a truncated timestamp, not an absolute one: it is resolved against the
-     * previous full timestamp the same way a compressed header is (32-second rollover),
-     * so it can never be read as a date in 1989.
+     * A monitoring message's time, and the full FIT seconds it establishes for the
+     * messages after it. A local timestamp sets no reference: it counts from the epoch
+     * in the device's local time, so it is not comparable with the UTC seconds a
+     * `timestamp_16` is expanded against.
+     */
+    private data class MonitoringTime(val at: Instant, val fitSeconds: Long?)
+
+    /**
+     * `timestamp`, else the local timestamp, else the 16-bit one. The 16-bit field is a
+     * truncated timestamp, not an absolute one: it is resolved against the most recent
+     * full timestamp ([FitTime.expandTruncated16]), so it can never be read as a date in
+     * 1989, and the resolved value becomes the reference for the next message.
      */
     @Suppress("ReturnCount")
-    private fun monitoringTimestamp(
+    private fun monitoringTime(
         message: FitMessage,
         zone: TimeZone,
-        previousFitSeconds: Long?,
-    ): Instant? {
-        message.timestampSeconds?.let { return Instant.fromEpochSeconds(FitTime.unixSeconds(it)) }
+        reference: Long?,
+    ): MonitoringTime? {
+        message.timestampSeconds?.let {
+            return MonitoringTime(Instant.fromEpochSeconds(FitTime.unixSeconds(it)), it)
+        }
         message.whole(FitGlobal.Monitoring.LOCAL_TIMESTAMP)?.let {
-            return FitTime.localInstant(it, zone)
+            return MonitoringTime(FitTime.localInstant(it, zone), null)
         }
         val truncated = message.whole(FitGlobal.Monitoring.TIMESTAMP_16) ?: return null
-        val base = previousFitSeconds ?: return null
-        var candidate = (base and TIMESTAMP_16_MASK.inv()) or
-            (truncated and TIMESTAMP_16_MASK)
-        if (candidate < base - TIMESTAMP_16_HALF) candidate += TIMESTAMP_16_ROLLOVER
-        return Instant.fromEpochSeconds(FitTime.unixSeconds(candidate))
+        val base = reference ?: return null
+        val expanded = FitTime.expandTruncated16(base, truncated)
+        return MonitoringTime(
+            Instant.fromEpochSeconds(FitTime.unixSeconds(expanded)),
+            expanded,
+        )
     }
-
-    private const val TIMESTAMP_16_MASK = 0xFFFFL
-    private const val TIMESTAMP_16_ROLLOVER = 0x10000L
-    private const val TIMESTAMP_16_HALF = 0x8000L
 }
 
 /** Where an import's values came from, so provenance is built the same way as elsewhere. */

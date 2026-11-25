@@ -76,11 +76,21 @@ nothing here depends on a vendor app or a vendor cloud.
 
 Heart rate (0x180D / 0x2A37), weight and body composition (0x181D / 0x2A9D, 0x2A9C) and
 blood pressure (0x1810 / 0x2A35). The decoders are pure functions in `:core`, tested
-against packets built from the specifications, and the Android side only moves bytes. A
-measurement is written the moment it is decoded; a failed write is buffered
-(`MeasurementBuffer`) and flushed on reconnect (`BleRetry`, 1 s doubling to 30 s, six
-attempts). A workout's sets are persisted as they are logged, so a strap dropping out
-costs heart-rate coverage, never a set.
+against packets built from the specifications, and the Android side only moves bytes.
+
+A single measurement — a weight, a body composition, a blood pressure — is written the
+moment it is decoded, because the person is standing there waiting for it. A strap's
+heart rate is **streaming**, about one sample a second, so it joins a batch that is
+written every ten seconds, on a disconnect and on close (`BleWritePolicy`): a write and a
+day rebuild per sample would be 3,600 of each in an hour of training, which is the work
+`pr.md` §6.26 budgets against. Nothing is dropped either way — a batch that fails to
+write goes back into `MeasurementBuffer` and is tried on the next tick, and the reconnect
+follows `BleRetry` (1 s doubling to 30 s, six attempts). A workout's sets are persisted
+as they are logged, so a strap dropping out costs heart-rate coverage, never a set.
+
+Android allows one GATT operation in flight per connection, so the CCCD writes that
+subscribe a scale's two characteristics are queued one behind the other and the next
+starts from `onDescriptorWrite`.
 
 ## 5. Dedup, priority and the visible rule
 
@@ -136,3 +146,24 @@ Every reading still names a real `source` row, so provenance is unchanged.
   a restore on another phone refreshes the granted set from the platform.
 - **A day nobody covers is `INCOMPLETE_DAY`,** not a gap fallback, and both reasons are shown
   on the Steps card.
+
+## 9. Amendments from the second audit round
+
+- **Body composition field order.** The profile puts the mandatory body fat percentage
+  immediately after the flags, before every optional field. Reading it from the end of the
+  packet shifted the timestamp, basal rate, impedance and weight two bytes early, so a BIA
+  scale's whole packet decoded wrong once §8 made the characteristic reachable. The water
+  field is a mass, and becomes a percentage only against the weight in the same packet.
+- **Heart rate is batched, not written per sample.** §4 above now says what the code does.
+  A failed batch returns to the buffer instead of being dropped.
+- **One CCCD write at a time.** Subscribing a scale's two characteristics in a loop left
+  the second unsubscribed, because Android allows one GATT operation in flight.
+- **`timestamp_16` resolves against the running time.** A day file states its full
+  timestamp once, on `monitoring_info`, and abbreviates the rest. Resolving those against
+  the file's first timestamp misdates everything past the nine-hour mark, and reading only
+  monitoring messages for a reference finds none and loses the day. The decoder now tracks
+  the reference across every message and advances it with each resolved stamp;
+  `monitoring-16bit.fit` is the fixture.
+- **The step service stops rather than crashes.** `startForeground` throws when
+  `ACTIVITY_RECOGNITION` has been revoked or the platform refuses a background start; the
+  service now stops itself and the counter is recovered on the next app start.

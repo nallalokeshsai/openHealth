@@ -203,7 +203,7 @@ object HealthBusImporter {
         val provenance = Provenance(
             sourceId = context.sourceId,
             time = TimeProvenance.of(start, context.recordedAt, context.zone),
-            idempotencyKey = idempotencyKey(reading, type),
+            idempotencyKey = idempotencyKey(reading),
             device = reading.metadata["device"] ?: context.device,
             appVersion = context.appVersion,
             method = method,
@@ -226,7 +226,7 @@ object HealthBusImporter {
      * A reading's identity is its source, its type, its start and the value; the platform
      * may hand the same record back on two syncs, and one of those must not count twice.
      */
-    private fun idempotencyKey(reading: HealthReading, type: ObservationType): String {
+    private fun idempotencyKey(reading: HealthReading): String {
         val value = reading.value.toString()
         return "hc:${reading.type}:${reading.startEpochMillis}:${reading.endEpochMillis}:$value:" +
             (reading.metadata["uid"] ?: "")

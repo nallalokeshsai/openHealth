@@ -42,6 +42,23 @@ sealed interface DeviceLinkState {
 }
 
 /**
+ * Which measurements wait for the batched write and which go straight to the database.
+ *
+ * A heart-rate strap notifies about once a second. Writing each sample on its own is one
+ * transaction and one day rebuild per second, which is 3,600 of each in an hour of
+ * training and is exactly the kind of work the `pr.md` §6.26 budgets forbid during a
+ * session. A strap's samples are therefore buffered and written as one batch on the
+ * flush tick.
+ *
+ * A weight, a body composition or a blood pressure is a single reading the person is
+ * standing there waiting for, so it is written the moment it is decoded (ADR 0013 §4).
+ */
+object BleWritePolicy {
+    fun isStreaming(measurement: GattMeasurement): Boolean =
+        measurement is GattMeasurement.HeartRate
+}
+
+/**
  * A bounded buffer for readings the radio produced while the database was busy or the
  * link had just dropped. It is small on purpose: a heart-rate sample every second for a
  * long workout is the worst case, and a full buffer drops the oldest reading rather than

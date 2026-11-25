@@ -251,6 +251,32 @@ object FitTime {
         val rolled = if (masked >= low) 0L else COMPRESSED_ROLLOVER
         return (baseFitSeconds and COMPRESSED_OFFSET_MASK.inv()) + masked + rolled
     }
+
+    /** `timestamp_16` keeps the low sixteen bits; it rolls over every 65,536 s. */
+    const val TRUNCATED_16_MASK = 0xFFFFL
+
+    private const val TRUNCATED_16_ROLLOVER = 0x1_0000L
+    private const val TRUNCATED_16_HALF = 0x8000L
+
+    /**
+     * Expands a `timestamp_16` against the most recent full timestamp. The sixteen bits
+     * name a time within half a rollover of that reference, so the answer is the nearest
+     * one: the reference has to be the previous *resolved* time, not the first full
+     * timestamp in the file. A monitoring file that carries one full timestamp and then
+     * sixteen-bit stamps for a day would otherwise be misdated by 18 hours from the
+     * nine-hour mark onwards.
+     */
+    fun expandTruncated16(referenceFitSeconds: Long, truncated: Long): Long {
+        var candidate = (referenceFitSeconds and TRUNCATED_16_MASK.inv()) or
+            (truncated and TRUNCATED_16_MASK)
+        if (candidate < referenceFitSeconds - TRUNCATED_16_HALF) {
+            candidate += TRUNCATED_16_ROLLOVER
+        }
+        if (candidate > referenceFitSeconds + TRUNCATED_16_HALF) {
+            candidate -= TRUNCATED_16_ROLLOVER
+        }
+        return candidate
+    }
 }
 
 /**

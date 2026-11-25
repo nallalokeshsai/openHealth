@@ -32,16 +32,29 @@ class StepTrackingService : Service() {
         tracker = container.newStepTracker()
     }
 
+    /**
+     * A health foreground service needs `ACTIVITY_RECOGNITION`, and newer releases also
+     * refuse some background starts. Either refusal throws, and an uncaught throw here
+     * is a crash on the person's phone, so the service stops itself instead. Nothing is
+     * lost: `TYPE_STEP_COUNTER` keeps counting with nothing running and the next app
+     * start persists the interval (`pr.md` §6.6, ADR 0013 §3).
+     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = build(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH,
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        val started = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        }.isSuccess
+        if (!started) {
+            stopSelf()
+            return START_NOT_STICKY
         }
         tracker?.start()
         return START_STICKY

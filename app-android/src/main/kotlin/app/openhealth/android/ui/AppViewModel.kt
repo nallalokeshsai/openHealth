@@ -2512,7 +2512,8 @@ class AppViewModel(
             return
         }
         if (requestedHistory &&
-            "android.permission.health.READ_HEALTH_DATA_HISTORY" !in granted
+            androidx.health.connect.client.permission.HealthPermission
+                .PERMISSION_READ_HEALTH_DATA_HISTORY !in granted
         ) {
             // Reading a year without the history grant would silently return 30 days;
             // say so instead of marking the import done.

@@ -175,7 +175,6 @@ enum class DeviceKindName {
     }
 }
 
-/** What one kind of device contributes, in observation types. */
 /** A stable, non-reversible tag for an address, used only inside a source id. */
 private fun addressStamp(address: String): String {
     var hash = FNV_OFFSET
@@ -190,6 +189,7 @@ private const val FNV_PRIME = 0x100000001b3L
 private const val STAMP_HEX_CHARS = 8
 private const val HEX_RADIX = 16
 
+/** What one kind of device contributes, in observation types. */
 object DeviceCapabilities {
     fun types(kind: DeviceKind): List<ObservationType> = when (kind) {
         DeviceKind.HEART_RATE -> listOf(

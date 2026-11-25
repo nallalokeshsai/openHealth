@@ -271,6 +271,22 @@ class FitWriter(
             FieldSpecNumbers.MONITORING_CALORIES to BASE_UINT16,
         )
 
+        /** `monitoring_info`: the full timestamp a day file states once, up front. */
+        val MONITORING_INFO = listOf(
+            FieldSpecNumbers.MONITORING_TIMESTAMP to BASE_UINT32,
+        )
+
+        /**
+         * The abbreviated monitoring message a watch actually writes for a day: no full
+         * timestamp, a 16-bit one that is resolved against the running time, and the
+         * 16-bit cycle counter beside it.
+         */
+        val MONITORING_TIMED_16 = listOf(
+            FieldSpecNumbers.MONITORING_TIMESTAMP_16 to BASE_UINT16,
+            FieldSpecNumbers.MONITORING_ACTIVITY_TYPE to BASE_ENUM,
+            FieldSpecNumbers.MONITORING_CYCLES_16 to BASE_UINT16,
+        )
+
         fun specs(pairs: List<Pair<Int, Int>>): List<FieldSpec> = pairs.map { (number, type) ->
             val size = when (type) {
                 BASE_ENUM, BASE_UINT8, BASE_SINT8, BASE_UINT8Z -> 1
@@ -308,6 +324,8 @@ class FitWriter(
         const val MONITORING_ACTIVITY_TYPE = 5
         const val MONITORING_CYCLES = 3
         const val MONITORING_CALORIES = 1
+        const val MONITORING_CYCLES_16 = 9
+        const val MONITORING_TIMESTAMP_16 = 26
     }
 
     /** Global message numbers, named so a fixture reads like the message it writes. */
@@ -316,6 +334,7 @@ class FitWriter(
         const val GLOBAL_SESSION = 18
         const val GLOBAL_RECORD = 20
         const val GLOBAL_MONITORING = 55
+        const val GLOBAL_MONITORING_INFO = 103
     }
 }
 
@@ -458,6 +477,58 @@ object FitFixtures {
         return writer.toByteArray()
     }
 
+    /**
+     * A day file in the shape a watch actually writes one: `monitoring_info` states the
+     * full timestamp once, and every monitoring message after it carries only a 16-bit
+     * timestamp and a 16-bit cycle counter.
+     *
+     * The file spans a full 24 hours, which is longer than the 65,536 seconds a 16-bit
+     * stamp can hold, so the stamps roll over once part way through — and the walking
+     * stretch deliberately straddles that rollover. A decoder that resolves the stamps
+     * against the file's first full timestamp instead of against the running one
+     * misdates the buckets after it; a decoder that only looks at monitoring messages
+     * never finds a reference at all and loses the day.
+     */
+    fun monitoringTimestamp16(): ByteArray {
+        val writer = FitWriter()
+        writer.define(
+            localType = 0,
+            globalNumber = FitWriter.Numbers.GLOBAL_MONITORING_INFO,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.MONITORING_INFO),
+        )
+        writer.data(
+            0,
+            mapOf(FitWriter.FieldSpecNumbers.MONITORING_TIMESTAMP to DAY_START_SECONDS),
+        )
+        writer.define(
+            localType = 1,
+            globalNumber = FitWriter.Numbers.GLOBAL_MONITORING,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.MONITORING_TIMED_16),
+        )
+        repeat(MONITORING_BUCKETS) { index ->
+            val timestamp = DAY_START_SECONDS + (index + 1) * MONITORING_BUCKET_SECONDS
+            val walking = index >= AWAKE_FROM_BUCKET_16
+            writer.data(
+                1,
+                mapOf(
+                    FitWriter.FieldSpecNumbers.MONITORING_TIMESTAMP_16 to
+                        (timestamp and TRUNCATED_16_MASK).toInt(),
+                    FitWriter.FieldSpecNumbers.MONITORING_ACTIVITY_TYPE to if (walking) {
+                        ACTIVITY_TYPE_WALKING
+                    } else {
+                        ACTIVITY_TYPE_SLEEP
+                    },
+                    FitWriter.FieldSpecNumbers.MONITORING_CYCLES_16 to if (walking) {
+                        MONITORING_RAW_CYCLES_PER_BUCKET.toInt()
+                    } else {
+                        0
+                    },
+                ),
+            )
+        }
+        return writer.toByteArray()
+    }
+
     /** A one-record file with a big-endian definition, to prove endianness is honoured. */
     fun bigEndian(): ByteArray {
         val writer = FitWriter(bigEndian = true)
@@ -590,4 +661,13 @@ object FitFixtures {
 
     /** The trailing full record, which only parses if the compressed one was sized right. */
     const val COMPRESSED_TRAILING_OFFSET_SECONDS = 60L
+
+    /** `timestamp_16` keeps the low sixteen bits of the FIT seconds. */
+    const val TRUNCATED_16_MASK = 0xFFFFL
+
+    /**
+     * The 16-bit day file sleeps first and walks the rest of the day, so its walking
+     * stretch straddles the 65,536-second rollover rather than ending before it.
+     */
+    const val AWAKE_FROM_BUCKET_16 = 24
 }

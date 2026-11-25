@@ -471,21 +471,6 @@ class ActivityPresenter(
         } else {
             minOf(last?.at ?: to, to) - INCREMENTAL_DAYS.days
         }
-        ensureSource(
-            GARMIN_HC_SOURCE,
-            SourceKind.GARMIN,
-            context.getString(UiR.string.devices_garmin_health_connect),
-            setOf(
-                SourcePermission.READ_STEPS,
-                SourcePermission.READ_DISTANCE,
-                SourcePermission.READ_ENERGY,
-                SourcePermission.READ_HEART_RATE,
-                SourcePermission.READ_SLEEP,
-                SourcePermission.READ_WEIGHT,
-                SourcePermission.READ_BODY_COMPOSITION,
-            ),
-            family = "garmin",
-        )
         var imported = 0
         val skipped = mutableSetOf<String>()
         HealthBusTypes.all.forEach { key ->
@@ -501,9 +486,26 @@ class ActivityPresenter(
                 GarminDetector.isGarmin(reading.metadata["device"])
             }
             groups.forEach { (garmin, groupReadings) ->
+                if (garmin) {
+                    // Only a phone that actually carries Garmin data gains the row.
+                    ensureSource(
+                        GARMIN_HC_SOURCE,
+                        SourceKind.GARMIN,
+                        context.getString(UiR.string.devices_garmin_health_connect),
+                        setOf(
+                            SourcePermission.READ_STEPS,
+                            SourcePermission.READ_DISTANCE,
+                            SourcePermission.READ_ENERGY,
+                            SourcePermission.READ_HEART_RATE,
+                            SourcePermission.READ_SLEEP,
+                            SourcePermission.READ_WEIGHT,
+                            SourcePermission.READ_BODY_COMPOSITION,
+                        ),
+                        family = "garmin",
+                    )
+                }
                 val sourceId = if (garmin) GARMIN_HC_SOURCE else HEALTH_CONNECT_SOURCE
                 val sourceKind = if (garmin) SourceKind.GARMIN else SourceKind.HEALTH_CONNECT
-                val family = if (garmin) "garmin" else "health-connect"
                 val payload = groupReadings.joinToString(separator = "\n") {
                     "${it.type}:${it.startEpochMillis}:${it.endEpochMillis}:${it.value}:" +
                         "${it.unit}:${it.metadata["device"]}:${it.metadata["uid"]}"
@@ -548,8 +550,6 @@ class ActivityPresenter(
                     )
                     store.sources.markSynced(sourceId, to)
                 }
-                // The family is a fact of the reading, not of the sync call.
-                check(family.isNotBlank())
             }
         }
         if (backfill) store.devices.setHealthConnectBackfilled(true)

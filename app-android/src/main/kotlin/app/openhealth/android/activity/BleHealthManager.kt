@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import app.openhealth.core.activity.BleRetry
+import app.openhealth.core.activity.BleWritePolicy
 import app.openhealth.core.activity.DeviceCapabilities
 import app.openhealth.core.activity.DeviceKind
 import app.openhealth.core.activity.DeviceLinkState
@@ -186,21 +187,26 @@ class BleHealthManager(
         }
     }
 
+    /**
+     * Writes everything the buffer holds as one batch. A batch that cannot be written
+     * goes back into the buffer and is tried again on the next tick: a reading is
+     * dropped only when the buffer overflows, never because one attempt failed.
+     */
     fun flush() {
         val drained = buffer.drain()
         if (drained.isEmpty()) return
-        drained.forEach { reading -> write(reading) }
+        if (!writeAll(drained)) drained.forEach(buffer::add)
     }
 
     @SuppressLint("MissingPermission")
     fun close() {
+        flush()
         stopScan()
         connections.values.forEach { gatt -> runCatching { gatt.close() } }
         connections.clear()
         handler.removeCallbacksAndMessages(null)
     }
 
-    /** Restores the links a person expected to be live when the app opens. */
     /** Called once when the app starts, so a paired strap reconnects by itself. */
     fun reconnectPaired() {
         store.devices.registry().devices.filter { it.autoConnect }.forEach { device ->
@@ -226,6 +232,9 @@ class BleHealthManager(
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 connections.remove(address)
                 _heartRate.value = null
+                // The link dropping is exactly when the batch must land: whatever the
+                // strap sent since the last tick is written before anything else.
+                flush()
                 val paired = store.devices.registry().byAddress(address)
                 val retry = paired != null && BleRetry.shouldRetry(attempt, paired.autoConnect)
                 if (retry) {
@@ -239,36 +248,58 @@ class BleHealthManager(
             }
         }
 
+        /** The characteristics still waiting for their CCCD write, in order. */
+        private val pendingSubscriptions = ArrayDeque<BluetoothGattCharacteristic>()
+
         /**
          * Subscribes to every measurement characteristic the kind defines and the
          * device actually exposes. A scale with impedance sends its body composition on
          * a second characteristic, so subscribing only to the first would silently drop
          * body fat (`pr.md` §6.18, ADR 0013 §4).
+         *
+         * Android allows **one** GATT operation in flight per connection, so the
+         * descriptor writes are queued and the next one starts when the previous one
+         * reports back. Issuing them in a loop makes every write after the first return
+         * false, which is how a second characteristic ends up never subscribed at all.
          */
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) return
             val service = gatt.getService(java.util.UUID.fromString(kind.serviceUuid)) ?: return
+            pendingSubscriptions.clear()
             kind.measurementUuids.forEach { uuid ->
-                val characteristic = service.getCharacteristic(java.util.UUID.fromString(uuid))
-                    ?: return@forEach
-                subscribe(gatt, characteristic)
+                service.getCharacteristic(java.util.UUID.fromString(uuid))
+                    ?.let(pendingSubscriptions::addLast)
             }
+            subscribeNext(gatt)
             flush()
             scheduleFlush()
         }
 
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int,
+        ) {
+            subscribeNext(gatt)
+        }
+
         @SuppressLint("MissingPermission")
-        private fun subscribe(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            gatt.setCharacteristicNotification(characteristic, true)
-            val descriptor = characteristic.getDescriptor(CCCD_UUID) ?: return
-            val indication = characteristic.properties and
-                BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
-            descriptor.value = if (indication) {
-                BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-            } else {
-                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+        private fun subscribeNext(gatt: BluetoothGatt) {
+            while (pendingSubscriptions.isNotEmpty()) {
+                val characteristic = pendingSubscriptions.removeFirst()
+                gatt.setCharacteristicNotification(characteristic, true)
+                val descriptor = characteristic.getDescriptor(CCCD_UUID) ?: continue
+                val indication = characteristic.properties and
+                    BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+                descriptor.value = if (indication) {
+                    BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                } else {
+                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                }
+                // Accepted: the next one waits for onDescriptorWrite.
+                if (runCatching { gatt.writeDescriptor(descriptor) }.getOrDefault(false)) return
             }
-            gatt.writeDescriptor(descriptor)
         }
 
         @Suppress("OVERRIDE_DEPRECATION")
@@ -281,10 +312,6 @@ class BleHealthManager(
         }
     }
 
-    /**
-     * The decoder is chosen by the characteristic the packet arrived on, never by the
-     * kind of device: a scale's two characteristics carry two different layouts.
-     */
     /** A batched write tick: heart rate at 1 Hz must not mean 3,600 DB writes an hour. */
     private val flushTick = object : Runnable {
         override fun run() {
@@ -298,15 +325,24 @@ class BleHealthManager(
         handler.postDelayed(flushTick, FLUSH_INTERVAL_MILLIS)
     }
 
+    /**
+     * The decoder is chosen by the characteristic the packet arrived on, never by the
+     * kind of device: a scale's two characteristics carry two different layouts.
+     *
+     * A streaming measurement joins the batch ([BleWritePolicy]); anything else is
+     * written straight away and only joins the batch if that write failed.
+     */
     private fun decode(characteristicUuid: String, value: ByteArray, address: String) {
         val decoded = runCatching {
             GattCodec.decode(characteristicUuid, value, zone)
         }.getOrNull() ?: return
         if (decoded is GattMeasurement.HeartRate) _heartRate.value = decoded.bpm
         val reading = BufferedReading(address, kind(decoded), decoded, clock.now())
-        if (!write(reading)) buffer.add(reading)
-        // A measurement that could not be written waits for the next flush instead of
-        // retrying in a tight loop on the GATT callback thread.
+        if (BleWritePolicy.isStreaming(decoded) || !writeAll(listOf(reading))) {
+            buffer.add(reading)
+        }
+        // The batch lands on the next tick rather than retrying in a tight loop on the
+        // GATT callback thread.
         scheduleFlush()
     }
 
@@ -317,39 +353,51 @@ class BleHealthManager(
     }
 
     /**
-     * Writes one measurement under the device's own source. A failed write is buffered by
-     * the caller and retried on reconnect; a measurement is never silently dropped.
+     * Writes a batch of measurements under each device's own source, in one transaction,
+     * so a minute of heart rate is one write and one day rebuild rather than sixty of
+     * each. Every reading still gets its own layer-1 raw record, referenced from the
+     * observation's provenance (`pr.md` §7.1).
+     *
+     * Returns false if nothing could be written; the caller keeps the batch buffered.
      */
-    private fun write(reading: BufferedReading): Boolean = runCatching {
-        val device = store.devices.registry().byAddress(reading.address)
-        val sourceId = DeviceCapabilities.sourceIdFor(reading.kind, reading.address)
-        val label = device?.name ?: "Bluetooth device"
-        ensureSource(sourceId, label, device)
-        val recordedAt = reading.at
-        val payload = "device=${reading.address};kind=${reading.kind.name};" +
-            "at=${reading.at.toEpochMilliseconds()};measurement=${reading.measurement}"
-        val rawId = RawRecordId(ids.newId())
-        val raw = RawRecord(
-            id = rawId,
-            sourceId = sourceId,
-            sourceKind = SourceKind.API,
-            receivedAt = recordedAt,
-            recordedAt = recordedAt,
-            happenedAt = reading.at,
-            payloadHash = PayloadHash.sha256(payload),
-            idempotencyKey = "ble-raw:${reading.address}:" +
-                PayloadHash.sha256(payload).take(RAW_KEY_CHARS),
-            schemaVersion = RAW_SCHEMA,
-            device = label,
-            appVersion = appVersion,
-            payload = payload,
-        )
-        val observations = observationsFor(reading, sourceId, recordedAt, label, rawId)
-        if (observations.isEmpty()) return@runCatching false
-        store.observations.recordAll(observations, listOf(raw))
-        device?.let { paired ->
-            store.devices.touch(paired.id, recordedAt, reading = true)
+    private fun writeAll(readings: List<BufferedReading>): Boolean = runCatching {
+        if (readings.isEmpty()) return@runCatching true
+        val observations = mutableListOf<Observation>()
+        val raws = mutableListOf<RawRecord>()
+        val touched = LinkedHashMap<String, Instant>()
+        readings.forEach { reading ->
+            val device = store.devices.registry().byAddress(reading.address)
+            val sourceId = DeviceCapabilities.sourceIdFor(reading.kind, reading.address)
+            val label = device?.name ?: "Bluetooth device"
+            ensureSource(sourceId, label, device)
+            val recordedAt = reading.at
+            val payload = "device=${reading.address};kind=${reading.kind.name};" +
+                "at=${reading.at.toEpochMilliseconds()};measurement=${reading.measurement}"
+            val rawId = RawRecordId(ids.newId())
+            val readingObservations =
+                observationsFor(reading, sourceId, recordedAt, label, rawId)
+            if (readingObservations.isEmpty()) return@forEach
+            raws += RawRecord(
+                id = rawId,
+                sourceId = sourceId,
+                sourceKind = SourceKind.API,
+                receivedAt = recordedAt,
+                recordedAt = recordedAt,
+                happenedAt = reading.at,
+                payloadHash = PayloadHash.sha256(payload),
+                idempotencyKey = "ble-raw:${reading.address}:" +
+                    PayloadHash.sha256(payload).take(RAW_KEY_CHARS),
+                schemaVersion = RAW_SCHEMA,
+                device = label,
+                appVersion = appVersion,
+                payload = payload,
+            )
+            observations += readingObservations
+            device?.let { paired -> touched[paired.id] = recordedAt }
         }
+        if (observations.isEmpty()) return@runCatching false
+        store.observations.recordAll(observations, raws)
+        touched.forEach { (id, at) -> store.devices.touch(id, at, reading = true) }
         true
     }.getOrDefault(false)
 

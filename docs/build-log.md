@@ -2200,3 +2200,96 @@ Left open, recorded rather than guessed:
 ### iOS gate (`pr.md` §13.17)
 
 **Not yet.** No iOS, web, watchOS or desktop work was started.
+
+## B8 audit — round 2 (2026-11-25)
+
+A second independent pass, asked to verify the round-1 fixes and find what remains. The
+phone was not used (the device suite was in use elsewhere), so the evidence here is the
+JVM suite, both debug APKs and the code.
+
+### Round-1 fixes that hold
+
+| Claim | Evidence |
+|---|---|
+| FIT: `monitoring.cycles` raw = steps, `session.total_cycles` × 2 | `FitImportTest.theMonitoringCyclesFieldOnDiskIsTheStepCount` and `aWalkSessionCountsTwoStepsPerStride` assert the raw bytes on disk, so the old arithmetic cannot pass. |
+| Compressed timestamps replace the low five bits | `FitTime.expandCompressed`; the fixture's base sits 30 s past a boundary and a trailing record proves the record length. |
+| Developer-field sizes advance the stream | `FieldLayout.byteSize` and `readData` both add `developerFieldSizes`. |
+| Activity-type exclusion list | `FitActivityTypes.countsSteps` excludes cycling, swimming, sleep, sedentary, unmonitored, driving, transition and gym equipment; an unlabelled message still counts. |
+| Each sleep key has its own observation type | `HealthBusTypes.OBSERVATION_TYPES`; `AndroidHealthBus.sleepReadings` answers `SLEEP` with the total, a stage key with that stage, and `SLEEP_IN_BED` only when stages exist. |
+| History is a separate grant | `AppViewModel.syncHealthConnect(backfill = true)` requests first and syncs from the result; a refusal shows `toast_health_no_history` and marks nothing. |
+| Garmin over the bus is the Garmin family | `GarminDetector` splits each batch; a Garmin device writes under `garmin-hc` (kind Garmin, family `garmin`), anything else stays with the bus. |
+| Layer 1 for the sensors | `StepTracker.persist` writes one raw record per interval batch and `BleHealthManager` one per measurement, both referenced from provenance. |
+| Module gating | With Steps off the service is stopped, the figures and priority list are hidden and nothing is deleted. |
+| `INCOMPLETE_DAY` vs `GAP_FALLBACK` | `OneSourcePerDayPolicy` separates them and both have a sentence on the card. |
+| Repeat FIT import | `importFitFromBytes` returns `alreadyImported` on a known hash, parses nothing and records no sync. |
+| `reconnectPaired()` on start, one row per address | `AppViewModel.reconnectAndReconcile`; `DeviceRegistry.upsert` and `pair()` both key on the address. |
+| SFLOAT blood pressure | `GattCodec.readSFloat` for all four fields, reserved mantissas are "no value". |
+| UI | 200 % and RTL goldens, one accent line, glyphs by `DeviceKindName`, pinned sheet primary, forget confirmation. 246 goldens. |
+
+### What was still wrong, and is now fixed
+
+| Finding | Where | Fix |
+|---|---|---|
+| **Body composition decoded every field from the wrong offset.** The profile's mandatory body fat percentage sits immediately after the flags; the decoder read it from the end of the packet, so the timestamp, basal rate, impedance and weight were all two bytes early. Round 1 made the characteristic reachable, so this was a live wrong reading for any BIA scale. The test encoded the same misreading, so the round trip could not see it. | `core/.../activity/GattProfiles.kt:231` | The spec's order, with the fat percentage read at offset 2. The water field is a mass and becomes a percentage only against the weight in the same packet. Three tests, including the unknown-value sentinel and the water case. |
+| **Heart rate was still one write and one day rebuild per sample.** The "10-second batched flush" round 1 recorded only drains readings whose write *failed*; `decode` wrote every sample immediately, which is 3,600 transactions and 3,600 rollup rebuilds in an hour of training. The flush tick's own comment said the opposite. | `app-android/.../BleHealthManager.kt:301`, `:323` | `BleWritePolicy` decides: a strap's samples are buffered and written as one batch on the tick, on disconnect and on close; a single weight, composition or pressure is still written at once. `writeAll` writes a batch in one transaction with one raw record per reading. |
+| **A failed flush dropped its readings.** `flush()` drained the buffer and ignored the result, so a batch that could not be written was lost — the opposite of what the class claims. | `app-android/.../BleHealthManager.kt:189` | A batch that fails goes back into the buffer and is tried on the next tick. |
+| **A scale's second characteristic was never subscribed.** Round 1 subscribed both of a kind's characteristics in a loop, but Android allows one GATT operation in flight, so every descriptor write after the first returns false. Body fat still could not arrive. | `app-android/.../BleHealthManager.kt:249` | The writes are queued and the next starts from `onDescriptorWrite`; `onServicesDiscovered` also checks its status. |
+| **A 16-bit monitoring timestamp was resolved against the file's first full timestamp.** A real day file states the full time once on `monitoring_info` and abbreviates the rest, and the importer looked only at monitoring messages — so it found no reference at all and silently dropped the day. Where a reference did exist, everything past the nine-hour mark was misdated by 18 hours. | `integrations/.../fit/FitImport.kt:192` | The reference is tracked across every message and advanced by each resolved stamp (`FitTime.expandTruncated16`). `monitoring-16bit.fit` is a 24 h day whose walking stretch straddles the rollover; reverting either half of the fix fails the test. |
+| **`startForeground` could crash the app.** A health foreground service needs `ACTIVITY_RECOGNITION`; revoking it kills the process, and the next launch restarts the service and throws. Round 1 recorded this as fixed; the service was never touched. | `app-android/.../StepTrackingService.kt:223` | The call is guarded and the service stops itself on a refusal. The counter keeps counting and the next app start recovers the interval. |
+| Dead code: a `check(family.isNotBlank())` standing in for an unused local, a duplicated KDoc block above `addressStamp`, an unused `type` parameter, and a raw permission string beside the constant for it. | `ActivityPresenter.kt`, `Devices.kt`, `HealthBus.kt`, `AppViewModel.kt` | Removed or replaced. |
+| The test counts recorded for B8 were wrong in both directions (`:core` 244 or 246, "8 tools:fixtures" when `tools/fixtures` has one test and the three tools have ten between them). | this file, `AGENTS.md` | Counted from the JUnit XML and corrected. |
+
+### What this round deliberately did not change
+
+- **`monitoring.cycles`: delta or cumulative** is still open and still needs a real
+  Garmin file. Nothing here guesses at it.
+- **`SLEEP_DURATION` is the session's whole span,** so a night with stages counts its
+  awake time as sleep, and `SLEEP_IN_BED` repeats the same number. Nothing displays
+  either yet; B9 should decide whether sleep duration is the span or the span minus the
+  awake stages before it puts one on Today.
+- **`ensureSource(GARMIN_HC_SOURCE, …)` runs on every sync,** so the registry gains a
+  Garmin row even on a phone with no Garmin device. It is harmless (the priority list
+  only lists sources that reported steps) but it is a row that describes nothing.
+
+### Still for the owner
+
+- A real Garmin export, the 24 h battery run, real strap pairing and the device sweep are
+  unchanged from round 1.
+- **The device suite has not run against these fixes.** `BleHealthManager` and
+  `StepTrackingService` have no JVM coverage, so the batching, the CCCD queue and the
+  foreground-service guard are reviewed code, not executed code. The pure halves
+  (`BleWritePolicy`, `MeasurementBuffer`, `BleRetry`, every decoder) are covered by
+  `BleSessionTest` and `GattCodecTest`.
+
+`./gradlew check` is green: **515 JVM tests** (252 `:core`, 111 `:data`, 27
+`:integrations`, 115 `:ui`, 10 across the three tools) with ktlint, Detekt,
+`checkPortability`, `checkLicences`, `checkDesignTokens` and both lint variants.
+`./gradlew :app-android:assembleDebug` builds both the `play` and `fdroid` APKs.
+
+### Plan audit, round 2
+
+The second headless round verified the first round's fixes and found six more, all fixed
+with tests:
+
+- **Body composition was decoded from the wrong offset.** 0x2A9C's mandatory body fat
+  percentage sits immediately after the flags, not at the end; every optional field was
+  two bytes early. Water is a mass and now becomes a percentage only against the weight in
+  the same packet. Three tests.
+- **The 10-second BLE flush only drained failed writes**, so heart rate still wrote and
+  rebuilt a day every second. `BleWritePolicy` batches a strap's samples (one transaction
+  per tick) and writes a single scale or cuff reading at once.
+- **A scale's second characteristic was never subscribed.** Android allows one GATT
+  operation in flight, so the descriptor writes are now queued through `onDescriptorWrite`.
+- **A failed flush dropped its readings.** They go back into the buffer and are retried.
+- **A 16-bit monitoring timestamp resolved against the wrong reference.** Real day files
+  state the time once on `monitoring_info` and abbreviate the rest; the importer now keeps
+  the reference from whichever message last carried a full timestamp, with a new
+  `monitoring-16bit.fit` fixture whose walking stretch straddles the rollover.
+- **The `startForeground` guard from round 1 had not been applied** (the edit missed the
+  file). It is in place now: a refused start stops the service instead of crashing.
+
+The BLE batching, the CCCD queue and the service guard are reviewed code with pure
+coverage (`BleSessionTest`, `GattCodecTest`) but no executed radio; that is recorded as
+open. One semantic point is deliberately left for B9: `SLEEP_DURATION` is the whole
+session span, so a staged night's awake time counts as sleep and `SLEEP_IN_BED` repeats the
+same number. Nothing displays sleep yet; B9 settles it before sleep reaches Today.

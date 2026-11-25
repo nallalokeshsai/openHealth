@@ -24,6 +24,7 @@ object FitFixtureWriter {
         val files = listOf(
             "activity-walk.fit" to FitFixtures.activityWalk(),
             "daily-monitoring.fit" to FitFixtures.dailyMonitoring(),
+            "monitoring-16bit.fit" to FitFixtures.monitoringTimestamp16(),
             "big-endian.fit" to FitFixtures.bigEndian(),
             "compressed-timestamp.fit" to FitFixtures.compressedTimestamp(),
             "corrupt-crc.fit" to FitFixtures.corrupt(FitFixtures.activityWalk()),

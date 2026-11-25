@@ -228,7 +228,18 @@ object GattCodec {
         return GattMeasurement.Weight(kilograms, bmi, height, at)
     }
 
-    @Suppress("CyclomaticComplexMethod")
+    /**
+     * Body Composition Measurement (0x2A9C). The profile's field order is **flags, then
+     * the mandatory body fat percentage**, and only then the optional fields in flag-bit
+     * order: time stamp, user id, basal metabolism, muscle percentage, muscle mass, fat
+     * free mass, soft lean mass, body water mass, impedance, weight, height.
+     *
+     * Body fat is not a trailing field. Reading it from the end of the packet puts every
+     * optional field two bytes early, so a BIA scale's timestamp, impedance and weight
+     * all come out of the wrong bytes and the fat percentage is read from the height
+     * field or past the end.
+     */
+    @Suppress("CyclomaticComplexMethod", "LongMethod")
     fun decodeBodyComposition(
         bytes: ByteArray,
         zone: TimeZone = TimeZone.UTC,
@@ -244,6 +255,9 @@ object GattCodec {
             raw * WEIGHT_SI_RESOLUTION_KG
         }
         var index = 2
+        val rawFat = readUInt16(bytes, index)
+        index += 2
+        val fatPercent = rawFat.takeIf { it != UINT16_UNKNOWN }?.let { it * BODY_FAT_RESOLUTION }
         var at: Instant? = null
         if (flags and BODY_FLAG_TIMESTAMP != 0) {
             at = readDateTime(bytes, index, zone)
@@ -252,7 +266,7 @@ object GattCodec {
         if (flags and BODY_FLAG_USER_ID != 0) index += 1
         var basal: Int? = null
         if (flags and BODY_FLAG_BASAL_METABOLISM != 0) {
-            basal = readUInt16(bytes, index)
+            basal = readUInt16(bytes, index).takeIf { it != UINT16_UNKNOWN }
             index += 2
         }
         var musclePercent: Double? = null
@@ -264,11 +278,10 @@ object GattCodec {
         if (flags and BODY_FLAG_MUSCLE_MASS != 0) index += 2
         if (flags and BODY_FLAG_FAT_FREE_MASS != 0) index += 2
         if (flags and BODY_FLAG_SOFT_LEAN_MASS != 0) index += 2
-        var waterPercent: Double? = null
+        var waterKilograms: Double? = null
         if (flags and BODY_FLAG_WATER_MASS != 0) {
             val raw = readUInt16(bytes, index)
-            // The profile reports water as a mass; a percentage needs the weight below.
-            waterPercent = raw.toDouble().takeIf { raw != UINT16_UNKNOWN }
+            if (raw != UINT16_UNKNOWN) waterKilograms = mass(raw)
             index += 2
         }
         var impedance: Double? = null
@@ -283,10 +296,13 @@ object GattCodec {
             if (raw != UINT16_UNKNOWN) weightKg = mass(raw)
             index += 2
         }
-        val bodyFat = if (index + 1 < bytes.size) readUInt16(bytes, index) else null
-        val fatPercent = bodyFat
-            ?.takeIf { it != UINT16_UNKNOWN }
-            ?.let { it * BODY_FAT_RESOLUTION }
+        // The profile reports water as a mass, so a percentage needs the weight from the
+        // same packet. Without one there is no honest percentage to report.
+        val waterPercent = if (waterKilograms != null && weightKg != null && weightKg > 0) {
+            waterKilograms / weightKg * PERCENT
+        } else {
+            null
+        }
         return GattMeasurement.BodyComposition(
             bodyFatPercent = fatPercent,
             kilograms = weightKg,
@@ -458,6 +474,7 @@ object GattCodec {
     private const val WEIGHT_FLAG_USER_ID = 0x04
     private const val IMPEDANCE_RESOLUTION = 0.1
     private const val BODY_FAT_RESOLUTION = 0.1
+    private const val PERCENT = 100.0
     private const val BP_FLAG_KILOPASCAL = 0x01
     private const val BP_FLAG_TIMESTAMP = 0x02
     private const val BP_FLAG_PULSE = 0x04

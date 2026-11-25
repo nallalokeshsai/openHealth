@@ -218,9 +218,10 @@ Non-negotiables in the visual contract:
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
 - Last completed phase: **B8 Activity sources** (2026-11-25); next is **B9 Today and Stats**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **505 JVM tests**
-  (246 `:core`, 111 `:data`, 25 `:integrations`, 115 `:ui`, 8 tools:fixtures) and **40
-  instrumented tests** pass on the owner's phone. `:ui` holds the B1 design system, the B3
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **515 JVM tests**
+  (252 `:core`, 111 `:data`, 27 `:integrations`, 115 `:ui`, 10 across the three tools).
+  **40 instrumented tests** passed on the owner's phone before the round-2 audit fixes;
+  they have not been re-run since. `:ui` holds the B1 design system, the B3
   screens, the B4 body map, the B5 Train surfaces, the B6 Nutrition surfaces, the B7 Vitals
   surfaces and the B8 Devices page: **246 goldens** in dark, light, 200 % text and RTL.
   Both the `play` and `fdroid` debug APKs build.
@@ -237,9 +238,11 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   mark, consent, the sync book) with no schema change; `LocalStore` also exposes the raw
   repository.
 - `:app-android` adds the Health Connect bus (read-only, `connect-client` 1.1.0), the
-  foreground step service of type `health` with its boot receiver, the standard-GATT BLE
-  manager (persist on arrival, 10 s batched flush, reconnect), the Devices presenter, the
-  privacy rationale activity and the manifest permissions.
+  foreground step service of type `health` with its boot receiver (it stops itself rather
+  than crash when the platform refuses the start), the standard-GATT BLE manager (a
+  strap's samples batched every 10 s, a single measurement written at once, queued CCCD
+  writes, reconnect), the Devices presenter, the privacy rationale activity and the
+  manifest permissions.
 - `:ui` adds the Devices page, the correction and provenance sheets, the forget
   confirmation and 8 goldens; `OhPageHeader` now wraps at 200 % text.
 - B8's decisions are `docs/adr/0013-activity-sources.md`; `NOTICE.md` records the Health
@@ -247,6 +250,8 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Open issues (see `docs/build-log.md`): the 24 h battery run and real strap pairing are
   the owner's hand-over; no genuine Garmin export has been parsed (the step scales are
   read from the published profile and cross-checked, but some firmware reports monitoring
-  cycles cumulatively); Health Connect's own zone offsets are not carried through, so a
+  cycles cumulatively); the BLE batching, the CCCD queue and the foreground-service guard
+  from the round-2 audit are reviewed but not yet executed on a phone; Health Connect's
+  own zone offsets are not carried through, so a
   history imported after a move is filed in the current zone; the BLE radio path has no
   automated coverage without a second device.

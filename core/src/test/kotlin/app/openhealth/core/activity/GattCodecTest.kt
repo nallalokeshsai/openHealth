@@ -88,16 +88,21 @@ class GattCodecTest {
         assertEquals(Instant.parse("2026-11-23T08:30:00Z"), decoded.at)
     }
 
+    /**
+     * The profile puts the mandatory body fat percentage immediately after the flags,
+     * before every optional field. Reading it from the end of the packet instead shifts
+     * the timestamp, the basal rate, the impedance and the weight two bytes early, so
+     * this packet is the specification's order and nothing else decodes it.
+     */
     @Test
     fun bodyCompositionDecodesFatWeightAndImpedance() {
-        // Flags: timestamp, basal metabolism, impedance, weight and the trailing fat %.
         val packet = bytes(
-            0x0A, 0x06,
-            0xEA, 0x07, 0x0B, 0x17, 0x08, 0x1E, 0x00,
-            0x10, 0x27,
-            0x2C, 0x01,
-            0xB0, 0x36,
-            0xB4, 0x00,
+            0x0A, 0x06, // flags: timestamp, basal metabolism, impedance, weight
+            0xB4, 0x00, // body fat 18.0 % (mandatory, right after the flags)
+            0xEA, 0x07, 0x0B, 0x17, 0x08, 0x1E, 0x00, // 2026-11-23T08:30:00
+            0x10, 0x27, // basal metabolism 10,000 kJ
+            0x2C, 0x01, // impedance 30.0 ohm
+            0xB0, 0x36, // weight 70.000 kg
         )
         val decoded = GattCodec.decodeBodyComposition(packet, TimeZone.UTC)
         assertEquals(70.0, decoded.kilograms ?: 0.0, 1e-9)
@@ -105,6 +110,34 @@ class GattCodecTest {
         assertEquals(10_000.0, decoded.basalMetabolismKiloJoules?.toDouble() ?: 0.0, 1e-9)
         assertEquals(30.0, decoded.impedanceOhms ?: 0.0, 1e-9)
         assertEquals(Instant.parse("2026-11-23T08:30:00Z"), decoded.at)
+    }
+
+    /**
+     * Water arrives as a mass, not a percentage. A raw mass stored as a percentage would
+     * report a 40 kg body water as 8,000 %, so the percentage is derived from the weight
+     * in the same packet and is absent when the scale did not send one.
+     */
+    @Test
+    fun bodyCompositionTurnsTheWaterMassIntoAPercentageOfTheWeight() {
+        // Flags: body water mass and weight. Fat, then water, then weight.
+        val withWeight = bytes(0x00, 0x05, 0xB4, 0x00, 0xE0, 0x1F, 0xB0, 0x36)
+        val decoded = GattCodec.decodeBodyComposition(withWeight, TimeZone.UTC)
+        assertEquals(40.8 / 70.0 * 100.0, decoded.bodyWaterPercent ?: 0.0, 1e-9)
+
+        val withoutWeight = bytes(0x00, 0x01, 0xB4, 0x00, 0xE0, 0x1F)
+        assertNull(
+            GattCodec.decodeBodyComposition(withoutWeight, TimeZone.UTC).bodyWaterPercent,
+            "a water mass with no weight beside it is not a percentage",
+        )
+    }
+
+    /** A scale that measured no fat sends the unknown sentinel, not a reading of zero. */
+    @Test
+    fun bodyCompositionReportsNoFatRatherThanZero() {
+        val packet = bytes(0x00, 0x04, 0xFF, 0xFF, 0xB0, 0x36)
+        val decoded = GattCodec.decodeBodyComposition(packet, TimeZone.UTC)
+        assertNull(decoded.bodyFatPercent)
+        assertEquals(70.0, decoded.kilograms ?: 0.0, 1e-9)
     }
 
     @Test
@@ -180,11 +213,11 @@ class GattCodecTest {
         val weight = bytes(0x00, 0x60, 0x36)
         val composition = bytes(
             0x0A, 0x06,
+            0xB4, 0x00,
             0xEA, 0x07, 0x0B, 0x17, 0x08, 0x1E, 0x00,
             0x10, 0x27,
             0x2C, 0x01,
             0xB0, 0x36,
-            0xB4, 0x00,
         )
 
         val asWeight = GattCodec.decode(GattServices.WEIGHT_MEASUREMENT, weight, TimeZone.UTC)

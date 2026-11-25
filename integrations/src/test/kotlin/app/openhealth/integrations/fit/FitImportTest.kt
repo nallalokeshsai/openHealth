@@ -28,6 +28,8 @@ private const val WALKING_ACTIVITY_TYPE = 6L
 private const val SLEEP_ACTIVITY_TYPE = 7L
 private const val WALKING_SPORT = 11L
 private const val CYCLING_SPORT = 2L
+private const val MONITORING_BUCKET_SECONDS = 15L * 60
+private const val ONE_DAY_SECONDS = 24L * 60 * 60
 
 class FitImportTest {
 
@@ -81,6 +83,69 @@ class FitImportTest {
         assertTrue(import.steps.all { it.steps == MONITORING_STEPS_PER_BUCKET })
         assertTrue(import.steps.all { it.end > it.start })
         assertEquals(18_000L, import.steps.sumOf { it.steps })
+    }
+
+    /**
+     * The shape a watch actually writes a day in: `monitoring_info` carries the only
+     * full timestamp and the monitoring messages that follow abbreviate theirs to
+     * sixteen bits. The file spans 24 hours, which is longer than a 16-bit stamp can
+     * hold, so the stamps roll over once inside it.
+     *
+     * Resolving them against the file's first timestamp instead of the running one
+     * misdates everything past the nine-hour mark; looking only at monitoring messages
+     * for a reference finds none and loses the day outright.
+     */
+    @Test
+    fun aDayOfSixteenBitMonitoringTimestampsResolvesAgainstTheRunningTime() {
+        val import = FitImporter.import(fixture("monitoring-16bit.fit"), TimeZone.UTC)
+
+        assertEquals(FitStepSource.MONITORING, import.stepSource)
+        assertEquals(18_000L, import.stepTotal)
+        assertEquals(72, import.steps.size)
+
+        val dayStart = Instant.fromEpochSeconds(DAY_START_UNIX_SECONDS)
+        // The walking stretch runs from the sixth hour to the end of the day, so it
+        // straddles the point 65,536 s in where the 16-bit stamps wrap.
+        assertEquals(
+            dayStart + (25 * MONITORING_BUCKET_SECONDS).seconds,
+            import.steps.first().end,
+        )
+        assertEquals(
+            dayStart + ONE_DAY_SECONDS.seconds,
+            import.steps.last().end,
+            "the last bucket of the day is read past the 16-bit rollover",
+        )
+        assertTrue(
+            import.steps.all {
+                it.start >= dayStart && it.end <= dayStart + ONE_DAY_SECONDS.seconds
+            },
+            "every bucket lands inside the day the file describes",
+        )
+    }
+
+    /**
+     * The 16-bit expansion itself: the answer is the time nearest the reference, so a
+     * stamp whose low bits have wrapped below the reference's belongs to the next
+     * rollover, and one that has wrapped above belongs to the previous one.
+     */
+    @Test
+    fun aTruncatedTimestampExpandsToTheTimeNearestTheReference() {
+        val reference = 0x0001_FFF0L
+        assertEquals(
+            0x0002_0010L,
+            FitTime.expandTruncated16(reference, 0x0010L),
+            "a stamp just past a rollover is the next one, not 65,520 seconds earlier",
+        )
+        assertEquals(
+            0x0001_FFF5L,
+            FitTime.expandTruncated16(reference, 0xFFF5L),
+            "a stamp in the same rollover stays in it",
+        )
+        assertEquals(
+            0x0001_FFE0L,
+            FitTime.expandTruncated16(0x0002_0005L, 0xFFE0L),
+            "a stamp just before a rollover is the previous one",
+        )
     }
 
     /**
