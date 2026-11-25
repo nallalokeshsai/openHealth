@@ -100,6 +100,22 @@ object AdiposeModel {
     }
 
     /**
+     * The layer at a point between two dates, for the before/after scrub (`DESIGN.md`
+     * §9.1.1). A layer that was not drawn at one end is not invented at that end: the
+     * caller only offers a scrub when both ends have a layer.
+     */
+    fun blend(from: AdiposeLayer, to: AdiposeLayer, fraction: Double): AdiposeLayer {
+        val t = fraction.coerceIn(0.0, 1.0)
+        return AdiposeLayer(
+            MuscleRegion.entries.associateWith { region ->
+                val start = from.thicknessFor(region)
+                val end = to.thicknessFor(region)
+                start + (end - start) * t
+            },
+        )
+    }
+
+    /**
      * The person's own measurements that actually shaped this layer, as measurement
      * types, for the provenance sheet (`DESIGN.md` §9.1.1 Provenance, `pr.md` §2.2).
      *

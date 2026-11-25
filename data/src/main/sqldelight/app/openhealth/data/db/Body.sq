@@ -67,6 +67,9 @@ INSERT OR IGNORE INTO measurement(
 measurementById:
 SELECT * FROM measurement WHERE id = :id;
 
+measurementByIdempotencyKey:
+SELECT * FROM measurement WHERE idempotency_key = :key;
+
 measurementsForDay:
 SELECT * FROM measurement WHERE local_date = :localDate ORDER BY happened_at;
 
@@ -132,3 +135,80 @@ SELECT DISTINCT local_date FROM measurement ORDER BY local_date;
 
 deleteVital:
 DELETE FROM vital WHERE id = :id;
+
+-- Progress photos (pr.md §6.8, DESIGN.md §9.4). The bytes live in the encrypted database,
+-- never in shared storage, the media gallery or a platform backup. The metadata queries
+-- below never load the image; only photoById and photoThumbnailById do.
+CREATE TABLE body_photo (
+    id TEXT NOT NULL PRIMARY KEY,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    caption TEXT,
+    notes TEXT,
+    mime TEXT NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    bytes_b64 TEXT NOT NULL,
+    thumb_b64 TEXT,
+    sha256 TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX body_photo_date ON body_photo(local_date);
+CREATE INDEX body_photo_happened ON body_photo(happened_at);
+
+insertPhoto:
+INSERT OR IGNORE INTO body_photo(
+    id, local_date, zone_id, happened_at, recorded_at, source_id, caption, notes, mime,
+    width, height, bytes_b64, thumb_b64, sha256, idempotency_key, device, app_version,
+    revision
+) VALUES (
+    :id, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId, :caption, :notes, :mime,
+    :width, :height, :bytesB64, :thumbB64, :sha256, :idempotencyKey, :device, :appVersion,
+    :revision
+);
+
+photoById:
+SELECT * FROM body_photo WHERE id = :id;
+
+-- The timeline needs a caption, a date and a source, never the image bytes. The gallery
+-- and the timeline both read this shape.
+photoTimeline:
+SELECT id, local_date, zone_id, happened_at, recorded_at, source_id, caption, device,
+    revision
+FROM body_photo WHERE id = :id;
+
+vitalByObservationId:
+SELECT * FROM vital WHERE observation_id = :id LIMIT 1;
+
+photoThumbnailById:
+SELECT thumb_b64, bytes_b64 FROM body_photo WHERE id = :id;
+
+photosBetween:
+SELECT * FROM body_photo
+WHERE local_date >= :from AND local_date <= :to
+ORDER BY happened_at DESC;
+
+latestPhotos:
+SELECT * FROM body_photo ORDER BY happened_at DESC LIMIT :limit;
+
+-- The gallery needs a date, a caption and a thumbnail, never the full image: loading every
+-- full photo to draw a 110 dp tile would read megabytes per rebuild (DESIGN.md §9.4).
+photoGallery:
+SELECT id, local_date, happened_at, recorded_at, source_id, caption, thumb_b64
+FROM body_photo ORDER BY happened_at DESC LIMIT :limit;
+
+allPhotos:
+SELECT * FROM body_photo ORDER BY happened_at;
+
+countPhotos:
+SELECT count(*) FROM body_photo;
+
+deletePhoto:
+DELETE FROM body_photo WHERE id = :id;

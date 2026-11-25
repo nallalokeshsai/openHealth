@@ -22,6 +22,12 @@ enum class CitationKey {
     IOM_MACRONUTRIENTS_2005,
     USDA_FOODDATA_CENTRAL,
     OPEN_FOOD_FACTS,
+    ESH_HYPERTENSION_2023,
+    AHA_RESTING_HEART_RATE,
+    AHA_LOW_BLOOD_PRESSURE,
+    WHO_PULSE_OXIMETRY_2011,
+    GENEVA_BODY_TEMPERATURE_2019,
+    ADA_GLYCEMIC_TARGETS_2026,
     APP_RULE,
 }
 
@@ -219,8 +225,77 @@ object Citations {
             publication = "docs/adr/0005-core-and-data.md",
             url = "https://github.com/nallalokeshsai/openHealth/blob/main/" +
                 "docs/adr/0005-core-and-data.md",
-            supports = "A rule this app defines itself (recovery thresholds, " +
-                "readiness v1, safety floors)",
+            supports = "A rule this app defines itself (recovery thresholds, readiness " +
+                "v1, safety floors, the weight trend and weekly rate)",
+        ),
+        Citation(
+            key = CitationKey.ESH_HYPERTENSION_2023,
+            title = "2023 ESH Guidelines for the management of arterial hypertension",
+            authors = "Mancia G, Kreutz R, Brunström M, et al.; European Society of " +
+                "Hypertension",
+            year = 2023,
+            publication = "Journal of Hypertension 41(12):1874-2071",
+            url = "https://doi.org/10.1097/HJH.0000000000003480",
+            supports = "The home blood-pressure threshold (135/85 mmHg; office 140/90) " +
+                "and the home-measurement protocol (duplicate morning and evening " +
+                "readings for 7 days, 3 days minimum, first day discarded)",
+            licenceNote = "A published clinical threshold; no guideline text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.AHA_RESTING_HEART_RATE,
+            title = "All About Heart Rate",
+            authors = "American Heart Association",
+            year = 2024,
+            publication = "American Heart Association health topic",
+            url = "https://www.heart.org/en/health-topics/high-blood-pressure/" +
+                "the-facts-about-high-blood-pressure/all-about-heart-rate-pulse",
+            supports = "The 60-100 beats-per-minute resting heart rate range for adults",
+            licenceNote = "A published reference range; no page text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.AHA_LOW_BLOOD_PRESSURE,
+            title = "Low Blood Pressure: When Blood Pressure Is Too Low",
+            authors = "American Heart Association",
+            year = 2024,
+            publication = "American Heart Association health topic",
+            url = "https://www.heart.org/en/health-topics/low-blood-pressure",
+            supports = "The 90/60 mmHg lower bound below which a reading is called low",
+            licenceNote = "A published reference bound; no page text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.WHO_PULSE_OXIMETRY_2011,
+            title = "Pulse Oximetry Training Manual",
+            authors = "World Health Organization",
+            year = 2011,
+            publication = "WHO Patient Safety Programme, Geneva",
+            url = "https://www.who.int/publications/i/item/9789241501133",
+            supports = "The 95-100 % oxygen-saturation range for a healthy adult at sea " +
+                "level",
+            licenceNote = "A published reference range; no manual text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.GENEVA_BODY_TEMPERATURE_2019,
+            title = "Normal Body Temperature: A Systematic Review",
+            authors = "Geneva II, Cuzzo B, Fazili T, Javaid W",
+            year = 2019,
+            publication = "Open Forum Infectious Diseases 6(4):ofz032",
+            url = "https://doi.org/10.1093/ofid/ofz032",
+            supports = "The 36.59 +/- 0.43 degrees Celsius pooled adult temperature; the " +
+                "mean +/- 2 SD band is approximately 35.7-37.5 across measurement sites",
+            licenceNote = "A published reference range; the article text is not reproduced.",
+        ),
+        Citation(
+            key = CitationKey.ADA_GLYCEMIC_TARGETS_2026,
+            title = "2. Diagnosis and Classification of Diabetes: Standards of Care in " +
+                "Diabetes-2026",
+            authors = "American Diabetes Association Professional Practice Committee",
+            year = 2026,
+            publication = "Diabetes Care 49(Suppl 1):S27-S49",
+            url = "https://doi.org/10.2337/dc26-S002",
+            supports = "Fasting plasma glucose below 5.6 mmol/L and the two-hour value " +
+                "below 7.8 mmol/L (Table 2.2); 3.9 mmol/L as the Level 1 low threshold " +
+                "in Table 6.4 of the same standards (dc26-S006)",
+            licenceNote = "Published thresholds; the standards text is not reproduced.",
         ),
     )
 

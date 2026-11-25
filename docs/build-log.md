@@ -1703,3 +1703,226 @@ from the entries through the same `sumInOrder`); the deferrals already listed be
 - Meal templates cannot be edited or deleted in the UI yet.
 - Barcode capture needs a physical barcode for the final manual confirmation; the owner
   can aim the phone at any EAN/UPC label.
+
+---
+
+## B7 — Body and vitals
+
+**Status:** Completed · **Date:** 2026-11-25 · **Branch:** `build/b7-body-and-vitals`
+**Device re-check pending:** the phone was disconnected from USB during the QA sweep; the
+final visual pass (weight-neutral, photo pick, 200 %/RTL on the panel) is the owner hand-over.
+**Goal:** the Vitals tab, with the dynamic body model driven by the owner's real data
+(`BUILD-ROADMAP.md` §B7).
+
+### What this phase added
+
+- **`:core`**
+  - `MeasurementSite` (nine anchor sites plus wrist and ankle) and the four composition
+    values, with one storage key per site, so onboarding, the sheet and the CSV agree.
+  - `WeightTrendCalculator`: one daily value per day (latest check-in), the signed change,
+    and a least-squares weekly rate over 28 days that needs three distinct days across a
+    week. `AdiposeModel.blend` gives the before/after scrub an exact interpolation between
+    two real layers.
+  - `VitalRanges`: seven cited reference ranges (home BP systolic and diastolic, resting
+    heart rate, oxygen saturation, temperature, fasting and two-hour glucose), the
+    four-zone clinical scale for BP and glucose, and `VitalContextCode` for the reading's
+    arm, position, meal and home-protocol slot. A range cannot be constructed without a
+    `CitationKey`.
+  - `BloodPressureProtocol`: seven days × two morning + two evening readings, the next
+    short slot, and a home average that leaves out the first day as ESH 2023 asks.
+  - `BodyCsv`: `date,type,value,unit,method,notes`, RFC 4180 quoting, unit conversion
+    before storage, and plausible-range checks.
+- **`:data`** — schema **v8** (`7.sqm`): the `body_photo` table, its date/happened indexes
+  and its timeline branch; `ExportTables`, `TrashEntity.PHOTO` and the timeline query
+  include it. The LAST rollup tie-break uses `recorded_at` so two same-millisecond
+  check-ins cannot reorder the day. A v7 database gains the table and a photo round-trips
+  through the timeline (migration test).
+- **`:ui`** — the Vitals root (weight card, dynamic body model with measurement anchors
+  and a before/after scrub, composition grid, measurements, photos, grouped readings,
+  CSV), the Vitals detail page (KPI band, cited range strip, 30-day line, context chips,
+  readings with provenance, Add reading, home-BP protocol sheet), the Add-reading and
+  Add-measurement sheets, the clinical range strip, the line chart with scrub and table,
+  the before/after photo slider, and the measurement anchors on `OhBodyMap`. Sixteen new
+  goldens in dark, light, 200 % text and RTL. A wording test scans the string resources
+  and fails on "risk", "warning", "diagnose" or "abnormal".
+- **`:app-android`** — `BodyPresenter` (all Vitals reads and writes), the encrypted photo
+  codec (re-encode, EXIF dropped, 1600 px + 256 px thumbnail, SHA-256), the schema v8
+  wiring, SAF CSV import/export, the system photo picker, the Vitals route and its detail
+  route, and dual-write of a reading as a layer-2 observation and a layer-4 vital row.
+- **Docs** — ADR 0012 (ranges, photos, measurement model), `NOTICE.md` with every range
+  and its source, `DESIGN.md` Appendix A with the measurement anchor's 30 % glow,
+  `Tech-Stack.md` §5 version 2.4 for the in-database photo decision.
+
+### Citations corrected before shipping
+
+The citation check caught two facts that would have been wrong on screen. The 2023
+hypertension guideline is **ESH-only** (not a joint ESC/ESH document), and Geneva et al.
+2019 reports a mean ± 2 SD of **36.16-37.02 °C**, not the consumer shorthand 36.1-37.2.
+The cited ranges are ESH 2023 · home below 135/85; AHA 2024 · 60-100 bpm; WHO 2011 ·
+95-100 %; Geneva 2019 · 36.2-37.0 °C; ADA 2026 · fasting 3.9-5.6 mmol/L and the two-hour
+75 g OGTT below 7.8 mmol/L. `NOTICE.md` records each one.
+
+### Exit tests (`BUILD-ROADMAP.md` §B7)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| Changing waist or body fat visibly changes the figure | `VitalsExitTest.changingWaistOrBodyFatChangesTheFigureAndOffersABeforeAfter`: a man at 180 cm with neck 38 and waist 86 gets a layer; waist 102 makes `maxThickness` strictly larger; a body-fat row 40 days old gives a `before` map and date. `VitalsSemanticsTest.theBodyModelChangesWhenBodyFatChanges` also asserts 12 % < 30 % and the blend endpoints. | **pass** |
+| A before/after scrub works | The same instrumented test proves the before layer exists; `AdiposeModel.blend` is asserted at 0, 0.5 and 1.0; the slider is in `VitalsRootScreen` with the §9.4 handle and slider semantics. Goldens: `vitals-root`. | **pass** |
+| A BP reading shows range and citation with no alarming wording | `VitalsExitTest.aBloodPressureReadingIsOnePairWithItsCitedRange` stores one reading as a systolic/diastolic pair plus its pulse, opens the detail and asserts `128/78`, `below 135/85`, `ESH 2023`, two strips and the left-arm context. `VitalsSemanticsTest.aBloodPressureReadingShowsItsRangeAndCitation` asserts the on-screen citation, "Inside the published range" and the absence of "risk", "warning" and "abnormal". | **pass** |
+| Every number opens the provenance sheet | `VitalsSemanticsTest.theWeightNumberOpensItsProvenanceSheet` taps 82.4 and finds the sheet with its source. The composition tiles, measurement rows, reading rows, weekly rate (formula sheet), goal and fat source all open one; the code has no number without a row or sheet. | **pass** |
+| A wording test fails on "risk", "warning", "diagnos" and "abnormal" used as a verdict | `MedicalWordingTest.theWordingRuleFailsOnTheVerdictWords` proves the regex rejects all four and accepts the neutral range sentences; `noProductStringUsesAVerdict` scans all 500+ string resources. The two disclaimers that say "does not diagnose" are the only allowlisted strings. | **pass** |
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew check` | **BUILD SUCCESSFUL**, 226 tasks: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, 427 JVM tests and 238 goldens. Both debug flavours assemble. |
+| `:core:test` | **197 tests**, including the B7 domain tests: weight trend and tie-break, CSV parse/round-trip/unit conversion, the cited ranges and context codes, the four-stop strip, the BP protocol's 28-reading window and day-one exclusion. |
+| `:data:test` | **103 tests**, including the v7 → v8 migration test (the photo table and its timeline branch), the export registry with `body_photo`, and a restore of a bundle written before photos. |
+| `:ui:testDebugUnitTest` | **107 tests**, including the 16 new Vitals goldens (4 screens × dark, light, 200 % text, RTL), the semantics assertions and the wording test. **238 goldens** in total. |
+| `:app-android:connectedPlayDebugAndroidTest` on the phone | **35/35**; the five B7 scenarios and all 30 earlier B2-B6 scenarios passed. |
+| `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; both the `play` and `fdroid` debug variants build. |
+| Device walk-through | Vitals root, weight card, measurement sheet (waist, neck, body fat), body model with anchors and fat chip, body composition, readings, BP detail, provenance sheet and the home-BP protocol were opened on the owner's phone; no `AndroidRuntime:E` entry appeared. The photo picker opened; selecting a pushed test image was left incomplete when the USB connection dropped (see below). |
+
+### Device QA and the plan audit
+
+The exhaustive sweep and the headless plan audit are recorded in the next two sections;
+`issues.md` and the screenshots live outside the repository and are deleted when every
+entry is closed.
+
+### Device sweep and the issues it raised
+
+The sweep was run on the owner's phone with a fresh profile, then with real entries. Twelve
+issues were seen and fixed in the same run; each was re-checked on the phone after its fix
+where the phone was still attached:
+
+1. The weight card drew a one-point chart with an empty plot and two identical dates. The
+   chart is now shown only from two check-ins, and the table link takes its place.
+2. A blood-pressure pair at 128/78 was labelled "Outside the published range": the
+   diastolic value was being tested against the systolic range. The root now assesses each
+   number against its own cited range.
+3. The detail page's header sat under the status bar because `OhPageHeader` did not consume
+   the status inset. It does now, for every pushed page.
+4. The provenance sheet titled its raw-record row "Raw record kept" while its value said
+   "Raw record compacted". The title is now "Raw record".
+5. A measurement silhouette with anchors still exposed one muscle node per shape, so
+   TalkBack could read "Chest" twice. On the silhouette the anchors are the controls and
+   the muscle nodes are omitted when there is no muscle tap.
+6. The body CSV stayed visible in weight-neutral mode and with the Body module off. It is
+   now behind the same gates as the rest of the body surfaces.
+7. Manual sources appeared as "Manual" in the Vitals rows and sheets; they now say
+   "Entered by you" as `DESIGN.md` §7.2 asks.
+8. The weight table printed kilograms for an imperial profile; it converts now.
+9. The chart description was the phrase "Last 30 days"; it is now a sentence with the
+   reading count.
+10. A "Readings 4" count after one blood-pressure entry exposed that the pulse row (three
+    vital rows plus the layer-2 value) is a real record; the count and list are consistent.
+11. The weight-neutral switch was exercised in Settings; the code path is covered by the
+    `vitals-neutral` golden and the `VitalsSemanticsTest` weight-neutral assertion. The
+    visual confirmation on the phone was interrupted by the USB drop before it could be
+    re-checked.
+12. The photo picker opened from "Add a photo"; the picker's own media library did not show
+    a side-loaded test image before the phone disconnected, so selecting a real photo is
+    the one manual step left for the owner. The instrumented `VitalsExitTest` proves the
+    storage, thumbnail, before/after compare and Trash-restore path with real JPEG bytes.
+
+The phone's USB connection disappeared during the sweep (it is absent from `adb devices`
+and from `lsusb`). Everything that needs a device had already passed its instrumented run;
+the remaining visual confirmations (weight-neutral, photo pick, 200 % / RTL on the
+physical panel) are listed as the owner hand-over below and are not recorded as passed.
+
+### Independent reviews (three fresh reviewers) and the fixes
+
+The reviewers saw only the diff and the contract. Their confirmed findings were fixed in
+the same run; the important ones:
+
+- **Measurement anchors were semantics-only.** The 44 dp anchor had `onClick` semantics
+  but no pointer handler, so a sighted tap did nothing. It now has `ohClickable` as well.
+- **A later body-fat measurement was ignored.** `latestBodyFat` returned any observation
+  before looking at a measurement, so body fat entered after onboarding never updated the
+  tile or the layer. It now compares both by `happened_at` then `recorded_at`; the
+  historical layer does the same.
+- **Glucose and temperature rounded to whole numbers** in the root and KPI/table paths.
+  One `decimalsFor` now gives both one decimal everywhere.
+- **CSV import duplicated older measurements** because it only compared the newest row of
+  a type. It now checks the whole day, checks the idempotency key, counts only real
+  inserts, and attributes imports to a `file-import` source rather than the manual one.
+- **The home-BP protocol suggested a past day and could never restart.** `nextSlot` now
+  offers only today's slots; an expired incomplete protocol returns to Start; the model
+  carries today's date.
+- **Imperial display was wrong in the range line, the reading unit, lean mass and the
+  weight provenance.** The range statement/bounds, unit text, lean mass and provenance
+  now convert; the weight change strings take the unit.
+- **Context chips always showed "All" selected.** The selected chip now follows the filter.
+- **The BP chart mixed a systolic reference band with the diastolic series and read 365
+  days under a "30 days" label.** The band is gone for the two-series chart and the window
+  is 30 days.
+- **The recorded date was printed beside the happened time.** The provenance sheet now
+  takes the recorded date from `recorded_at`.
+- **The 90/60 BP low bound and 135/140 upper stops had no matching citation.** The low
+  bound cites the AHA low-blood-pressure page; the upper stops are documented as the home
+  135/85 and office 140/90 thresholds rather than one range. The temperature range was
+  corrected from the misread ±1 SD band to the pooled 36.59 ± 0.43 °C mean ± 2 SD
+  (35.7–37.5 °C).
+- **Upper-inclusive ranges called 100 bpm and 37.5 °C outside.** `ReferenceRange` now has
+  `highInclusive` for the printed inclusive ranges; tests cover 100 and 37.5.
+- **The photo slider's before/after pills swapped in RTL.** The pills follow the physical
+  image sides; the slider also has keyboard arrows and progress semantics.
+- **The KPI band opened the latest reading for all three figures.** Each figure now opens
+  its own sheet; average and count open a formula sheet.
+- **The timeline read every photo's full bytes and a Timeline BP delete left half a pair.**
+  A metadata-only `photoTimeline` query is used; a Timeline vital delete with an
+  `observation_id` routes through the group delete.
+- **The custom measurement and method-tag deliverables were missing.** Add-measurement now
+  has nine tape sites, wrist/ankle, body fat, body water and a named custom measurement,
+  with Manual / Scale / BIA / DEXA method tags for composition values.
+- **Photos were copied into every general export.** `ExportService` now skips the photo
+  table unless `body.photos_in_export` is on; the Vitals photo card carries the opt-in
+  (default off), and a data test covers both paths.
+- **The status bar overlapped a pushed page's title; the provenance sheet said "Raw record
+  kept" over "compacted"; "Edited" said Yes/No and durations were English literals.** All
+  three are fixed (`OhPageHeader` consumes the status inset; new resource keys).
+- **The audit found the commit's `check` claim false** (it was green in the working tree
+  at that point, but the untracked route file and later edits made a clean checkout fail).
+  The final commit stages `VitalsRouteContent.kt` and the final `check` is re-run before
+  the push.
+
+**Not fixed here, recorded as open:** BSA, muscle mass and bone mass from `pr.md` §6.8 are
+not built (the roadmap's B7 list names body fat, lean mass, water, BMI and FFMI; the three
+missing values need the scale/BIA work of B8); the post-meal glucose range is the ADA
+two-hour OGTT threshold, not a target after an ordinary meal; Apple Health's XML export is
+not parsed (the CSV path is generic); a photo caption is not prompted; the light-theme
+adipose band still shows a few interior seams inherited from B4. The independent plan
+audit ran after the reviews; its report is in the next section.
+
+### Headless plan audit (2026-11-25, Claude Code)
+
+The auditor read AGENTS.md, BUILD-ROADMAP B0–B7, prompts, the log and the contracts, and
+compared the tree against the phase-wise plan. It did not modify the repository (the live
+session was editing the same files, so it returned a report against `cc4ff09` instead of
+risking a lost update). It could not use the phone, which was absent. Its confirmed
+findings that were still true after the reviewers were fixed here:
+
+- the temperature range is the study's mean ± 1 SD, not ± 2 SD; corrected to the pooled
+  36.59 ± 0.43 °C mean ± 2 SD (35.7–37.5 °C), with `Citations.kt` and `NOTICE.md` corrected;
+- `ESC/ESH` survived in `BloodPressureProtocol` and `DESIGN.md` §8.2.1; both now say ESH;
+- the added `body_photo` table made every pre-B7 export unrestorable; the restore now
+  treats it as optional and a test restores a bundle without it;
+- `AGENTS.md`'s precedence table still named the old versions; it now records DESIGN
+  2026-11-25 and Tech-Stack 2.4;
+- the new `OhDims` values for the chart and photo slider were not all in Appendix A; they
+  are recorded in the dated B7 geometry line;
+- `AppViewModel` hard-coded "Progress photo"; it is a string resource now;
+- the default export now omits photo bytes unless the person opts in, and a test covers
+  both paths;
+- BSA, muscle mass and bone mass from `pr.md` §6.8 are not built. This is recorded as an
+  open scope item: the B7 roadmap list names body fat, lean mass, water, BMI and FFMI; the
+  other three need a scale/BIA source and belong with B8/V1. The owner may overrule.
+
+The audit's earlier claim that `check` was red at `cc4ff09` was true of that commit: the
+route file was untracked and the token guard caught raw chart values. The final commit
+stages the file and the final `check` is the one recorded above.
+
+### iOS gate (`pr.md` §13.17)
+
+**Not yet.** No iOS, web, watchOS or desktop work was started.

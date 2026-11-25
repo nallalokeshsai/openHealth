@@ -79,6 +79,7 @@ enum class TrashKind {
     OBSERVATION,
     MEASUREMENT,
     VITAL,
+    PHOTO,
     ENTRY,
     SET,
     SESSION,

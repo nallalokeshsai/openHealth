@@ -20,7 +20,7 @@ class DatabaseTest {
     fun aNewDatabaseIsCreatedAtTheCurrentSchemaVersion() {
         val store = inMemoryStore()
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
-        assertEquals(7L, store.schemaVersion)
+        assertEquals(8L, store.schemaVersion)
         assertEquals(0L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(0L, store.db.trainingQueries.countWorkSets().executeAsOne())
         store.close()
@@ -68,9 +68,9 @@ class DatabaseTest {
         val store = DatabaseOpener(backup).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals("v1-to-v7", backupLabel)
-        assertEquals(7L, store.schemaVersion)
-        assertEquals(7L, userVersion(store.driver))
+        assertEquals("v1-to-v8", backupLabel)
+        assertEquals(8L, store.schemaVersion)
+        assertEquals(8L, userVersion(store.driver))
         V2_INDEXES.forEach { assertEquals(1L, indexCount(store.driver, it), "index $it") }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
@@ -203,7 +203,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(7L, store.schemaVersion)
+        assertEquals(8L, store.schemaVersion)
         val view = store.driver.executeQuery(
             null,
             "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
@@ -299,7 +299,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(7L, store.schemaVersion)
+        assertEquals(8L, store.schemaVersion)
         assertEquals(1L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(3, store.db.sourceQueries.allSources().executeAsList().size)
 
@@ -367,7 +367,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(7L, store.schemaVersion)
+        assertEquals(8L, store.schemaVersion)
         val repository = app.openhealth.data.repo.NutritionRepository(store.db)
         val food = repository.foodById("legacy-food")!!
         assertEquals(389.0, food.per100g[app.openhealth.core.nutrition.Nutrient.ENERGY])
@@ -384,6 +384,55 @@ class DatabaseTest {
         )
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(directory)
+    }
+
+    @Test
+    fun aV7DatabaseGainsThePhotoTableAndItsTimelineBranch() {
+        val directory = Files.createTempDirectory("openhealth-v7-photo")
+        val path = directory.resolve("v7.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        dropTimelineView(first)
+        first.execute(null, "DROP TABLE body_photo", 0)
+        createV6Timeline(first)
+        first.execute(null, "PRAGMA user_version = 7", 0)
+        first.close()
+
+        val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
+            jdbcFactory("jdbc:sqlite:$path"),
+        )
+        assertEquals(8L, store.schemaVersion)
+        seedSources(store)
+        store.db.bodyQueries.insertPhoto(
+            id = "photo-1",
+            localDate = "2026-11-25",
+            zoneId = TEST_ZONE.id,
+            happenedAt = 0L,
+            recordedAt = 1L,
+            sourceId = "manual",
+            caption = null,
+            notes = null,
+            mime = "image/jpeg",
+            width = 10L,
+            height = 10L,
+            bytesB64 = "AA==",
+            thumbB64 = "AA==",
+            sha256 = "abc",
+            idempotencyKey = "photo-1",
+            device = null,
+            appVersion = null,
+            revision = 1L,
+        )
+        assertEquals(1L, store.db.bodyQueries.countPhotos().executeAsOne())
+        assertTrue(
+            app.openhealth.data.repo.TimelineRepository(store.db, store.driver)
+                .page(10).any { it.kind == "body_photo" },
+        )
+        store.close()
+        Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(java.nio.file.Path.of("$path-shm"))
+        Files.deleteIfExists(java.nio.file.Path.of("$path-wal"))
         Files.deleteIfExists(directory)
     }
 
@@ -422,7 +471,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(7L, store.schemaVersion)
+        assertEquals(8L, store.schemaVersion)
         val columns = store.driver.executeQuery(
             null,
             "PRAGMA table_info(exercise)",

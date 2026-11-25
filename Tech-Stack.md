@@ -1,6 +1,6 @@
 # openHealth — Technology Stack
 
-**Version:** 2.3 · 2026-11-25 (B6: a telemetry-free barcode decoder) — **Android only for the first releases** (`pr.md` §0.1)
+**Version:** 2.4 · 2026-11-25 (B7: progress photos in the encrypted store) — **Android only for the first releases** (`pr.md` §0.1)
 **Status:** Closes `pr.md` §13 decisions 1, 2, 3 and supersedes `pr.md` §8.1–8.4.
 **Companions:** [`pr.md`](pr.md) · [`DESIGN.md`](DESIGN.md) · [`BUILD-ROADMAP.md`](BUILD-ROADMAP.md) · [`prompts.md`](prompts.md) · ADR [`docs/adr/0001-android-first.md`](docs/adr/0001-android-first.md)
 
@@ -97,7 +97,7 @@ Day one of the iOS port is "add the KMP targets and write the actuals", not "fin
 - **WAL mode**, integrity check on open, automatic local backup before every migration, `allowBackup=false` (the app owns its export path).
 - **Schema = `pr.md` §7's five layers**, physically separated: `raw_record` (immutable payloads) → `observation` (canonical, UCUM units, full provenance columns) → `daily_rollup` (derived, rebuildable) → domain tables → `settings`.
 - **Rollups are always rebuildable from observations.** Backfill recomputes affected days; bugs are fixed by a rebuild, never a patch script.
-- **Media** in app-private storage, encrypted, never in the database.
+- **Media** in app-private encrypted storage, never in shared storage, the media gallery or the platform backup. B7 progress photos are re-encoded and stored as rows in the encrypted database itself (ADR 0012), so a tombstone can restore the bytes and the general backup carries them; no other media is stored yet.
 
 **Indexing rule:** every UI query hits an index on `(local_date)` or `(type, happened_at)`. Benchmarked against a seeded five-year corpus in `tools/fixtures`, not an empty database.
 

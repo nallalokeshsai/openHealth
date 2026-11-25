@@ -102,6 +102,68 @@ class ExportRoundTripTest {
     }
 
     @Test
+    fun aBundleWrittenBeforePhotosStillRestores() {
+        val store = corpusStore()
+        val cipher = Argon2ExportCipher(iterations = 1, memoryKiB = 8_192, parallelism = 1)
+        val service = ExportService(store.driver, store.db, cipher, FixedClock(now))
+        val bundle = service.snapshot()
+        // An export taken before B7 has no body_photo table. It is a complete backup of
+        // the older account, not corruption, so it restores with that table empty.
+        val older = bundle.copy(tables = bundle.tables.filterNot { it.table == "body_photo" })
+        val report = service.restoreBundle(older)
+        assertEquals(
+            bundle.tables.filterNot { it.table == "body_photo" || it.table == "daily_rollup" }
+                .sumOf { it.rows.size },
+            report.rows.toInt(),
+        )
+        assertEquals(0L, store.db.bodyQueries.countPhotos().executeAsOne())
+        store.close()
+    }
+
+    @Test
+    fun photosAreExcludedFromAGeneralExportUnlessIncluded() {
+        val store = corpusStore()
+        store.db.bodyQueries.insertPhoto(
+            id = "photo-export",
+            localDate = endDate.toString(),
+            zoneId = TEST_ZONE.id,
+            happenedAt = now.toEpochMilliseconds(),
+            recordedAt = now.toEpochMilliseconds(),
+            sourceId = "manual",
+            caption = null,
+            notes = null,
+            mime = "image/jpeg",
+            width = 10L,
+            height = 10L,
+            bytesB64 = "AA==",
+            thumbB64 = "AA==",
+            sha256 = "abc",
+            idempotencyKey = "photo-export",
+            device = null,
+            appVersion = null,
+            revision = 1L,
+        )
+        val cipher = Argon2ExportCipher(iterations = 1, memoryKiB = 8_192, parallelism = 1)
+        val excluded = ExportService(
+            store.driver,
+            store.db,
+            cipher,
+            FixedClock(now),
+            includePhotos = { false },
+        ).snapshot().tables.first { it.table == "body_photo" }
+        assertEquals(0, excluded.rows.size)
+        val included = ExportService(
+            store.driver,
+            store.db,
+            cipher,
+            FixedClock(now),
+            includePhotos = { true },
+        ).snapshot().tables.first { it.table == "body_photo" }
+        assertEquals(1, included.rows.size)
+        store.close()
+    }
+
+    @Test
     fun aBundleMissingATableIsRefused() {
         val store = corpusStore()
         val cipher = Argon2ExportCipher(iterations = 1, memoryKiB = 8_192, parallelism = 1)

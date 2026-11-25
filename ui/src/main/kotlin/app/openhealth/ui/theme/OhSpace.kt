@@ -253,6 +253,41 @@ data class OhDims(
     /** §9.1: the Recovering hatch is a 1.5 dp line every 7 dp, at 35 %. */
     val bodyMapHatchStroke: Dp = 1.5.dp,
     val bodyMapHatchSpacing: Dp = 7.dp,
+
+    // §9.3, B7: the measurement silhouette's anchor is a 22 dp glow with an 8 dp dot.
+    val measureAnchor: Dp = 22.dp,
+
+    // §8.1-8.2.1, B7: line-chart chrome and the clinical range strip.
+    val chartHeight: Dp = 160.dp,
+    val chartAxisWidth: Dp = 46.dp,
+    val chartScaleLabel: Dp = 64.dp,
+    val chartLine: Dp = 2.5.dp,
+    val chartSecondLine: Dp = 2.dp,
+    val chartGrid: Dp = 1.dp,
+    val chartGoal: Dp = 1.5.dp,
+    val chartCrosshair: Dp = 1.dp,
+    val chartPoint: Dp = 2.5.dp,
+    val chartLastPoint: Dp = 4.dp,
+    val chartScrubRing: Dp = 7.dp,
+    val chartScrubDot: Dp = 5.dp,
+    val chartLegendDot: Dp = 8.dp,
+    val chartDashOn: Dp = 7.dp,
+    val chartDashOff: Dp = 4.dp,
+    /** §8.2.1: the strip is 10 dp tall inside a 16 dp tick box, with a 3 dp tick. */
+    val rangeStripTrack: Dp = 10.dp,
+    val rangeStripBox: Dp = 16.dp,
+    val rangeStripTickWidth: Dp = 3.dp,
+
+    // §9.4, B7: the before/after photo slider.
+    val photoCompareMax: Dp = 420.dp,
+    val photoHandle: Dp = 2.dp,
+    val photoGrip: Dp = 12.dp,
+    val photoGripDot: Dp = 3.dp,
+    val photoGripDotOffset: Dp = 4.dp,
+    val photoGripStroke: Dp = 1.5.dp,
+    val photoHiddenBlur: Dp = 18.dp,
+    val photoDatePillPadV: Dp = 2.dp,
+    val photoGridGap: Dp = 10.dp,
 )
 
 /** Spacing and radius are single instances; geometry is one immutable record. */

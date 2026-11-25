@@ -44,6 +44,9 @@ class BodyRepository(private val db: OpenHealthDb) {
     fun measurementById(id: String): Measurement? =
         db.bodyQueries.measurementById(id).executeAsOneOrNull()
 
+    fun measurementByIdempotencyKey(key: String): Measurement? =
+        db.bodyQueries.measurementByIdempotencyKey(key).executeAsOneOrNull()
+
     fun measurementsForDay(date: LocalDate): List<Measurement> =
         db.bodyQueries.measurementsForDay(date.toString()).executeAsList()
 
@@ -96,4 +99,56 @@ class BodyRepository(private val db: OpenHealthDb) {
     fun latestVitals(limit: Long): List<Vital> = db.bodyQueries.latestVitals(limit).executeAsList()
 
     fun countMeasurements(): Long = db.bodyQueries.countMeasurements().executeAsOne()
+
+    // ---------------------------------------------------------------- progress photos
+
+    fun upsertPhoto(photo: app.openhealth.data.db.Body_photo) {
+        requireConsistentDay(photo.local_date, photo.zone_id, photo.happened_at)
+        db.transaction {
+            db.bodyQueries.insertPhoto(
+                id = photo.id,
+                localDate = photo.local_date,
+                zoneId = photo.zone_id,
+                happenedAt = photo.happened_at,
+                recordedAt = photo.recorded_at,
+                sourceId = photo.source_id,
+                caption = photo.caption,
+                notes = photo.notes,
+                mime = photo.mime,
+                width = photo.width,
+                height = photo.height,
+                bytesB64 = photo.bytes_b64,
+                thumbB64 = photo.thumb_b64,
+                sha256 = photo.sha256,
+                idempotencyKey = photo.idempotency_key,
+                device = photo.device,
+                appVersion = photo.app_version,
+                revision = photo.revision,
+            )
+        }
+    }
+
+    fun photoById(id: String): app.openhealth.data.db.Body_photo? =
+        db.bodyQueries.photoById(id).executeAsOneOrNull()
+
+    fun photoTimeline(id: String): app.openhealth.data.db.PhotoTimeline? =
+        db.bodyQueries.photoTimeline(id).executeAsOneOrNull()
+
+    fun vitalByObservationId(observationId: String): app.openhealth.data.db.Vital? =
+        db.bodyQueries.vitalByObservationId(observationId).executeAsOneOrNull()
+
+    fun photosBetween(from: LocalDate, to: LocalDate): List<app.openhealth.data.db.Body_photo> =
+        db.bodyQueries.photosBetween(from.toString(), to.toString()).executeAsList()
+
+    fun latestPhotos(limit: Long): List<app.openhealth.data.db.Body_photo> =
+        db.bodyQueries.latestPhotos(limit).executeAsList()
+
+    /** Gallery rows with a thumbnail only: never loads the full image (DESIGN.md §9.4). */
+    fun photoGallery(limit: Long): List<app.openhealth.data.db.PhotoGallery> =
+        db.bodyQueries.photoGallery(limit).executeAsList()
+
+    fun allPhotos(): List<app.openhealth.data.db.Body_photo> =
+        db.bodyQueries.allPhotos().executeAsList()
+
+    fun countPhotos(): Long = db.bodyQueries.countPhotos().executeAsOne()
 }

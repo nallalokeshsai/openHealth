@@ -122,6 +122,7 @@ private fun TrashKind.labelRes(): Int = when (this) {
     TrashKind.OBSERVATION -> R.string.trash_kind_observation
     TrashKind.MEASUREMENT -> R.string.trash_kind_measurement
     TrashKind.VITAL -> R.string.trash_kind_vital
+    TrashKind.PHOTO -> R.string.trash_kind_photo
     TrashKind.ENTRY -> R.string.trash_kind_entry
     TrashKind.SET -> R.string.trash_kind_set
     TrashKind.SESSION -> R.string.trash_kind_session

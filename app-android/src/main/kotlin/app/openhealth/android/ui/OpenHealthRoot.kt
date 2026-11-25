@@ -50,6 +50,7 @@ import app.openhealth.R
 import app.openhealth.android.AppContainer
 import app.openhealth.android.nutrition.BarcodeCameraPreview
 import app.openhealth.android.preferences.ThemeMode
+import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.ui.R as UiR
 import app.openhealth.ui.components.OhTabItem
@@ -71,7 +72,6 @@ import app.openhealth.ui.screens.nutrition.WaterSheet
 import app.openhealth.ui.screens.onboarding.OnboardingScreen
 import app.openhealth.ui.screens.quickadd.QuickAddSheet
 import app.openhealth.ui.screens.roots.StatsRoot
-import app.openhealth.ui.screens.roots.VitalsRoot
 import app.openhealth.ui.screens.settings.SettingsScreen
 import app.openhealth.ui.screens.settings.TrashScreen
 import app.openhealth.ui.screens.shell.OhRootShell
@@ -84,6 +84,8 @@ import app.openhealth.ui.screens.train.RoutineDetailScreen
 import app.openhealth.ui.screens.train.RoutineEditorScreen
 import app.openhealth.ui.screens.train.SessionSummaryScreen
 import app.openhealth.ui.screens.train.TrainRootScreen
+import app.openhealth.ui.screens.vitals.PhotoCompareSheet
+import app.openhealth.ui.screens.vitals.VitalDetailScreen
 import app.openhealth.ui.theme.OhTheme
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -164,7 +166,20 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
                     contentAlignment = Alignment.BottomCenter,
                 ) {
                     OhToast(
-                        message = stringResource(toast.messageRes),
+                        message = when {
+                            toast.argument != null && toast.second != null -> stringResource(
+                                toast.messageRes,
+                                toast.argument,
+                                toast.second,
+                            )
+
+                            toast.argument != null -> stringResource(
+                                toast.messageRes,
+                                toast.argument,
+                            )
+
+                            else -> stringResource(toast.messageRes)
+                        },
                         actionLabel = if (toast.undo) {
                             stringResource(UiR.string.action_undo)
                         } else {
@@ -224,20 +239,55 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                // The Body module hides its surfaces, and weight-neutral hides the
-                // value: both gates, exactly as Today applies them.
-                val weightOffered = HealthModule.BODY in state.preferences.modules &&
-                    state.preferences.displayPolicy.shows(
-                        app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+                val model = state.vitals
+                if (model == null) {
+                    Loading()
+                } else {
+                    VitalsRouteContent(
+                        model = model,
+                        onLogWeight = { viewModel.openQuickAdd(QuickAction.WEIGHT) },
+                        onOpenDetail = { type ->
+                            viewModel.openVital(type)
+                            nav.navigate(VitalDetailRoute(type.name))
+                        },
+                        onSaveReading = viewModel::saveVitalReading,
+                        onSaveMeasurement = { type, value, method ->
+                            viewModel.saveMeasurement(type, value, method)
+                        },
+                        onAddPhoto = { bytes -> viewModel.addPhoto(bytes, null) },
+                        onOpenPhoto = viewModel::openPhotoCompare,
+                        onDeletePhoto = viewModel::deletePhoto,
+                        onPhotosHidden = viewModel::setPhotosHidden,
+                        onPhotosInExport = viewModel::setPhotosInExport,
+                        onExportCsv = viewModel::exportVitalsCsv,
+                        onImportCsv = viewModel::importVitalsCsv,
+                        onOpenSettings = { nav.navigate(SettingsRoute) },
                     )
-                VitalsRoot(
-                    onLogWeight = if (weightOffered) {
-                        { viewModel.openQuickAdd(QuickAction.WEIGHT) }
-                    } else {
-                        null
+                }
+            }
+        }
+        composable<VitalDetailRoute> { entry ->
+            val type = runCatching {
+                ObservationType.valueOf(entry.toRoute<VitalDetailRoute>().type)
+            }.getOrNull()
+            LaunchedEffect(type) {
+                if (type != null && state.vitalDetail == null) viewModel.openVital(type)
+            }
+            val detail = state.vitalDetail
+            if (type == null || detail == null) {
+                Loading()
+            } else {
+                VitalDetailScreen(
+                    model = detail,
+                    imperial = state.profile?.units == "imperial",
+                    onBack = {
+                        viewModel.closeVital()
+                        nav.popBackStack()
                     },
-                    moduleOff = HealthModule.VITALS !in state.preferences.modules,
-                    onOpenSettings = { nav.navigate(SettingsRoute) },
+                    onSaveReading = viewModel::saveVitalReading,
+                    onDeleteReading = viewModel::deleteVitalReading,
+                    onSelectContext = viewModel::selectVitalContext,
+                    onStartProtocol = viewModel::startBpProtocol,
                 )
             }
         }
@@ -731,6 +781,9 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             onDismiss = viewModel::closeNutritionSheets,
             onSave = viewModel::saveQuickCalories,
         )
+    }
+    state.photoCompare?.let { compare ->
+        PhotoCompareSheet(model = compare, onDismiss = viewModel::closePhotoCompare)
     }
 }
 

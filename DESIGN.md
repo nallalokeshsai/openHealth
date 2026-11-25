@@ -2,7 +2,9 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-24 — B4 gives the body map its missing engraving rules
+**Last revision:** 2026-11-25 — B7 records the measurement anchor's 30 % glow, the
+line-chart chrome and the photo-slider geometry in Appendix A; no new colour, type role,
+spacing value or component. Previous: 2026-11-24 — B4 gives the body map its missing engraving rules
 and the dynamic model its arithmetic, no new colour or type role: the Recovering hatch
 (§9.1); the adipose band's thickness rule, region factors, self-relative tape scaling and
 a closing ring that keeps the band out of the seams between muscles, with a full-opacity
@@ -1017,7 +1019,8 @@ Rules:
   `label-2`, with a link: "ESC 2024 · European Society of Cardiology".
 - A user override is a dashed boundary and a note: "Your clinician's range".
 - Wording is neutral: "outside the published range", never "high", "risky",
-  "concerning" (`pr.md` §12.1).
+  "concerning" (`pr.md` §12.1). The zone names Low / Normal / Raised / High in §8.2.1 are
+  the scale's own words, not a verdict about the person (2026-11-25).
 - No range ships without a citation; a range without a citation is an opinion
   and is not drawn.
 
@@ -1100,7 +1103,7 @@ Low ░░░░░  Normal █████  Raised ▒▒▒▒  High ▓▓▓
 - Stops are labelled Low / Normal / Raised / High beneath, 11 sp `label-2`, and
   the numeric boundaries are printed under each.
 - The guideline and region are printed in full above the strip:
-  "ESC/ESH 2023, adults, home measurement — below 135/85". A range with no
+  "ESH 2023, adults, home measurement — below 135/85". A range with no
   citation does not ship.
 - The strip has a table alternative with the same numbers and the citation.
 - A user or clinician override draws a dashed boundary and says "Your range".
@@ -1275,8 +1278,8 @@ For scale-imported values (body fat, lean, bone, water, BMR):
 
 ### 9.3 Measurement silhouette
 
-- The same body geometry, no heat colour, with seven anchor dots: neck, chest,
-  waist, hips, arm, thigh, calf.
+- The same body geometry, no heat colour, with nine anchor dots: neck,
+  shoulders, chest, waist, hips, upper arm, forearm, thigh, calf.
 - Tapping an anchor opens the measurement field for that site. Measured sites
   glow with `acc` at 30 %.
 - A before/after outline (last month vs today) may overlay at 1 dp, dashed for
@@ -1286,7 +1289,9 @@ For scale-imported values (body fat, lean, bone, water, BMR):
 ### 9.4 Progress photos
 
 - Stored privately, encrypted where possible, never uploaded without an explicit
-  action, excluded from a general export unless the person includes photos.
+  action, excluded from a general export unless the person includes photos. B7's Vitals
+  card carries the opt-in ("Include photos in encrypted backups", off by default); the
+  encrypted backup includes the photo rows only when it is on (2026-11-25).
 - The gallery is a 3-across grid of square tiles, 10 dp gaps, 16 dp radius,
   date in a 12 sp pill at the bottom. A photo is blurred until tapped if the
   person enabled "Hide photos in the gallery".
@@ -1703,7 +1708,7 @@ header, never a floating camera over the list.
 
 **Vitals.** A lead card: current weight `display`, trend sentence, 90-day line,
 goal line. Under it, the dynamic body model with measurement anchors (the
-measurement silhouette of §9.3 drawn on the §9.1.1 figure; ten anchors: neck,
+measurement silhouette of §9.3 drawn on the §9.1.1 figure; nine anchors: neck,
 shoulders, chest, waist, hips, upper arm, forearm, thigh, calf, plus the
 wrist/ankle frame sizes in the list only) and a 2-column tile
 grid (body fat, lean mass, waist, resting HR) with source lines. Then photos
@@ -1930,6 +1935,12 @@ press   .97 / .92 small / .985 card
 quick   84 tile / 21 glyph   (§14.2, B3; no new token, quoted here for the guard)
 body    pair gap 6 · stroke 2.5 · selected 7 + 2 glow · mini 46 (event 30) tall,
         3 stroke, 2 gap · hatch 1.5 / 7 at 35 % · fat 55 %   (§9.1, §9.1.1, B4)
+anchor  measured 22 dp glow at 30 % · 8 dp dot   (§9.3, B7)
+chart   height 160 · axis 46 · scale label 64 · line 2.5 (2 second) · grid 1 · goal 1.5
+        · point 2.5 (last 4) · scrub 7/5 · crosshair 1 · legend 8 · dash 7/4
+        · range strip 16 box / 10 track / 3 tick   (§8.1, §8.2.1, B7)
+photo   compare 420 max · handle 2 · grip 12 · grip dot 3 at offset 4, stroke 1.5
+        · date pad 2 · blur 18 · grid gap 10   (§9.4, B7)
 ```
 
 ---

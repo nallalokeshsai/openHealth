@@ -267,6 +267,16 @@ object ExportTables {
             ),
         ),
         ExportTable(
+            "body_photo",
+            listOf(
+                text("id"), text("local_date"), text("zone_id"), long("happened_at"),
+                long("recorded_at"), text("source_id"), text("caption"), text("notes"),
+                text("mime"), long("width"), long("height"), text("bytes_b64"),
+                text("thumb_b64"), text("sha256"), text("idempotency_key"), text("device"),
+                text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
             "raw_record",
             listOf(
                 text("id"), text("source_id"), text("source_kind"), text("device"),

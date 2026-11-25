@@ -4,11 +4,13 @@ import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.MeasurementId
 import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.ObservationId
+import app.openhealth.core.ids.PhotoId
 import app.openhealth.core.ids.SetId
 import app.openhealth.core.ids.TombstoneId
 import app.openhealth.core.ids.VitalId
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SystemClock
+import app.openhealth.data.db.Body_photo
 import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Measurement
 import app.openhealth.data.db.Note
@@ -33,6 +35,7 @@ enum class TrashEntity(val table: String) {
     ENTRY("entry"),
     MEASUREMENT("measurement"),
     VITAL("vital"),
+    PHOTO("body_photo"),
     NOTE("note"),
     OBSERVATION("observation"),
 }
@@ -218,6 +221,29 @@ data class VitalPayload(
     val revision: Long,
 )
 
+/** A progress photo is a layer-4 row; the bytes travel with it so undo is exact. */
+@Serializable
+data class PhotoPayload(
+    val id: String,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val caption: String?,
+    val notes: String?,
+    val mime: String,
+    val width: Long,
+    val height: Long,
+    val bytesB64: String,
+    val thumbB64: String?,
+    val sha256: String,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+)
+
 /** The whole observation row, provenance included, so undo restores it unchanged. */
 @Serializable
 data class ObservationPayload(
@@ -273,6 +299,7 @@ data class NotePayload(
  * the session; Trash keeps it for 30 days; purge is explicit and only touches rows past
  * their window. No code path here deletes anything without a tombstone.
  */
+@Suppress("LargeClass")
 class TrashService(
     private val db: OpenHealthDb,
     private val clock: ClockSeam = SystemClock,
@@ -385,6 +412,17 @@ class TrashService(
         }
     }
 
+    fun deletePhoto(id: PhotoId): TombstoneId? = photo(id.value)?.let { row ->
+        record(
+            entity = TrashEntity.PHOTO,
+            entityId = row.id,
+            payload = json.encodeToString(PhotoPayload.serializer(), row.toPayload()),
+            invalidateOn = LocalDate.parse(row.local_date),
+        ) {
+            db.bodyQueries.deletePhoto(row.id)
+        }
+    }
+
     fun deleteObservation(id: ObservationId): TombstoneId? = observation(id.value)?.let { row ->
         record(
             entity = TrashEntity.OBSERVATION,
@@ -407,6 +445,7 @@ class TrashService(
     }
 
     /** Restores one tombstoned row. Returns false when it is gone or already restored. */
+    @Suppress("CyclomaticComplexMethod")
     fun undo(id: TombstoneId): Boolean {
         val tombstone = tombstoneById(id.value)
         val payload = tombstone?.payload
@@ -424,6 +463,7 @@ class TrashService(
                 TrashEntity.ENTRY -> restoreEntry(payload)
                 TrashEntity.MEASUREMENT -> restoreMeasurement(payload)
                 TrashEntity.VITAL -> restoreVital(payload)
+                TrashEntity.PHOTO -> restorePhoto(payload)
                 TrashEntity.NOTE -> restoreNote(payload)
                 TrashEntity.OBSERVATION -> restoreObservation(payload)
             }
@@ -469,11 +509,13 @@ class TrashService(
                 payload,
             ).type in SENSITIVE_TYPES
             TrashEntity.ENTRY.table -> true
+            TrashEntity.PHOTO.table -> true
             else -> false
         }
     }.getOrDefault(false)
 
     /** A short, human summary of a tombstoned row for the Trash list. */
+    @Suppress("CyclomaticComplexMethod")
     fun preview(row: app.openhealth.data.db.ActiveTombstones): String = runCatching {
         val payload = row.payload ?: return ""
         when (row.entity_table) {
@@ -492,6 +534,10 @@ class TrashService(
             TrashEntity.VITAL.table -> {
                 val v = json.decodeFromString(VitalPayload.serializer(), payload)
                 "${v.type.lowercase()} ${v.value} ${unitLabel(v.unit)}"
+            }
+            TrashEntity.PHOTO.table -> {
+                val p = json.decodeFromString(PhotoPayload.serializer(), payload)
+                p.caption ?: "Progress photo · ${p.localDate}"
             }
             TrashEntity.ENTRY.table -> {
                 val e = json.decodeFromString(EntryPayload.serializer(), payload)
@@ -552,6 +598,7 @@ class TrashService(
         TrashEntity.ENTRY -> db.nutritionQueries.entryById(id).executeAsOneOrNull() != null
         TrashEntity.MEASUREMENT -> db.bodyQueries.measurementById(id).executeAsOneOrNull() != null
         TrashEntity.VITAL -> db.bodyQueries.vitalById(id).executeAsOneOrNull() != null
+        TrashEntity.PHOTO -> db.bodyQueries.photoById(id).executeAsOneOrNull() != null
         TrashEntity.NOTE -> db.noteQueries.noteById(id).executeAsOneOrNull() != null
         TrashEntity.OBSERVATION ->
             db.observationQueries.observationById(id).executeAsOneOrNull() != null
@@ -571,6 +618,8 @@ class TrashService(
                 json.decodeFromString(SessionPayload.serializer(), payload).session.localDate
             TrashEntity.WORK_SET ->
                 json.decodeFromString(WorkSetPayload.serializer(), payload).localDate
+            TrashEntity.PHOTO ->
+                json.decodeFromString(PhotoPayload.serializer(), payload).localDate
             TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE -> null
         }
         date?.let { rollupInvalidator?.invoke(LocalDate.parse(it)) }
@@ -594,6 +643,53 @@ class TrashService(
         db.bodyQueries.measurementById(id).executeAsOneOrNull()
 
     private fun vital(id: String): Vital? = db.bodyQueries.vitalById(id).executeAsOneOrNull()
+
+    private fun photo(id: String): Body_photo? = db.bodyQueries.photoById(id).executeAsOneOrNull()
+
+    private fun restorePhoto(payload: String) {
+        val row = json.decodeFromString(PhotoPayload.serializer(), payload)
+        db.bodyQueries.insertPhoto(
+            id = row.id,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            caption = row.caption,
+            notes = row.notes,
+            mime = row.mime,
+            width = row.width,
+            height = row.height,
+            bytesB64 = row.bytesB64,
+            thumbB64 = row.thumbB64,
+            sha256 = row.sha256,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+    }
+
+    private fun Body_photo.toPayload(): PhotoPayload = PhotoPayload(
+        id = id,
+        localDate = local_date,
+        zoneId = zone_id,
+        happenedAt = happened_at,
+        recordedAt = recorded_at,
+        sourceId = source_id,
+        caption = caption,
+        notes = notes,
+        mime = mime,
+        width = width,
+        height = height,
+        bytesB64 = bytes_b64,
+        thumbB64 = thumb_b64,
+        sha256 = sha256,
+        idempotencyKey = idempotency_key,
+        device = device,
+        appVersion = app_version,
+        revision = revision,
+    )
 
     private fun unitLabel(unit: String): String = when (unit) {
         "[lb_av]" -> "lb"

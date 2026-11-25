@@ -134,6 +134,15 @@ value class VitalId(val value: String) {
 }
 
 @JvmInline
+value class PhotoId(val value: String) {
+    init {
+        require(value.isNotBlank()) { "PhotoId must not be blank" }
+    }
+
+    override fun toString(): String = value
+}
+
+@JvmInline
 value class NoteId(val value: String) {
     init {
         require(value.isNotBlank()) { "NoteId must not be blank" }

@@ -23,6 +23,8 @@ class ExportService(
     private val db: OpenHealthDb,
     private val cipher: ExportCipher,
     private val clock: ClockSeam = SystemClock,
+    /** `DESIGN.md` §9.4: photos are excluded from a general export unless included. */
+    private val includePhotos: () -> Boolean = { false },
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -31,7 +33,13 @@ class ExportService(
 
     fun snapshot(): ExportBundle {
         val tables = db.transactionWithResult {
-            ExportTables.all.map { SqlDump.dump(driver, it) }
+            ExportTables.all.map { table ->
+                if (table.name == PHOTO_TABLE && !includePhotos()) {
+                    ExportTableData(table.name, emptyList())
+                } else {
+                    SqlDump.dump(driver, table)
+                }
+            }
         }
         return ExportBundle(
             format = ExportBundle.FORMAT,
@@ -76,6 +84,7 @@ class ExportService(
 
     private companion object {
         const val ROLLUP_TABLE = "daily_rollup"
+        const val PHOTO_TABLE = "body_photo"
     }
 
     fun export(passphrase: CharArray): ByteArray = try {
@@ -98,7 +107,11 @@ class ExportService(
         requireSupportedSchema(bundle)
         val byName = bundle.tables.associateBy { it.table }
         val expected = ExportTables.all.map { it.name }.toSet()
-        val missing = expected - byName.keys
+        // A table added after an older export was written is restored empty, not
+        // treated as corruption: the person's old backup still restores and the new
+        // table starts clean. Column additions already default the same way.
+        val optional = setOf("body_photo")
+        val missing = expected - byName.keys - optional
         val unknown = byName.keys - expected
         if (missing.isNotEmpty() || unknown.isNotEmpty()) {
             throw UnsupportedExportFormat(
@@ -118,7 +131,7 @@ class ExportService(
             ExportTables.all
                 .filterNot { it.name == ROLLUP_TABLE }
                 .forEach { table ->
-                    val rowsOfTable = byName.getValue(table.name).rows
+                    val rowsOfTable = byName[table.name]?.rows ?: emptyList()
                     SqlDump.insert(driver, table, rowsOfTable)
                     rows += rowsOfTable.size
                 }

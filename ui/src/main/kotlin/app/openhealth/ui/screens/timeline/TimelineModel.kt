@@ -10,6 +10,7 @@ enum class TimelineKind {
     WEIGHT,
     MEASUREMENT,
     VITAL,
+    PHOTO,
     MEAL,
     NUTRITION,
     ENTRY,

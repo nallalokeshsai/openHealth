@@ -61,10 +61,13 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import app.openhealth.core.body.BodySex
 import app.openhealth.core.body.BodySide
+import app.openhealth.core.body.MeasurementSite
 import app.openhealth.core.body.Muscle
 import app.openhealth.core.body.MuscleRegion
 import app.openhealth.core.formula.RecoveryStep
 import app.openhealth.ui.R
+import app.openhealth.ui.components.ohClickable
+import app.openhealth.ui.components.rememberInteraction
 import app.openhealth.ui.theme.OhAlpha
 import app.openhealth.ui.theme.OhColors
 import app.openhealth.ui.theme.OhRamp
@@ -89,6 +92,11 @@ fun OhBodyMap(
     sides: Set<BodySide> = setOf(BodySide.FRONT, BodySide.BACK),
     onMuscle: ((Muscle) -> Unit)? = null,
     onShowTable: (() -> Unit)? = null,
+    /** A caller's accessible sentence, for a figure that is not the recovery map. */
+    descriptionOverride: String? = null,
+    /** Anchors on the front view for the measurement silhouette (`DESIGN.md` §9.3). */
+    anchors: Map<MeasurementSite, Boolean> = emptyMap(),
+    onAnchor: ((MeasurementSite) -> Unit)? = null,
     geometry: BodyGeometry? = null,
     /**
      * Build the adipose band inline instead of on a background dispatcher. Screenshot
@@ -126,7 +134,7 @@ fun OhBodyMap(
     }
     val front = drawings.view(model.sex, BodySide.FRONT)?.takeIf { BodySide.FRONT in sides }
     val back = drawings.view(model.sex, BodySide.BACK)?.takeIf { BodySide.BACK in sides }
-    val description = bodyMapDescription(model)
+    val description = descriptionOverride ?: bodyMapDescription(model)
     val tableLabel = stringResource(R.string.body_map_show_table)
     val paints = rememberPaints(model, variant)
     // One accessibility node per muscle, never one per view: TalkBack hears "Forearms"
@@ -191,6 +199,8 @@ fun OhBodyMap(
                         onMuscle = onMuscle,
                         nodeSide = nodeSide,
                         synchronousLayers = synchronousLayers,
+                        anchors = anchors,
+                        onAnchor = onAnchor,
                     )
                 }
                 back?.let {
@@ -203,6 +213,8 @@ fun OhBodyMap(
                         onMuscle = onMuscle,
                         nodeSide = nodeSide,
                         synchronousLayers = synchronousLayers,
+                        anchors = anchors,
+                        onAnchor = onAnchor,
                     )
                 }
             }
@@ -348,6 +360,8 @@ private fun ViewPanel(
     onMuscle: ((Muscle) -> Unit)?,
     nodeSide: Map<Muscle, BodySide>,
     synchronousLayers: Boolean,
+    anchors: Map<MeasurementSite, Boolean>,
+    onAnchor: ((MeasurementSite) -> Unit)?,
 ) {
     val colors = OhTheme.colors
     val dims = OhTheme.dims
@@ -532,48 +546,126 @@ private fun ViewPanel(
                 }
             }
         }
-        // One accessibility node per muscle; the drawn shapes stay one pointer target.
-        view.parts.filter { it.muscle != null }.reversed().forEach { part ->
-            val muscle = part.muscle ?: return@forEach
-            if (nodeSide[muscle] != view.view.side) return@forEach
-            val bounds = part.bounds
-            // At least one 44 dp target per muscle (DESIGN.md §11.1), centred on the
-            // muscle's own bounds: a narrower box is covered by its neighbours and can
-            // drop out of the platform accessibility tree.
-            val minSide = OhTheme.dims.touchTarget.value
-            val boxWidth = maxOf(bounds.width() * scale, minSide)
-            val boxHeight = maxOf(bounds.height() * scale, minSide)
-            Box(
-                modifier = Modifier
-                    .offset(
-                        x = (
-                            ((bounds.left + bounds.right) / 2f - vb.x) * scale -
-                                boxWidth / 2f
-                            ).dp,
-                        y = (
-                            ((bounds.top + bounds.bottom) / 2f - vb.y) * scale -
-                                boxHeight / 2f
-                            ).dp,
-                    )
-                    .size(width = boxWidth.dp, height = boxHeight.dp)
-                    .semantics {
-                        contentDescription = labels.getValue(muscle)
-                        stateDescription = states.getValue(muscle)
-                        if (onMuscle != null) role = Role.Button
-                        selected = model.selected == muscle
-                        if (onMuscle != null) {
-                            onClick(label = labels.getValue(muscle)) {
-                                onMuscle(muscle)
-                                true
-                            }
-                        }
+        // The measurement silhouette's anchors (`DESIGN.md` §9.3): one 44 dp target per
+        // measured site on the front view, over the figure, never replacing a muscle tap.
+        if (view.view.side == BodySide.FRONT && anchors.isNotEmpty() && onAnchor != null) {
+            MeasurementSite.anchors.forEach { site ->
+                val fraction = FRONT_ANCHOR_POSITIONS[site] ?: return@forEach
+                val measured = anchors[site] == true
+                val label = measurementSiteLabel(site)
+                val state = stringResource(
+                    if (measured) {
+                        R.string.measure_anchor_measured
+                    } else {
+                        R.string.measure_anchor_open
                     },
-            )
+                )
+                val target = OhTheme.dims.touchTarget.value
+                val cx = vb.width * fraction.first * scale
+                val cy = vb.height * fraction.second * scale
+                val anchorInteraction = rememberInteraction()
+                Box(
+                    modifier = Modifier
+                        .offset(x = (cx - target / 2f).dp, y = (cy - target / 2f).dp)
+                        .size(OhTheme.dims.touchTarget)
+                        .ohClickable(
+                            interactionSource = anchorInteraction,
+                            enabled = onAnchor != null,
+                            onClick = { onAnchor?.invoke(site) },
+                        )
+                        .semantics {
+                            contentDescription = label
+                            stateDescription = state
+                            if (onAnchor != null) {
+                                role = Role.Button
+                                onClick(label = label) {
+                                    onAnchor(site)
+                                    true
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(modifier = Modifier.size(OhTheme.dims.measureAnchor)) {
+                        if (measured) {
+                            drawCircle(
+                                color = colors.acc.copy(alpha = OhAlpha.anchorGlow),
+                                radius = size.minDimension / 2f,
+                            )
+                        }
+                        drawCircle(
+                            color = if (measured) colors.acc else colors.label3,
+                            radius = size.minDimension / ANCHOR_DOT_DIVISOR,
+                        )
+                    }
+                }
+            }
+        }
+        // One accessibility node per muscle; the drawn shapes stay one pointer target.
+        // On the measurement silhouette the anchors are the controls, so the muscle
+        // nodes would repeat "Chest" twice under the same finger; they are left out there.
+        if (onMuscle != null || anchors.isEmpty()) {
+            view.parts.filter { it.muscle != null }.reversed().forEach { part ->
+                val muscle = part.muscle ?: return@forEach
+                if (nodeSide[muscle] != view.view.side) return@forEach
+                val bounds = part.bounds
+                // At least one 44 dp target per muscle (DESIGN.md §11.1), centred on the
+                // muscle's own bounds: a narrower box is covered by its neighbours and can
+                // drop out of the platform accessibility tree.
+                val minSide = OhTheme.dims.touchTarget.value
+                val boxWidth = maxOf(bounds.width() * scale, minSide)
+                val boxHeight = maxOf(bounds.height() * scale, minSide)
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = (
+                                ((bounds.left + bounds.right) / 2f - vb.x) * scale -
+                                    boxWidth / 2f
+                                ).dp,
+                            y = (
+                                ((bounds.top + bounds.bottom) / 2f - vb.y) * scale -
+                                    boxHeight / 2f
+                                ).dp,
+                        )
+                        .size(width = boxWidth.dp, height = boxHeight.dp)
+                        .semantics {
+                            contentDescription = labels.getValue(muscle)
+                            stateDescription = states.getValue(muscle)
+                            if (onMuscle != null) role = Role.Button
+                            selected = model.selected == muscle
+                            if (onMuscle != null) {
+                                onClick(label = labels.getValue(muscle)) {
+                                    onMuscle(muscle)
+                                    true
+                                }
+                            }
+                        },
+                )
+            }
         }
     }
 }
 
 private const val GLOW_BOTH_SIDES = 2
+
+/**
+ * Where each measurement anchor sits on the front view, as a fraction of the viewBox.
+ * The MuscleMap bounds span both limbs for a paired muscle, so their centre is the spine;
+ * these coordinates put the dot on the anatomy instead (`DESIGN.md` §9.3).
+ */
+@Suppress("MagicNumber")
+private val FRONT_ANCHOR_POSITIONS: Map<MeasurementSite, Pair<Float, Float>> = mapOf(
+    MeasurementSite.NECK to (0.50f to 0.14f),
+    MeasurementSite.SHOULDERS to (0.38f to 0.20f),
+    MeasurementSite.CHEST to (0.52f to 0.27f),
+    MeasurementSite.WAIST to (0.50f to 0.40f),
+    MeasurementSite.HIPS to (0.50f to 0.50f),
+    MeasurementSite.UPPER_ARM to (0.30f to 0.34f),
+    MeasurementSite.FOREARM to (0.24f to 0.46f),
+    MeasurementSite.THIGH to (0.42f to 0.62f),
+    MeasurementSite.CALF to (0.42f to 0.82f),
+)
+private const val ANCHOR_DOT_DIVISOR = 2.75f
 
 private fun DrawScope.drawHatches(
     view: GeometryView,

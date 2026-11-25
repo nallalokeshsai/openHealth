@@ -19,8 +19,8 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 | File | Version | Owns | Authority |
 |---|---|---|---|
 | `pr.md` | 0.4 · 2026-11-22 | Features and MVP/V1/Later tags (§6); five-layer data model (§7); architecture summary (§8); product roadmap (§9); metrics (§10); non-goals (§11); regulatory, licensing and platform constraints (§12); open decisions (§13); cut list (§14.5) | **Behaviour contract.** Wins on scope, wording and what a screen does. |
-| `DESIGN.md` | 0.2 · 2026-11-22 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
-| `Tech-Stack.md` | 2.1 · 2026-11-22 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
+| `DESIGN.md` | 0.2 · 2026-11-25 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
+| `Tech-Stack.md` | 2.4 · 2026-11-25 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
 | `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
 | `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
 | `docs/adr/` | 0002 · 2026-11-22 | Dated closed decisions. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 pinned versions is written in B0 | **Decision record.** |
@@ -217,36 +217,31 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B6 Nutrition** (2026-11-25); next is **B7 Body and vitals**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **396 JVM tests**
-  (179 `:core`, 100 `:data`, 10 `:integrations`, 97 `:ui`, 7 tools:foodindex, 1 fixtures,
-  2 exerciseindex) and **30 instrumented tests** pass on the owner's phone. `:ui` holds
-  the B1 design system, the B3 screens, the B4 body map, the B5 Train surfaces and the B6
-  Nutrition surfaces: **222 goldens** (198 before + 24 for the Nutrition root, neutral
-  root, micros, barcode found/disclosure and the recipe editor) in dark, light, 200 % text
-  and RTL. Both the `play` and `fdroid` debug APKs build.
-- `:core` adds the nutrition domain: the nutrient set and FDA Daily Values, portion and
-  recipe arithmetic, exact day totals, target suggestions from the IOM report, the
-  fasting window and the shared food-query normaliser. `:data` is schema **v7** (`6.sqm`):
-  per-100 g micronutrients, entry serving metadata, meal provenance, recipes, meal
-  templates, water containers, dated targets and fasting windows; the diary's micro
-  totals ride on the rebuilt day rollup's `detail`, and the timeline includes fasting.
-- `tools/foodindex` builds the committed 8,262-food USDA index (Foundation Foods
-  2026-04-30 + SR Legacy 2018-04, CC0) as a 9.4 MB asset. `:integrations` parses Open
-  Food Facts with an explicit, disclosed lookup and a local cache. `:ui` adds the
-  Nutrition root, search, portion, entry provenance, water, targets, fasting, micros,
-  barcode and food/recipe editor; `app-android` adds the CameraX scanner with the ZXing
-  decoder in every flavour (ML Kit was removed after its transitive Google Data Transport
-  proved to be telemetry), the OFF HTTP transport and the nutrition presenter/state
-  wiring. Debug cold start **1 112 ms**.
-- Versions are in `docs/adr/0003-pinned-versions.md`; B1's decisions are
-  `0004-design-system.md`, B2's `0005-core-and-data.md` and `0006-referential-integrity.md`,
-  B3's `0007-shell-and-onboarding.md`, B4's `0008-body-model-and-exercises.md` and
-  `0009-adipose-mask.md`, B5's `0010-gym-training.md`, B6's `0011-nutrition.md`. R8 is
-  **off** in release; turning it on is B10's.
-- B4's live QA fixes remain in force (the adipose mask, the module-off root, the light
-  fat token). B5's and B6's clean-ups are the QA sweeps in `docs/build-log.md`; the
-  remaining open items (recipes sharing, meal-template editing, the camera-capture manual
-  check, the OFF rate-limit question) are recorded there.
-- Open issues: see `docs/build-log.md`.
+- Last completed phase: **B7 Body and vitals** (2026-11-25); next is **B8 Activity sources**.
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **427 JVM tests**
+  (197 `:core`, 103 `:data`, 10 `:integrations`, 107 `:ui`, 7 tools:foodindex, 1 fixtures,
+  2 exerciseindex) and **35 instrumented tests** pass on the owner's phone (the last
+  device run; the phone's USB connection was lost during the B7 sweep, so the final UI
+  edits were checked by the 107 JVM tests and 238 goldens only). `:ui` holds the B1 design
+  system, the B3 screens, the B4 body map, the B5 Train surfaces, the B6 Nutrition
+  surfaces and the B7 Vitals surfaces: **238 goldens** in dark, light, 200 % text and RTL.
+  Both the `play` and `fdroid` debug APKs build.
+- `:core` adds the body/vitals domain: weight trend and weekly rate, the measurement-site
+  catalogue, CSV, the seven cited reference ranges, the four-zone BP/glucose strip, the
+  home-BP protocol and its day-one exclusion. `:data` is schema **v8** (`7.sqm`):
+  `body_photo`, its timeline branch, export/restore and Trash; a pre-B7 export restores
+  with the photo table empty. `:app-android` adds `BodyPresenter`, the encrypted photo
+  codec, the SAF CSV path, the system photo picker and the Vitals/detail routes. The
+  dynamic body model reads body fat first, then the Navy tape estimate; the photos live
+  in the SQLCipher database and are exported only with the explicit "Include photos in
+  encrypted backups" opt-in.
+- B7's decisions are `docs/adr/0012-body-and-vitals.md`; the reference ranges and their
+  sources are in `NOTICE.md` and `:core/.../vitals/Vitals.kt`. `DESIGN.md` records the
+  B7 chart/photo geometry in Appendix A.
+- Open issues: see `docs/build-log.md` (BSA/muscle/bone from `pr.md` §6.8, the post-meal
+  glucose range being the OGTT threshold, Apple Health XML import, captions, and the light
+  adipose seams inherited from B4). The owner should reconnect the phone for the final
+  visual pass (weight-neutral, photo pick, 200 %/RTL) before treating the device sweep as
+  complete.
+
 
