@@ -2363,3 +2363,20 @@ round-1 fixes. Health Connect's own zone offsets are still not carried through.
 `:integrations`, 115 `:ui`, 10 across the three tools) with ktlint, Detekt,
 `checkPortability`, `checkLicences`, `checkDesignTokens` and both lint variants.
 `./gradlew :app-android:assemblePlayDebug :app-android:assembleFdroidDebug` builds both.
+
+### Round 3 and the final device run
+
+The third headless round verified rounds 1 and 2 and found five more, fixed in `947e653`:
+the flush tick was cancelled and re-posted by every notification, so a 1 Hz strap
+postponed it for ever and overflowed the buffer; the buffer and the tick's state were
+touched from two threads; a batch that mapped to no observation was retried for ever; the
+CCCD queue looked for 0x2A9C inside 0x181D, but the SIG puts it in Body Composition
+(0x181B), so body fat was still never subscribed; and notifications read the deprecated
+cached value instead of the bytes API 33 hands over. All five are fixed, with four new
+`:core` tests for the pure halves.
+
+After those fixes the full suite ran on the owner's phone: **40/40**, including the five
+B8 scenarios, and `./gradlew check` is green with **519 JVM tests** (256 `:core`, 111
+`:data`, 27 `:integrations`, 115 `:ui`, 10 tools) and **246 goldens**. The BLE batching,
+the flush tick, the CCCD queue and the foreground-service guard are still reviewed code
+rather than executed radio; that is recorded as open, not claimed.
