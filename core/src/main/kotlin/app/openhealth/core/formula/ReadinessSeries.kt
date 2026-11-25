@@ -46,6 +46,7 @@ object ReadinessSeries {
      * the resting heart rate and HRV are today's reading (or the most recent one the
      * caller chose) and their series supply the baseline.
      */
+    @Suppress("LongParameterList")
     fun inputs(
         today: LocalDate,
         sleepMinutes: Double? = null,

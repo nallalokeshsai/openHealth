@@ -57,6 +57,9 @@ object SettingKeys {
     const val TRASH_RETENTION_DAYS = "trash.retention_days"
     const val GOAL_MODE = "goal.mode"
     const val GOAL_RATE_KG_PER_WEEK = "goal.rate_kg_per_week"
+
+    /** B9: the daily step goal the Today ring fills towards (`pr.md` §6.6). */
+    const val STEP_GOAL = "goal.steps"
     const val THEME = "appearance.theme"
     const val ACCENT_PRESET = "appearance.accent"
     const val ONBOARDING_COMPLETE = "onboarding.complete"

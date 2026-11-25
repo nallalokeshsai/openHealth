@@ -2380,3 +2380,43 @@ B8 scenarios, and `./gradlew check` is green with **519 JVM tests** (256 `:core`
 `:data`, 27 `:integrations`, 115 `:ui`, 10 tools) and **246 goldens**. The BLE batching,
 the flush tick, the CCCD queue and the foreground-service guard are still reviewed code
 rather than executed radio; that is recorded as open, not claimed.
+
+## B9 — Today and Stats
+
+**Status:** In progress · **Date:** 2026-11-25 · **Branch:** `build/b9-today-and-stats`
+**Goal:** the daily dashboard and the statistics, every number interrogable
+(`BUILD-ROADMAP.md` §B9).
+
+### What this phase added
+
+- **`:core`** — `EnergyBalanceCalculator` (BMR, step energy at a 0.762 m stride and 3 MET,
+  resistance work at 3.5 MET, ranges around each part, net as in minus out);
+  `ReadinessSeries` (the 28-day baseline and input assembly, with a zero-filled load
+  series); `SleepTotalsCalculator`, settling B8's open point that a staged night's awake
+  time is not sleep; `StatsMath` (windows, weekly buckets, the five-step heat grid,
+  ranked totals) and `EnergyRange`/`GoalEta` states.
+- **`:ui`** — the hand-built chart kit (`OhBarChart` with a labelled zero axis,
+  `OhHeatmap`, `OhSparkline` with a goal line, `OhStatBarList`, `OhStackedBar`, the
+  existing line chart and rings), `ChartTableModel`/`OhChartCard` with a "Show as table"
+  action and a "How this is calculated" row, and `ChartRegistry` with a test that every
+  chart id has a title, formula and citation. Today is rebuilt in the §14.2 order; Stats
+  gains its five segments, KPI band and cards. New goldens in dark, light, 200 % text and
+  RTL.
+- **`:app-android`** — `TodayPresenter` (the day's rollups, readiness, energy, steps,
+  weight, plan, due list, their tables and provenance) and `StatsPresenter` (Overview,
+  Body, Training, Sleep, Nutrition). Today's Start opens the planned routine; the goal
+  what-if saves a goal rate through the same safety clamp; the step goal is a layer-5
+  setting. New `:benchmark` module and a benchmark-only five-year seed activity.
+- **Docs** — ADR 0014, `DESIGN.md` §5.6's 12 sp range line and revision 0.3.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew check` | to be recorded at the exit |
+| `./gradlew :app-android:assembleDebug` | to be recorded at the exit |
+| Device walk-through | in progress |
+
+### Placeholders and open issues
+
+- The Macrobenchmark numbers and the device QA sweep are recorded at the exit.

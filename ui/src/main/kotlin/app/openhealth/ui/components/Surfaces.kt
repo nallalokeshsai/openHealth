@@ -382,6 +382,8 @@ data class OhKpiFigure(
     val unit: String? = null,
     val ink: Color? = null,
     val onClick: (() -> Unit)? = null,
+    /** A range or qualifier under the figure, at 12 sp; the figure stays one line. */
+    val detail: String? = null,
 )
 
 /**
@@ -434,6 +436,13 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                     figure.unit?.let {
                         Text(text = it, style = type.caption, color = colors.label2)
                     }
+                    figure.detail?.let {
+                        Text(
+                            text = it,
+                            style = type.caption.tabular(),
+                            color = colors.label2,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(OhTheme.space.s3))
             }
@@ -483,6 +492,14 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                             }
                         }
                         Text(text = figure.label, style = type.footnote, color = colors.label2)
+                        figure.detail?.let {
+                            Text(
+                                text = it,
+                                style = type.caption.tabular(),
+                                color = colors.label2,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }

@@ -81,10 +81,8 @@ import app.openhealth.ui.screens.timeline.TimelineFilter
 import app.openhealth.ui.screens.timeline.TimelineKind
 import app.openhealth.ui.screens.timeline.TimelineModel
 import app.openhealth.ui.screens.timeline.TimelineRowModel
-import app.openhealth.ui.screens.today.Greeting
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayModel
-import app.openhealth.ui.screens.today.TodayStatus
 import app.openhealth.ui.screens.train.ExerciseHistoryModel
 import app.openhealth.ui.screens.train.LiveSessionModel
 import app.openhealth.ui.screens.train.LiveSetEdit
@@ -198,6 +196,9 @@ data class AppState(
     val vitalType: ObservationType? = null,
     val vitalFilter: ObservationContext? = null,
     val devices: app.openhealth.ui.screens.devices.DevicesModel? = null,
+    val stats: app.openhealth.ui.screens.stats.StatsModel? = null,
+    val statsSegment: app.openhealth.ui.screens.stats.StatsSegment =
+        app.openhealth.ui.screens.stats.StatsSegment.OVERVIEW,
     val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
     val pendingPermission: app.openhealth.ui.screens.devices.DevicePermissionRequest? = null,
     val photoCompare: PhotoCompareModel? = null,
@@ -255,6 +256,22 @@ class AppViewModel(
     }
     private val activity: app.openhealth.android.activity.ActivityPresenter
         get() = container.activity
+    private val todayPresenter: app.openhealth.android.today.TodayPresenter by lazy {
+        app.openhealth.android.today.TodayPresenter(
+            context = container.context,
+            store = store,
+            clock = container.clock,
+            zone = zone,
+        )
+    }
+    private val statsPresenter: app.openhealth.android.stats.StatsPresenter by lazy {
+        app.openhealth.android.stats.StatsPresenter(
+            context = container.context,
+            store = store,
+            clock = container.clock,
+            zone = zone,
+        )
+    }
     private val nutritionPresenter: NutritionPresenter by lazy {
         NutritionPresenter(
             store = store,
@@ -364,7 +381,10 @@ class AppViewModel(
         val preferences = container.preferences.snapshot()
         val profile = store.profile.active()
         val complete = preferences.onboardingComplete && profile != null
-        val today = profile?.let { buildToday(preferences, it) }
+        val today = profile?.let { loaded ->
+            todayPresenter.model(preferences, loaded)
+                .copy(bodyMap = buildBodyMap(preferences, loaded))
+        }
         val settings = buildSettings(preferences, profile)
         val devices = activity.model(
             stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
@@ -399,6 +419,7 @@ class AppViewModel(
         _state.update { it.copy(train = train) }
         val vitals = profile?.let { body.model(it, preferences, preferences.demo) }
         _state.update { it.copy(vitals = vitals) }
+        refreshStats(preferences, profile)
         val openVital = _state.value.vitalType
         if (openVital != null) {
             val detail = body.detail(
@@ -427,6 +448,16 @@ class AppViewModel(
         _state.update { it.copy(nutrition = nutritionModel, nutritionDate = date) }
     }
 
+    private suspend fun refreshStats(
+        preferences: app.openhealth.android.preferences.Preferences,
+        profile: app.openhealth.data.db.Profile?,
+    ) {
+        val stats = profile?.let {
+            statsPresenter.model(_state.value.statsSegment, preferences)
+        }
+        _state.update { it.copy(stats = stats) }
+    }
+
     // -------------------------------------------------------------------- training
 
     fun startSession(routineId: String?) {
@@ -437,6 +468,64 @@ class AppViewModel(
     }
 
     fun startFreestyle() = startSession(null)
+
+    /** Today's Start: the plan's routine, or the Train root when there is no plan. */
+    fun startTodayPlan(routineId: String?) {
+        if (routineId == null) return
+        startSession(routineId)
+    }
+
+    fun selectStatsSegment(segment: app.openhealth.ui.screens.stats.StatsSegment) {
+        _state.update { it.copy(statsSegment = segment) }
+        if (_state.value.profile == null) return
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                statsPresenter.model(segment, _state.value.preferences)
+            }
+            _state.update { it.copy(stats = model) }
+        }
+    }
+
+    /**
+     * The goal-ETA what-if's Save: the daily change becomes the goal rate the nutrition
+     * targets use, through the same safety clamp (`pr.md` §6.4). Nothing else is rewritten.
+     */
+    fun saveGoalRate(dailyDeltaKcal: Double) {
+        launchGuarded {
+            val weekly = dailyDeltaKcal * DAYS_PER_WEEK / KCAL_PER_KG
+            withContext(Dispatchers.IO) {
+                store.settings.put(
+                    SettingKeys.GOAL_RATE_KG_PER_WEEK,
+                    kotlin.math.abs(weekly).toString(),
+                )
+            }
+            if (weekly < 0.0) {
+                profileGoal("lose_fat")
+            } else if (weekly > 0.0) {
+                profileGoal("gain_muscle")
+            }
+            showToast(R.string.toast_goal_saved, undo = false)
+            rebuild()
+        }
+    }
+
+    fun saveStepGoal(steps: Int) {
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                store.settings.put(
+                    SettingKeys.STEP_GOAL,
+                    steps.coerceIn(MIN_STEP_GOAL, MAX_STEP_GOAL).toString(),
+                )
+            }
+            showToast(R.string.toast_step_goal_saved, undo = false)
+            rebuild()
+        }
+    }
+
+    private fun profileGoal(goal: String) {
+        val profile = store.profile.active() ?: return
+        store.profile.upsert(profile.copy(goal = goal))
+    }
 
     fun startPastSession(date: kotlinx.datetime.LocalDate) {
         launchGuarded {
@@ -1499,6 +1588,13 @@ class AppViewModel(
                     container.preferences.setModules(HealthModule.entries.toSet())
                     container.preferences.setWeightNeutral(false)
                     container.preferences.setDemo(true)
+                    if (store.settings.get(SettingKeys.GOAL_WEIGHT_KG).isNullOrBlank()) {
+                        val current = store.profile.active()?.weight_kg
+                        store.settings.put(
+                            SettingKeys.GOAL_WEIGHT_KG,
+                            ((current ?: 82.0) - 4.0).toString(),
+                        )
+                    }
                     container.preferences.markOnboardingComplete(tier = 3)
                 }
             }.onFailure {
@@ -2879,42 +2975,6 @@ class AppViewModel(
 
     // ---------------------------------------------------------------------- builders
 
-    private fun buildToday(
-        preferences: app.openhealth.android.preferences.Preferences,
-        profile: Profile,
-    ): TodayModel {
-        val date = now().toLocalDateTime(zone).date
-        val rollups = store.rollups.forDay(date)
-        fun value(type: ObservationType): Double? =
-            rollups.firstOrNull { it.type == type }?.value?.value
-        val notes = store.notes.forDay(date).size
-        val water = value(ObservationType.WATER)
-        val steps = value(ObservationType.STEPS)?.toInt()
-        val energy = value(ObservationType.NUTRITION_ENERGY)
-        val weight = value(ObservationType.WEIGHT)
-        val anything =
-            notes > 0 || water != null || weight != null || steps != null || energy != null
-        return TodayModel(
-            today = date,
-            greeting = greeting(now().toLocalDateTime(zone).hour),
-            status = when {
-                preferences.weightNeutral -> TodayStatus.WEIGHT_NEUTRAL
-                anything -> TodayStatus.LOGGED_TODAY
-                else -> TodayStatus.NOTHING_LOGGED
-            },
-            noteCount = notes,
-            waterMl = water,
-            steps = steps,
-            energyKcal = energy,
-            weightKg = weight,
-            unitSystem = UnitSystem.fromKey(profile.units) ?: UnitSystem.METRIC,
-            readinessScore = null,
-            modules = preferences.modules,
-            demo = preferences.demo,
-            bodyMap = buildBodyMap(preferences, profile),
-        )
-    }
-
     /**
      * The recovery map (`pr.md` §6.5, `DESIGN.md` §9.1): computed from the last four weeks
      * of logged sets, never stored. The adipose layer is hidden entirely in weight-neutral
@@ -3749,13 +3809,6 @@ class AppViewModel(
         return value.takeIf { it in MIN_TAPE_CM..MAX_TAPE_CM }
     }
 
-    private fun greeting(hour: Int): Greeting = when (hour) {
-        in NIGHT_FROM..NIGHT_TO -> Greeting.NIGHT
-        in MORNING_FROM..MORNING_TO -> Greeting.MORNING
-        in AFTERNOON_FROM..AFTERNOON_TO -> Greeting.AFTERNOON
-        else -> Greeting.EVENING
-    }
-
     /**
      * The locale's separators, at most one decimal, no trailing zero, and a true minus
      * sign rather than a hyphen (`DESIGN.md` §8.1, §11.7).
@@ -3774,6 +3827,10 @@ class AppViewModel(
 
     companion object {
         const val DEMO_PROFILE = "profile-demo"
+        private const val KCAL_PER_KG = 7_700.0
+        private const val DAYS_PER_WEEK = 7.0
+        private const val MIN_STEP_GOAL = 1_000
+        private const val MAX_STEP_GOAL = 50_000
         private const val TIMELINE_PAGE = 200L
         private const val UNDO_TOAST_MS = 6_000L
         private const val PLAIN_TOAST_MS = 4_000L
@@ -3794,12 +3851,6 @@ class AppViewModel(
         private const val MAX_SYSTOLIC = 260.0
         private const val MIN_DIASTOLIC = 30.0
         private const val MAX_DIASTOLIC = 180.0
-        private const val NIGHT_FROM = 0
-        private const val NIGHT_TO = 4
-        private const val MORNING_FROM = 5
-        private const val MORNING_TO = 11
-        private const val AFTERNOON_FROM = 12
-        private const val AFTERNOON_TO = 17
         private const val RECENT_LIMIT = 3
         private const val LAST_HOUR = 23
         private const val NBSP = '\u00A0'

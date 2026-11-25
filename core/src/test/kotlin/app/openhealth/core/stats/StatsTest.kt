@@ -6,12 +6,12 @@ import app.openhealth.core.formula.EnergyBalance
 import app.openhealth.core.formula.EnergyBalanceCalculator
 import app.openhealth.core.formula.EnergyRange
 import app.openhealth.core.formula.FormulaOutcome
-import app.openhealth.core.formula.StepEnergy
-import app.openhealth.core.formula.WorkoutEnergy
-import app.openhealth.core.formula.ReadinessSeries
 import app.openhealth.core.formula.Readiness
 import app.openhealth.core.formula.ReadinessInputs
 import app.openhealth.core.formula.ReadinessScore
+import app.openhealth.core.formula.ReadinessSeries
+import app.openhealth.core.formula.StepEnergy
+import app.openhealth.core.formula.WorkoutEnergy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

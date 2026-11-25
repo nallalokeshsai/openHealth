@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber")
+
 package app.openhealth.core.formula
 
 import app.openhealth.core.citation.CitationKey
@@ -32,6 +34,7 @@ object StepEnergy {
     private const val MAX_KG = 400.0
     private const val MAX_STEPS = 200_000
 
+    @Suppress("ReturnCount")
     fun compute(steps: Double, weightKg: Double): FormulaOutcome<EnergyRange> {
         val inputs = listOf(
             input("steps", steps, "{count}"),

@@ -15,6 +15,18 @@ android {
         create("fdroid") { dimension = "store" }
     }
 
+    // Macrobenchmark (B9) installs this variant beside the benchmark test APK. It is a
+    // release-shaped build signed with the debug key so `connectedBenchmarkAndroidTest`
+    // can launch it without the owner's release keystore.
+    buildTypes {
+        create("benchmark") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+        }
+    }
+
     // The FIT golden fixtures are the same bytes the :integrations tests parse, so a
     // device test cannot drift from the JVM one. They are read-only test assets, never
     // shipped in an APK: only the androidTest source set sees them.

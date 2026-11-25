@@ -12,11 +12,7 @@ import kotlinx.datetime.plus
 enum class RampLevel { L0, L1, L2, L3, L4 }
 
 /** A week of one figure, starting on a Monday. */
-data class WeeklyBucket(
-    val start: LocalDate,
-    val value: Double,
-    val daysWithData: Int,
-)
+data class WeeklyBucket(val start: LocalDate, val value: Double, val daysWithData: Int)
 
 /** One cell of a consistency heatmap. */
 data class HeatCell(val date: LocalDate, val value: Double, val level: RampLevel)
@@ -41,9 +37,13 @@ data class SeriesChange(
  * day stays missing: a mean is over the days that have a value, never over zero-filled
  * days.
  */
+@Suppress("TooManyFunctions")
 object StatsMath {
     private const val DAYS_PER_WEEK = 7
     private const val MONDAY = 1
+    private const val STEP_ONE = 0.25
+    private const val STEP_TWO = 0.50
+    private const val STEP_THREE = 0.75
 
     fun startOfWeek(date: LocalDate): LocalDate =
         date.minus(DatePeriod(days = date.dayOfWeek.isoDayNumber - MONDAY))
@@ -78,19 +78,15 @@ object StatsMath {
         if (value <= 0.0 || maximum <= 0.0) return RampLevel.L0
         val ratio = value / maximum
         return when {
-            ratio <= 0.25 -> RampLevel.L1
-            ratio <= 0.50 -> RampLevel.L2
-            ratio <= 0.75 -> RampLevel.L3
+            ratio <= STEP_ONE -> RampLevel.L1
+            ratio <= STEP_TWO -> RampLevel.L2
+            ratio <= STEP_THREE -> RampLevel.L3
             else -> RampLevel.L4
         }
     }
 
     /** Weekly totals ending on [endDate]'s week, oldest week first. */
-    fun weekly(
-        values: List<DailyValue>,
-        endDate: LocalDate,
-        weeks: Int,
-    ): List<WeeklyBucket> {
+    fun weekly(values: List<DailyValue>, endDate: LocalDate, weeks: Int): List<WeeklyBucket> {
         require(weeks > 0) { "a weekly chart needs at least one week" }
         val lastStart = startOfWeek(endDate)
         val firstStart = lastStart.minus(DatePeriod(days = DAYS_PER_WEEK * (weeks - 1)))
@@ -142,9 +138,8 @@ object StatsMath {
     }
 
     /** Descending totals, so a bar list reads like a ranked list (`DESIGN.md` §8.2). */
-    fun ranked(totals: Map<String, Double>): List<NamedTotal> =
-        totals.entries
-            .filter { it.value > 0.0 }
-            .map { NamedTotal(it.key, it.value) }
-            .sortedWith(compareByDescending<NamedTotal> { it.value }.thenBy { it.name })
+    fun ranked(totals: Map<String, Double>): List<NamedTotal> = totals.entries
+        .filter { it.value > 0.0 }
+        .map { NamedTotal(it.key, it.value) }
+        .sortedWith(compareByDescending<NamedTotal> { it.value }.thenBy { it.name })
 }

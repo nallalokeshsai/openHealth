@@ -210,6 +210,21 @@ class TrendTest {
     }
 
     @Test
+    fun dayThirteenHasNoEtaAndDayFourteenHasAWindow() {
+        val thirteen = (0 until 13).map { WeightEntry(day(it), 90.0 - it * 0.07) }
+        val short = WeightTrend.ewma(thirteen).value()
+        val notYet = GoalEta.fromTrend(85.0, short, day(12))
+        assertIs<FormulaOutcome.NotAvailable>(notYet)
+        assertEquals(NotAvailableReason.NOT_ENOUGH_DATA, notYet.reason)
+
+        val fourteen = (0 until 14).map { WeightEntry(day(it), 90.0 - it * 0.07) }
+        val enough = WeightTrend.ewma(fourteen).value()
+        val window = GoalEta.fromTrend(85.0, enough, day(13))
+        assertIs<FormulaOutcome.Computed<EtaWindow>>(window)
+        assertTrue(window.value.start < window.value.end)
+    }
+
+    @Test
     fun etaIsAWindowAroundTheCentralDay() {
         val entries = (0 until 28).map { WeightEntry(day(it), 90.0 - it * 0.07) }
         val series = WeightTrend.ewma(entries).value()

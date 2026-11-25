@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
 import app.openhealth.ui.theme.tabular
@@ -39,16 +40,21 @@ fun OhRing(
     centre: String,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    /** §14.2: 120 dp for energy, 96 dp for steps; the stroke is 8 dp in both. */
+    diameter: Dp? = null,
+    strokeWidth: Dp? = null,
 ) {
     val colors = OhTheme.colors
+    val ringSize = diameter ?: OhTheme.dims.nutritionRing
+    val strokeDp = strokeWidth ?: OhTheme.dims.nutritionRingStroke
     Box(
         modifier = modifier
-            .size(OhTheme.dims.nutritionRing)
+            .size(ringSize)
             .semantics(mergeDescendants = true) { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val stroke = OhTheme.dims.nutritionRingStroke.toPx()
+            val stroke = strokeDp.toPx()
             val inset = stroke / STROKE_HALF
             val arcSize = Size(size.width - stroke, size.height - stroke)
             drawArc(
