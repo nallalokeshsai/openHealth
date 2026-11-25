@@ -257,4 +257,3 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   full instrumented suite has five B3/B6 tests that fail only in class sequence and pass
   alone (test isolation, B10); B8's battery run, real strap pairing and Garmin export
   remain owner hand-overs.
-
