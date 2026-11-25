@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import app.openhealth.R
 import app.openhealth.android.AppContainer
+import app.openhealth.android.body.BodyPresenter
+import app.openhealth.android.body.PhotoCodec
 import app.openhealth.android.nutrition.NutritionPresenter
 import app.openhealth.android.security.LockError
 import app.openhealth.android.training.TrainingPresenter
@@ -22,10 +24,12 @@ import app.openhealth.core.ids.ObservationId
 import app.openhealth.core.ids.SourceId
 import app.openhealth.core.ids.TombstoneId
 import app.openhealth.core.observation.MeasurementMethod
+import app.openhealth.core.observation.ObservationContext
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.Provenance
 import app.openhealth.core.observation.SourceKind
+import app.openhealth.core.body.MeasurementSite
 import app.openhealth.core.preferences.AgeRules
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ProfileGoal
@@ -90,6 +94,10 @@ import app.openhealth.ui.screens.train.RoutineDraft
 import app.openhealth.ui.screens.train.RoutineEditorModel
 import app.openhealth.ui.screens.train.SessionSummaryModel
 import app.openhealth.ui.screens.train.TrainModel
+import app.openhealth.ui.screens.vitals.PhotoCompareModel
+import app.openhealth.ui.screens.vitals.VitalDetailModel
+import app.openhealth.ui.screens.vitals.VitalDraft
+import app.openhealth.ui.screens.vitals.VitalsModel
 import app.openhealth.ui.theme.OhAccent
 import java.util.Locale
 import kotlin.time.Instant
@@ -144,12 +152,13 @@ data class QuickAddUi(
             }
 }
 
-data class AppToast(val messageRes: Int, val undo: Boolean)
+data class AppToast(val messageRes: Int, val undo: Boolean, val argument: Int? = null, val second: Int? = null)
 
 /** One undo slot for the session; the tombstone in Trash is the durable promise. */
 private sealed interface UndoAction {
     data class Added(val entity: TrashEntity, val id: String) : UndoAction
     data class Deleted(val tombstone: TombstoneId) : UndoAction
+    data class DeletedMany(val tombstones: List<TombstoneId>) : UndoAction
 }
 
 data class AppState(
@@ -178,6 +187,11 @@ data class AppState(
     val exerciseHistory: ExerciseHistoryModel? = null,
     val nutrition: NutritionModel? = null,
     val nutritionDate: LocalDate? = null,
+    val vitals: VitalsModel? = null,
+    val vitalDetail: VitalDetailModel? = null,
+    val vitalType: ObservationType? = null,
+    val vitalFilter: ObservationContext? = null,
+    val photoCompare: PhotoCompareModel? = null,
     val foodSearch: FoodSearchModel? = null,
     val portion: PortionModel? = null,
     val entryDetail: EntryDetailModel? = null,
@@ -218,6 +232,17 @@ class AppViewModel(
         )
     }
     private var liveTicker: Job? = null
+    private val body: BodyPresenter by lazy {
+        BodyPresenter(
+            context = container.context,
+            store = store,
+            clock = container.clock,
+            zone = zone,
+            ids = container.ids,
+            manualSource = AppContainer.MANUAL_SOURCE,
+            appVersion = container.versionName,
+        )
+    }
     private val nutritionPresenter: NutritionPresenter by lazy {
         NutritionPresenter(
             store = store,
@@ -323,6 +348,17 @@ class AppViewModel(
         // add's timeline or a settings change is never held behind the exercise library.
         val train = profile?.let { training.train(preferences, it) }
         _state.update { it.copy(train = train) }
+        val vitals = profile?.let { body.model(it, preferences, preferences.demo) }
+        _state.update { it.copy(vitals = vitals) }
+        val openVital = _state.value.vitalType
+        if (openVital != null) {
+            val detail = body.detail(
+                openVital,
+                _state.value.vitalFilter,
+                profile?.units == "imperial",
+            )
+            _state.update { it.copy(vitalDetail = detail) }
+        }
         // The diary is the third update: its own reads (seven days of entries, the
         // water rollup, the food index) never delay the shell or the Train root.
         val date = _state.value.nutritionDate ?: container.clock.now().toLocalDateTime(zone).date
@@ -1957,6 +1993,8 @@ class AppViewModel(
                         )
                     TimelineKind.VITAL ->
                         store.trash.deleteVital(app.openhealth.core.ids.VitalId(row.entityId))
+                    TimelineKind.PHOTO ->
+                        store.trash.deletePhoto(app.openhealth.core.ids.PhotoId(row.entityId))
                     TimelineKind.ENTRY -> store.trash.deleteEntry(EntryId(row.entityId))
                     TimelineKind.SESSION -> store.trash.deleteSession(row.entityId)
                     TimelineKind.SET ->
@@ -2009,6 +2047,7 @@ class AppViewModel(
                         else -> Unit
                     }
                     is UndoAction.Deleted -> store.trash.undo(action.tombstone)
+                    is UndoAction.DeletedMany -> action.tombstones.forEach { store.trash.undo(it) }
                 }
             }
             undoAction = null
@@ -2319,6 +2358,181 @@ class AppViewModel(
         }
     }
 
+    // -------------------------------------------------------------------- body and vitals
+
+    fun openVital(type: ObservationType) {
+        launchGuarded {
+            val detail = withContext(Dispatchers.IO) {
+                body.detail(type, null, profileUnits() == UnitSystem.IMPERIAL)
+            }
+            _state.update {
+                it.copy(vitalType = type, vitalFilter = null, vitalDetail = detail)
+            }
+        }
+    }
+
+    fun closeVital() {
+        _state.update { it.copy(vitalType = null, vitalFilter = null, vitalDetail = null) }
+    }
+
+    fun selectVitalContext(context: ObservationContext?) {
+        val type = _state.value.vitalType ?: return
+        launchGuarded {
+            val detail = withContext(Dispatchers.IO) {
+                body.detail(type, context, profileUnits() == UnitSystem.IMPERIAL)
+            }
+            _state.update { it.copy(vitalFilter = context, vitalDetail = detail) }
+        }
+    }
+
+    fun saveVitalReading(draft: VitalDraft) {
+        val imperial = profileUnits() == UnitSystem.IMPERIAL
+        launchGuarded {
+            val saved = withContext(Dispatchers.IO) { body.logReading(draft, imperial, now()) }
+            showToast(
+                if (saved.isNotEmpty()) R.string.toast_reading_saved else R.string.toast_not_saved,
+                undo = false,
+            )
+            rebuild()
+        }
+    }
+
+    fun saveWeight(value: String) {
+        val imperial = profileUnits() == UnitSystem.IMPERIAL
+        launchGuarded {
+            val saved = withContext(Dispatchers.IO) {
+                body.logWeight(value, now(), imperial)
+            }
+            showToast(
+                if (saved != null) R.string.toast_weight_added else R.string.toast_not_saved,
+                undo = false,
+            )
+            rebuild()
+        }
+    }
+
+    fun saveMeasurement(site: MeasurementSite, value: String) {
+        val imperial = profileUnits() == UnitSystem.IMPERIAL
+        launchGuarded {
+            val saved = withContext(Dispatchers.IO) {
+                body.logMeasurement(site, value, now(), imperial)
+            }
+            showToast(
+                if (saved != null) R.string.toast_measurement_saved else R.string.toast_not_saved,
+                undo = false,
+            )
+            rebuild()
+        }
+    }
+
+    fun deleteVitalReading(id: String) {
+        launchGuarded {
+            val tombstones = withContext(Dispatchers.IO) { body.deleteReading(id) }
+            if (tombstones.isNotEmpty()) {
+                undoAction = UndoAction.DeletedMany(tombstones)
+                showToast(R.string.toast_reading_deleted, undo = true)
+            }
+            rebuild()
+        }
+    }
+
+    fun addPhoto(bytes: ByteArray, caption: String?) {
+        if (bytes.isEmpty()) return
+        launchGuarded {
+            val saved = withContext(Dispatchers.IO) {
+                PhotoCodec.prepare(bytes)?.let { prepared ->
+                    body.savePhoto(prepared, caption, now())
+                }
+            }
+            showToast(
+                if (saved != null) R.string.toast_photo_saved else R.string.toast_not_saved,
+                undo = false,
+            )
+            rebuild()
+        }
+    }
+
+    fun deletePhoto(id: String) {
+        launchGuarded {
+            val tombstone = withContext(Dispatchers.IO) { body.deletePhoto(id) }
+            if (tombstone != null) {
+                undoAction = UndoAction.Deleted(tombstone)
+                showToast(R.string.toast_photo_deleted, undo = true)
+            }
+            rebuild()
+        }
+    }
+
+    fun openPhotoCompare(id: String) {
+        launchGuarded {
+            val compare = withContext(Dispatchers.IO) { body.photoCompare(id) }
+            _state.update { it.copy(photoCompare = compare) }
+        }
+    }
+
+    fun closePhotoCompare() {
+        _state.update { it.copy(photoCompare = null) }
+    }
+
+    fun setPhotosHidden(hidden: Boolean) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { body.setPhotosHidden(hidden) }
+            rebuild()
+        }
+    }
+
+    fun startBpProtocol() {
+        launchGuarded {
+            withContext(Dispatchers.IO) { body.startProtocol() }
+            rebuild()
+        }
+    }
+
+    fun exportVitalsCsv(uri: Uri) {
+        launchGuarded {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val text = body.csv()
+                    container.documents.write(uri, text.toByteArray(Charsets.UTF_8))
+                }
+            }
+            showToast(
+                if (result.isSuccess) R.string.toast_csv_saved else R.string.toast_csv_failed,
+                undo = false,
+            )
+        }
+    }
+
+    fun importVitalsCsv(uri: Uri) {
+        launchGuarded {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val text = container.documents.read(uri).toString(Charsets.UTF_8)
+                    body.importCsv(text)
+                }
+            }.getOrNull()
+            when {
+                result == null -> showToast(R.string.toast_csv_none, undo = false)
+                result.imported == 0 && result.problems > 0 ->
+                    showToast(R.string.toast_csv_none, undo = false)
+
+                result.problems > 0 -> showToast(
+                    R.string.toast_csv_import_problems,
+                    undo = false,
+                    argument = result.imported,
+                    second = result.problems,
+                )
+
+                else -> showToast(
+                    R.string.toast_csv_imported,
+                    undo = false,
+                    argument = result.imported,
+                )
+            }
+            rebuild()
+        }
+    }
+
     // ---------------------------------------------------------------------- builders
 
     private fun buildToday(
@@ -2592,7 +2806,8 @@ class AppViewModel(
         TimelineFilter.NOTES -> row.kind == TimelineKind.NOTE
         TimelineFilter.BODY ->
             row.kind == TimelineKind.WEIGHT ||
-                row.kind == TimelineKind.MEASUREMENT
+                row.kind == TimelineKind.MEASUREMENT ||
+                row.kind == TimelineKind.PHOTO
         TimelineFilter.NUTRITION ->
             row.kind == TimelineKind.WATER ||
                 row.kind == TimelineKind.NUTRITION ||
@@ -2612,6 +2827,7 @@ class AppViewModel(
         "observation" -> observationTimelineRow(item, sources)
         "measurement" -> measurementTimelineRow(item, sources)
         "vital" -> vitalTimelineRow(item, sources)
+        "body_photo" -> photoTimelineRow(item, sources)
         "meal" -> mealTimelineRow(item, sources)
         "fast" -> fastTimelineRow(item, sources)
         "entry" -> entryTimelineRow(item, sources)
@@ -2703,6 +2919,34 @@ class AppViewModel(
                 rawRecord = row.raw_record_id != null,
             ),
             deletable = true,
+        )
+    }
+
+    private fun photoTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.body.photoById(item.entityId)?.let { photo ->
+        val source = sources[photo.source_id] ?: unknownSource()
+        TimelineRowModel(
+            kind = TimelineKind.PHOTO,
+            entityId = photo.id,
+            sourceId = photo.source_id,
+            title = photo.caption ?: "Progress photo",
+            detail = source,
+            valueText = null,
+            provenance = RowProvenance(
+                sourceLabel = source,
+                happenedAt = Instant.fromEpochMilliseconds(photo.happened_at),
+                recordedAt = Instant.fromEpochMilliseconds(photo.recorded_at),
+                method = null,
+                device = photo.device,
+                edited = photo.revision > 1,
+                localDay = photo.local_date,
+                zoneId = photo.zone_id,
+                rawRecord = false,
+            ),
+            deletable = true,
+            sensitive = true,
         )
     }
 
@@ -2877,6 +3121,7 @@ class AppViewModel(
                 TrashEntity.OBSERVATION.table -> TrashKind.OBSERVATION
                 TrashEntity.MEASUREMENT.table -> TrashKind.MEASUREMENT
                 TrashEntity.VITAL.table -> TrashKind.VITAL
+                TrashEntity.PHOTO.table -> TrashKind.PHOTO
                 TrashEntity.ENTRY.table -> TrashKind.ENTRY
                 TrashEntity.WORK_SET.table -> TrashKind.SET
                 TrashEntity.SESSION.table -> TrashKind.SESSION
@@ -2899,11 +3144,16 @@ class AppViewModel(
         return QuickAddUi(whenDate = local.date, whenHour = local.hour)
     }
 
-    private fun showToast(messageRes: Int, undo: Boolean) {
+    private fun showToast(
+        messageRes: Int,
+        undo: Boolean,
+        argument: Int? = null,
+        second: Int? = null,
+    ) {
         toastJob?.cancel()
         _state.update {
             it.copy(
-                toast = AppToast(messageRes, undo),
+                toast = AppToast(messageRes, undo, argument, second),
                 sessionUndo = null,
             )
         }

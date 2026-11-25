@@ -37,6 +37,10 @@ SELECT
 FROM vital
 UNION ALL
 SELECT
+    'body_photo', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM body_photo
+UNION ALL
+SELECT
     'meal', id, local_date, COALESCE(happened_at, created_at),
     COALESCE(recorded_at, created_at), COALESCE(source_id, 'manual'), kind, 0
 FROM meal

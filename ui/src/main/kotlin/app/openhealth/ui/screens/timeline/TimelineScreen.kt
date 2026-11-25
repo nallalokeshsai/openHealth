@@ -500,6 +500,7 @@ private fun TimelineKind.glyph(): ImageVector = when (this) {
     TimelineKind.WEIGHT -> OhObjectIcons.scale
     TimelineKind.MEASUREMENT -> OhObjectIcons.scale
     TimelineKind.VITAL -> OhModuleIcons.heart
+    TimelineKind.PHOTO -> OhIcons.camera
     TimelineKind.MEAL, TimelineKind.NUTRITION, TimelineKind.ENTRY -> OhObjectIcons.plate
     TimelineKind.FAST -> OhGlyphIcons.moon
     TimelineKind.SESSION, TimelineKind.SET -> OhObjectIcons.barbell
@@ -513,6 +514,7 @@ private fun TimelineKind.tint() = when (this) {
     TimelineKind.WATER -> OhTheme.colors.blue
     TimelineKind.WEIGHT, TimelineKind.MEASUREMENT -> OhTheme.colors.acc
     TimelineKind.VITAL -> OhTheme.colors.teal
+    TimelineKind.PHOTO -> OhTheme.colors.acc
     TimelineKind.MEAL, TimelineKind.NUTRITION, TimelineKind.ENTRY -> OhTheme.colors.orange
     TimelineKind.FAST -> OhTheme.colors.teal
     TimelineKind.SESSION, TimelineKind.SET -> OhTheme.colors.acc

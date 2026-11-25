@@ -199,6 +199,37 @@ Acids, Cholesterol, Protein, and Amino Acids* (The National Academies Press, 200
 `https://doi.org/10.17226/10490`). Values are cited facts; the report text is not
 reproduced.
 
+### Vital reference ranges (cited facts)
+
+The Vitals screens draw a reading against a published range. Every range is a cited fact
+and its citation is shown on screen and in the code (`core/.../vitals/Vitals.kt`); no
+guideline text is reproduced. A range without a citation does not ship (`pr.md` §6.9,
+§12.1; `DESIGN.md` §7.5).
+
+| Reading | Range shown | Source |
+|---|---|---|
+| Home blood pressure | below 135/85 mmHg (office 140/90; home protocol: duplicate morning and evening readings for 7 days, 3 minimum, first day discarded) | Mancia G, Kreutz R, Brunström M, et al. 2023 ESH Guidelines for the management of arterial hypertension. *Journal of Hypertension* 2023;41(12):1874-2071. doi:10.1097/HJH.0000000000003480 |
+| Resting heart rate | 60-100 bpm | American Heart Association, *All About Heart Rate*, reviewed 13 May 2024 |
+| Oxygen saturation | 95-100 % at sea level | World Health Organization, *Pulse Oximetry Training Manual*, 2011, ISBN 978 92 4 150113 2 |
+| Body temperature | 36.2-37.0 °C (the review's mean +/- 2 SD across sites, 36.16-37.02 °C) | Geneva II, Cuzzo B, Fazili T, Javaid W. Normal Body Temperature: A Systematic Review. *Open Forum Infectious Diseases* 2019;6(4):ofz032. doi:10.1093/ofid/ofz032 |
+| Blood glucose | fasting 3.9-5.6 mmol/L; two-hour 75 g oral glucose test below 7.8 mmol/L | American Diabetes Association Professional Practice Committee. 2. Diagnosis and Classification of Diabetes: Standards of Care in Diabetes-2026. *Diabetes Care* 2026;49(Suppl 1):S27-S49. doi:10.2337/dc26-S002 (the 3.9 mmol/L low threshold is Table 6.4 of the same standards, dc26-S006) |
+
+The US Navy body-fat estimate (`pr.md` §6.8) is Hodgdon JA, Beckett MB. *Prediction of
+percent body fat for U.S. Navy men and women from body circumferences and height*, Naval
+Health Research Center reports 84-11 and 84-29, 1984. BMI uses WHO Technical Report
+Series 894 (2000); FFMI uses Schutz Y, Kyle UU, Pichard C, *International Journal of
+Obesity* 2002;26(7):953-960. These are numerical formulas and ranges, cited as facts; no
+text from the reports is reproduced.
+
+### Progress photos (app-private, no third party)
+
+Progress photos are re-encoded JPEG images stored as rows in the SQLCipher-encrypted
+database (B7). They never enter shared storage, the media gallery or the platform backup:
+`data_extraction_rules.xml` and `backup_rules.xml` exclude every domain, and the image is
+re-encoded so its EXIF (including any location tag) is dropped. There is no photo library,
+service or model in this path, so no third-party notice applies. The camera and photo
+picker are the platform's own.
+
 ### CameraX (Apache-2.0)
 
 The barcode camera pipeline uses `androidx.camera:camera-core`, `camera-camera2`,

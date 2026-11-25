@@ -313,3 +313,22 @@ private fun LegendDot(label: String, color: androidx.compose.ui.graphics.Color) 
         Text(text = label, style = OhTheme.type.caption, color = OhTheme.colors.label2)
     }
 }
+
+/** The site's name on the silhouette and in the list (`DESIGN.md` §9.3). */
+@Composable
+fun measurementSiteLabel(site: app.openhealth.core.body.MeasurementSite): String =
+    stringResource(
+        when (site) {
+            app.openhealth.core.body.MeasurementSite.NECK -> R.string.measure_site_neck
+            app.openhealth.core.body.MeasurementSite.SHOULDERS -> R.string.measure_site_shoulders
+            app.openhealth.core.body.MeasurementSite.CHEST -> R.string.measure_site_chest
+            app.openhealth.core.body.MeasurementSite.WAIST -> R.string.measure_site_waist
+            app.openhealth.core.body.MeasurementSite.HIPS -> R.string.measure_site_hips
+            app.openhealth.core.body.MeasurementSite.UPPER_ARM -> R.string.measure_site_upper_arm
+            app.openhealth.core.body.MeasurementSite.FOREARM -> R.string.measure_site_forearm
+            app.openhealth.core.body.MeasurementSite.THIGH -> R.string.measure_site_thigh
+            app.openhealth.core.body.MeasurementSite.CALF -> R.string.measure_site_calf
+            app.openhealth.core.body.MeasurementSite.WRIST -> R.string.measure_site_wrist
+            app.openhealth.core.body.MeasurementSite.ANKLE -> R.string.measure_site_ankle
+        },
+    )

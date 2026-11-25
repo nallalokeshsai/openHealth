@@ -90,4 +90,9 @@ object SettingKeys {
 
     /** The one equipment profile: bars, plates and the dumbbell increment (pr.md §6.5). */
     const val TRAINING_EQUIPMENT = "training.equipment"
+
+    /** B7: the gallery can hide a photo until it is tapped, and the home-BP protocol
+     * remembers the day it started so its seven-day grid survives a restart. */
+    const val BODY_PHOTOS_HIDDEN = "body.photos_hidden"
+    const val VITALS_BP_PROTOCOL_START = "vitals.bp_protocol_start"
 }

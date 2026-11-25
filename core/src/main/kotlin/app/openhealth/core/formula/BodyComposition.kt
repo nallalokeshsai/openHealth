@@ -152,8 +152,7 @@ object NavyBodyFat {
  * Fat-free mass index: fat-free mass divided by height squared, and the height-
  * normalised form published by Schutz et al. (`pr.md` §6.8).
  */
-object Ffmi {
-    private const val REFERENCE_HEIGHT_M = 1.8
+object Ffmi {    private const val REFERENCE_HEIGHT_M = 1.8
     private const val NORMALISATION = 6.1
     private const val MIN_KG = 1.0
     private const val MAX_KG = 500.0
@@ -206,6 +205,31 @@ object Ffmi {
                 CitationKey.FFMI_SCHUTZ_2002,
                 inputs,
             )
+        }
+    }
+}
+
+/**
+ * Lean mass from a weight and a body-fat figure (`pr.md` §6.8). It is a derivation, not a
+ * measurement: the card labels it and keeps the body fat's own method, because a lean
+ * mass from BIA and one from DEXA are not the same number.
+ */
+object LeanMass {
+    private const val MIN_KG = 1.0
+    private const val MAX_KG = 500.0
+    private const val MIN_BODY_FAT = 1.0
+    private const val MAX_BODY_FAT = 70.0
+    private const val PERCENT = 100.0
+
+    fun compute(weightKg: Double, bodyFatPercent: Double): FormulaOutcome<Double> {
+        val inputs = listOf(
+            input("weight", weightKg, "kg"),
+            input("bodyFat", bodyFatPercent, "%"),
+        )
+        return if (weightKg !in MIN_KG..MAX_KG || bodyFatPercent !in MIN_BODY_FAT..MAX_BODY_FAT) {
+            notAvailable(NotAvailableReason.OUT_OF_RANGE, CitationKey.APP_RULE, inputs)
+        } else {
+            computed(weightKg * (1.0 - bodyFatPercent / PERCENT), CitationKey.APP_RULE, inputs)
         }
     }
 }

@@ -59,3 +59,8 @@ data class FoodEditorRoute(
 
 @Serializable
 data class MicrosRoute(val date: String)
+
+// B7: one vital's detail page. The type is the ObservationType name, so a route survives
+// process death without a live object.
+@Serializable
+data class VitalDetailRoute(val type: String)

@@ -51,4 +51,7 @@ object OhAlpha {
 
     /** §9.1: the mini map's untrained base is 26 %. */
     const val bodyMiniBase: Float = 0.26f
+
+    /** §9.3: a measured site's anchor glows with `acc` at 30 %. */
+    const val anchorGlow: Float = 0.30f
 }

@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -48,8 +49,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.openhealth.R
 import app.openhealth.android.AppContainer
+import app.openhealth.android.body.PhotoCodec
 import app.openhealth.android.nutrition.BarcodeCameraPreview
 import app.openhealth.android.preferences.ThemeMode
+import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.ui.R as UiR
 import app.openhealth.ui.components.OhTabItem
@@ -71,13 +74,15 @@ import app.openhealth.ui.screens.nutrition.WaterSheet
 import app.openhealth.ui.screens.onboarding.OnboardingScreen
 import app.openhealth.ui.screens.quickadd.QuickAddSheet
 import app.openhealth.ui.screens.roots.StatsRoot
-import app.openhealth.ui.screens.roots.VitalsRoot
 import app.openhealth.ui.screens.settings.SettingsScreen
 import app.openhealth.ui.screens.settings.TrashScreen
 import app.openhealth.ui.screens.shell.OhRootShell
 import app.openhealth.ui.screens.timeline.TimelineScreen
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayScreen
+import app.openhealth.ui.screens.vitals.PhotoCompareSheet
+import app.openhealth.ui.screens.vitals.VitalDetailScreen
+import app.openhealth.ui.screens.vitals.VitalsRootScreen
 import app.openhealth.ui.screens.train.ExerciseHistoryScreen
 import app.openhealth.ui.screens.train.LiveSessionScreen
 import app.openhealth.ui.screens.train.RoutineDetailScreen
@@ -164,7 +169,20 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
                     contentAlignment = Alignment.BottomCenter,
                 ) {
                     OhToast(
-                        message = stringResource(toast.messageRes),
+                        message = when {
+                            toast.argument != null && toast.second != null -> stringResource(
+                                toast.messageRes,
+                                toast.argument,
+                                toast.second,
+                            )
+
+                            toast.argument != null -> stringResource(
+                                toast.messageRes,
+                                toast.argument,
+                            )
+
+                            else -> stringResource(toast.messageRes)
+                        },
                         actionLabel = if (toast.undo) {
                             stringResource(UiR.string.action_undo)
                         } else {
@@ -224,20 +242,52 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                // The Body module hides its surfaces, and weight-neutral hides the
-                // value: both gates, exactly as Today applies them.
-                val weightOffered = HealthModule.BODY in state.preferences.modules &&
-                    state.preferences.displayPolicy.shows(
-                        app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+                val model = state.vitals
+                if (model == null) {
+                    Loading()
+                } else {
+                    VitalsRouteContent(
+                        model = model,
+                        onLogWeight = { viewModel.openQuickAdd(QuickAction.WEIGHT) },
+                        onOpenDetail = { type ->
+                            viewModel.openVital(type)
+                            nav.navigate(VitalDetailRoute(type.name))
+                        },
+                        onSaveReading = viewModel::saveVitalReading,
+                        onSaveMeasurement = viewModel::saveMeasurement,
+                        onAddPhoto = { bytes -> viewModel.addPhoto(bytes, null) },
+                        onOpenPhoto = viewModel::openPhotoCompare,
+                        onDeletePhoto = viewModel::deletePhoto,
+                        onPhotosHidden = viewModel::setPhotosHidden,
+                        onExportCsv = viewModel::exportVitalsCsv,
+                        onImportCsv = viewModel::importVitalsCsv,
+                        onOpenSettings = { nav.navigate(SettingsRoute) },
                     )
-                VitalsRoot(
-                    onLogWeight = if (weightOffered) {
-                        { viewModel.openQuickAdd(QuickAction.WEIGHT) }
-                    } else {
-                        null
+                }
+            }
+        }
+        composable<VitalDetailRoute> { entry ->
+            val type = runCatching {
+                ObservationType.valueOf(entry.toRoute<VitalDetailRoute>().type)
+            }.getOrNull()
+            LaunchedEffect(type) {
+                if (type != null && state.vitalDetail == null) viewModel.openVital(type)
+            }
+            val detail = state.vitalDetail
+            if (type == null || detail == null) {
+                Loading()
+            } else {
+                VitalDetailScreen(
+                    model = detail,
+                    imperial = state.profile?.units == "imperial",
+                    onBack = {
+                        viewModel.closeVital()
+                        nav.popBackStack()
                     },
-                    moduleOff = HealthModule.VITALS !in state.preferences.modules,
-                    onOpenSettings = { nav.navigate(SettingsRoute) },
+                    onSaveReading = viewModel::saveVitalReading,
+                    onDeleteReading = viewModel::deleteVitalReading,
+                    onSelectContext = viewModel::selectVitalContext,
+                    onStartProtocol = viewModel::startBpProtocol,
                 )
             }
         }
@@ -732,6 +782,9 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             onSave = viewModel::saveQuickCalories,
         )
     }
+    state.photoCompare?.let { compare ->
+        PhotoCompareSheet(model = compare, onDismiss = viewModel::closePhotoCompare)
+    }
 }
 
 @Composable
@@ -872,6 +925,67 @@ private fun SessionEnded(onBack: () -> Unit) {
             onClick = onBack,
         )
     }
+}
+
+/**
+ * The Vitals tab with its two document pickers and the system photo picker. The pickers
+ * are the only place a file or a gallery image enters the app: the CSV is read into memory,
+ * the photo is decoded and re-encoded before it is stored, and neither needs a storage
+ * permission (`pr.md` §6.25, `DESIGN.md` §9.4).
+ */
+@Composable
+private fun VitalsRouteContent(
+    model: app.openhealth.ui.screens.vitals.VitalsModel,
+    onLogWeight: () -> Unit,
+    onOpenDetail: (ObservationType) -> Unit,
+    onSaveReading: (app.openhealth.ui.screens.vitals.VitalDraft) -> Unit,
+    onSaveMeasurement: (app.openhealth.core.body.MeasurementSite, String) -> Unit,
+    onAddPhoto: (ByteArray) -> Unit,
+    onOpenPhoto: (String) -> Unit,
+    onDeletePhoto: (String) -> Unit,
+    onPhotosHidden: (Boolean) -> Unit,
+    onExportCsv: (android.net.Uri) -> Unit,
+    onImportCsv: (android.net.Uri) -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val context = LocalContext.current
+    val createCsv = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri ->
+        if (uri != null) onExportCsv(uri)
+    }
+    val openCsv = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) onImportCsv(uri)
+    }
+    val pickPhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            PhotoCodec.read(context, uri)?.let(onAddPhoto)
+        }
+    }
+    VitalsRootScreen(
+        model = model,
+        onLogWeight = onLogWeight,
+        onOpenDetail = onOpenDetail,
+        onSaveReading = onSaveReading,
+        onSaveMeasurement = onSaveMeasurement,
+        onAddPhoto = {
+            pickPhoto.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+            )
+        },
+        onOpenPhoto = onOpenPhoto,
+        onDeletePhoto = onDeletePhoto,
+        onPhotosHidden = onPhotosHidden,
+        onExportCsv = { createCsv.launch("openHealth-body.csv") },
+        onImportCsv = {
+            openCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
+        },
+        onOpenSettings = onOpenSettings,
+    )
 }
 
 /**

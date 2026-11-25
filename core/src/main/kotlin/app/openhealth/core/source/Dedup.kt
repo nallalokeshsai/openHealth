@@ -270,8 +270,8 @@ class ManualFirstPerDayPolicy : DedupPolicy {
         val winner = reduced.sortedWith(
             compareBy(
                 { if (kindOf(it, registry) == SourceKind.MANUAL) 0 else 1 },
-                { -it.provenance.happenedAt.epochSeconds },
-                { -it.provenance.recordedAt.epochSeconds },
+                { -it.provenance.happenedAt.toEpochMilliseconds() },
+                { -it.provenance.recordedAt.toEpochMilliseconds() },
             ),
         ).first()
         val reason = when {

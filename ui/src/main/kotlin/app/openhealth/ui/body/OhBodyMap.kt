@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import app.openhealth.core.body.BodySex
 import app.openhealth.core.body.BodySide
+import app.openhealth.core.body.MeasurementSite
 import app.openhealth.core.body.Muscle
 import app.openhealth.core.body.MuscleRegion
 import app.openhealth.core.formula.RecoveryStep
@@ -89,6 +90,9 @@ fun OhBodyMap(
     sides: Set<BodySide> = setOf(BodySide.FRONT, BodySide.BACK),
     onMuscle: ((Muscle) -> Unit)? = null,
     onShowTable: (() -> Unit)? = null,
+    /** Anchors on the front view for the measurement silhouette (`DESIGN.md` §9.3). */
+    anchors: Map<MeasurementSite, Boolean> = emptyMap(),
+    onAnchor: ((MeasurementSite) -> Unit)? = null,
     geometry: BodyGeometry? = null,
     /**
      * Build the adipose band inline instead of on a background dispatcher. Screenshot
@@ -191,6 +195,8 @@ fun OhBodyMap(
                         onMuscle = onMuscle,
                         nodeSide = nodeSide,
                         synchronousLayers = synchronousLayers,
+                        anchors = anchors,
+                        onAnchor = onAnchor,
                     )
                 }
                 back?.let {
@@ -203,6 +209,8 @@ fun OhBodyMap(
                         onMuscle = onMuscle,
                         nodeSide = nodeSide,
                         synchronousLayers = synchronousLayers,
+                        anchors = anchors,
+                        onAnchor = onAnchor,
                     )
                 }
             }
@@ -348,6 +356,8 @@ private fun ViewPanel(
     onMuscle: ((Muscle) -> Unit)?,
     nodeSide: Map<Muscle, BodySide>,
     synchronousLayers: Boolean,
+    anchors: Map<MeasurementSite, Boolean>,
+    onAnchor: ((MeasurementSite) -> Unit)?,
 ) {
     val colors = OhTheme.colors
     val dims = OhTheme.dims
@@ -532,6 +542,52 @@ private fun ViewPanel(
                 }
             }
         }
+        // The measurement silhouette's anchors (`DESIGN.md` §9.3): one 44 dp target per
+        // measured site on the front view, over the figure, never replacing a muscle tap.
+        if (view.view.side == BodySide.FRONT && anchors.isNotEmpty() && onAnchor != null) {
+            MeasurementSite.anchors.forEach { site ->
+                val muscle = site.anchorMuscle ?: return@forEach
+                val part = view.parts.firstOrNull { it.muscle == muscle } ?: return@forEach
+                val measured = anchors[site] == true
+                val label = measurementSiteLabel(site)
+                val state = stringResource(
+                    if (measured) R.string.measure_anchor_measured else R.string.measure_anchor_open,
+                )
+                val target = OhTheme.dims.touchTarget.value
+                val cx = ((part.bounds.left + part.bounds.right) / 2f - vb.x) * scale
+                val cy = ((part.bounds.top + part.bounds.bottom) / 2f - vb.y) * scale
+                Box(
+                    modifier = Modifier
+                        .offset(x = (cx - target / 2f).dp, y = (cy - target / 2f).dp)
+                        .size(OhTheme.dims.touchTarget)
+                        .semantics {
+                            contentDescription = label
+                            stateDescription = state
+                            if (onAnchor != null) {
+                                role = Role.Button
+                                onClick(label = label) {
+                                    onAnchor(site)
+                                    true
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(modifier = Modifier.size(ANCHOR_HALO)) {
+                        if (measured) {
+                            drawCircle(
+                                color = colors.acc.copy(alpha = OhAlpha.anchorGlow),
+                                radius = size.minDimension / 2f,
+                            )
+                        }
+                        drawCircle(
+                            color = if (measured) colors.acc else colors.label3,
+                            radius = size.minDimension / ANCHOR_DOT_DIVISOR,
+                        )
+                    }
+                }
+            }
+        }
         // One accessibility node per muscle; the drawn shapes stay one pointer target.
         view.parts.filter { it.muscle != null }.reversed().forEach { part ->
             val muscle = part.muscle ?: return@forEach
@@ -574,6 +630,8 @@ private fun ViewPanel(
 }
 
 private const val GLOW_BOTH_SIDES = 2
+private val ANCHOR_HALO = 22.0.dp
+private const val ANCHOR_DOT_DIVISOR = 2.75f
 
 private fun DrawScope.drawHatches(
     view: GeometryView,

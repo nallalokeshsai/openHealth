@@ -2,7 +2,8 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-24 — B4 gives the body map its missing engraving rules
+**Last revision:** 2026-11-25 — B7 records the measurement anchor's 30 % glow in
+Appendix A; no new colour, type role, spacing value or component. Previous: 2026-11-24 — B4 gives the body map its missing engraving rules
 and the dynamic model its arithmetic, no new colour or type role: the Recovering hatch
 (§9.1); the adipose band's thickness rule, region factors, self-relative tape scaling and
 a closing ring that keeps the band out of the seams between muscles, with a full-opacity
@@ -1930,6 +1931,7 @@ press   .97 / .92 small / .985 card
 quick   84 tile / 21 glyph   (§14.2, B3; no new token, quoted here for the guard)
 body    pair gap 6 · stroke 2.5 · selected 7 + 2 glow · mini 46 (event 30) tall,
         3 stroke, 2 gap · hatch 1.5 / 7 at 35 % · fat 55 %   (§9.1, §9.1.1, B4)
+anchor  measured 22 dp glow at 30 % · 8 dp dot   (§9.3, B7)
 ```
 
 ---
