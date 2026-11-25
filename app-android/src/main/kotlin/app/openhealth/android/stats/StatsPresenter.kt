@@ -22,6 +22,7 @@ import app.openhealth.core.formula.SleepSession
 import app.openhealth.core.formula.SleepSessions
 import app.openhealth.core.formula.WeightEntry
 import app.openhealth.core.formula.WeightTrend
+import app.openhealth.core.ids.SourceId
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.SensitiveMetric
@@ -204,6 +205,7 @@ class StatsPresenter(
                         StatsKpi(
                             value = numberFormat.format(it.roundToInt()),
                             label = context.getString(UiR.string.stats_kpi_steps),
+                            chart = ChartId.STEPS_TREND,
                         )
                     } ?: StatsKpi(
                         value = DASH,
@@ -218,6 +220,7 @@ class StatsPresenter(
                             value = signed(it, 1),
                             label = context.getString(UiR.string.stats_kpi_weight),
                             unit = context.getString(UiR.string.unit_kg),
+                            chart = ChartId.WEIGHT_TREND,
                         )
                     } ?: StatsKpi(
                         value = DASH,
@@ -242,6 +245,7 @@ class StatsPresenter(
                         value = decimal(it, 1),
                         label = context.getString(UiR.string.stats_card_weight_title),
                         unit = context.getString(UiR.string.unit_kg),
+                        chart = ChartId.WEIGHT_TREND,
                     )
                 } ?: StatsKpi(DASH, context.getString(UiR.string.stats_card_weight_title)),
                 weeklyRate(date)?.let {
@@ -249,6 +253,7 @@ class StatsPresenter(
                         value = signed(it, 2),
                         label = context.getString(UiR.string.stats_weekly_rate_label),
                         unit = context.getString(UiR.string.stats_unit_kg_week),
+                        chart = ChartId.WEIGHT_TREND,
                     )
                 } ?: StatsKpi(
                     DASH,
@@ -259,6 +264,7 @@ class StatsPresenter(
                         value = decimal(it, 1),
                         label = context.getString(UiR.string.stats_card_body_fat_title),
                         unit = context.getString(UiR.string.unit_percent),
+                        chart = ChartId.BODY_FAT_TREND,
                     )
                 } ?: StatsKpi(DASH, context.getString(UiR.string.stats_card_body_fat_title)),
             )
@@ -272,10 +278,12 @@ class StatsPresenter(
                     value = numberFormat.format(weeklyTotal(date, ObservationType.TRAINING_VOLUME)),
                     label = context.getString(UiR.string.stats_kpi_volume),
                     unit = context.getString(UiR.string.unit_kg),
+                    chart = ChartId.TRAINING_VOLUME,
                 ),
                 StatsKpi(
                     value = numberFormat.format(weeklyTotal(date, ObservationType.TRAINING_SETS)),
                     label = context.getString(UiR.string.stats_kpi_sets),
+                    chart = ChartId.TRAINING_CONSISTENCY,
                 ),
                 StatsKpi(
                     value = numberFormat.format(sessionsThisWeek(date)),
@@ -293,14 +301,17 @@ class StatsPresenter(
                     value = nights.map { it.totals.asleepMinutes }.average().takeIf { !it.isNaN() }
                         ?.let { duration(it) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_sleep),
+                    chart = ChartId.SLEEP_DURATION,
                 ),
                 StatsKpi(
                     value = sleepDebt(date)?.let { duration(it.debtMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_debt),
+                    chart = ChartId.SLEEP_DURATION,
                 ),
                 StatsKpi(
                     value = sleepDebt(date)?.let { duration(it.consistencyMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_consistency),
+                    chart = ChartId.SLEEP_DURATION,
                 ),
             )
         }
@@ -316,6 +327,7 @@ class StatsPresenter(
                         value = numberFormat.format(it.roundToInt()),
                         label = context.getString(UiR.string.stats_kpi_energy),
                         unit = context.getString(UiR.string.unit_kcal),
+                        chart = ChartId.ENERGY_TREND,
                     )
                 } ?: StatsKpi(DASH, context.getString(UiR.string.stats_kpi_energy)),
                 average(date, ObservationType.NUTRITION_PROTEIN, SEASON_DAYS)?.let {
@@ -323,6 +335,7 @@ class StatsPresenter(
                         value = numberFormat.format(it.roundToInt()),
                         label = context.getString(UiR.string.stats_kpi_protein),
                         unit = context.getString(UiR.string.unit_g),
+                        chart = ChartId.PROTEIN_TREND,
                     )
                 } ?: StatsKpi(DASH, context.getString(UiR.string.stats_kpi_protein)),
                 StatsKpi(
@@ -893,10 +906,15 @@ class StatsPresenter(
                     type = observation.type,
                     seconds = observation.value.value,
                     localDate = observation.localDate,
+                    sourceId = observation.provenance.sourceId.value,
                 )
             }
         }
-        return SleepSessions.collect(samples)
+        // One source wins a night, by the same priority list the rollups use (`pr.md` §7.6).
+        val registry = store.sources.registry()
+        return SleepSessions.collect(samples) { sourceId ->
+            registry.priorityOf(SourceId(sourceId), ObservationType.SLEEP_DURATION)
+        }
     }
 
     private fun sleepDebt(date: LocalDate): app.openhealth.core.formula.SleepDebtResult? {

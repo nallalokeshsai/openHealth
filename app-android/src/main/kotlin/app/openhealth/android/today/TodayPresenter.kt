@@ -36,6 +36,7 @@ import app.openhealth.core.formula.Tdee
 import app.openhealth.core.formula.WeightEntry
 import app.openhealth.core.formula.WeightTrend
 import app.openhealth.core.formula.WorkoutEnergy
+import app.openhealth.core.ids.SourceId
 import app.openhealth.core.nutrition.MacroTargets
 import app.openhealth.core.nutrition.Nutrient
 import app.openhealth.core.nutrition.TargetSuggestions
@@ -351,10 +352,15 @@ class TodayPresenter(
                     type = observation.type,
                     seconds = observation.value.value,
                     localDate = observation.localDate,
+                    sourceId = observation.provenance.sourceId.value,
                 )
             }
         }
-        return SleepSessions.collect(samples)
+        // One source wins a night, by the same priority list the rollups use (`pr.md` §7.6).
+        val registry = store.sources.registry()
+        return SleepSessions.collect(samples) { sourceId ->
+            registry.priorityOf(SourceId(sourceId), ObservationType.SLEEP_DURATION)
+        }
     }
 
     private fun dailySeries(type: ObservationType, today: LocalDate): List<DailyValue> =
@@ -967,10 +973,9 @@ class TodayPresenter(
         }
         if (steps != null) {
             val rollup = store.rollups.forDayAndType(date, ObservationType.STEPS)
-            val observation = store.observations.forDayAndType(
-                date,
-                ObservationType.STEPS,
-            ).lastOrNull()
+            // Steps are the type two sources most often both report (`pr.md` §7.6), so
+            // the sheet reads the winner's own observation, never the loser's device.
+            val observation = winningObservation(ObservationType.STEPS, date, rollup)
             add(
                 TodayProvenance(
                     TodayValue.STEPS,

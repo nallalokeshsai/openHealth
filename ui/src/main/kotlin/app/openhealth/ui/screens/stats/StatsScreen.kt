@@ -100,15 +100,12 @@ fun StatsScreen(
         if (model.kpis.size >= KPI_BAND) {
             OhKpiBand(
                 figures = model.kpis.take(KPI_BAND).map { kpi ->
+                    val kpiTable = tableForKpi(kpi, model.cards)
                     OhKpiFigure(
                         value = kpi.value,
                         label = kpi.label,
                         unit = kpi.unit,
-                        onClick = {
-                            table = kpi.chart?.let { chart ->
-                                model.cards.firstOrNull { it.chart == chart }?.table
-                            } ?: model.cards.firstOrNull()?.table
-                        },
+                        onClick = kpiTable?.let { opened -> { table = opened } },
                     )
                 },
             )

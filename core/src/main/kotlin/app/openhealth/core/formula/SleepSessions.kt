@@ -1,6 +1,7 @@
 package app.openhealth.core.formula
 
 import app.openhealth.core.observation.ObservationType
+import app.openhealth.core.source.SourceRegistry
 import kotlinx.datetime.LocalDate
 
 /** One sleep reading as the observation layer stores it, before a session is assembled. */
@@ -9,10 +10,17 @@ data class SleepSample(
     val type: ObservationType,
     val seconds: Double,
     val localDate: LocalDate,
+    /** The source that wrote the reading; two sources are never merged into one night. */
+    val sourceId: String? = null,
 )
 
 /** One night, assembled from every reading the source wrote for the same session. */
-data class SleepSession(val groupKey: String?, val localDate: LocalDate, val totals: SleepTotals)
+data class SleepSession(
+    val groupKey: String?,
+    val localDate: LocalDate,
+    val totals: SleepTotals,
+    val sourceId: String? = null,
+)
 
 /**
  * A night is a session, not a calendar day (`pr.md` §6.10). Health Connect writes a
@@ -20,17 +28,34 @@ data class SleepSession(val groupKey: String?, val localDate: LocalDate, val tot
  * started, so a night that crosses midnight would otherwise be split into a fragment on
  * each day. Readings that share a source session id are summed into one [SleepTotals],
  * and only when they carry no id are they grouped by their local day.
+ *
+ * A night is also deduplicated the way the rollup layer deduplicates sleep (`pr.md` §7.6,
+ * `MostDetailedPolicy`): readings from two sources are never summed and never shown as
+ * two nights. When more than one source covers the same local day the most detailed one
+ * wins, ties going to the higher-priority source, and the others are left out.
  */
 object SleepSessions {
     private const val UNGROUPED = "ungrouped:"
+    private const val NO_SOURCE = "source:none"
 
-    fun collect(samples: List<SleepSample>): List<SleepSession> {
+    /**
+     * [priority] is the configured source priority for sleep, lower being better; the
+     * default treats every source as equally trusted, for a caller with no registry.
+     */
+    fun collect(
+        samples: List<SleepSample>,
+        priority: (String) -> Int = { SourceRegistry.UNKNOWN_SOURCE_PRIORITY },
+    ): List<SleepSession> {
         val grouped = samples
             .filter { it.seconds.isFinite() && it.seconds >= 0.0 }
             .groupBy { sample ->
-                sample.groupKey?.let { "group:$it" } ?: "$UNGROUPED${sample.localDate}"
+                // The source is part of the key: two sources that both report a night
+                // without a session id must not be added together (`pr.md` §7.6).
+                val within = sample.groupKey?.let { "group:$it" }
+                    ?: "$UNGROUPED${sample.localDate}"
+                "${sample.sourceId ?: NO_SOURCE}|$within"
             }
-        return grouped.values.mapNotNull { readings ->
+        val sessions = grouped.values.mapNotNull { readings ->
             val total = readings.firstOrNull { it.type == ObservationType.SLEEP_DURATION }
             val stages = readings.filter { it.type != ObservationType.SLEEP_DURATION }
             val totals = SleepTotalsCalculator.of(
@@ -46,12 +71,42 @@ object SleepSessions {
             val date = total?.localDate
                 ?: stages.minOfOrNull { it.localDate }
                 ?: return@mapNotNull null
-            SleepSession(
-                groupKey = readings.firstNotNullOfOrNull { it.groupKey },
-                localDate = date,
-                totals = totals,
+            Assembled(
+                session = SleepSession(
+                    groupKey = readings.firstNotNullOfOrNull { it.groupKey },
+                    localDate = date,
+                    totals = totals,
+                    sourceId = readings.firstNotNullOfOrNull { it.sourceId },
+                ),
+                readings = readings.size,
             )
-        }.sortedBy { it.localDate }
+        }
+        return sessions
+            .groupBy { it.session.localDate }
+            .values
+            .flatMap { sameDay -> winningSource(sameDay, priority) }
+            .sortedBy { it.localDate }
+    }
+
+    private data class Assembled(val session: SleepSession, val readings: Int)
+
+    /** One source wins a day, never the sum and never the longest night. */
+    private fun winningSource(
+        sameDay: List<Assembled>,
+        priority: (String) -> Int,
+    ): List<SleepSession> {
+        val bySource = sameDay.groupBy { it.session.sourceId }
+        if (bySource.size <= 1) return sameDay.map { it.session }
+        val winner = bySource.entries
+            .sortedWith(
+                compareByDescending<Map.Entry<String?, List<Assembled>>> { (_, group) ->
+                    group.sumOf { it.readings }
+                }.thenBy { (sourceId, _) ->
+                    sourceId?.let(priority) ?: SourceRegistry.UNKNOWN_SOURCE_PRIORITY
+                }.thenBy { (sourceId, _) -> sourceId.orEmpty() },
+            )
+            .first()
+        return winner.value.map { it.session }
     }
 
     private fun secondsOf(readings: List<SleepSample>, type: ObservationType): Double? {

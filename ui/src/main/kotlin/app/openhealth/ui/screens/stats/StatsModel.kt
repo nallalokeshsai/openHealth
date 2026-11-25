@@ -71,6 +71,16 @@ data class StatsCard(
     }
 }
 
+/**
+ * The table a KPI figure opens. A figure that names no chart, or whose chart has no card
+ * on this segment, opens nothing: a number never opens another number's table
+ * (`DESIGN.md` §7.1, §8.6).
+ */
+fun tableForKpi(kpi: StatsKpi, cards: List<StatsCard>): ChartTableModel? {
+    val chart = kpi.chart ?: return null
+    return cards.firstOrNull { it.chart == chart }?.table
+}
+
 /** A plain row under the charts, for records that are lists rather than trends. */
 data class StatsRecords(val title: String, val rows: List<String>)
 

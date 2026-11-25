@@ -110,10 +110,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
@@ -512,7 +514,10 @@ class AppViewModel(
                 val sex = profile?.sex_at_birth?.let {
                     runCatching { app.openhealth.core.formula.SexAtBirth.valueOf(it) }.getOrNull()
                 }
-                val weight = profile?.weight_kg
+                // The measured weight comes first, exactly as Today's energy card reads
+                // it; a profile whose weight_kg was never filled in must not cost the
+                // macro targets their numbers (`pr.md` §6.3, §6.4).
+                val weight = latestWeightKg(today) ?: profile?.weight_kg
                 val suggested = if (sex != null && weight != null) {
                     (
                         app.openhealth.core.nutrition.TargetSuggestions.suggest(
@@ -541,6 +546,15 @@ class AppViewModel(
             showToast(R.string.toast_goal_saved, undo = false)
             rebuild()
         }
+    }
+
+    /** The latest weight the record holds in the last 90 days, from the deduplicated day. */
+    private fun latestWeightKg(today: LocalDate): Double? {
+        val from = today.minus(DatePeriod(days = WEIGHT_LOOKBACK_DAYS))
+        return store.rollups.forTypeRange(ObservationType.WEIGHT, from, today)
+            .maxByOrNull { it.localDate }
+            ?.value
+            ?.value
     }
 
     fun saveStepGoal(steps: Int) {
@@ -3859,6 +3873,7 @@ class AppViewModel(
         private const val MIN_STEP_GOAL = 1_000
         private const val DEMO_WEIGHT_KG = 82.0
         private const val DEMO_GOAL_DROP_KG = 4.0
+        private const val WEIGHT_LOOKBACK_DAYS = 90
         private const val MIN_GOAL_KCAL = 500.0
         private const val MAX_GOAL_KCAL = 10_000.0
         private const val MAX_STEP_GOAL = 50_000
