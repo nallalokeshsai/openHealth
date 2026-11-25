@@ -2504,7 +2504,7 @@ rather than executed radio; that is recorded as open, not claimed.
 
 - The B9 instrumented scenarios (`TodayStatsExitTest`) pass **2/2** on the owner's phone.
 - The full instrumented suite ran **42 tests**. `ActivityExitTest`, `TrainingExitTest`, `VitalsExitTest`, `ExerciseLibraryDeviceTest` and both B9 scenarios pass. Five B3/B6 tests (`underSixteen…`, `aSeventeenYearOld…`, `waterGlasses…`, `theOneTapWater…`, `theBundledIndex…`) failed only in the class sequence; each was re-run alone and passed. The failures are test-suite state and the phone's intermittent USB drop (they surfaced as `SQLITE_IOERR_DELETE`), not product failures; this is recorded as an open B10 test-isolation issue.
-- The manual sweep exercised Today (populated, empty via the golden suite, weight-neutral, dark/light/200 %), the readiness explanation, the goal what-if and Save target, the step goal, the chart tables and formula sheets, all five Stats segments, the four states of a card, rotation, process death, back navigation, and the settings surface. Eleven issues were recorded; seven are fixed in this phase and four are moved to open issues below.
+- The manual sweep exercised Today (populated, empty via the golden suite, weight-neutral, dark/light/200 %), the readiness explanation, the goal what-if and Save target, the step goal, the chart tables and formula sheets, all five Stats segments, the four states of a card, rotation, process death, back navigation, and the settings surface. Eleven issues were recorded; eight are fixed in this phase and three are moved to open issues below.
 - Device output, screenshots and the issue list lived under `/tmp/openhealth-qa/b9` and were never committed.
 
 ### Open issues from QA (moved here)
