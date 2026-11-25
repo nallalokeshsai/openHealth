@@ -1,5 +1,8 @@
 plugins {
     id("openhealth.kotlin.library")
+    // The device registry and the sync book are small JSON documents in the settings
+    // layer; the compiler plugin generates their serializers at build time.
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // Domain types, UCUM units, formulas and validators. No android.* and no androidx.*

@@ -2,7 +2,9 @@
 
 **Version:** 0.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-25 — B7 records the measurement anchor's 30 % glow, the
+**Last revision:** 2026-11-25 — B8 adds the Devices recipe to §14.2 (a pushed page under
+Settings: grouped lists, one accent for the winning source, no new colour, type role,
+spacing value or component). Previous: 2026-11-25 — B7 records the measurement anchor's 30 % glow, the
 line-chart chrome and the photo-slider geometry in Appendix A; no new colour, type role,
 spacing value or component. Previous: 2026-11-24 — B4 gives the body map its missing engraving rules
 and the dynamic model its arithmetic, no new colour or type role: the Recovering hatch

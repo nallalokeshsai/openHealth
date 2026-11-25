@@ -117,6 +117,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
+private const val BLUETOOTH_SCAN_MILLIS = 20_000L
+
 /** The onboarding surface state: the current question, what was typed, and why it failed. */
 data class OnboardingUi(
     val step: OnboardingStep = OnboardingStep.Welcome,
@@ -195,6 +197,9 @@ data class AppState(
     val vitalDetail: VitalDetailModel? = null,
     val vitalType: ObservationType? = null,
     val vitalFilter: ObservationContext? = null,
+    val devices: app.openhealth.ui.screens.devices.DevicesModel? = null,
+    val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
+    val pendingPermission: app.openhealth.ui.screens.devices.DevicePermissionRequest? = null,
     val photoCompare: PhotoCompareModel? = null,
     val foodSearch: FoodSearchModel? = null,
     val portion: PortionModel? = null,
@@ -248,6 +253,8 @@ class AppViewModel(
             appVersion = container.versionName,
         )
     }
+    private val activity: app.openhealth.android.activity.ActivityPresenter
+        get() = container.activity
     private val nutritionPresenter: NutritionPresenter by lazy {
         NutritionPresenter(
             store = store,
@@ -289,7 +296,36 @@ class AppViewModel(
     private var toastJob: Job? = null
 
     init {
+        container.ble.onFound { found ->
+            val mapped = found.map { device ->
+                app.openhealth.ui.screens.devices.FoundDeviceModel(
+                    address = device.address,
+                    name = device.name ?: device.address,
+                    kindLabel = kindLabel(device.kind),
+                    kind = app.openhealth.core.activity.DeviceKindName.of(device.kind),
+                )
+            }
+            _state.update { it.copy(foundDevices = mapped) }
+        }
+        container.ble.onState {
+            _state.update { current ->
+                current.copy(
+                    devices = activity.model(found = current.foundDevices),
+                )
+            }
+        }
         refresh()
+    }
+
+    private fun kindLabel(kind: app.openhealth.core.activity.DeviceKind): String = when (kind) {
+        app.openhealth.core.activity.DeviceKind.HEART_RATE ->
+            container.context.getString(UiR.string.devices_kind_heart_rate)
+
+        app.openhealth.core.activity.DeviceKind.SCALE ->
+            container.context.getString(UiR.string.devices_kind_scale)
+
+        app.openhealth.core.activity.DeviceKind.BLOOD_PRESSURE ->
+            container.context.getString(UiR.string.devices_kind_pressure)
     }
 
     fun refresh() {
@@ -328,6 +364,7 @@ class AppViewModel(
         val complete = preferences.onboardingComplete && profile != null
         val today = profile?.let { buildToday(preferences, it) }
         val settings = buildSettings(preferences, profile)
+        val devices = activity.model(found = _state.value.foundDevices)
         val timeline = buildTimeline(preferences)
         val trash = buildTrash(preferences)
         val recent = buildRecent(preferences)
@@ -343,6 +380,7 @@ class AppViewModel(
                 profile = profile,
                 today = today,
                 settings = settings,
+                devices = devices,
                 timeline = timeline,
                 trash = trash,
                 recent = recent,
@@ -363,6 +401,11 @@ class AppViewModel(
                 profile?.units == "imperial",
             )
             _state.update { it.copy(vitalDetail = detail) }
+        }
+        if (store.devices.stepTrackingEnabled() && container.activity.phoneSensorPresent) {
+            // The counter keeps counting while nothing runs; starting the service makes
+            // the next sensor event persist the interval (`pr.md` §6.6).
+            app.openhealth.android.activity.StepTrackingService.ensureRunning(container.context)
         }
         // The diary is the third update: its own reads (seven days of entries, the
         // water rollup, the food index) never delay the shell or the Train root.
@@ -2383,6 +2426,198 @@ class AppViewModel(
             rebuild()
         }
     }
+
+    // -------------------------------------------------------------------- devices
+
+    fun openDevices() {
+        _state.update {
+            it.copy(devices = activity.model(found = it.foundDevices), pendingPermission = null)
+        }
+    }
+
+    fun closeDevices() {
+        container.ble.stopScan()
+        _state.update { it.copy(foundDevices = emptyList()) }
+    }
+
+    /** Starts or stops the phone's own counter; the permission is asked at first use. */
+    fun toggleStepTracking() {
+        val tracking = store.devices.stepTrackingEnabled()
+        if (tracking) {
+            activity.setStepTracking(false)
+            app.openhealth.android.activity.StepTrackingService.ensureStopped(container.context)
+            refreshDevices()
+            return
+        }
+        if (activityRecognitionGranted()) {
+            activity.setStepTracking(true)
+            app.openhealth.android.activity.StepTrackingService.ensureRunning(container.context)
+            refreshDevices()
+        } else {
+            _state.update {
+                it.copy(
+                    pendingPermission =
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest
+                        .ACTIVITY_RECOGNITION,
+                )
+            }
+        }
+    }
+
+    fun onActivityRecognitionResult(granted: Boolean) {
+        _state.update { it.copy(pendingPermission = null) }
+        if (!granted) {
+            showToast(R.string.toast_permission_needed, undo = false)
+            return
+        }
+        activity.setStepTracking(true)
+        app.openhealth.android.activity.StepTrackingService.ensureRunning(container.context)
+        refreshDevices()
+    }
+
+    fun onHealthConnectRequested() {
+        _state.update {
+            it.copy(
+                pendingPermission =
+                app.openhealth.ui.screens.devices.DevicePermissionRequest.HEALTH_CONNECT,
+            )
+        }
+    }
+
+    fun onHealthPermissionResult(granted: Set<String>) {
+        _state.update { it.copy(pendingPermission = null) }
+        if (granted.isEmpty()) {
+            showToast(R.string.toast_permission_needed, undo = false)
+            refreshDevices()
+            return
+        }
+        syncHealthConnect(backfill = false)
+    }
+
+    fun syncHealthConnect(backfill: Boolean) {
+        launchGuarded {
+            val outcome = withContext(Dispatchers.IO) {
+                activity.syncHealthConnect(backfill)
+                    .also { if (it.ok) store.engine.rebuildAll() }
+            }
+            val message = when {
+                outcome.error == app.openhealth.android.activity.ActivityPresenter.NO_PERMISSION ->
+                    R.string.toast_health_no_permission
+
+                outcome.error != null -> R.string.toast_health_failed
+                outcome.imported == 0 -> R.string.toast_health_none
+                else -> R.string.toast_health_synced
+            }
+            refreshDevices()
+            if (outcome.ok) showToast(message, undo = false) else showToast(message, undo = false)
+        }
+    }
+
+    fun importFit(uri: android.net.Uri) {
+        launchGuarded {
+            val outcome = withContext(Dispatchers.IO) { activity.importFit(uri) }
+            showToast(
+                if (outcome.ok) R.string.toast_fit_imported else R.string.toast_fit_failed,
+                undo = false,
+            )
+            refreshDevices()
+            refresh()
+        }
+    }
+
+    fun scanForDevices() {
+        if (!container.ble.hasPermissions()) {
+            _state.update {
+                it.copy(
+                    pendingPermission =
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest.BLUETOOTH,
+                )
+            }
+            return
+        }
+        _state.update { it.copy(foundDevices = emptyList()) }
+        container.ble.startScan()
+        launchGuarded {
+            delay(BLUETOOTH_SCAN_MILLIS)
+            container.ble.stopScan()
+            refreshDevices()
+        }
+    }
+
+    fun onBluetoothResult(granted: Boolean) {
+        _state.update { it.copy(pendingPermission = null) }
+        if (!granted) {
+            showToast(R.string.toast_permission_needed, undo = false)
+            return
+        }
+        scanForDevices()
+    }
+
+    fun stopScanForDevices() {
+        container.ble.stopScan()
+        refreshDevices()
+    }
+
+    fun pairDevice(found: app.openhealth.ui.screens.devices.FoundDeviceModel) {
+        launchGuarded {
+            val paired = withContext(Dispatchers.IO) { activity.pair(found) }
+            if (paired) {
+                container.ble.stopScan()
+                container.ble.connect(found.address, found.kind.let { kindOf(it) })
+                _state.update { it.copy(foundDevices = emptyList()) }
+                refreshDevices()
+            }
+        }
+    }
+
+    fun unpairDevice(id: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { activity.unpair(id) }
+            refreshDevices()
+        }
+    }
+
+    fun connectDevice(id: String) {
+        launchGuarded { withContext(Dispatchers.IO) { activity.connect(id) } }
+    }
+
+    fun correctTodaySteps(steps: Int) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { activity.correctToday(steps) }
+            refreshDevices()
+            refresh()
+        }
+    }
+
+    fun excludeTodayFromSteps() {
+        launchGuarded {
+            val excluded = withContext(Dispatchers.IO) { activity.toggleExcludeToday() }
+            if (excluded) showToast(UiR.string.devices_excluded, undo = false)
+            refreshDevices()
+            refresh()
+        }
+    }
+
+    fun moveSourcePriority(sourceId: String, up: Boolean) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { activity.movePriority(sourceId, up) }
+            refreshDevices()
+            refresh()
+        }
+    }
+
+    private fun refreshDevices() {
+        _state.update { it.copy(devices = activity.model(found = it.foundDevices)) }
+    }
+
+    private fun activityRecognitionGranted(): Boolean =
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            container.context,
+            android.Manifest.permission.ACTIVITY_RECOGNITION,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    private fun kindOf(kind: app.openhealth.core.activity.DeviceKindName) =
+        app.openhealth.core.activity.DeviceKindName.toKind(kind)
 
     // -------------------------------------------------------------------- body and vitals
 

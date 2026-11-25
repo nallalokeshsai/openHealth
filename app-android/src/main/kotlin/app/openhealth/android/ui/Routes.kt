@@ -24,6 +24,10 @@ data object StatsRoute
 @Serializable
 data object SettingsRoute
 
+/** B8: the Devices and integrations page, pushed from Settings. */
+@Serializable
+data object DevicesRoute
+
 @Serializable
 data object TimelineRoute
 

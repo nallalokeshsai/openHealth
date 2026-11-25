@@ -31,7 +31,7 @@ import kotlinx.datetime.toLocalDateTime
  *
  * Constructed by Koin in [OpenHealthApp]; nothing here performs network I/O.
  */
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 class AppContainer(
     context: Context,
     documentStore: app.openhealth.android.documents.DocumentStore? = null,
@@ -42,9 +42,10 @@ class AppContainer(
      */
     databaseName: String = AndroidDatabaseFactory.DEFAULT_DATABASE,
     vaultPreferences: String = DEFAULT_VAULT,
-    /** Test seams: the bundled index and the one explicit network client. */
+    /** Test seams: the bundled index, the one explicit network client and the health bus. */
     foodIndexOverride: app.openhealth.core.nutrition.BundledFoodIndex? = null,
     offClientOverride: app.openhealth.integrations.food.OpenFoodFactsClient? = null,
+    healthBusOverride: app.openhealth.core.seam.HealthBus? = null,
 ) {
     val context: Context = context.applicationContext
     private val appContext = this.context
@@ -60,6 +61,7 @@ class AppContainer(
         val local = LocalStore(opened.value.driver, opened.value.db)
         ensureManualSource(local)
         ensureImportSource(local)
+        ensurePhoneSource(local)
         ensureExerciseLibrary(local)
         local.trash.purgeExpired()
         local
@@ -89,6 +91,79 @@ class AppContainer(
         )
     }
     val documents = documentStore ?: AndroidDocumentStore(appContext)
+
+    /** The health-bus seam's Android implementation; read-only (Tech-Stack.md §8). */
+    val healthBus: app.openhealth.core.seam.HealthBus =
+        healthBusOverride ?: app.openhealth.android.activity.AndroidHealthBus(appContext)
+
+    /** Standard-GATT straps, scales and cuffs (pr.md §6.18). */
+    val ble: app.openhealth.android.activity.BleHealthManager by lazy {
+        app.openhealth.android.activity.BleHealthManager(
+            context = appContext,
+            store = store,
+            clock = clock,
+            zone = zone,
+            ids = ids,
+            appVersion = versionName,
+        )
+    }
+
+    /** The Devices surface and its imports. */
+    val activity: app.openhealth.android.activity.ActivityPresenter by lazy {
+        app.openhealth.android.activity.ActivityPresenter(
+            context = appContext,
+            store = store,
+            clock = clock,
+            zone = zone,
+            ids = ids,
+            appVersion = versionName,
+            healthBus = healthBus,
+            ble = ble,
+            documents = documents,
+            manualSource = MANUAL_SOURCE,
+        ).also { presenter ->
+            presenter.phoneSensorPresent = hasStepCounter()
+        }
+    }
+
+    /** A tracker bound to the store, for the foreground service and the cold-start catch-up. */
+    fun newStepTracker(): app.openhealth.android.activity.StepTracker =
+        app.openhealth.android.activity.StepTracker(
+            context = appContext,
+            store = store,
+            clock = clock,
+            zone = zone,
+            ids = ids,
+            appVersion = versionName,
+        )
+
+    private fun hasStepCounter(): Boolean {
+        val manager = appContext.getSystemService(Context.SENSOR_SERVICE)
+            as? android.hardware.SensorManager ?: return false
+        return manager.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_COUNTER) != null
+    }
+
+    /**
+     * The phone's own step sensor is a source in its own right, so a day reported by
+     * both it and a watch is deduplicated like any other pair (pr.md §7.6).
+     */
+    private fun ensurePhoneSource(local: LocalStore) {
+        val id = app.openhealth.android.activity.StepTracker.PHONE_SOURCE
+        if (local.sources.byId(id) != null) return
+        local.sources.upsert(
+            app.openhealth.core.source.Source(
+                id = id,
+                kind = SourceKind.DEVICE,
+                label = appContext.getString(app.openhealth.R.string.devices_phone_source),
+                family = "phone",
+                device = null,
+                permissions = setOf(
+                    SourcePermission.READ_STEPS,
+                    SourcePermission.READ_DISTANCE,
+                ),
+            ),
+        )
+    }
     val zone: TimeZone = TimeZone.currentSystemDefault()
     val today: LocalDate get() = kotlin.time.Clock.System.now()
         .toLocalDateTime(zone).date

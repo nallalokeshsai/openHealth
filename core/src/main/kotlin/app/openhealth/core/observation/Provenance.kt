@@ -12,6 +12,9 @@ import kotlin.time.Instant
  */
 enum class SourceKind(val defaultFamily: String) {
     MANUAL("manual"),
+
+    /** A sensor on this phone, such as the hardware step counter (`pr.md` §6.6). */
+    DEVICE("device"),
     HEALTH_CONNECT("health-connect"),
     HEALTHKIT("healthkit"),
     GARMIN("garmin"),

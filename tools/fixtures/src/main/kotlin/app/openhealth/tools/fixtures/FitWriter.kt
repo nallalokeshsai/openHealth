@@ -1,0 +1,527 @@
+package app.openhealth.tools.fixtures
+
+/**
+ * A minimal FIT writer, used only to produce the golden fixtures that `:integrations`
+ * parses (`BUILD-ROADMAP.md` §B8, `Tech-Stack.md` §10). It is written from the published
+ * protocol, independently of the decoder, so a fixture that round-trips proves the
+ * parser against a second implementation rather than against itself.
+ *
+ * No Garmin SDK code or sample files are used: the FIT SDK licence is source-available
+ * and cannot be redistributed in this Apache-2.0 repository (`NOTICE.md`).
+ */
+@Suppress("TooManyFunctions")
+class FitWriter(
+    private val profileVersion: Int = PROFILE_VERSION,
+    private val protocolVersion: Int = PROTOCOL_VERSION,
+    private val bigEndian: Boolean = false,
+) {
+    data class FieldSpec(val number: Int, val size: Int, val baseType: Int)
+
+    private data class Definition(val globalNumber: Int, val fields: List<FieldSpec>)
+
+    private val definitions = LinkedHashMap<Int, Definition>()
+    private val body = java.io.ByteArrayOutputStream()
+
+    fun define(localType: Int, globalNumber: Int, fields: List<FieldSpec>) {
+        definitions[localType] = Definition(globalNumber, fields)
+        val header = DEFINITION_FLAG or localType
+        body.write(header)
+        body.write(0) // reserved
+        body.write(if (bigEndian) 1 else 0)
+        writeUInt16(globalNumber, bigEndian)
+        body.write(fields.size)
+        fields.forEach { field ->
+            body.write(field.number)
+            body.write(field.size)
+            body.write(field.baseType)
+        }
+    }
+
+    fun data(localType: Int, values: Map<Int, Any>) {
+        val definition = definitions[localType]
+            ?: error("local type $localType has no definition")
+        body.write(localType)
+        definition.fields.forEach { field ->
+            writeValue(field, values[field.number])
+        }
+    }
+
+    /**
+     * A data message with the compressed-timestamp header: the 5-bit offset replaces the
+     * timestamp field, so the definition must carry field 253 as its first field.
+     */
+    fun compressedData(localType: Int, timeOffset: Int, values: Map<Int, Any>) {
+        val definition = definitions[localType]
+            ?: error("local type $localType has no definition")
+        body.write(
+            COMPRESSED_FLAG or (localType shl COMPRESSED_LOCAL_SHIFT) or
+                (timeOffset and COMPRESSED_OFFSET_MASK),
+        )
+        definition.fields.forEach { field ->
+            if (field.number == TIMESTAMP_FIELD) return@forEach
+            writeValue(field, values[field.number])
+        }
+    }
+
+    fun toByteArray(): ByteArray {
+        val data = body.toByteArray()
+        val header = java.io.ByteArrayOutputStream()
+        header.write(MAX_HEADER_SIZE)
+        header.write(protocolVersion)
+        writeUInt16(profileVersion, false, header)
+        writeUInt32(data.size.toLong(), false, header)
+        header.write(".FIT".toByteArray(Charsets.US_ASCII))
+        val headerBytes = header.toByteArray()
+        val crc = crc16(headerBytes, 0, headerBytes.size)
+        val output = java.io.ByteArrayOutputStream()
+        output.write(headerBytes)
+        writeUInt16(crc, false, output)
+        output.write(data)
+        // The file CRC covers the header (including its own CRC field) and the data.
+        val fileCrc = crc16(output.toByteArray(), 0, headerBytes.size + CRC_BYTES + data.size)
+        writeUInt16(fileCrc, false, output)
+        return output.toByteArray()
+    }
+
+    private fun writeValue(field: FieldSpec, value: Any?) {
+        val type = field.baseType
+        when (type) {
+            BASE_ENUM, BASE_UINT8 -> body.write(intValue(value, UINT8_INVALID))
+            BASE_UINT8Z -> body.write(intValue(value, 0))
+            BASE_SINT8 -> body.write(intValue(value, SINT8_INVALID))
+            BASE_UINT16, BASE_UINT16Z ->
+                writeUInt16(intValue(value, UINT16_INVALID), bigEndian)
+
+            BASE_SINT16 -> writeUInt16(intValue(value, SINT16_INVALID), bigEndian)
+            BASE_UINT32, BASE_UINT32Z ->
+                writeUInt32(longValue(value, UINT32_INVALID), bigEndian)
+
+            BASE_SINT32 -> writeUInt32(longValue(value, SINT32_INVALID), bigEndian)
+            BASE_UINT64, BASE_UINT64Z -> writeUInt64(longValue(value, UINT64_INVALID))
+            BASE_SINT64 -> writeUInt64(longValue(value, SINT64_INVALID))
+            BASE_STRING -> {
+                val text = (value as? String).orEmpty().toByteArray(Charsets.UTF_8)
+                val padded = ByteArray(field.size) { 0 }
+                text.copyInto(padded, endIndex = minOf(text.size, field.size))
+                body.write(padded)
+            }
+
+            BASE_FLOAT32 -> writeUInt32(floatBits(value), bigEndian)
+            else -> error("unsupported fixture base type $type")
+        }
+    }
+
+    private fun intValue(value: Any?, invalid: Int): Int = when (value) {
+        null -> invalid
+        is Int -> value
+        is Long -> value.toInt()
+        is Boolean -> if (value) 1 else 0
+        else -> error("expected an integer field value, was $value")
+    }
+
+    private fun longValue(value: Any?, invalid: Long): Long = when (value) {
+        null -> invalid
+        is Int -> value.toLong()
+        is Long -> value
+        is kotlin.time.Instant -> value.epochSeconds - FIT_EPOCH_OFFSET
+        else -> error("expected a long field value, was $value")
+    }
+
+    private fun floatBits(value: Any?): Long = when (value) {
+        null -> UINT32_INVALID
+        is Float -> value.toRawBits().toLong() and UINT32_MASK
+        is Double -> value.toFloat().toRawBits().toLong() and UINT32_MASK
+        else -> error("expected a float field value, was $value")
+    }
+
+    private fun writeUInt16(
+        value: Int,
+        bigEndian: Boolean,
+        out: java.io.ByteArrayOutputStream = body,
+    ) {
+        if (bigEndian) {
+            out.write((value shr 8) and 0xFF)
+            out.write(value and 0xFF)
+        } else {
+            out.write(value and 0xFF)
+            out.write((value shr 8) and 0xFF)
+        }
+    }
+
+    private fun writeUInt32(
+        value: Long,
+        bigEndian: Boolean,
+        out: java.io.ByteArrayOutputStream = body,
+    ) {
+        if (bigEndian) {
+            for (shift in intArrayOf(24, 16, 8, 0)) out.write(((value shr shift) and 0xFF).toInt())
+        } else {
+            for (shift in intArrayOf(0, 8, 16, 24)) out.write(((value shr shift) and 0xFF).toInt())
+        }
+    }
+
+    private fun writeUInt64(value: Long) {
+        for (shift in intArrayOf(0, 8, 16, 24, 32, 40, 48, 56)) {
+            body.write(((value shr shift) and 0xFF).toInt())
+        }
+    }
+
+    companion object {
+        const val PROFILE_VERSION = 2132
+        const val PROTOCOL_VERSION = 0x20
+        const val FIT_EPOCH_OFFSET = 631_065_600L
+
+        const val BASE_ENUM = 0x00
+        const val BASE_SINT8 = 0x01
+        const val BASE_UINT8 = 0x02
+        const val BASE_SINT16 = 0x03
+        const val BASE_UINT16 = 0x04
+        const val BASE_SINT32 = 0x05
+        const val BASE_UINT32 = 0x06
+        const val BASE_STRING = 0x07
+        const val BASE_FLOAT32 = 0x08
+        const val BASE_UINT8Z = 0x0A
+        const val BASE_UINT16Z = 0x0B
+        const val BASE_UINT32Z = 0x0C
+        const val BASE_SINT64 = 0x0E
+        const val BASE_UINT64 = 0x0F
+        const val BASE_UINT64Z = 0x10
+
+        private const val DEFINITION_FLAG = 0x40
+        private const val COMPRESSED_FLAG = 0x80
+        private const val COMPRESSED_LOCAL_SHIFT = 5
+        private const val COMPRESSED_OFFSET_MASK = 0x1F
+        private const val TIMESTAMP_FIELD = 253
+        private const val MAX_HEADER_SIZE = 14
+        private const val CRC_BYTES = 2
+        private const val UINT8_INVALID = 0xFF
+        private const val SINT8_INVALID = 0x7F
+        private const val UINT16_INVALID = 0xFFFF
+        private const val SINT16_INVALID = 0x7FFF
+        private const val UINT32_INVALID = 0xFFFFFFFFL
+        private const val UINT32_MASK = 0xFFFFFFFFL
+        private const val SINT32_INVALID = 0x7FFFFFFFL
+        private const val UINT64_INVALID = -1L
+        private const val SINT64_INVALID = Long.MAX_VALUE
+
+        private val CRC_TABLE = intArrayOf(
+            0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401,
+            0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400,
+        )
+
+        /** The same published CRC-16; written independently of the decoder's copy. */
+        fun crc16(bytes: ByteArray, from: Int, to: Int): Int {
+            var crc = 0
+            for (index in from until to) {
+                val byte = bytes[index].toInt() and 0xFF
+                var tmp = CRC_TABLE[crc and 0x0F]
+                crc = (crc shr 4) and 0x0FFF
+                crc = crc xor tmp xor CRC_TABLE[byte and 0x0F]
+                tmp = CRC_TABLE[crc and 0x0F]
+                crc = (crc shr 4) and 0x0FFF
+                crc = crc xor tmp xor CRC_TABLE[(byte shr 4) and 0x0F]
+            }
+            return crc and 0xFFFF
+        }
+    }
+
+    /** Field definitions for the messages the fixtures use. */
+    object Fields {
+        val FILE_ID = listOf(
+            FieldSpecNumbers.FILE_ID_TYPE to BASE_ENUM,
+            FieldSpecNumbers.FILE_ID_MANUFACTURER to BASE_UINT16,
+            FieldSpecNumbers.FILE_ID_PRODUCT to BASE_UINT16,
+            FieldSpecNumbers.FILE_ID_TIME_CREATED to BASE_UINT32,
+            FieldSpecNumbers.FILE_ID_PRODUCT_NAME to BASE_STRING,
+        )
+
+        val SESSION = listOf(
+            FieldSpecNumbers.SESSION_START_TIME to BASE_UINT32,
+            FieldSpecNumbers.SESSION_SPORT to BASE_ENUM,
+            FieldSpecNumbers.SESSION_SUB_SPORT to BASE_ENUM,
+            FieldSpecNumbers.SESSION_TOTAL_ELAPSED to BASE_UINT32,
+            FieldSpecNumbers.SESSION_TOTAL_DISTANCE to BASE_UINT32,
+            FieldSpecNumbers.SESSION_TOTAL_CYCLES to BASE_UINT32,
+            FieldSpecNumbers.SESSION_TOTAL_CALORIES to BASE_UINT16,
+            FieldSpecNumbers.SESSION_AVG_HR to BASE_UINT8,
+            FieldSpecNumbers.SESSION_MAX_HR to BASE_UINT8,
+        )
+
+        val RECORD = listOf(
+            FieldSpecNumbers.RECORD_TIMESTAMP to BASE_UINT32,
+            FieldSpecNumbers.RECORD_HEART_RATE to BASE_UINT8,
+            FieldSpecNumbers.RECORD_DISTANCE to BASE_UINT32,
+        )
+
+        val MONITORING = listOf(
+            FieldSpecNumbers.MONITORING_TIMESTAMP to BASE_UINT32,
+            FieldSpecNumbers.MONITORING_LOCAL_TIMESTAMP to BASE_UINT32,
+            FieldSpecNumbers.MONITORING_ACTIVITY_TYPE to BASE_ENUM,
+            FieldSpecNumbers.MONITORING_CYCLES to BASE_UINT32,
+            FieldSpecNumbers.MONITORING_CALORIES to BASE_UINT16,
+        )
+
+        fun specs(pairs: List<Pair<Int, Int>>): List<FieldSpec> = pairs.map { (number, type) ->
+            val size = when (type) {
+                BASE_ENUM, BASE_UINT8, BASE_SINT8, BASE_UINT8Z -> 1
+                BASE_UINT16, BASE_SINT16, BASE_UINT16Z -> 2
+                BASE_STRING -> 16
+                else -> 4
+            }
+            FieldSpec(number, size, type)
+        }
+    }
+
+    object FieldSpecNumbers {
+        const val FILE_ID_TYPE = 0
+        const val FILE_ID_MANUFACTURER = 1
+        const val FILE_ID_PRODUCT = 2
+        const val FILE_ID_TIME_CREATED = 4
+        const val FILE_ID_PRODUCT_NAME = 8
+
+        const val SESSION_START_TIME = 2
+        const val SESSION_SPORT = 5
+        const val SESSION_SUB_SPORT = 6
+        const val SESSION_TOTAL_ELAPSED = 7
+        const val SESSION_TOTAL_DISTANCE = 9
+        const val SESSION_TOTAL_CYCLES = 10
+        const val SESSION_TOTAL_CALORIES = 11
+        const val SESSION_AVG_HR = 16
+        const val SESSION_MAX_HR = 17
+
+        const val RECORD_TIMESTAMP = 253
+        const val RECORD_HEART_RATE = 3
+        const val RECORD_DISTANCE = 5
+
+        const val MONITORING_TIMESTAMP = 253
+        const val MONITORING_LOCAL_TIMESTAMP = 11
+        const val MONITORING_ACTIVITY_TYPE = 5
+        const val MONITORING_CYCLES = 3
+        const val MONITORING_CALORIES = 1
+    }
+
+    /** Global message numbers, named so a fixture reads like the message it writes. */
+    object Numbers {
+        const val GLOBAL_FILE_ID = 0
+        const val GLOBAL_SESSION = 18
+        const val GLOBAL_RECORD = 20
+        const val GLOBAL_MONITORING = 55
+    }
+}
+
+/** Convenience wrappers so a fixture reads like the data it encodes. */
+object FitFixtures {
+    const val GARMIN_MANUFACTURER = 1
+    const val VIVOACTIVE_5_PRODUCT = 4340
+    const val SPORT_WALKING = 11
+    const val SPORT_RUNNING = 1
+    const val ACTIVITY_TYPE_WALKING = 6
+    const val ACTIVITY_TYPE_RUNNING = 1
+    const val ACTIVITY_TYPE_SLEEP = 7
+
+    /** 08:00 on 2026-11-23 in Unix seconds, the morning the fixtures describe. */
+    const val DAY_START_UNIX_SECONDS = 1_795_420_800L
+
+    /** The same moment in FIT seconds (the FIT epoch is 631,065,600 s after Unix). */
+    const val DAY_START_SECONDS = DAY_START_UNIX_SECONDS - FitWriter.FIT_EPOCH_OFFSET
+
+    /** A 45-minute walk with a heart-rate series and 3,000 steps. */
+    fun activityWalk(): ByteArray {
+        val writer = FitWriter()
+        writer.define(
+            localType = 0,
+            globalNumber = FitWriter.Numbers.GLOBAL_FILE_ID,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.FILE_ID),
+        )
+        writer.data(
+            0,
+            mapOf(
+                FitWriter.FieldSpecNumbers.FILE_ID_TYPE to 4,
+                FitWriter.FieldSpecNumbers.FILE_ID_MANUFACTURER to GARMIN_MANUFACTURER,
+                FitWriter.FieldSpecNumbers.FILE_ID_PRODUCT to VIVOACTIVE_5_PRODUCT,
+                FitWriter.FieldSpecNumbers.FILE_ID_TIME_CREATED to DAY_START_SECONDS,
+                FitWriter.FieldSpecNumbers.FILE_ID_PRODUCT_NAME to "vivoactive 5",
+            ),
+        )
+        writer.define(
+            localType = 1,
+            globalNumber = FitWriter.Numbers.GLOBAL_RECORD,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.RECORD),
+        )
+        val start = DAY_START_SECONDS + WALK_START_OFFSET_SECONDS
+        repeat(WALK_MINUTES) { minute ->
+            writer.data(
+                1,
+                mapOf(
+                    FitWriter.FieldSpecNumbers.RECORD_TIMESTAMP to
+                        start + minute * SECONDS_PER_MINUTE,
+                    FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to
+                        WALK_START_HEART_RATE + minute / HEART_RATE_STEP_MINUTES,
+                    FitWriter.FieldSpecNumbers.RECORD_DISTANCE to
+                        minute * DISTANCE_PER_MINUTE_CENTIMETRES,
+                ),
+            )
+        }
+        writer.define(
+            localType = 2,
+            globalNumber = FitWriter.Numbers.GLOBAL_SESSION,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.SESSION),
+        )
+        writer.data(
+            2,
+            mapOf(
+                FitWriter.FieldSpecNumbers.SESSION_START_TIME to start,
+                FitWriter.FieldSpecNumbers.SESSION_SPORT to SPORT_WALKING,
+                FitWriter.FieldSpecNumbers.SESSION_SUB_SPORT to 0,
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_ELAPSED to
+                    WALK_MINUTES * SECONDS_PER_MINUTE * MILLIS_PER_SECOND,
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_DISTANCE to
+                    WALK_MINUTES * DISTANCE_PER_MINUTE_CENTIMETRES,
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_CYCLES to WALK_STEPS * STEPS_PER_CYCLE,
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_CALORIES to WALK_CALORIES,
+                FitWriter.FieldSpecNumbers.SESSION_AVG_HR to WALK_AVG_HEART_RATE,
+                FitWriter.FieldSpecNumbers.SESSION_MAX_HR to WALK_MAX_HEART_RATE,
+            ),
+        )
+        return writer.toByteArray()
+    }
+
+    /**
+     * A daily monitoring file: 48 quarter-hour buckets from 08:00, each 500 cycles while
+     * walking (250 steps), plus a sleeping stretch with no steps. The expected total is
+     * derived from these constants by the test, not copy-pasted.
+     */
+    fun dailyMonitoring(): ByteArray {
+        val writer = FitWriter()
+        writer.define(
+            localType = 0,
+            globalNumber = FitWriter.Numbers.GLOBAL_FILE_ID,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.FILE_ID),
+        )
+        writer.data(
+            0,
+            mapOf(
+                FitWriter.FieldSpecNumbers.FILE_ID_TYPE to 4,
+                FitWriter.FieldSpecNumbers.FILE_ID_MANUFACTURER to GARMIN_MANUFACTURER,
+                FitWriter.FieldSpecNumbers.FILE_ID_PRODUCT to VIVOACTIVE_5_PRODUCT,
+                FitWriter.FieldSpecNumbers.FILE_ID_TIME_CREATED to DAY_START_SECONDS,
+                FitWriter.FieldSpecNumbers.FILE_ID_PRODUCT_NAME to "vivoactive 5",
+            ),
+        )
+        writer.define(
+            localType = 1,
+            globalNumber = FitWriter.Numbers.GLOBAL_MONITORING,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.MONITORING),
+        )
+        repeat(MONITORING_BUCKETS) { index ->
+            val timestamp = DAY_START_SECONDS + index * MONITORING_BUCKET_SECONDS
+            val walking = index >= AWAKE_FROM_BUCKET && index < ASLEEP_FROM_BUCKET
+            writer.data(
+                1,
+                mapOf(
+                    FitWriter.FieldSpecNumbers.MONITORING_TIMESTAMP to timestamp,
+                    FitWriter.FieldSpecNumbers.MONITORING_LOCAL_TIMESTAMP to timestamp,
+                    FitWriter.FieldSpecNumbers.MONITORING_ACTIVITY_TYPE to if (walking) {
+                        ACTIVITY_TYPE_WALKING
+                    } else {
+                        ACTIVITY_TYPE_SLEEP
+                    },
+                    FitWriter.FieldSpecNumbers.MONITORING_CYCLES to if (walking) {
+                        CYCLES_PER_BUCKET
+                    } else {
+                        0
+                    },
+                    FitWriter.FieldSpecNumbers.MONITORING_CALORIES to if (walking) {
+                        CALORIES_PER_BUCKET
+                    } else {
+                        0
+                    },
+                ),
+            )
+        }
+        return writer.toByteArray()
+    }
+
+    /** A one-record file with a big-endian definition, to prove endianness is honoured. */
+    fun bigEndian(): ByteArray {
+        val writer = FitWriter(bigEndian = true)
+        writer.define(
+            localType = 0,
+            globalNumber = FitWriter.Numbers.GLOBAL_RECORD,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.RECORD),
+        )
+        writer.data(
+            0,
+            mapOf(
+                FitWriter.FieldSpecNumbers.RECORD_TIMESTAMP to DAY_START_SECONDS,
+                FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to BIG_ENDIAN_HEART_RATE,
+                FitWriter.FieldSpecNumbers.RECORD_DISTANCE to 0,
+            ),
+        )
+        return writer.toByteArray()
+    }
+
+    /** Two heart-rate records, the second sent with a compressed timestamp. */
+    fun compressedTimestamp(): ByteArray {
+        val writer = FitWriter()
+        writer.define(
+            localType = 0,
+            globalNumber = FitWriter.Numbers.GLOBAL_RECORD,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.RECORD),
+        )
+        writer.data(
+            0,
+            mapOf(
+                FitWriter.FieldSpecNumbers.RECORD_TIMESTAMP to DAY_START_SECONDS,
+                FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to COMPRESSED_FIRST_HEART_RATE,
+                FitWriter.FieldSpecNumbers.RECORD_DISTANCE to 0,
+            ),
+        )
+        writer.compressedData(
+            localType = 0,
+            timeOffset = COMPRESSED_OFFSET_SECONDS,
+            values = mapOf(
+                FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to COMPRESSED_SECOND_HEART_RATE,
+                FitWriter.FieldSpecNumbers.RECORD_DISTANCE to 0,
+            ),
+        )
+        return writer.toByteArray()
+    }
+
+    /** A copy of [bytes] with one payload byte flipped, so the CRC no longer matches. */
+    fun corrupt(bytes: ByteArray): ByteArray {
+        val copy = bytes.copyOf()
+        val index = copy.size / 2
+        copy[index] = (copy[index].toInt() xor 0xFF).toByte()
+        return copy
+    }
+
+    const val WALK_MINUTES = 45
+    const val WALK_STEPS = 3000
+    const val WALK_CALORIES = 142
+    const val WALK_START_HEART_RATE = 96
+    const val WALK_AVG_HEART_RATE = 108
+    const val WALK_MAX_HEART_RATE = 124
+    const val HEART_RATE_STEP_MINUTES = 5
+    const val WALK_START_OFFSET_SECONDS = 9 * 60 * 60L
+    const val DISTANCE_PER_MINUTE_CENTIMETRES = 5300L
+    const val SECONDS_PER_MINUTE = 60L
+    const val MILLIS_PER_SECOND = 1000L
+    const val STEPS_PER_CYCLE = 2L
+
+    const val MONITORING_BUCKETS = 96
+    const val MONITORING_BUCKET_SECONDS = 15 * 60L
+    const val AWAKE_FROM_BUCKET = 0
+    const val ASLEEP_FROM_BUCKET = 72
+    const val CYCLES_PER_BUCKET = 500L
+    const val CALORIES_PER_BUCKET = 21L
+
+    /** 72 awake buckets × 500 cycles ÷ 2 = 18,000 steps in the fixture. */
+    const val EXPECTED_MONITORING_STEPS = (ASLEEP_FROM_BUCKET * CYCLES_PER_BUCKET) / STEPS_PER_CYCLE
+
+    const val BIG_ENDIAN_HEART_RATE = 77
+
+    const val COMPRESSED_FIRST_HEART_RATE = 88
+    const val COMPRESSED_SECOND_HEART_RATE = 91
+    const val COMPRESSED_OFFSET_SECONDS = 3
+}

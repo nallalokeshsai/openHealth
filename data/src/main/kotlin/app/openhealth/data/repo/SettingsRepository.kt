@@ -91,6 +91,19 @@ object SettingKeys {
     /** The one equipment profile: bars, plates and the dumbbell increment (pr.md §6.5). */
     const val TRAINING_EQUIPMENT = "training.equipment"
 
+    /** B8 activity sources: pairing, the step counter's runtime state and each source's
+     * last sync (`pr.md` §6.6, §6.18, §7.6). These are configuration and runtime state,
+     * never health values. */
+    const val DEVICE_REGISTRY = "device.registry"
+    const val STEPS_TRACKING = "steps.tracking_enabled"
+    const val STEPS_BOOT_MS = "steps.boot_ms"
+    const val STEPS_LAST_COUNT = "steps.last_count"
+    const val STEPS_LAST_AT = "steps.last_at"
+    const val SYNC_BOOK = "activity.sync_book"
+    const val HEALTH_CONNECT_ENABLED = "health_connect.enabled"
+    const val HEALTH_CONNECT_GRANTED = "health_connect.granted"
+    const val HEALTH_CONNECT_BACKFILL = "health_connect.backfilled"
+
     /** B7: the gallery can hide a photo until it is tapped, and the home-BP protocol
      * remembers the day it started so its seven-day grid survives a restart. */
     const val BODY_PHOTOS_HIDDEN = "body.photos_hidden"

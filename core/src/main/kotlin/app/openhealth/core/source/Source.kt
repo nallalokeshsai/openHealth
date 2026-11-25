@@ -55,6 +55,7 @@ object SourcePriorityDefaults {
     private const val MANUAL_PRIORITY = 10
     private const val LAB_PRIORITY = 15
     private const val DEVICE_PRIORITY = 20
+    private const val PHONE_PRIORITY = 25
     private const val SECOND_DEVICE_PRIORITY = 30
     private const val PLATFORM_BUS_PRIORITY = 40
     private const val API_PRIORITY = 65
@@ -72,6 +73,7 @@ object SourcePriorityDefaults {
         } else {
             DEVICE_PRIORITY
         }
+        SourceKind.DEVICE -> PHONE_PRIORITY
         SourceKind.GARMIN -> DEVICE_PRIORITY
         SourceKind.FITBIT -> SECOND_DEVICE_PRIORITY
         SourceKind.HEALTH_CONNECT, SourceKind.HEALTHKIT -> PLATFORM_BUS_PRIORITY

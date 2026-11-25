@@ -168,6 +168,7 @@ class ScreenScreenshotTest {
         onAppLock = {},
         onExport = { _, _ -> },
         onRestore = { _, _ -> },
+        onOpenDevices = {},
         onOpenTimeline = {},
         onOpenTrash = {},
         onExternalActivity = {},

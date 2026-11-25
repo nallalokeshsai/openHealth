@@ -65,7 +65,7 @@ data class HealthReading(
 interface HealthBus {
     fun isAvailable(): Boolean
 
-    fun grantedPermissions(): Set<String>
+    suspend fun grantedPermissions(): Set<String>
 
     suspend fun read(type: String, fromEpochMillis: Long, toEpochMillis: Long): List<HealthReading>
 
