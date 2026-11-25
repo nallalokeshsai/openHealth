@@ -1708,7 +1708,9 @@ from the entries through the same `sumInOrder`); the deferrals already listed be
 
 ## B7 — Body and vitals
 
-**Status:** In progress · **Date:** 2026-11-25 · **Branch:** `build/b7-body-and-vitals`
+**Status:** Completed · **Date:** 2026-11-25 · **Branch:** `build/b7-body-and-vitals`
+**Device re-check pending:** the phone was disconnected from USB during the QA sweep; the
+final visual pass (weight-neutral, photo pick, 200 %/RTL on the panel) is the owner hand-over.
 **Goal:** the Vitals tab, with the dynamic body model driven by the owner's real data
 (`BUILD-ROADMAP.md` §B7).
 
@@ -1774,9 +1776,9 @@ The cited ranges are ESH 2023 · home below 135/85; AHA 2024 · 60-100 bpm; WHO 
 
 | Command | Result |
 |---|---|
-| `./gradlew check` | **BUILD SUCCESSFUL**, 226 tasks: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, every JVM test and every golden. |
+| `./gradlew check` | **BUILD SUCCESSFUL**, 226 tasks: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkDesignTokens`, 427 JVM tests and 238 goldens. Both debug flavours assemble. |
 | `:core:test` | **197 tests**, including the B7 domain tests: weight trend and tie-break, CSV parse/round-trip/unit conversion, the cited ranges and context codes, the four-stop strip, the BP protocol's 28-reading window and day-one exclusion. |
-| `:data:test` | **102 tests**, including the v7 → v8 migration test (the photo table and its timeline branch), the export registry with `body_photo`, and a restore of a bundle written before photos. |
+| `:data:test` | **103 tests**, including the v7 → v8 migration test (the photo table and its timeline branch), the export registry with `body_photo`, and a restore of a bundle written before photos. |
 | `:ui:testDebugUnitTest` | **107 tests**, including the 16 new Vitals goldens (4 screens × dark, light, 200 % text, RTL), the semantics assertions and the wording test. **238 goldens** in total. |
 | `:app-android:connectedPlayDebugAndroidTest` on the phone | **35/35**; the five B7 scenarios and all 30 earlier B2-B6 scenarios passed. |
 | `./gradlew :app-android:assembleDebug` | **BUILD SUCCESSFUL**; both the `play` and `fdroid` debug variants build. |
