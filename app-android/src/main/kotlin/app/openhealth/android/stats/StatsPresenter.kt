@@ -74,17 +74,18 @@ class StatsPresenter(
     fun model(segment: StatsSegment, preferences: Preferences): StatsModel {
         val date = today()
         val hidden = preferences.displayPolicy
+        val modules = preferences.modules
         val cards = when (segment) {
-            StatsSegment.OVERVIEW -> overview(date, hidden)
-            StatsSegment.BODY -> body(date, hidden)
+            StatsSegment.OVERVIEW -> overview(date, hidden, modules)
+            StatsSegment.BODY -> body(date, hidden, modules)
             StatsSegment.TRAINING -> training(date, preferences)
             StatsSegment.SLEEP -> sleep(date, preferences)
-            StatsSegment.NUTRITION -> nutrition(date, hidden)
+            StatsSegment.NUTRITION -> nutrition(date, hidden, modules)
         }
         return StatsModel(
             today = date,
             segment = segment,
-            kpis = kpis(segment, date, hidden),
+            kpis = kpis(segment, date, hidden, modules),
             cards = cards.first,
             records = cards.second,
             demo = preferences.demo,
@@ -98,11 +99,16 @@ class StatsPresenter(
     private fun overview(
         date: LocalDate,
         hidden: app.openhealth.core.preferences.DisplayPolicy,
+        modules: Set<HealthModule>,
     ): Pair<List<StatsCard>, StatsRecords?> {
         val cards = mutableListOf<StatsCard>()
-        weightCard(date)?.let(cards::add)
-        stepsCard(date)?.let(cards::add)
-        if (hidden.shows(SensitiveMetric.CALORIES)) {
+        if (HealthModule.BODY in modules && hidden.shows(SensitiveMetric.WEIGHT)) {
+            weightCard(date)?.let(cards::add)
+        }
+        if (HealthModule.STEPS in modules) {
+            stepsCard(date)?.let(cards::add)
+        }
+        if (HealthModule.NUTRITION in modules && hidden.shows(SensitiveMetric.CALORIES)) {
             energyCard(date)?.let(cards::add)
         }
         return cards to null
@@ -113,7 +119,9 @@ class StatsPresenter(
     private fun body(
         date: LocalDate,
         hidden: app.openhealth.core.preferences.DisplayPolicy,
+        modules: Set<HealthModule>,
     ): Pair<List<StatsCard>, StatsRecords?> {
+        if (HealthModule.BODY !in modules) return emptyList<StatsCard>() to null
         val cards = mutableListOf<StatsCard>()
         if (hidden.shows(SensitiveMetric.WEIGHT)) {
             weightCard(date)?.let(cards::add)
@@ -160,8 +168,11 @@ class StatsPresenter(
     private fun nutrition(
         date: LocalDate,
         hidden: app.openhealth.core.preferences.DisplayPolicy,
+        modules: Set<HealthModule>,
     ): Pair<List<StatsCard>, StatsRecords?> {
-        if (!hidden.shows(SensitiveMetric.CALORIES)) {
+        if (HealthModule.NUTRITION !in modules ||
+            !hidden.shows(SensitiveMetric.CALORIES)
+        ) {
             return emptyList<StatsCard>() to null
         }
         val cards = mutableListOf<StatsCard>()
@@ -177,47 +188,50 @@ class StatsPresenter(
         segment: StatsSegment,
         date: LocalDate,
         hidden: app.openhealth.core.preferences.DisplayPolicy,
+        modules: Set<HealthModule>,
     ): List<StatsKpi> = when (segment) {
-        StatsSegment.OVERVIEW -> listOf(
-            StatsKpi(
-                value = numberFormat.format(sessionsThisWeek(date)),
-                label = context.getString(UiR.string.stats_kpi_sessions),
-            ),
-            stepsAverage(date, 30)?.let {
+        StatsSegment.OVERVIEW -> buildList {
+            add(
                 StatsKpi(
-                    value = numberFormat.format(it.roundToInt()),
-                    label = context.getString(UiR.string.stats_kpi_steps),
+                    value = numberFormat.format(sessionsThisWeek(date)),
+                    label = context.getString(UiR.string.stats_kpi_sessions),
+                ),
+            )
+            if (HealthModule.STEPS in modules) {
+                add(
+                    stepsAverage(date, 30)?.let {
+                        StatsKpi(
+                            value = numberFormat.format(it.roundToInt()),
+                            label = context.getString(UiR.string.stats_kpi_steps),
+                        )
+                    } ?: StatsKpi(
+                        value = DASH,
+                        label = context.getString(UiR.string.stats_kpi_steps),
+                    ),
                 )
-            } ?: StatsKpi(
-                value = DASH,
-                label = context.getString(UiR.string.stats_kpi_steps),
-            ),
-            if (hidden.shows(SensitiveMetric.WEIGHT)) {
-                weightChange(date, 30)?.let {
-                    StatsKpi(
-                        value = signed(it, 1),
+            }
+            if (HealthModule.BODY in modules && hidden.shows(SensitiveMetric.WEIGHT)) {
+                add(
+                    weightChange(date, 30)?.let {
+                        StatsKpi(
+                            value = signed(it, 1),
+                            label = context.getString(UiR.string.stats_kpi_weight),
+                            unit = context.getString(UiR.string.unit_kg),
+                        )
+                    } ?: StatsKpi(
+                        value = DASH,
                         label = context.getString(UiR.string.stats_kpi_weight),
                         unit = context.getString(UiR.string.unit_kg),
-                    )
-                } ?: StatsKpi(
-                    value = DASH,
-                    label = context.getString(UiR.string.stats_kpi_weight),
-                    unit = context.getString(UiR.string.unit_kg),
-                )
-            } else {
-                StatsKpi(
-                    value = context.getString(
-                        UiR.string.stats_days_logged,
-                        loggedDays(date, ObservationType.NUTRITION_ENERGY, SEASON_DAYS),
-                        SEASON_DAYS,
                     ),
-                    label = context.getString(UiR.string.stats_kpi_days),
                 )
-            },
-        )
+            }
+        }
 
-        StatsSegment.BODY -> if (!hidden.shows(SensitiveMetric.WEIGHT) &&
-            !hidden.shows(SensitiveMetric.BODY_FAT)
+        StatsSegment.BODY -> if (HealthModule.BODY !in modules ||
+            (
+                !hidden.shows(SensitiveMetric.WEIGHT) &&
+                    !hidden.shows(SensitiveMetric.BODY_FAT)
+                )
         ) {
             emptyList()
         } else {
@@ -249,23 +263,29 @@ class StatsPresenter(
             )
         }
 
-        StatsSegment.TRAINING -> listOf(
-            StatsKpi(
-                value = numberFormat.format(weeklyTotal(date, ObservationType.TRAINING_VOLUME)),
-                label = context.getString(UiR.string.stats_kpi_volume),
-                unit = context.getString(UiR.string.unit_kg),
-            ),
-            StatsKpi(
-                value = numberFormat.format(weeklyTotal(date, ObservationType.TRAINING_SETS)),
-                label = context.getString(UiR.string.stats_kpi_sets),
-            ),
-            StatsKpi(
-                value = numberFormat.format(sessionsThisWeek(date)),
-                label = context.getString(UiR.string.stats_kpi_sessions),
-            ),
-        )
+        StatsSegment.TRAINING -> if (HealthModule.TRAINING !in modules) {
+            emptyList()
+        } else {
+            listOf(
+                StatsKpi(
+                    value = numberFormat.format(weeklyTotal(date, ObservationType.TRAINING_VOLUME)),
+                    label = context.getString(UiR.string.stats_kpi_volume),
+                    unit = context.getString(UiR.string.unit_kg),
+                ),
+                StatsKpi(
+                    value = numberFormat.format(weeklyTotal(date, ObservationType.TRAINING_SETS)),
+                    label = context.getString(UiR.string.stats_kpi_sets),
+                ),
+                StatsKpi(
+                    value = numberFormat.format(sessionsThisWeek(date)),
+                    label = context.getString(UiR.string.stats_kpi_sessions),
+                ),
+            )
+        }
 
-        StatsSegment.SLEEP -> {
+        StatsSegment.SLEEP -> if (HealthModule.SLEEP !in modules) {
+            emptyList()
+        } else {
             val nights = sleepNights(date, 14)
             listOf(
                 StatsKpi(
@@ -284,7 +304,9 @@ class StatsPresenter(
             )
         }
 
-        StatsSegment.NUTRITION -> if (!hidden.shows(SensitiveMetric.CALORIES)) {
+        StatsSegment.NUTRITION -> if (HealthModule.NUTRITION !in modules ||
+            !hidden.shows(SensitiveMetric.CALORIES)
+        ) {
             emptyList()
         } else {
             listOf(
@@ -352,7 +374,7 @@ class StatsPresenter(
                     context.getString(UiR.string.chart_table_date),
                     context.getString(UiR.string.stats_table_weight),
                 ),
-                rows = rollups.map { it.first.toString() to decimal(it.second, 1) },
+                rows = rollups.map { shortDate(it.first) to decimal(it.second, 1) },
                 chart = ChartId.WEIGHT_TREND,
             ),
             unitText = context.getString(UiR.string.unit_kg),
@@ -379,7 +401,7 @@ class StatsPresenter(
                     context.getString(UiR.string.chart_table_date),
                     context.getString(UiR.string.stats_table_steps),
                 ),
-                rows = rollups.map { it.first.toString() to numberFormat.format(it.second) },
+                rows = rollups.map { shortDate(it.first) to numberFormat.format(it.second) },
                 chart = ChartId.STEPS_TREND,
             ),
             unitText = context.getString(UiR.string.stats_unit_steps),
@@ -409,7 +431,7 @@ class StatsPresenter(
                     context.getString(UiR.string.chart_table_date),
                     context.getString(UiR.string.stats_table_kcal),
                 ),
-                rows = rollups.map { it.first.toString() to numberFormat.format(it.second) },
+                rows = rollups.map { shortDate(it.first) to numberFormat.format(it.second) },
                 chart = id,
             ),
             unitText = context.getString(UiR.string.unit_kcal),
@@ -439,7 +461,7 @@ class StatsPresenter(
                     context.getString(UiR.string.chart_table_date),
                     context.getString(UiR.string.stats_table_grams),
                 ),
-                rows = rollups.map { it.first.toString() to numberFormat.format(it.second) },
+                rows = rollups.map { shortDate(it.first) to numberFormat.format(it.second) },
                 chart = ChartId.PROTEIN_TREND,
             ),
             unitText = context.getString(UiR.string.unit_g),
@@ -464,7 +486,7 @@ class StatsPresenter(
                     context.getString(UiR.string.chart_table_date),
                     context.getString(UiR.string.stats_table_fat),
                 ),
-                rows = rollups.map { it.first.toString() to decimal(it.second, 1) },
+                rows = rollups.map { shortDate(it.first) to decimal(it.second, 1) },
                 chart = ChartId.BODY_FAT_TREND,
             ),
             unitText = context.getString(UiR.string.unit_percent),
@@ -493,7 +515,7 @@ class StatsPresenter(
                     context.getString(UiR.string.stats_table_volume),
                 ),
                 rows = values.map {
-                    it.start.toString() to numberFormat.format(it.value.roundToInt())
+                    shortDate(it.start) to numberFormat.format(it.value.roundToInt())
                 },
                 chart = ChartId.TRAINING_VOLUME,
             ),
@@ -527,7 +549,9 @@ class StatsPresenter(
                     context.getString(UiR.string.chart_table_date),
                     context.getString(UiR.string.stats_table_sets),
                 ),
-                rows = values.map { it.first.toString() to numberFormat.format(it.second) },
+                rows = grid.flatten().map {
+                    shortDate(it.date) to numberFormat.format(it.value)
+                },
                 chart = ChartId.TRAINING_CONSISTENCY,
             ),
         )
@@ -589,7 +613,7 @@ class StatsPresenter(
                     context.getString(UiR.string.stats_table_hours),
                 ),
                 rows = nights.map {
-                    it.date.toString() to decimal(it.asleepMinutes / MINUTES_PER_HOUR, 1)
+                    shortDate(it.date) to decimal(it.asleepMinutes / MINUTES_PER_HOUR, 1)
                 },
                 chart = ChartId.SLEEP_DURATION,
             ),

@@ -228,7 +228,12 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         onOpenTrain = { goTab(2) },
                         onOpenNutrition = { viewModel.openQuickAdd(QuickAction.FOOD) },
                         onStartPlan = { id ->
-                            if (id == null) goTab(2) else viewModel.startTodayPlan(id)
+                            if (id == null) {
+                                goTab(2)
+                            } else {
+                                viewModel.startTodayPlan(id)
+                                nav.navigate(LiveSessionRoute())
+                            }
                         },
                         onSaveGoalRate = viewModel::saveGoalRate,
                         onSaveStepGoal = viewModel::saveStepGoal,

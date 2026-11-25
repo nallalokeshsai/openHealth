@@ -6,7 +6,7 @@
              benchmark variant carries the flag. -->
         <profileable android:shell="true" />
         <activity
-            android:name=".BenchmarkSeedActivity"
+            android:name="app.openhealth.android.BenchmarkSeedActivity"
             android:exported="true"
             android:label="Seed" />
     </application>

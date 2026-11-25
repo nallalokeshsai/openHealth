@@ -118,232 +118,240 @@ fun OhTrendChart(
 
     fun yFraction(value: Double): Float = (1.0 - (value - yLow) / ySpan).toFloat().coerceIn(0f, 1f)
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        // The scrub result is a sentence above the plot, so it is reachable without a
-        // floating tooltip and survives 200 % text.
-        selected?.let { date ->
-            val values = model.series.mapNotNull { series ->
-                series.points.firstOrNull { it.date == date }?.let { point ->
-                    (series.label ?: "") to point.value
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+    ) {
+        Column(modifier = modifier.fillMaxWidth()) {
+            // The scrub result is a sentence above the plot, so it is reachable without a
+            // floating tooltip and survives 200 % text.
+            selected?.let { date ->
+                val values = model.series.mapNotNull { series ->
+                    series.points.firstOrNull { it.date == date }?.let { point ->
+                        (series.label ?: "") to point.value
+                    }
                 }
-            }
-            Text(
-                text = if (values.size == 1) {
-                    stringResource(
-                        R.string.vitals_chart_scrub_one,
-                        shortDate(date),
-                        number(values.single().second, model.decimals),
-                        model.unitText,
-                    )
-                } else {
-                    stringResource(
-                        R.string.vitals_chart_scrub_two,
-                        shortDate(date),
-                        values.joinToString(" · ") {
-                            "${it.first} ${decimalText(it.second, model.decimals)}"
-                        },
-                    )
-                },
-                style = type.caption,
-                color = colors.label2,
-            )
-            Spacer(Modifier.height(OhTheme.space.s2))
-        }
-        Row {
-            Column(
-                modifier = Modifier.width(dims.chartAxisWidth).height(dims.chartHeight),
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
                 Text(
-                    text = number(yHigh, model.decimals),
-                    style = type.caption.tabular(),
+                    text = if (values.size == 1) {
+                        stringResource(
+                            R.string.vitals_chart_scrub_one,
+                            shortDate(date),
+                            number(values.single().second, model.decimals),
+                            model.unitText,
+                        )
+                    } else {
+                        stringResource(
+                            R.string.vitals_chart_scrub_two,
+                            shortDate(date),
+                            values.joinToString(" · ") {
+                                "${it.first} ${decimalText(it.second, model.decimals)}"
+                            },
+                        )
+                    },
+                    style = type.caption,
                     color = colors.label2,
                 )
-                Text(
-                    text = number(yLow, model.decimals),
-                    style = type.caption.tabular(),
-                    color = colors.label2,
-                )
+                Spacer(Modifier.height(OhTheme.space.s2))
             }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(dims.chartHeight)
-                    .semantics {
-                        contentDescription = model.description
-                        if (onShowTable != null) {
-                            customActions = listOf(
-                                CustomAccessibilityAction(tableLabel) {
-                                    onShowTable()
-                                    true
-                                },
-                            )
+            Row {
+                Column(
+                    modifier = Modifier.width(dims.chartAxisWidth).height(dims.chartHeight),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = number(yHigh, model.decimals),
+                        style = type.caption.tabular(),
+                        color = colors.label2,
+                    )
+                    Text(
+                        text = number(yLow, model.decimals),
+                        style = type.caption.tabular(),
+                        color = colors.label2,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(dims.chartHeight)
+                        .semantics {
+                            contentDescription = model.description
+                            if (onShowTable != null) {
+                                customActions = listOf(
+                                    CustomAccessibilityAction(tableLabel) {
+                                        onShowTable()
+                                        true
+                                    },
+                                )
+                            }
                         }
-                    }
-                    .pointerInput(model.series) {
-                        detectTapGestures { offset ->
-                            selected = nearestDate(
-                                offset.x / size.width,
-                                allDates,
-                                minDate,
-                                dateSpan,
-                            )
-                        }
-                    }
-                    .pointerInput(model.series) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
+                        .pointerInput(model.series) {
+                            detectTapGestures { offset ->
                                 selected = nearestDate(
                                     offset.x / size.width,
                                     allDates,
                                     minDate,
                                     dateSpan,
                                 )
-                            },
-                        ) { change, _ ->
-                            selected = nearestDate(
-                                change.position.x / size.width,
-                                allDates,
-                                minDate,
-                                dateSpan,
-                            )
+                            }
                         }
-                    },
-            ) {
-                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                    val w = size.width
-                    val h = size.height
-                    // Horizontal gridlines only (`DESIGN.md` §8.1).
-                    repeat(3) { index ->
-                        val y = h * (index + 1) / 4f
-                        drawLine(
-                            color = colors.sepOp,
-                            start = Offset(0f, y),
-                            end = Offset(w, y),
-                            strokeWidth = dims.chartGrid.toPx(),
-                        )
-                    }
-                    // The reference band, green at 18 %, never a hard coloured edge.
-                    if (model.referenceLow != null && model.referenceHigh != null) {
-                        val top = h * yFraction(model.referenceHigh)
-                        val bottom = h * yFraction(model.referenceLow)
-                        drawRect(
-                            color = colors.greenInk.copy(alpha = 0.18f),
-                            topLeft = Offset(0f, top),
-                            size = Size(w, (bottom - top).coerceAtLeast(1f)),
-                        )
-                    }
-                    model.goal?.let { goal ->
-                        val y = h * yFraction(goal)
-                        drawLine(
-                            color = colors.goldInk,
-                            start = Offset(0f, y),
-                            end = Offset(w, y),
-                            strokeWidth = dims.chartGoal.toPx(),
-                            pathEffect = dash,
-                        )
-                    }
-                    model.series.forEachIndexed { index, series ->
-                        val ink = lineColors[index % lineColors.size]
-                        val points = series.points.sortedBy { it.date }
-                        points.zipWithNext().forEach { (from, to) ->
-                            val gap = (to.date.toEpochDays() - from.date.toEpochDays()).toDouble()
-                            if (gap > MAX_GAP_DAYS) return@forEach
+                        .pointerInput(model.series) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    selected = nearestDate(
+                                        offset.x / size.width,
+                                        allDates,
+                                        minDate,
+                                        dateSpan,
+                                    )
+                                },
+                            ) { change, _ ->
+                                selected = nearestDate(
+                                    change.position.x / size.width,
+                                    allDates,
+                                    minDate,
+                                    dateSpan,
+                                )
+                            }
+                        },
+                ) {
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                        val w = size.width
+                        val h = size.height
+                        // Horizontal gridlines only (`DESIGN.md` §8.1).
+                        repeat(3) { index ->
+                            val y = h * (index + 1) / 4f
                             drawLine(
-                                color = ink,
-                                start = Offset(w * xFraction(from.date), h * yFraction(from.value)),
-                                end = Offset(w * xFraction(to.date), h * yFraction(to.value)),
-                                strokeWidth = if (model.series.size == 1) {
-                                    dims.chartLine.toPx()
-                                } else {
-                                    dims.chartSecondLine.toPx()
-                                },
-                                cap = StrokeCap.Round,
+                                color = colors.sepOp,
+                                start = Offset(0f, y),
+                                end = Offset(w, y),
+                                strokeWidth = dims.chartGrid.toPx(),
                             )
                         }
-                        points.forEach { point ->
-                            drawCircle(
-                                color = ink,
-                                radius = if (point == points.last()) {
-                                    dims.chartLastPoint.toPx()
-                                } else {
-                                    dims.chartPoint.toPx()
-                                },
-                                center = Offset(
-                                    w * xFraction(point.date),
-                                    h * yFraction(point.value),
-                                ),
+                        // The reference band, green at 18 %, never a hard coloured edge.
+                        if (model.referenceLow != null && model.referenceHigh != null) {
+                            val top = h * yFraction(model.referenceHigh)
+                            val bottom = h * yFraction(model.referenceLow)
+                            drawRect(
+                                color = colors.greenInk.copy(alpha = 0.18f),
+                                topLeft = Offset(0f, top),
+                                size = Size(w, (bottom - top).coerceAtLeast(1f)),
                             )
                         }
-                    }
-                    selected?.let { date ->
-                        val x = w * xFraction(date)
-                        drawLine(
-                            color = colors.label3,
-                            start = Offset(x, 0f),
-                            end = Offset(x, h),
-                            strokeWidth = dims.chartGrid.toPx(),
-                            pathEffect = dash,
-                        )
+                        model.goal?.let { goal ->
+                            val y = h * yFraction(goal)
+                            drawLine(
+                                color = colors.goldInk,
+                                start = Offset(0f, y),
+                                end = Offset(w, y),
+                                strokeWidth = dims.chartGoal.toPx(),
+                                pathEffect = dash,
+                            )
+                        }
                         model.series.forEachIndexed { index, series ->
-                            val point = series.points.firstOrNull { it.date == date }
-                                ?: return@forEachIndexed
-                            drawCircle(
-                                color = colors.surface,
-                                radius = dims.chartScrubRing.toPx(),
-                                center = Offset(x, h * yFraction(point.value)),
+                            val ink = lineColors[index % lineColors.size]
+                            val points = series.points.sortedBy { it.date }
+                            points.zipWithNext().forEach { (from, to) ->
+                                val gap = (to.date.toEpochDays() - from.date.toEpochDays())
+                                    .toDouble()
+                                if (gap > MAX_GAP_DAYS) return@forEach
+                                drawLine(
+                                    color = ink,
+                                    start = Offset(
+                                        w * xFraction(from.date),
+                                        h * yFraction(from.value),
+                                    ),
+                                    end = Offset(w * xFraction(to.date), h * yFraction(to.value)),
+                                    strokeWidth = if (model.series.size == 1) {
+                                        dims.chartLine.toPx()
+                                    } else {
+                                        dims.chartSecondLine.toPx()
+                                    },
+                                    cap = StrokeCap.Round,
+                                )
+                            }
+                            points.forEach { point ->
+                                drawCircle(
+                                    color = ink,
+                                    radius = if (point == points.last()) {
+                                        dims.chartLastPoint.toPx()
+                                    } else {
+                                        dims.chartPoint.toPx()
+                                    },
+                                    center = Offset(
+                                        w * xFraction(point.date),
+                                        h * yFraction(point.value),
+                                    ),
+                                )
+                            }
+                        }
+                        selected?.let { date ->
+                            val x = w * xFraction(date)
+                            drawLine(
+                                color = colors.label3,
+                                start = Offset(x, 0f),
+                                end = Offset(x, h),
+                                strokeWidth = dims.chartGrid.toPx(),
+                                pathEffect = dash,
                             )
-                            drawCircle(
-                                color = lineColors[index % lineColors.size],
-                                radius = dims.chartScrubDot.toPx(),
-                                center = Offset(x, h * yFraction(point.value)),
+                            model.series.forEachIndexed { index, series ->
+                                val point = series.points.firstOrNull { it.date == date }
+                                    ?: return@forEachIndexed
+                                drawCircle(
+                                    color = colors.surface,
+                                    radius = dims.chartScrubRing.toPx(),
+                                    center = Offset(x, h * yFraction(point.value)),
+                                )
+                                drawCircle(
+                                    color = lineColors[index % lineColors.size],
+                                    radius = dims.chartScrubDot.toPx(),
+                                    center = Offset(x, h * yFraction(point.value)),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth().padding(start = dims.chartAxisWidth)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = shortDate(minDate),
+                        style = type.caption.tabular(),
+                        color = colors.label2,
+                    )
+                    Text(
+                        text = shortDate(maxDate),
+                        style = type.caption.tabular(),
+                        color = colors.label2,
+                    )
+                }
+            }
+            if (model.series.size > 1) {
+                Spacer(Modifier.height(OhTheme.space.s1))
+                Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3)) {
+                    model.series.forEachIndexed { index, series ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier
+                                    .size(dims.chartLegendDot)
+                                    .clip(CircleShape)
+                                    .background(lineColors[index % lineColors.size]),
+                            )
+                            Spacer(Modifier.width(OhTheme.space.s1))
+                            Text(
+                                text = series.label.orEmpty(),
+                                style = type.caption,
+                                color = colors.label2,
                             )
                         }
                     }
                 }
             }
-        }
-        Row(modifier = Modifier.fillMaxWidth().padding(start = dims.chartAxisWidth)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = shortDate(minDate),
-                    style = type.caption.tabular(),
-                    color = colors.label2,
-                )
-                Text(
-                    text = shortDate(maxDate),
-                    style = type.caption.tabular(),
-                    color = colors.label2,
-                )
+            if (onShowTable != null) {
+                Spacer(Modifier.height(OhTheme.space.s1))
+                ChartLinkRow(text = tableLabel, onClick = onShowTable)
             }
-        }
-        if (model.series.size > 1) {
-            Spacer(Modifier.height(OhTheme.space.s1))
-            Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3)) {
-                model.series.forEachIndexed { index, series ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(dims.chartLegendDot)
-                                .clip(CircleShape)
-                                .background(lineColors[index % lineColors.size]),
-                        )
-                        Spacer(Modifier.width(OhTheme.space.s1))
-                        Text(
-                            text = series.label.orEmpty(),
-                            style = type.caption,
-                            color = colors.label2,
-                        )
-                    }
-                }
-            }
-        }
-        if (onShowTable != null) {
-            Spacer(Modifier.height(OhTheme.space.s1))
-            ChartLinkRow(text = tableLabel, onClick = onShowTable)
         }
     }
 }

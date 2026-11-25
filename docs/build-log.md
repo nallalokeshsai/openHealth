@@ -2406,7 +2406,7 @@ rather than executed radio; that is recorded as open, not claimed.
   weight, plan, due list, their tables and provenance) and `StatsPresenter` (Overview,
   Body, Training, Sleep, Nutrition). Today's Start opens the planned routine; the goal
   what-if saves a goal rate through the same safety clamp; the step goal is a layer-5
-  setting. New `:benchmark` module and a benchmark-only five-year seed activity.
+  setting. New `:tools:benchmark` module and a benchmark-only five-year seed activity.
 - **Docs** — ADR 0014, `DESIGN.md` §5.6's 12 sp range line and revision 0.3.
 
 ### What was run, and its result

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -27,8 +28,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.theme.OhAlpha
 import app.openhealth.ui.theme.OhTheme
@@ -472,23 +475,27 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(
-                                text = figure.value,
-                                style = type.display.copy(fontWeight = OhWeight.semibold)
-                                    .tabular()
-                                    .ltrFigures(),
-                                color = figure.ink ?: colors.label,
-                                maxLines = 1,
-                            )
-                            if (figure.unit != null) {
-                                Spacer(Modifier.width(OhTheme.space.s0))
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides LayoutDirection.Ltr,
+                        ) {
+                            Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = figure.unit,
-                                    style = type.caption.ltrFigures(),
-                                    color = colors.label2,
+                                    text = figure.value,
+                                    style = type.display.copy(fontWeight = OhWeight.semibold)
+                                        .tabular()
+                                        .ltrFigures(),
+                                    color = figure.ink ?: colors.label,
                                     maxLines = 1,
                                 )
+                                if (figure.unit != null) {
+                                    Spacer(Modifier.width(OhTheme.space.s0))
+                                    Text(
+                                        text = figure.unit,
+                                        style = type.caption.ltrFigures(),
+                                        color = colors.label2,
+                                        maxLines = 1,
+                                    )
+                                }
                             }
                         }
                         Text(text = figure.label, style = type.footnote, color = colors.label2)

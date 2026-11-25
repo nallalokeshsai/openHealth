@@ -54,13 +54,14 @@ fun OhChartCard(
     onShowFormula: () -> Unit,
     modifier: Modifier = Modifier,
     glyph: ImageVector? = null,
+    subtitle: String? = null,
     footer: String? = null,
     tableLabel: String = stringResource(R.string.chart_show_table),
     formulaLabel: String = stringResource(R.string.chart_how_calculated),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     OhCard(modifier = modifier) {
-        OhCardHeader(eyebrow = eyebrow, title = title, glyph = glyph)
+        OhCardHeader(eyebrow = eyebrow, title = title, glyph = glyph, subtitle = subtitle)
         Spacer(Modifier.height(OhTheme.space.s4))
         Box(
             modifier = Modifier.semantics {

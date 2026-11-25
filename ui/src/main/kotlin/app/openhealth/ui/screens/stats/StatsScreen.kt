@@ -117,6 +117,10 @@ fun StatsScreen(
                     app.openhealth.core.preferences.HealthModule.TRAINING !in model.modules
                 StatsSegment.SLEEP ->
                     app.openhealth.core.preferences.HealthModule.SLEEP !in model.modules
+                StatsSegment.BODY ->
+                    app.openhealth.core.preferences.HealthModule.BODY !in model.modules
+                StatsSegment.NUTRITION ->
+                    app.openhealth.core.preferences.HealthModule.NUTRITION !in model.modules
                 else -> false
             }
             val neutral = model.weightNeutral &&
@@ -183,6 +187,7 @@ private fun StatsChartCard(card: StatsCard, onShowTable: () -> Unit, onShowFormu
         onShowTable = onShowTable,
         onShowFormula = onShowFormula,
         footer = card.footer,
+        subtitle = card.unitText.takeIf { it.isNotBlank() },
     ) {
         when (val plot = card.plot) {
             is StatsPlot.Line -> OhTrendChart(
@@ -198,6 +203,9 @@ private fun StatsChartCard(card: StatsCard, onShowTable: () -> Unit, onShowFormu
                     goal = card.goal,
                     description = card.description,
                     decimals = card.decimals,
+                    startAtZero = card.chart == ChartId.STEPS_TREND ||
+                        card.chart == ChartId.ENERGY_TREND ||
+                        card.chart == ChartId.PROTEIN_TREND,
                 ),
                 onShowTable = null,
             )
@@ -226,7 +234,9 @@ private fun StatsChartCard(card: StatsCard, onShowTable: () -> Unit, onShowFormu
                     OhBarRow(
                         label = macro.name,
                         value = number(macro.grams),
-                        target = macro.targetGrams?.let { stringResource(R.string.today_macro_target, number(it)) },
+                        target = macro.targetGrams?.let {
+                            stringResource(R.string.today_macro_target, number(it))
+                        },
                         progress = macro.fraction,
                         ink = hueInk(macro.hue),
                     )
@@ -243,9 +253,9 @@ private fun StackedChart(plot: StatsPlot.Stack, description: String) {
     val inks = plot.segments.map { hueInk(it.hue) }
     OhStackedBar(
         segments = plot.segments.mapIndexed { index, segment ->
-            segment.value to
-                inks[index]
+            segment.value to inks[index]
         },
+        modifier = Modifier.semantics { contentDescription = description },
     )
     Spacer(Modifier.height(OhTheme.space.s3))
     plot.segments.forEachIndexed { index, segment ->

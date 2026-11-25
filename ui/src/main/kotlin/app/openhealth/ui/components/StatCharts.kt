@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,8 +29,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.core.stats.RampLevel
 import app.openhealth.ui.screens.common.observedLocale
 import app.openhealth.ui.theme.OhRamp
@@ -55,7 +58,12 @@ data class StatBarRow(val label: String, val value: Double, val valueText: Strin
  * table alternative, not by a content description of dots.
  */
 @Composable
-fun OhSparkline(points: List<ChartPoint>, modifier: Modifier = Modifier, goal: Double? = null) {
+fun OhSparkline(
+    points: List<ChartPoint>,
+    modifier: Modifier = Modifier,
+    goal: Double? = null,
+    description: String? = null,
+) {
     if (points.size < 2) return
     val colors = OhTheme.colors
     val low = minOf(points.minOf { it.value }, goal ?: points.minOf { it.value })
@@ -64,7 +72,14 @@ fun OhSparkline(points: List<ChartPoint>, modifier: Modifier = Modifier, goal: D
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(OhTheme.dims.chartHeight / 3),
+            .height(OhTheme.dims.chartHeight / 3)
+            .then(
+                if (description == null) {
+                    Modifier
+                } else {
+                    Modifier.semantics { contentDescription = description }
+                },
+            ),
     ) {
         val stepX = size.width / (points.size - 1)
         val path = Path()
@@ -118,69 +133,71 @@ fun OhBarChart(bars: List<ChartBar>, description: String, modifier: Modifier = M
     val colors = OhTheme.colors
     val type = OhTheme.type
     val maximum = bars.maxOf { it.value }.takeIf { it > 0.0 } ?: 1.0
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row {
-            Column(
-                modifier = Modifier
-                    .width(OhTheme.dims.chartAxisWidth)
-                    .height(OhTheme.dims.chartHeight),
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = axisNumber(maximum),
-                    style = type.caption.tabular(),
-                    color = colors.label2,
-                )
-                Text(text = "0", style = type.caption.tabular(), color = colors.label2)
-            }
-            Canvas(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(OhTheme.dims.chartHeight)
-                    .semantics { contentDescription = description },
-            ) {
-                val gridColor = colors.sepOp
-                repeat(GRIDLINES) { index ->
-                    val y = size.height * index / (GRIDLINES - 1)
-                    drawLine(
-                        color = gridColor,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = OhTheme.dims.chartGrid.toPx(),
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Column(modifier = modifier.fillMaxWidth()) {
+            Row {
+                Column(
+                    modifier = Modifier
+                        .width(OhTheme.dims.chartAxisWidth)
+                        .height(OhTheme.dims.chartHeight),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = axisNumber(maximum),
+                        style = type.caption.tabular(),
+                        color = colors.label2,
                     )
+                    Text(text = "0", style = type.caption.tabular(), color = colors.label2)
                 }
-                val gap = OhTheme.dims.macroBarGap.toPx()
-                val slot = (size.width - gap * (bars.size - 1)) / bars.size
-                bars.forEachIndexed { index, bar ->
-                    val height = (bar.value / maximum * size.height).toFloat()
-                        .coerceIn(0f, size.height)
-                    val left = index * (slot + gap)
-                    if (height > 0f) {
-                        drawRoundRect(
-                            color = colors.acc,
-                            topLeft = Offset(left, size.height - height),
-                            size = Size(slot, height),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(
-                                OhTheme.dims.macroBarHeight.toPx(),
-                            ),
+                Canvas(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(OhTheme.dims.chartHeight)
+                        .semantics { contentDescription = description },
+                ) {
+                    val gridColor = colors.sepOp
+                    repeat(GRIDLINES) { index ->
+                        val y = size.height * index / (GRIDLINES - 1)
+                        drawLine(
+                            color = gridColor,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = OhTheme.dims.chartGrid.toPx(),
                         )
+                    }
+                    val gap = OhTheme.dims.macroBarGap.toPx()
+                    val slot = (size.width - gap * (bars.size - 1)) / bars.size
+                    bars.forEachIndexed { index, bar ->
+                        val height = (bar.value / maximum * size.height).toFloat()
+                            .coerceIn(0f, size.height)
+                        val left = index * (slot + gap)
+                        if (height > 0f) {
+                            drawRoundRect(
+                                color = colors.acc,
+                                topLeft = Offset(left, size.height - height),
+                                size = Size(slot, height),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                                    OhTheme.dims.macroBarHeight.toPx(),
+                                ),
+                            )
+                        }
                     }
                 }
             }
-        }
-        Spacer(Modifier.height(OhTheme.space.s1))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(OhTheme.dims.chartAxisWidth))
-            val everyOther = bars.size > SEVEN
-            bars.forEachIndexed { index, bar ->
-                val show = !everyOther || index % 2 == 0 || index == bars.lastIndex
-                Text(
-                    text = if (show) bar.label else "",
-                    style = type.caption2.tabular(),
-                    color = colors.label2,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f),
-                )
+            Spacer(Modifier.height(OhTheme.space.s1))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.width(OhTheme.dims.chartAxisWidth))
+                val everyOther = bars.size > SEVEN
+                bars.forEachIndexed { index, bar ->
+                    val show = !everyOther || index % 2 == 0 || index == bars.lastIndex
+                    Text(
+                        text = if (show) bar.label else "",
+                        style = type.caption2.tabular(),
+                        color = colors.label2,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -198,54 +215,56 @@ fun OhHeatmap(weeks: List<List<HeatCellUi>>, description: String, modifier: Modi
     val type = OhTheme.type
     val cell = OhTheme.dims.heatCell
     val gap = OhTheme.dims.heatGap
-    Column(modifier = modifier.fillMaxWidth()) {
-        val months = mutableListOf<Pair<Int, Int>>()
-        weeks.forEach { week ->
-            val month = week.firstOrNull()?.date?.month?.ordinal ?: return@forEach
-            val last = months.lastOrNull()
-            if (last == null || last.first != month) {
-                months += month to 1
-            } else {
-                months[months.lastIndex] = month to last.second + 1
-            }
-        }
-        Row {
-            months.forEach { (month, span) ->
-                Text(
-                    text = monthShort(month),
-                    style = type.caption2,
-                    color = colors.label3,
-                    maxLines = 1,
-                    modifier = Modifier.width((cell + gap) * span),
-                )
-            }
-        }
-        Spacer(Modifier.height(OhTheme.space.s0))
-        Row(
-            modifier = Modifier.semantics { contentDescription = description },
-            horizontalArrangement = Arrangement.spacedBy(gap),
-        ) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Column(modifier = modifier.fillMaxWidth()) {
+            val months = mutableListOf<Pair<Int, Int>>()
             weeks.forEach { week ->
-                Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                    week.forEach { cellData ->
-                        val step = when (cellData.level) {
-                            RampLevel.L0 -> OhRamp.l0(colors)
-                            RampLevel.L1 -> OhRamp.l1(colors)
-                            RampLevel.L2 -> OhRamp.l2(colors)
-                            RampLevel.L3 -> OhRamp.l3(colors)
-                            RampLevel.L4 -> OhRamp.l4(colors)
+                val month = week.firstOrNull()?.date?.month?.ordinal ?: return@forEach
+                val last = months.lastOrNull()
+                if (last == null || last.first != month) {
+                    months += month to 1
+                } else {
+                    months[months.lastIndex] = month to last.second + 1
+                }
+            }
+            Row {
+                months.forEach { (month, span) ->
+                    Text(
+                        text = monthShort(month),
+                        style = type.caption2,
+                        color = colors.label3,
+                        maxLines = 1,
+                        modifier = Modifier.width((cell + gap) * span),
+                    )
+                }
+            }
+            Spacer(Modifier.height(OhTheme.space.s0))
+            Row(
+                modifier = Modifier.semantics { contentDescription = description },
+                horizontalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                weeks.forEach { week ->
+                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                        week.forEach { cellData ->
+                            val step = when (cellData.level) {
+                                RampLevel.L0 -> OhRamp.l0(colors)
+                                RampLevel.L1 -> OhRamp.l1(colors)
+                                RampLevel.L2 -> OhRamp.l2(colors)
+                                RampLevel.L3 -> OhRamp.l3(colors)
+                                RampLevel.L4 -> OhRamp.l4(colors)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(cell)
+                                    .clip(RoundedCornerShape(OhTheme.dims.heatRadius))
+                                    .background(step.track)
+                                    .then(
+                                        step.overlay?.let { overlay ->
+                                            Modifier.background(overlay)
+                                        } ?: Modifier,
+                                    ),
+                            )
                         }
-                        Box(
-                            modifier = Modifier
-                                .size(cell)
-                                .clip(RoundedCornerShape(OhTheme.dims.heatRadius))
-                                .background(step.track)
-                                .then(
-                                    step.overlay?.let { overlay ->
-                                        Modifier.background(overlay)
-                                    } ?: Modifier,
-                                ),
-                        )
                     }
                 }
             }

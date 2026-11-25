@@ -107,7 +107,16 @@ class TodayPresenter(
         val energyKcal = value(ObservationType.NUTRITION_ENERGY)
         val weight = latestWeight()
         val weightTrend = weightTrend()
-        val readiness = readiness(date)
+        val readiness = if (preferences.modules.any {
+                it == HealthModule.SLEEP ||
+                    it == HealthModule.VITALS ||
+                    it == HealthModule.TRAINING
+            }
+        ) {
+            readiness(date)
+        } else {
+            null
+        }
         val plan = plan(date, profile)
         val sessionCount = sessionsThisWeek(date)
         val energy = energy(date, profile, weight?.kg, energyKcal)
@@ -145,7 +154,7 @@ class TodayPresenter(
             energy = energy,
             stepsCard = stepsCard,
             weightCard = weightCard,
-            due = due(date, moduleOn),
+            due = due(date, moduleOn, preferences.weightNeutral),
             charts = charts(date, energy, steps, weight, weightTrend),
             provenances = provenances(date, energyKcal, steps, weight),
         )
@@ -626,11 +635,16 @@ class TodayPresenter(
             weeklyChangeKg = trend?.weeklyRateKg,
             goalKg = store.settings.get(SettingKeys.GOAL_WEIGHT_KG)?.toDoubleOrNull(),
             spark = rollups.map { ChartPoint(it.localDate, it.value.value) },
+            sparkDescription = weightDescription(weight, trend),
             sourceLabel = latestRollup?.sourceId?.let { store.sources.byId(it)?.label },
         )
     }
 
-    private fun due(date: LocalDate, moduleOn: (HealthModule) -> Boolean): List<TodayDueItem> {
+    private fun due(
+        date: LocalDate,
+        moduleOn: (HealthModule) -> Boolean,
+        weightNeutral: Boolean,
+    ): List<TodayDueItem> {
         val due = mutableListOf<TodayDueItem>()
         if (moduleOn(HealthModule.VITALS)) {
             val now = clock.now()
@@ -667,7 +681,8 @@ class TodayPresenter(
                 TodayDueAction.SLEEP,
             )
         }
-        if (moduleOn(HealthModule.BODY) &&
+        if (!weightNeutral &&
+            moduleOn(HealthModule.BODY) &&
             store.rollups.forTypeRange(
                 ObservationType.WEIGHT,
                 date.minus(DatePeriod(days = 6)),
@@ -877,7 +892,7 @@ class TodayPresenter(
                         localDate = date,
                         zoneId = zone.id,
                         device = observation?.provenance?.device,
-                        quality = rollup?.dedupReason,
+                        quality = qualityOf(rollup?.dedupReason),
                         edited = observation?.userEdited ?: false,
                         rawRecord = observation?.provenance?.rawRecordId != null,
                         valueText = numberFormat.format(steps),
@@ -901,7 +916,7 @@ class TodayPresenter(
                         localDate = weight.date,
                         zoneId = zone.id,
                         device = observation?.provenance?.device,
-                        quality = rollup?.dedupReason,
+                        quality = qualityOf(rollup?.dedupReason),
                         edited = observation?.userEdited ?: false,
                         rawRecord = observation?.provenance?.rawRecordId != null,
                         valueText = "${decimal(
@@ -912,6 +927,13 @@ class TodayPresenter(
                 ),
             )
         }
+    }
+
+    private fun qualityOf(reason: String?): String? = when (reason) {
+        null -> null
+        "ONE_SOURCE_WINS" -> context.getString(UiR.string.today_quality_one_source)
+        "NO_DEDUP" -> context.getString(UiR.string.today_quality_combined)
+        else -> reason
     }
 
     private fun methodLabel(method: MeasurementMethod): String = context.getString(

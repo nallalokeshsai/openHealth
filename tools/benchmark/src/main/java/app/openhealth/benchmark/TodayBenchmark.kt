@@ -72,13 +72,13 @@ class TodayBenchmark {
     ) {
         pressHome()
         startActivityAndWait()
-        device.wait(Until.hasObject(By.text("Today")), CONTENT_TIMEOUT_MILLIS)
+        device.wait(Until.hasObject(By.text("Due")), CONTENT_TIMEOUT_MILLIS)
     }
 
     private companion object {
         const val PACKAGE = "app.openhealth"
         const val ITERATIONS = 5
-        const val SEED_TIMEOUT_MILLIS = 15 * 60 * 1000L
+        const val SEED_TIMEOUT_MILLIS = 30 * 60 * 1000L
         const val CONTENT_TIMEOUT_MILLIS = 2_000L
     }
 }

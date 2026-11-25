@@ -66,7 +66,7 @@ the setting is local-first like every other preference.
 
 ## 6. The benchmark is a separate module and a benchmark-only source set
 
-`:benchmark` is a `com.android.test` module targeting the app's `benchmark` build type
+`:tools:benchmark` is a `com.android.test` module targeting the app's `benchmark` build type
 (release-shaped, debug-signed). The five-year seed activity lives in
 `app-android/src/benchmark/`, so no debug or release APK contains it. The benchmark
 reports cold startup and warm Today; the emulator caveat in the phase exit test is

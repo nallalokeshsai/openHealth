@@ -76,7 +76,9 @@ class TodayStatsExitTest {
     fun todayShowsTheRecipeAndOpensItsTables() {
         compose.setContent { OpenHealthRoot(container, viewModel) }
         waitFor("loaded") { viewModel.state.value.loaded }
-        waitFor("Today") { compose.onAllNodesWithText("Readiness").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("Today") {
+            compose.onAllNodesWithText("Readiness").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Readiness").assertIsDisplayed()
         compose.onNodeWithText("Steps").assertIsDisplayed()
         compose.onNodeWithText("Weight").assertIsDisplayed()

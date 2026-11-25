@@ -810,7 +810,11 @@ private fun WeightCard(
         }
         if (weight.spark.size >= 2) {
             Spacer(Modifier.height(OhTheme.space.s3))
-            OhSparkline(points = weight.spark, goal = weight.goalKg)
+            OhSparkline(
+                points = weight.spark,
+                goal = weight.goalKg,
+                description = weight.sparkDescription,
+            )
         }
         weight.goalKg?.let { goal ->
             Spacer(Modifier.height(OhTheme.space.s2))
@@ -969,14 +973,14 @@ private fun GoalSheet(
     val whatIf = energy.whatIf ?: return
     var delta by rememberSaveable { mutableFloatStateOf(whatIf.initialDailyDeltaKcal.toFloat()) }
     val rate = delta * DAYS_PER_WEEK / KCAL_PER_KG
-    val current = whatIf.currentWeightKg
-    val goal = whatIf.goalWeightKg
-    val remaining = current - goal
-    val days = if (kotlin.math.abs(rate) < MIN_RATE_KG_PER_WEEK) {
-        null
-    } else {
-        (kotlin.math.abs(remaining / rate) * DAYS_PER_WEEK).toInt()
-    }
+    val window = (
+        app.openhealth.core.formula.GoalEta.whatIf(
+            currentWeightKg = whatIf.currentWeightKg,
+            goalWeightKg = whatIf.goalWeightKg,
+            dailyDeltaKcal = delta.toDouble(),
+            today = today,
+        ) as? app.openhealth.core.formula.FormulaOutcome.Computed
+        )?.value
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
@@ -1015,10 +1019,11 @@ private fun GoalSheet(
             )
             OhRow(
                 title = stringResource(R.string.today_goal_sheet_window),
-                value = days?.let {
+                value = window?.let {
                     stringResource(
-                        R.string.today_goal_window_value,
-                        shortDateText(today.plus(DatePeriod(days = it))),
+                        R.string.today_goal_window_range,
+                        shortDateText(it.start),
+                        shortDateText(it.end),
                     )
                 } ?: stringResource(R.string.today_energy_goal_unknown),
                 showDivider = true,
@@ -1161,7 +1166,6 @@ private const val READINESS_CHIPS = 3
 private const val RANGE_MERGE_KCAL = 20.0
 private const val DAYS_PER_WEEK = 7.0
 private const val KCAL_PER_KG = 7_700.0
-private const val MIN_RATE_KG_PER_WEEK = 0.05
 private const val MIN_STEP_GOAL = 1_000
 private const val MAX_STEP_GOAL = 50_000
 private const val MAX_GOAL_DIGITS = 5

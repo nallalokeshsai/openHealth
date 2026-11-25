@@ -25,6 +25,10 @@ class BenchmarkSeedActivity : ComponentActivity() {
         setContentView(label)
         val app = application as OpenHealthApp
         lifecycleScope.launch {
+            if (app.container.preferences.snapshot().demo) {
+                label.text = "Seeded"
+                return@launch
+            }
             val ok = runCatching {
                 withContext(Dispatchers.IO) {
                     val container = app.container

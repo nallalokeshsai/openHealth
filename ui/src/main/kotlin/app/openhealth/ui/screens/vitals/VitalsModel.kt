@@ -179,6 +179,8 @@ data class TrendChartModel(
     val goal: Double? = null,
     val description: String,
     val decimals: Int = 1,
+    /** §8.5: a steps or energy chart starts at zero; a weight chart does not. */
+    val startAtZero: Boolean = false,
 )
 
 data class VitalReadingModel(

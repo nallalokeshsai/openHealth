@@ -1707,4 +1707,7 @@
     <string name="today_energy_goal_steady">Your weight has been steady over the recent weeks, so there is no pace to project yet.</string>
     <string name="today_energy_goal_away">Your recent trend is moving away from the goal weight, so there is no date to show.</string>
     <string name="stats_module_off_title">This module is off. Its data is kept.</string>
+    <string name="today_goal_window_range">Between %1$s and %2$s</string>
+    <string name="today_quality_one_source">One source wins</string>
+    <string name="today_quality_combined">Sources combined</string>
 </resources>

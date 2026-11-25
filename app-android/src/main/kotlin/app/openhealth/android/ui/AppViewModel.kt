@@ -499,10 +499,10 @@ class AppViewModel(
                     kotlin.math.abs(weekly).toString(),
                 )
             }
-            if (weekly < 0.0) {
-                profileGoal("lose_fat")
-            } else if (weekly > 0.0) {
-                profileGoal("gain_muscle")
+            when {
+                weekly < -FLAT_RATE_KG_PER_WEEK -> profileGoal("lose_fat")
+                weekly > FLAT_RATE_KG_PER_WEEK -> profileGoal("gain_muscle")
+                else -> profileGoal("maintain")
             }
             showToast(R.string.toast_goal_saved, undo = false)
             rebuild()
@@ -1592,7 +1592,7 @@ class AppViewModel(
                         val current = store.profile.active()?.weight_kg
                         store.settings.put(
                             SettingKeys.GOAL_WEIGHT_KG,
-                            ((current ?: 82.0) - 4.0).toString(),
+                            ((current ?: DEMO_WEIGHT_KG) - DEMO_GOAL_DROP_KG).toString(),
                         )
                     }
                     container.preferences.markOnboardingComplete(tier = 3)
@@ -3830,6 +3830,9 @@ class AppViewModel(
         private const val KCAL_PER_KG = 7_700.0
         private const val DAYS_PER_WEEK = 7.0
         private const val MIN_STEP_GOAL = 1_000
+        private const val DEMO_WEIGHT_KG = 82.0
+        private const val DEMO_GOAL_DROP_KG = 4.0
+        private const val FLAT_RATE_KG_PER_WEEK = 0.01
         private const val MAX_STEP_GOAL = 50_000
         private const val TIMELINE_PAGE = 200L
         private const val UNDO_TOAST_MS = 6_000L

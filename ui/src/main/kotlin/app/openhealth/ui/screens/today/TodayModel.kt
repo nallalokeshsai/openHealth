@@ -114,6 +114,7 @@ data class TodayWeightModel(
     val weeklyChangeKg: Double?,
     val goalKg: Double?,
     val spark: List<ChartPoint>,
+    val sparkDescription: String,
     val sourceLabel: String?,
 )
 
@@ -150,8 +151,6 @@ data class TodayModel(
     val demo: Boolean,
     /** The recovery map, or null when training is off or no store is open. */
     val bodyMap: BodyMapModel? = null,
-    val bodyChips: List<String> = emptyList(),
-    val lastMuscle: String? = null,
     val readiness: ReadinessCardModel? = null,
     val week: List<TodayWeekDay> = emptyList(),
     val sessionCount: Int = 0,

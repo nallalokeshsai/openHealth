@@ -22,8 +22,8 @@ import app.openhealth.ui.components.ChartTableModel
 import app.openhealth.ui.components.HeatCellUi
 import app.openhealth.ui.components.StatBarRow
 import app.openhealth.ui.screens.stats.ChartId
-import app.openhealth.ui.screens.stats.StatsCard
 import app.openhealth.ui.screens.stats.MacroAverage
+import app.openhealth.ui.screens.stats.StatsCard
 import app.openhealth.ui.screens.stats.StatsHue
 import app.openhealth.ui.screens.stats.StatsKpi
 import app.openhealth.ui.screens.stats.StatsModel
@@ -217,6 +217,7 @@ class TodayStatsScreenshotTest {
             spark = (0 until 10).map {
                 ChartPoint(date.minusDays(9 - it), 83.2 - it * 0.08)
             },
+            sparkDescription = "Weight 82.4 kilograms, 0.3 kilograms a week.",
             sourceLabel = "Withings",
         ),
         due = listOf(
@@ -246,6 +247,7 @@ class TodayStatsScreenshotTest {
         ),
     )
 
+    @Suppress("ReturnCount")
     private fun stats(segment: StatsSegment): StatsModel {
         val line = StatsPlot.Line(
             (0 until 14).map { ChartPoint(date.minusDays(13 - it), 82.0 + it * 0.03) },
