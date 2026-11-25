@@ -2504,12 +2504,11 @@ rather than executed radio; that is recorded as open, not claimed.
 
 - The B9 instrumented scenarios (`TodayStatsExitTest`) pass **2/2** on the owner's phone.
 - The full instrumented suite ran **42 tests**. `ActivityExitTest`, `TrainingExitTest`, `VitalsExitTest`, `ExerciseLibraryDeviceTest` and both B9 scenarios pass. Five B3/B6 tests (`underSixteen…`, `aSeventeenYearOld…`, `waterGlasses…`, `theOneTapWater…`, `theBundledIndex…`) failed only in the class sequence; each was re-run alone and passed. The failures are test-suite state and the phone's intermittent USB drop (they surfaced as `SQLITE_IOERR_DELETE`), not product failures; this is recorded as an open B10 test-isolation issue.
-- The manual sweep exercised Today (populated, empty via the golden suite, weight-neutral, dark/light/200 %), the readiness explanation, the goal what-if and Save target, the step goal, the chart tables and formula sheets, all five Stats segments, the four states of a card, rotation, process death, back navigation, and the settings surface. Eleven issues were recorded; eight are fixed in this phase and three are moved to open issues below.
+- The manual sweep exercised Today (populated, empty via the golden suite, weight-neutral, dark/light/200 %), the readiness explanation, the goal what-if and Save target, the step goal, the chart tables and formula sheets, all five Stats segments, the four states of a card, rotation, process death, back navigation, and the settings surface. Eleven issues were recorded; nine are fixed in this phase (the audit fixed the saved-target macro issue) and two are moved to open issues below.
 - Device output, screenshots and the issue list lived under `/tmp/openhealth-qa/b9` and were never committed.
 
 ### Open issues from QA (moved here)
 
-- **A saved what-if target can leave the macro rows without targets** (`AppViewModel.saveGoalTarget`). The calorie target is written and correct; the macro suggestion is computed but the saved row can still show only kcal, so the bars have no target until Nutrition → Targets is saved. Repro: Today → what-if → Save target on the demo profile.
 - **The five-tab labels are clipped at 200 % text.** The 56 dp bar shows the icons but not the labels; this is B1's component and belongs to B10's accessibility sweep.
 - **Stats is kilograms-only.** Weight and body fat in Stats do not follow the profile's imperial unit while Today does; B10's internationalisation pass.
 - **The phone's Macrobenchmark tracing is misconfigured**; the emulator number is reported and flagged.
