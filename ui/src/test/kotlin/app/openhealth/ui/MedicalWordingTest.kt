@@ -40,14 +40,34 @@ class MedicalWordingTest {
     fun noProductStringUsesAVerdict() {
         val file = File("src/main/res/values/strings.xml")
         assertTrue(file.exists(), "expected ${file.absolutePath}")
-        val entries = Regex(
-            """<string name="([^"]+)">(.*?)</string>""",
-            RegexOption.DOT_MATCHES_ALL,
-        )
-            .findAll(file.readText())
-            .map { it.groupValues[1] to it.groupValues[2] }
-            .toList()
+        val entries = stringsIn(file)
         assertTrue(entries.size > 500, "the resource scan found only ${entries.size} strings")
+        assertNoVerdict(entries)
+    }
+
+    /**
+     * The app module carries product copy of its own (toasts, the lock prompt, the
+     * startup error). It is scanned here because the rule is about what a person reads,
+     * not about which module a string happens to live in.
+     */
+    @Test
+    fun noAppModuleStringUsesAVerdict() {
+        val file = File("../app-android/src/main/res/values/strings.xml")
+        assertTrue(file.exists(), "expected ${file.absolutePath}")
+        val entries = stringsIn(file)
+        assertTrue(entries.size > 20, "the app resource scan found only ${entries.size} strings")
+        assertNoVerdict(entries)
+    }
+
+    private fun stringsIn(file: File): List<Pair<String, String>> = Regex(
+        """<string name="([^"]+)">(.*?)</string>""",
+        RegexOption.DOT_MATCHES_ALL,
+    )
+        .findAll(file.readText())
+        .map { it.groupValues[1] to it.groupValues[2] }
+        .toList()
+
+    private fun assertNoVerdict(entries: List<Pair<String, String>>) {
         val offenders = entries.filter { (name, text) ->
             name !in allowed && banned.containsMatchIn(text)
         }

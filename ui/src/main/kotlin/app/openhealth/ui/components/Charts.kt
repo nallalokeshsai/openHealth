@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,11 +23,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
+import app.openhealth.ui.theme.ltrFigures
 import app.openhealth.ui.theme.tabular
 
 /**
@@ -39,16 +44,21 @@ fun OhRing(
     centre: String,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    /** §14.2: 120 dp for energy, 96 dp for steps; the stroke is 8 dp in both. */
+    diameter: Dp? = null,
+    strokeWidth: Dp? = null,
 ) {
     val colors = OhTheme.colors
+    val ringSize = diameter ?: OhTheme.dims.nutritionRing
+    val strokeDp = strokeWidth ?: OhTheme.dims.nutritionRingStroke
     Box(
         modifier = modifier
-            .size(OhTheme.dims.nutritionRing)
+            .size(ringSize)
             .semantics(mergeDescendants = true) { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val stroke = OhTheme.dims.nutritionRingStroke.toPx()
+            val stroke = strokeDp.toPx()
             val inset = stroke / STROKE_HALF
             val arcSize = Size(size.width - stroke, size.height - stroke)
             drawArc(
@@ -121,35 +131,26 @@ fun OhBarRow(
     progress: Float?,
     ink: Color,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     val colors = OhTheme.colors
     val stack = androidx.compose.ui.platform.LocalDensity.current.fontScale >=
         OhTheme.dims.largeFontScale
-    Column(modifier = modifier.fillMaxWidth()) {
+    val interaction = rememberInteraction()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick == null) {
+                    Modifier
+                } else {
+                    Modifier.ohClickable(interactionSource = interaction, onClick = onClick)
+                },
+            ),
+    ) {
         if (stack) {
             Text(text = label, style = OhTheme.type.footnote, color = colors.label2)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = value,
-                    style = OhTheme.type.footnote.tabular(),
-                    color = colors.label,
-                )
-                if (target != null) {
-                    Spacer(Modifier.width(OhTheme.space.s1))
-                    Text(
-                        text = target,
-                        style = OhTheme.type.footnote.tabular(),
-                        color = colors.label3,
-                    )
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(text = label, style = OhTheme.type.footnote, color = colors.label2)
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = value,
@@ -160,9 +161,34 @@ fun OhBarRow(
                         Spacer(Modifier.width(OhTheme.space.s1))
                         Text(
                             text = target,
-                            style = OhTheme.type.footnote.tabular(),
-                            color = colors.label3,
+                            style = OhTheme.type.footnote.tabular().ltrFigures(),
+                            color = colors.label2,
                         )
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = label, style = OhTheme.type.footnote, color = colors.label2)
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = value,
+                            style = OhTheme.type.footnote.tabular(),
+                            color = colors.label,
+                        )
+                        if (target != null) {
+                            Spacer(Modifier.width(OhTheme.space.s1))
+                            Text(
+                                text = target,
+                                style = OhTheme.type.footnote.tabular(),
+                                color = colors.label3,
+                            )
+                        }
                     }
                 }
             }

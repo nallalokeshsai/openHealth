@@ -33,6 +33,8 @@ junit = "4.13.2"
 junitJupiter = "5.11.4"
 junitPlatform = "1.11.4"
 robolectric = "4.18.1"
+benchmarkMacro = "1.5.0"
+uiautomator = "2.3.0"
 roborazzi = "1.79.0"
 ktlint = "14.2.0"
 
@@ -82,6 +84,8 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
 roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
+androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmarkMacro" }
+androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 

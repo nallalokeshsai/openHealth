@@ -31,6 +31,8 @@ live in `gradle/libs.versions.toml`; this file explains them.
 | SQLCipher for Android | 4.20.0 | 4.20.0 (Maven Central, 2026-11-23) | Community edition, BSD-3-Clause; encrypted database on device. |
 | Health Connect client | 1.1.0 (added in B8, 2026-11-25) | 1.1.0 stable; 1.2.0-alpha06 is the newest alpha (Google Maven metadata, last updated 2026-08-26) | The stable channel. Requires `compileSdk 36` (the app is on 37), supports API 26+ and has no Google Play Services dependency, so the F-Droid flavour still builds. |
 | AndroidX test | runner 1.7.0, ext:junit 1.3.0 | the same (Google Maven, 2026-11-23) | The instrumented encrypted-database test. |
+| AndroidX Benchmark (B9) | 1.5.0 | 1.5.0 stable; 1.6.0-alpha02 is the newest alpha (Google Maven metadata, 2026-11-18) | Macrobenchmark for Today's cold and warm start; test-only, never in the APK. |
+| AndroidX UI Automator (B9) | 2.3.0 | 2.3.0 stable (Google Maven) | Drives the benchmark seed activity; test-only. |
 
 **SQLite JDBC** is not pinned in the catalogue: `app.cash.sqldelight:sqlite-driver`
 2.4.1 brings its own `org.xerial:sqlite-jdbc` for JVM tests and `tools/fixtures`. It

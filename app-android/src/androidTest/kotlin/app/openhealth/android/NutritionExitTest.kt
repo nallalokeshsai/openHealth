@@ -457,6 +457,12 @@ class NutritionExitTest {
             container.preferences.markOnboardingComplete(1)
         }
         viewModel.refresh()
+        val deadline = System.currentTimeMillis() + 30_000
+        while (!viewModel.state.value.onboardingComplete &&
+            System.currentTimeMillis() < deadline
+        ) {
+            Thread.sleep(50)
+        }
     }
 
     private fun waitFor(what: String, timeoutMillis: Long = 30_000, condition: () -> Boolean) {

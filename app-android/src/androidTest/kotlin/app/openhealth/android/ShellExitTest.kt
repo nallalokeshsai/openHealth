@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -146,12 +147,15 @@ class ShellExitTest {
         // before that the card shows its reserved placeholder. This is the regression
         // test for a blank map on Today.
         waitFor("body map") {
-            runCatching {
-                compose.onNodeWithContentDescription("Chest").assertExists()
-            }.isSuccess
+            compose.onAllNodesWithContentDescription("Chest").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithContentDescription("Chest").assertExists()
-        compose.onNodeWithContentDescription("Quadriceps").assertExists()
+        assertTrue(
+            compose.onAllNodesWithContentDescription("Chest").fetchSemanticsNodes().isNotEmpty(),
+        )
+        assertTrue(
+            compose.onAllNodesWithContentDescription("Quadriceps")
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
     }
 
     @Test
@@ -520,6 +524,12 @@ class ShellExitTest {
             container.preferences.markOnboardingComplete(1)
         }
         viewModel.refresh()
+        val deadline = System.currentTimeMillis() + 30_000
+        while (!viewModel.state.value.onboardingComplete &&
+            System.currentTimeMillis() < deadline
+        ) {
+            Thread.sleep(50)
+        }
     }
 
     private fun typeAndContinue(text: String) {

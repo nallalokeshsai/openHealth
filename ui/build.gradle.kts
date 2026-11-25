@@ -51,5 +51,9 @@ tasks.withType<Test>().configureEach {
     inputs.dir(layout.projectDirectory.dir("src/test/screenshots"))
         .withPropertyName("screenshotGoldens")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+    // MedicalWordingTest scans the app module's copy too, so a new toast there re-runs it.
+    inputs.file(rootProject.file("app-android/src/main/res/values/strings.xml"))
+        .withPropertyName("appStrings")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     maxHeapSize = "3g"
 }

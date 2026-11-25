@@ -191,6 +191,8 @@ data class OhDims(
     // §5.16 sheet
     /** §5.16: a sheet is at most 90 % of the viewport minus the status inset. */
     val sheetMaxHeightFraction: Float = 0.90f,
+    /** §5.16: a long table inside a sheet scrolls in a bounded box. */
+    val tableSheetMax: Dp = 440.dp,
 
     // §5.19 timer bar
     val timerProgress: Dp = 3.dp,
@@ -273,6 +275,19 @@ data class OhDims(
     val chartLegendDot: Dp = 8.dp,
     val chartDashOn: Dp = 7.dp,
     val chartDashOff: Dp = 4.dp,
+    /** §8.2: a sparkline is 1.5 dp with a 3 dp last point. */
+    val chartSparkLine: Dp = 1.5.dp,
+    val chartSparkPoint: Dp = 3.dp,
+    /** §8.2: heatmap cells are 11 dp with a 2 dp gap and a 2 dp radius. */
+    val heatCell: Dp = 11.dp,
+    val heatGap: Dp = 2.dp,
+    val heatRadius: Dp = 2.dp,
+    /** §14.2 Today: the steps ring is 96 dp. */
+    val stepsRing: Dp = 96.dp,
+    /** §8.2: a stacked bar is 14 dp tall with 2 dp seams. */
+    val stackedBarHeight: Dp = 14.dp,
+    /** §8.2: at or below 400 dp a horizontal bar list stacks its name over the bar. */
+    val statBarStackWidth: Dp = 400.dp,
     /** §8.2.1: the strip is 10 dp tall inside a 16 dp tick box, with a 3 dp tick. */
     val rangeStripTrack: Dp = 10.dp,
     val rangeStripBox: Dp = 16.dp,

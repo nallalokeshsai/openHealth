@@ -72,7 +72,6 @@ import app.openhealth.ui.screens.nutrition.TargetsSheet
 import app.openhealth.ui.screens.nutrition.WaterSheet
 import app.openhealth.ui.screens.onboarding.OnboardingScreen
 import app.openhealth.ui.screens.quickadd.QuickAddSheet
-import app.openhealth.ui.screens.roots.StatsRoot
 import app.openhealth.ui.screens.settings.SettingsScreen
 import app.openhealth.ui.screens.settings.TrashScreen
 import app.openhealth.ui.screens.shell.OhRootShell
@@ -228,6 +227,17 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         onOpenTimeline = { nav.navigate(TimelineRoute) },
                         onOpenTrain = { goTab(2) },
                         onOpenNutrition = { viewModel.openQuickAdd(QuickAction.FOOD) },
+                        onStartPlan = { id ->
+                            if (id == null) {
+                                goTab(2)
+                            } else {
+                                viewModel.startTodayPlan(id)
+                                nav.navigate(LiveSessionRoute())
+                            }
+                        },
+                        onSaveGoalTarget = viewModel::saveGoalTarget,
+                        onSaveStepGoal = viewModel::saveStepGoal,
+                        onOpenVitals = { goTab(1) },
                     )
                 }
             }
@@ -463,7 +473,15 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSelectTab = goTab,
                 onQuickAdd = { viewModel.openQuickAdd(null) },
             ) {
-                StatsRoot(onAddNote = { viewModel.openQuickAdd(QuickAction.NOTE) })
+                val stats = state.stats
+                if (stats == null) {
+                    Loading()
+                } else {
+                    app.openhealth.ui.screens.stats.StatsScreen(
+                        model = stats,
+                        onSelectSegment = viewModel::selectStatsSegment,
+                    )
+                }
             }
         }
         composable<RoutineRoute> { entry ->

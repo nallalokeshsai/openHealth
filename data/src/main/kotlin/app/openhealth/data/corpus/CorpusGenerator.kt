@@ -265,7 +265,7 @@ class CorpusGenerator(
             point = SourcePoint("garmin", SourceKind.GARMIN, dayStart.plus(8.hours)),
             zone = zone,
         )
-        if (dayIndex % 7 == 0) {
+        run {
             sink += observation(
                 type = ObservationType.RESTING_HEART_RATE,
                 value = Measure(52.0 + random.nextInt(0, 10), UcumUnit.PER_MINUTE),

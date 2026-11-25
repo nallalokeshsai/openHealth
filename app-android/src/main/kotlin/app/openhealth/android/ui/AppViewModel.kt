@@ -23,6 +23,7 @@ import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.ObservationId
 import app.openhealth.core.ids.SourceId
 import app.openhealth.core.ids.TombstoneId
+import app.openhealth.core.nutrition.MacroTargets
 import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationContext
@@ -41,6 +42,7 @@ import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.db.Measurement
 import app.openhealth.data.db.Note
 import app.openhealth.data.db.Profile
+import app.openhealth.data.repo.NutritionTargetRecord
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.data.repo.TrashEntity
 import app.openhealth.ui.R as UiR
@@ -81,10 +83,8 @@ import app.openhealth.ui.screens.timeline.TimelineFilter
 import app.openhealth.ui.screens.timeline.TimelineKind
 import app.openhealth.ui.screens.timeline.TimelineModel
 import app.openhealth.ui.screens.timeline.TimelineRowModel
-import app.openhealth.ui.screens.today.Greeting
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayModel
-import app.openhealth.ui.screens.today.TodayStatus
 import app.openhealth.ui.screens.train.ExerciseHistoryModel
 import app.openhealth.ui.screens.train.LiveSessionModel
 import app.openhealth.ui.screens.train.LiveSetEdit
@@ -110,10 +110,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
@@ -198,6 +200,9 @@ data class AppState(
     val vitalType: ObservationType? = null,
     val vitalFilter: ObservationContext? = null,
     val devices: app.openhealth.ui.screens.devices.DevicesModel? = null,
+    val stats: app.openhealth.ui.screens.stats.StatsModel? = null,
+    val statsSegment: app.openhealth.ui.screens.stats.StatsSegment =
+        app.openhealth.ui.screens.stats.StatsSegment.OVERVIEW,
     val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
     val pendingPermission: app.openhealth.ui.screens.devices.DevicePermissionRequest? = null,
     val photoCompare: PhotoCompareModel? = null,
@@ -255,6 +260,22 @@ class AppViewModel(
     }
     private val activity: app.openhealth.android.activity.ActivityPresenter
         get() = container.activity
+    private val todayPresenter: app.openhealth.android.today.TodayPresenter by lazy {
+        app.openhealth.android.today.TodayPresenter(
+            context = container.context,
+            store = store,
+            clock = container.clock,
+            zone = zone,
+        )
+    }
+    private val statsPresenter: app.openhealth.android.stats.StatsPresenter by lazy {
+        app.openhealth.android.stats.StatsPresenter(
+            context = container.context,
+            store = store,
+            clock = container.clock,
+            zone = zone,
+        )
+    }
     private val nutritionPresenter: NutritionPresenter by lazy {
         NutritionPresenter(
             store = store,
@@ -296,22 +317,26 @@ class AppViewModel(
     private var toastJob: Job? = null
 
     init {
-        container.ble.onFound { found ->
-            val mapped = found.map { device ->
-                app.openhealth.ui.screens.devices.FoundDeviceModel(
-                    address = device.address,
-                    name = device.name ?: device.address,
-                    kindLabel = kindLabel(device.kind),
-                    kind = app.openhealth.core.activity.DeviceKindName.of(device.kind),
-                )
+        // The BLE manager opens the encrypted store; construct it off the main thread so
+        // the first frame (and the cold-start budget) never waits for SQLCipher.
+        viewModelScope.launch(Dispatchers.IO) {
+            container.ble.onFound { found ->
+                val mapped = found.map { device ->
+                    app.openhealth.ui.screens.devices.FoundDeviceModel(
+                        address = device.address,
+                        name = device.name ?: device.address,
+                        kindLabel = kindLabel(device.kind),
+                        kind = app.openhealth.core.activity.DeviceKindName.of(device.kind),
+                    )
+                }
+                _state.update { it.copy(foundDevices = mapped) }
             }
-            _state.update { it.copy(foundDevices = mapped) }
-        }
-        container.ble.onState {
-            _state.update { current ->
-                current.copy(
-                    devices = activity.model(found = current.foundDevices),
-                )
+            container.ble.onState {
+                _state.update { current ->
+                    current.copy(
+                        devices = activity.model(found = current.foundDevices),
+                    )
+                }
             }
         }
         refresh()
@@ -339,7 +364,12 @@ class AppViewModel(
 
     /** Stops the state holder's coroutines; tests call this before closing the store. */
     fun stop() {
+        val job = viewModelScope.coroutineContext[Job]
         viewModelScope.cancel()
+        // A test closes the store right after this; joining the cancelled rebuild stops a
+        // late write from racing the database close (B9 found this as an intermittent
+        // SQLITE_IOERR_DELETE in the instrumented suite).
+        if (job != null) kotlinx.coroutines.runBlocking { job.join() }
     }
 
     /**
@@ -364,7 +394,10 @@ class AppViewModel(
         val preferences = container.preferences.snapshot()
         val profile = store.profile.active()
         val complete = preferences.onboardingComplete && profile != null
-        val today = profile?.let { buildToday(preferences, it) }
+        val today = profile?.let { loaded ->
+            todayPresenter.model(preferences, loaded)
+                .copy(bodyMap = buildBodyMap(preferences, loaded))
+        }
         val settings = buildSettings(preferences, profile)
         val devices = activity.model(
             stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
@@ -399,6 +432,7 @@ class AppViewModel(
         _state.update { it.copy(train = train) }
         val vitals = profile?.let { body.model(it, preferences, preferences.demo) }
         _state.update { it.copy(vitals = vitals) }
+        refreshStats(preferences, profile)
         val openVital = _state.value.vitalType
         if (openVital != null) {
             val detail = body.detail(
@@ -427,6 +461,16 @@ class AppViewModel(
         _state.update { it.copy(nutrition = nutritionModel, nutritionDate = date) }
     }
 
+    private suspend fun refreshStats(
+        preferences: app.openhealth.android.preferences.Preferences,
+        profile: app.openhealth.data.db.Profile?,
+    ) {
+        val stats = profile?.let {
+            statsPresenter.model(_state.value.statsSegment, preferences)
+        }
+        _state.update { it.copy(stats = stats) }
+    }
+
     // -------------------------------------------------------------------- training
 
     fun startSession(routineId: String?) {
@@ -437,6 +481,94 @@ class AppViewModel(
     }
 
     fun startFreestyle() = startSession(null)
+
+    /** Today's Start: the plan's routine, or the Train root when there is no plan. */
+    fun startTodayPlan(routineId: String?) {
+        if (routineId == null) return
+        startSession(routineId)
+    }
+
+    fun selectStatsSegment(segment: app.openhealth.ui.screens.stats.StatsSegment) {
+        _state.update { it.copy(statsSegment = segment) }
+        if (_state.value.profile == null) return
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                statsPresenter.model(segment, _state.value.preferences)
+            }
+            _state.update { it.copy(stats = model) }
+        }
+    }
+
+    /**
+     * The goal-ETA what-if's Save: the chosen daily target becomes today's nutrition
+     * target. It never changes the profile's goal mode or the stored goal rate; the
+     * what-if is a target, not a rewrite of the person's goal (`pr.md` §6.4).
+     */
+    fun saveGoalTarget(kcal: Double) {
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                val today = container.clock.now().toLocalDateTime(zone).date
+                val existing = store.nutrition.targetFor(today)
+                val safeKcal = kcal.coerceIn(MIN_GOAL_KCAL, MAX_GOAL_KCAL)
+                val profile = store.profile.active()
+                val sex = profile?.sex_at_birth?.let {
+                    runCatching { app.openhealth.core.formula.SexAtBirth.valueOf(it) }.getOrNull()
+                }
+                // The measured weight comes first, exactly as Today's energy card reads
+                // it; a profile whose weight_kg was never filled in must not cost the
+                // macro targets their numbers (`pr.md` §6.3, §6.4).
+                val weight = latestWeightKg(today) ?: profile?.weight_kg
+                val suggested = if (sex != null && weight != null) {
+                    (
+                        app.openhealth.core.nutrition.TargetSuggestions.suggest(
+                            sex,
+                            weight,
+                            safeKcal,
+                        ) as? app.openhealth.core.formula.FormulaOutcome.Computed
+                        )?.value
+                } else {
+                    null
+                }
+                val targets = (suggested ?: existing?.targets ?: MacroTargets.EMPTY)
+                    .copy(kcal = safeKcal)
+                store.nutrition.saveTarget(
+                    NutritionTargetRecord(
+                        id = existing?.id ?: "target-${container.ids.newId()}",
+                        effectiveFrom = today,
+                        targets = targets,
+                        createdAt = existing?.createdAt
+                            ?: container.clock.now().toEpochMilliseconds(),
+                        updatedAt = container.clock.now().toEpochMilliseconds(),
+                        revision = (existing?.revision ?: 0) + 1,
+                    ),
+                )
+            }
+            showToast(R.string.toast_goal_saved, undo = false)
+            rebuild()
+        }
+    }
+
+    /** The latest weight the record holds in the last 90 days, from the deduplicated day. */
+    private fun latestWeightKg(today: LocalDate): Double? {
+        val from = today.minus(DatePeriod(days = WEIGHT_LOOKBACK_DAYS))
+        return store.rollups.forTypeRange(ObservationType.WEIGHT, from, today)
+            .maxByOrNull { it.localDate }
+            ?.value
+            ?.value
+    }
+
+    fun saveStepGoal(steps: Int) {
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                store.settings.put(
+                    SettingKeys.STEP_GOAL,
+                    steps.coerceIn(MIN_STEP_GOAL, MAX_STEP_GOAL).toString(),
+                )
+            }
+            showToast(R.string.toast_step_goal_saved, undo = false)
+            rebuild()
+        }
+    }
 
     fun startPastSession(date: kotlinx.datetime.LocalDate) {
         launchGuarded {
@@ -1499,6 +1631,13 @@ class AppViewModel(
                     container.preferences.setModules(HealthModule.entries.toSet())
                     container.preferences.setWeightNeutral(false)
                     container.preferences.setDemo(true)
+                    if (store.settings.get(SettingKeys.GOAL_WEIGHT_KG).isNullOrBlank()) {
+                        val current = store.profile.active()?.weight_kg
+                        store.settings.put(
+                            SettingKeys.GOAL_WEIGHT_KG,
+                            ((current ?: DEMO_WEIGHT_KG) - DEMO_GOAL_DROP_KG).toString(),
+                        )
+                    }
                     container.preferences.markOnboardingComplete(tier = 3)
                 }
             }.onFailure {
@@ -2879,42 +3018,6 @@ class AppViewModel(
 
     // ---------------------------------------------------------------------- builders
 
-    private fun buildToday(
-        preferences: app.openhealth.android.preferences.Preferences,
-        profile: Profile,
-    ): TodayModel {
-        val date = now().toLocalDateTime(zone).date
-        val rollups = store.rollups.forDay(date)
-        fun value(type: ObservationType): Double? =
-            rollups.firstOrNull { it.type == type }?.value?.value
-        val notes = store.notes.forDay(date).size
-        val water = value(ObservationType.WATER)
-        val steps = value(ObservationType.STEPS)?.toInt()
-        val energy = value(ObservationType.NUTRITION_ENERGY)
-        val weight = value(ObservationType.WEIGHT)
-        val anything =
-            notes > 0 || water != null || weight != null || steps != null || energy != null
-        return TodayModel(
-            today = date,
-            greeting = greeting(now().toLocalDateTime(zone).hour),
-            status = when {
-                preferences.weightNeutral -> TodayStatus.WEIGHT_NEUTRAL
-                anything -> TodayStatus.LOGGED_TODAY
-                else -> TodayStatus.NOTHING_LOGGED
-            },
-            noteCount = notes,
-            waterMl = water,
-            steps = steps,
-            energyKcal = energy,
-            weightKg = weight,
-            unitSystem = UnitSystem.fromKey(profile.units) ?: UnitSystem.METRIC,
-            readinessScore = null,
-            modules = preferences.modules,
-            demo = preferences.demo,
-            bodyMap = buildBodyMap(preferences, profile),
-        )
-    }
-
     /**
      * The recovery map (`pr.md` §6.5, `DESIGN.md` §9.1): computed from the last four weeks
      * of logged sets, never stored. The adipose layer is hidden entirely in weight-neutral
@@ -3749,13 +3852,6 @@ class AppViewModel(
         return value.takeIf { it in MIN_TAPE_CM..MAX_TAPE_CM }
     }
 
-    private fun greeting(hour: Int): Greeting = when (hour) {
-        in NIGHT_FROM..NIGHT_TO -> Greeting.NIGHT
-        in MORNING_FROM..MORNING_TO -> Greeting.MORNING
-        in AFTERNOON_FROM..AFTERNOON_TO -> Greeting.AFTERNOON
-        else -> Greeting.EVENING
-    }
-
     /**
      * The locale's separators, at most one decimal, no trailing zero, and a true minus
      * sign rather than a hyphen (`DESIGN.md` §8.1, §11.7).
@@ -3774,6 +3870,13 @@ class AppViewModel(
 
     companion object {
         const val DEMO_PROFILE = "profile-demo"
+        private const val MIN_STEP_GOAL = 1_000
+        private const val DEMO_WEIGHT_KG = 82.0
+        private const val DEMO_GOAL_DROP_KG = 4.0
+        private const val WEIGHT_LOOKBACK_DAYS = 90
+        private const val MIN_GOAL_KCAL = 500.0
+        private const val MAX_GOAL_KCAL = 10_000.0
+        private const val MAX_STEP_GOAL = 50_000
         private const val TIMELINE_PAGE = 200L
         private const val UNDO_TOAST_MS = 6_000L
         private const val PLAIN_TOAST_MS = 4_000L
@@ -3794,12 +3897,6 @@ class AppViewModel(
         private const val MAX_SYSTOLIC = 260.0
         private const val MIN_DIASTOLIC = 30.0
         private const val MAX_DIASTOLIC = 180.0
-        private const val NIGHT_FROM = 0
-        private const val NIGHT_TO = 4
-        private const val MORNING_FROM = 5
-        private const val MORNING_TO = 11
-        private const val AFTERNOON_FROM = 12
-        private const val AFTERNOON_TO = 17
         private const val RECENT_LIMIT = 3
         private const val LAST_HOUR = 23
         private const val NBSP = '\u00A0'

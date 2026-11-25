@@ -141,9 +141,18 @@ class StepBootReceiver : android.content.BroadcastReceiver() {
             return
         }
         val app = context.applicationContext as? OpenHealthApp ?: return
-        val enabled = runCatching { app.container.store.devices.stepTrackingEnabled() }
-            .getOrDefault(false)
-        if (!enabled) return
-        StepTrackingService.ensureRunning(context)
+        // Reading the setting opens the encrypted store; a boot broadcast arrives while
+        // the process may be starting for the launcher, so never do it on the main thread.
+        val pending = goAsync()
+        Thread({
+            try {
+                val enabled = runCatching {
+                    app.container.store.devices.stepTrackingEnabled()
+                }.getOrDefault(false)
+                if (enabled) StepTrackingService.ensureRunning(context)
+            } finally {
+                pending.finish()
+            }
+        }, "step-boot").start()
     }
 }

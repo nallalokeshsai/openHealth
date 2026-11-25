@@ -1,8 +1,10 @@
 # openHealth — Design System
 
-**Version:** 0.2
+**Version:** 0.3
 **Status:** Living document, first pass
-**Last revision:** 2026-11-25 — B8 adds the Devices recipe to §14.2 (a pushed page under
+**Last revision:** 2026-11-25 — B9 adds the KPI band's 12 sp range line to §5.6 and the
+Today and Stats recipes to §14.2; no new colour, type role, spacing value or component.
+Previous: 2026-11-25 — B8 adds the Devices recipe to §14.2 (a pushed page under
 Settings: grouped lists, one accent for the winning source, no new colour, type role,
 spacing value or component). Previous: 2026-11-25 — B7 records the measurement anchor's 30 % glow, the
 line-chart chrome and the photo-slider geometry in Appendix A; no new colour, type role,
@@ -686,6 +688,11 @@ For a row of headline figures (Stats overview, session summary): one
 `surface` card divided by vertical hairlines, three figures across, 12/16 dp
 padding. Figures are **type, not tiles**: 28/600 with a 13 `label-2` label. The
 lifetime total may sit underneath at full width. No boxes inside the card.
+
+An uncertain figure keeps its central value at 28/600 and puts its range or
+qualifier on a 12 sp `label-2` detail line under the label ("1,930–2,180"), so a
+range never clips a third of the band (2026-11-25, B9). The centre is the
+estimate; the line is the interval.
 
 ### 5.7 Button
 

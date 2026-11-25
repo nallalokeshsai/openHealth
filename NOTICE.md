@@ -158,6 +158,8 @@ energy estimate names it.
 
 Kotest, Robolectric and Roborazzi run on the JVM only and never enter the APK. Their
 licences and every transitive are recorded in `gradle/licences/allowed.tsv`.
+AndroidX Benchmark 1.5.0 and UI Automator 2.3.0 (Apache-2.0) run in the benchmark and
+instrumented test APKs only (B9); they never enter a release APK.
 
 
 ### USDA FoodData Central (CC0 1.0, public domain)
