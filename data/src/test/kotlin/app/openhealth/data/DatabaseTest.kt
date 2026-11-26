@@ -630,6 +630,7 @@ class DatabaseTest {
             "meal_template_item_template",
             "nutrition_target_effective",
             "fast_window_start",
+            "meal_effective_time",
         ).forEach { driver.execute(null, "DROP INDEX IF EXISTS $it", 0) }
         listOf(
             "recipe_item",
