@@ -2722,6 +2722,8 @@ Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
 
 ### Decisions taken
 
+The full record is `docs/adr/0015-hardening-and-release.md`; the short form:
+
 - **The tab bar decides labels once, for the whole bar.** A measured per-cell decision
   left a half-labelled bar at 200 % ("Today, Vitals, … Stats"), which reads as a bug.
 - **The three accessibility options are app preferences**, not device branches, because
