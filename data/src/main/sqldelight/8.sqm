@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS activity (
 
 CREATE INDEX IF NOT EXISTS activity_local_date ON activity(local_date);
 CREATE INDEX IF NOT EXISTS activity_started ON activity(started_at);
+CREATE INDEX IF NOT EXISTS activity_happened ON activity(happened_at);
 CREATE INDEX IF NOT EXISTS activity_type_date ON activity(type, local_date);
 
 CREATE TABLE IF NOT EXISTS activity_point (
@@ -54,6 +55,10 @@ CREATE TABLE IF NOT EXISTS activity_point (
     speed_mps REAL,
     PRIMARY KEY (activity_id, position)
 );
+
+-- The page branch sorts meals by the effective timeline time; an expression index keeps
+-- that sort from scanning the whole table now that the timeline has one more branch.
+CREATE INDEX IF NOT EXISTS meal_effective_time ON meal(COALESCE(happened_at, created_at));
 
 DROP VIEW timeline;
 CREATE VIEW timeline AS

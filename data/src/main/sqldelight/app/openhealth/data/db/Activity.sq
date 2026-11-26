@@ -38,6 +38,7 @@ CREATE TABLE activity (
 
 CREATE INDEX activity_local_date ON activity(local_date);
 CREATE INDEX activity_started ON activity(started_at);
+CREATE INDEX activity_happened ON activity(happened_at);
 CREATE INDEX activity_type_date ON activity(type, local_date);
 
 CREATE TABLE activity_point (

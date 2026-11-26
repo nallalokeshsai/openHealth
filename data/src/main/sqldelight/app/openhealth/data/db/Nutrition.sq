@@ -52,6 +52,9 @@ CREATE TABLE meal (
 
 CREATE INDEX meal_local_date ON meal(local_date);
 CREATE INDEX meal_created ON meal(created_at);
+-- The timeline page orders meals by the time they are shown, which is happened_at with
+-- created_at as the fallback; the expression index is what keeps that branch indexed.
+CREATE INDEX meal_effective_time ON meal(COALESCE(happened_at, created_at));
 
 CREATE TABLE entry (
     id TEXT NOT NULL PRIMARY KEY,
