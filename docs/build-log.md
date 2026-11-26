@@ -2653,3 +2653,277 @@ its files are committed, not when the working tree is green.
 ### iOS gate (`pr.md` §13.17)
 
 Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
+
+## B10 — Hardening and MVP release
+
+**Status:** Completed · **Date:** 2026-11-26 ·
+**Branch:** `build/b10-hardening-and-mvp-release`
+**Goal:** the MVP is trustworthy enough to run the owner's whole day
+(`BUILD-ROADMAP.md` §B10).
+
+### What this phase added
+
+- **Accessibility (deliverable 1).**
+  - The five-tab bar measures every label against its cell and the bar height once, and
+    either draws all five labels or, at the largest font scales, none; the name stays on
+    each cell's accessibility node. The drawn word is hidden from the screen reader so a
+    tab is announced once. `AccessibilitySweepTest` holds the names at 100 % and 200 %,
+    the 44 dp target at 200 %, the heading on a page title, the toast's polite live
+    region and the segmented control's growth.
+  - The segmented control grows with the text instead of clipping it, and at 200 % it
+    shows a fade into the track as its scroll affordance.
+  - Every control using `ohClickable` is keyboard-focusable and draws the §11.6 focus
+    ring, not only the text field.
+  - Three accessibility preferences in Settings → Appearance, mapped onto existing
+    tokens (DESIGN.md §12.4.1): high contrast, reduce transparency, reduce motion. The
+    system "remove animations" setting is still honoured.
+  - `ColourBlindTest` simulates deuteranopia, protanopia and tritanopia (Machado 2009)
+    over every status ink against `bg` and `surface`, and proves the recovery ramp keeps
+    three distinct states under all three.
+  - Text overflow: every single-line label that lacked an ellipsis has one.
+- **Light theme and screenshots (deliverable 2).** Review inbox goldens in dark, light,
+  200 % text and RTL; the body map now also has 200 % text and RTL goldens (it was dark
+  and light only). 300 goldens in total.
+- **Performance (deliverable 3).** R8 and resource shrinking on for release; a
+  `proguard-rules.pro` with only the reflective keeps (SQLDelight, SQLCipher, Bouncy
+  Castle, Koin, kotlinx.serialization, Health Connect); a generated
+  `app-android/src/main/baseline-prof.txt` (13 203 lines) from a
+  `BaselineProfileGenerator` in `:tools:benchmark` on the `oh35` emulator, committed
+  because the benchmark variant is unminified so the profile carries real names.
+- **Data safety (deliverable 4).**
+  - A v5 migration test (`V5MigrationTest`): v1–v8 now each have an upgrade test.
+  - Corrupted-database recovery: `AndroidDatabaseFactory` detects a corrupt file,
+    restores the newest pre-migration snapshot scoped to that database name, reopens and
+    records the recovery; Settings → Data states the date it happened.
+    `DatabaseRecoveryTest` proves it on a test-only database.
+  - The review inbox (`pr.md` §6.28): `:core` `ReviewInbox` (disagreements, out-of-range
+    readings, probable duplicates), `ReviewPresenter`, a screen reachable from
+    Settings → Data, and four answers (keep, leave out of trends, merge to Trash, ignore)
+    plus an edit path to the timeline. Dismissals are a key list in settings.
+  - Trash expiry runs whenever the Trash list is read, not only at process start.
+- **Security (deliverable 5).**
+  - `checkNoTelemetrySdks` on every module's runtime classpath, with a deny list
+    separate from the licence allowlist; the two `com.google.*` allowlist wildcards that
+    would have admitted Firebase or Play Services were removed and the five real Google
+    artifacts listed by name.
+  - `android:usesCleartextTraffic="false"` and an explicit network security config;
+    `ACCESS_NETWORK_STATE` (merged in by CameraX's video module) removed.
+  - `SecurityPostureTest` on the installed APK: backup off, both backup rule sets present,
+    cleartext refused, the permission list equals what the product uses, and no analytics
+    class is loadable. `PrivacySourceTest` scans every client source file for a second
+    transport or a cleartext URL.
+- **Release (deliverable 6).** Release signing reads `OH_KEYSTORE*` from the environment
+  (the owner's keystore, created outside the repository); signed `play` and `fdroid`
+  APKs and AABs build; Fastlane metadata under `fastlane/metadata/android/en-US/`;
+  `docs/privacy-policy.md` and an in-app privacy paragraph; `docs/reproducible-builds.md`
+  with the signing and rebuild procedure; version `1.0.0` (code 1).
+- **E2E.** Seven Maestro flows under `.maestro/`: onboarding with sample data, the five
+  tabs, a chart table, the review inbox, privacy, appearance, and one-tap water.
+
+### Decisions taken
+
+The full record is `docs/adr/0015-hardening-and-release.md`; the short form:
+
+- **The tab bar decides labels once, for the whole bar.** A measured per-cell decision
+  left a half-labelled bar at 200 % ("Today, Vitals, … Stats"), which reads as a bug.
+- **The three accessibility options are app preferences**, not device branches, because
+  Android exposes the three settings inconsistently; they reuse tokens only.
+- **A corrupt database is restored automatically**, because the alternative is a record
+  that cannot open, and the snapshot exists for exactly this. The restore is scoped to
+  the database's own file name and reported in Settings.
+- **The review inbox never edits automatically.** Keep and ignore answer the question;
+  leave-out excludes from trends (reversible from the timeline); merge tombstones the
+  extra duplicate for 30 days.
+- **SQLDelight `verifyMigrations` stays off.** Its verifier needs a schema snapshot per
+  released version and the project has only the current one; the per-version upgrade
+  tests are the gate instead, and all eight versions are covered.
+- **The benchmark variant is unminified** so the baseline profile carries real class
+  names.
+
+### What was run, and its result
+
+| Command | Result |
+|---|---|
+| `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkNoTelemetrySdks`, `checkDesignTokens`, both lint variants, **602 JVM tests** (308 `:core`, 112 `:data`, 27 `:integrations`, 145 `:ui`, 10 tools) and **300 goldens**. |
+| `./gradlew :app-android:assembleDebug :app-android:assembleFdroidDebug` | **BUILD SUCCESSFUL**. |
+| `assembleRelease` + `bundleRelease`, owner's keystore from `.env.local` | **BUILD SUCCESSFUL**: signed play APK 23 MB, play AAB 17 MB, fdroid APK and AAB; `apksigner` reports `CN=openHealth, OU=Android Release`. |
+| `:tools:benchmark:connectedPlayBenchmarkAndroidTest` `BaselineProfileGenerator` on `oh35` | **BUILD SUCCESSFUL**: `baseline-prof.txt` generated and committed. |
+| `:app-android:connectedPlayDebugAndroidTest` on the emulator | **47 tests, 0 failures** — the whole instrumented suite in class order. |
+| Maestro suite on the emulator (release APK) | **7/7 flows pass**; the audit re-ran them. |
+| `QueryBenchmarkTest` (`:tools:fixtures`) | passes inside `check`: no query over 16 ms on the five-year corpus. |
+
+### Fixed during the phase's own verification
+
+- **The tab labels were announced twice.** Setting the cell's content description and
+  drawing the same word as a `Text` made the merged node's description a two-item list;
+  `NutritionExitTest` could no longer find the tab by its exact name. The drawn word is
+  now decoration for the screen reader.
+- **At 200 % the bar showed three labels and dropped two.** It now decides once for the
+  whole bar from measurement.
+- **The segmented control clipped a 30 sp line in a 32 dp track.** The track and thumb
+  now grow to `heightIn(min)` and the 200 % variant has a visible fade at the end.
+- **The permission audit assumed the legacy Bluetooth pair on every API level.** The pair
+  is only requested below Android 12; the test now accepts either shape and still fails
+  on any other permission. Android 17 adds `OTHER_SENSORS` to apps targeting its SDK; it
+  is listed as platform-injected rather than silently ignored.
+- **`aDaysTotalsEqualTheSumOfItsEntriesExactly` asserted against a stale model** while
+  the refresh was running; it now waits for the rebuilt value. This was one of the B9
+  class-sequence flakes.
+
+### What the independent review found, and what was fixed
+
+Three fresh reviewers (correctness, invariants/licence, DESIGN conformance) read only the
+diff and the contract. Everything below was confirmed and fixed in this run, with the
+gates re-run afterwards.
+
+- **Weight-neutral mode was bypassed by the inbox.** The presenter ignored
+  `DisplayPolicy`, so a weight or energy question would have shown its number. It now
+  hides every sensitive type before the inbox is built, and the golden that proved the
+  leak was replaced.
+- **Module switches were ignored.** A switched-off module's questions no longer appear.
+- **A corrupt database was deleted before the snapshot was copied.** Recovery now renames
+  the broken file and its sidecars aside (`.corrupt-<stamp>`), copies the snapshot to a
+  temporary file and moves it in atomically; a failed copy leaves the record in place.
+  The database driver is closed before the file is replaced.
+- **A heart-rate stream was offered as duplicates.** Duplicate detection is skipped for
+  `INSTANT` types (a FIT import writes one sample per second), the kept reading is shown
+  with the extras, and one item draws at most five rows while merging every extra.
+- **Two "leave out" buttons with the same label** could exclude the wrong reading; each
+  now names its value. The duplicate gap is measured across the kept reading and the
+  extras, not the extras alone.
+- **The inbox never said which day a row was about**, its readings carried no provenance,
+  and its count was not in Settings. The date is the row's trailing value, each reading
+  has its method, device and recorded time, and Settings → Data shows the count.
+- **Copy and localisation.** "under a minute"/"N minutes" became plurals, the count
+  became a plural, "Shown today" became "Wins", "Keep %s" now names the value, and the
+  empty action is "Back". Units in the inbox follow the profile (lb or kg).
+- **RTL: a filled text block resolved alignment from the content, not the layout**, so
+  the page title sat at the far edge from its back control and row titles staggered
+  against their subtitles. `ohBlockDirection()` gives those blocks the layout's
+  direction; the RTL goldens show the title beside the chevron and one row edge.
+- **The segmented control's scroll fade was screen-tall** (a `fillMaxHeight` under loose
+  constraints) and the track measured 44 dp where §5.10 says 36. Both were fixed: the
+  fade is bounded to the track and the track is 36 dp (44 dp at the largest text).
+- **Accent spend.** The only accent in the review sheet was "Ignore this"; the first
+  answer is now Primary, Ignore is Quiet, and the winner is a neutral "Wins" word, not a
+  disabled button.
+- **Stats read units from the settings mirror** while Today and Body read the profile; it
+  now reads the profile, and the duplicate `unit_lb` key is gone.
+- **The telemetry gate could pass having inspected nothing**; it now fails on an empty
+  classpath like the licence gate. `PrivacySourceTest` requires every scan root to exist
+  and matches more transport types.
+- **Two B1/B10 tests asserted the tab label as text**, which the single-name fix removed;
+  they assert the content description now.
+- **The permission audit assumed the legacy Bluetooth pair on every API level** and did
+  not know Android 17's `OTHER_SENSORS`; it now accepts either shape and still fails on
+  any other permission.
+- **`aDaysTotalsEqualTheSumOfItsEntriesExactly` raced a rebuild** and asserted against the
+  stale model (the B9 class-sequence flake); it waits for the rebuilt value now.
+
+### QA sweep on the phone (real hardware)
+
+The phone was exercised as a user, with screenshots kept outside the repository under
+`/tmp/openhealth-qa/b10`:
+
+- **Every root and pushed page:** Today (populated, empty via the golden suite), Vitals,
+  Train, Nutrition, Stats (Overview, Body, Training, Sleep, Nutrition), Settings (profile,
+  modules, data, appearance, privacy, about), Devices, Timeline, Trash, Review inbox,
+  the body table sheet, a chart table and a formula sheet, onboarding and the lock class.
+- **States:** populated sample data, empty Trash, empty review inbox, weight-neutral (via
+  the B7/B9 suites and goldens), module off, Health Connect not granted, light theme, dark
+  theme, 200 % text, reduced-width window (landscape), process death and relaunch, back
+  out of every pushed page and every sheet.
+- **Numbers:** weight 84.7 kg and its 30-day trend, weekly rate, goal, readiness 67, sleep
+  7 h 18 (a night), 9 h 19 (debt), 31 min (variation), 2,284 kcal in, breakfast 606 kcal —
+  each opened through its card's table or its provenance, and each matched the seeded
+  demo corpus.
+- **Security on the installed APK:** 4/6 device tests (the other 2 belong to recovery)
+  green; the permission list, cleartext refusal and absent telemetry classes were checked
+  on the phone, not only the emulator.
+
+What the sweep found, and what was fixed in this run (with the goldens re-recorded and
+`check` re-run):
+
+- **The KPI band clipped its durations** ("7 h 18 …", "9 h 19 …") in a third of the band.
+  The band's own form now drops the word "min"; cards and tables keep the full sentence.
+- **A dense bar chart ellipsised every date to "13 …"**. Every-other labels now get two
+  slots, so "13 Nov" fits.
+- **"Down 0.3 kg in 1 days"** — the weight change and two nearby day counts are plurals
+  now.
+- **The debug build had two launcher entries** (the design gallery and the body lab), so a
+  plain launch opened the gallery. They are debug-only activities without launcher
+  filters; the comment says how to start them.
+- **The device's instrumented suite uninstalls the app when it finishes**, which deletes
+  the record it was run against. It was run on the emulator from then on; this is
+  recorded as a process note, not a product defect.
+
+Not reproducible on the phone: force-RTL needs a reboot of the owner's device, so the RTL
+pass is the 59 RTL goldens (including the body map and the review inbox) plus the
+`ohBlockDirection` fix; the phone's own RTL layout was not toggled.
+
+### B10 exit tests (`BUILD-ROADMAP.md` §B10)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| The full Maestro suite passes | 6/6 flows on the emulator (release APK); 5/5 app flows plus the onboarding flow on the phone, 2 m 46 s; flow 03 was made state-independent after the populated inbox exposed it. | **pass** |
+| Every budget passes | Cold start **484 / 509 / 484 ms** (signed release, phone) and **500 / 502 / 511 ms** with the five-year `.bench` corpus; warm **24 / 31 / 27 / 30 / 24 ms** and **18 / 30 / 32 / 33 ms**; one-tap set **240 ms**; barcode to logged **753 ms**; `QueryBenchmarkTest` holds every query under 16 ms. Doctor report and battery are B12/B8. | **pass on the phone** |
+| A signed APK installs on the owner's phone | The signed `play` release APK (`CN=openHealth`) is installed on the phone as version 1.0.0 and launches; `apksigner` verified the certificate. | **pass** |
+| Open issues listed honestly | This section and the list below. | **pass** |
+
+### What the headless plan audit found, and what was fixed
+
+A fresh Claude Code session audited the branch against B0–B10 with permissions skipped.
+Its diff was read and its gates re-run; everything below was kept because it is right.
+
+- **A duplicate question named the wrong source.** The kept reading was the earliest of
+  the day across sources, so with Fitbit reporting once and Garmin twice the row said
+  "Fitbit recorded steps twice" while merging Garmin's reading. Duplicate runs are now
+  per source. Test: `ReviewInboxTest`.
+- **The no-winner disagreement sentence named one source twice** ("Garmin says 8,400 and
+  Garmin says 8,400"). It now names the highest and lowest. Test: `ReviewPresenterTest`.
+- **UCUM codes reached the screen** ("{steps}", "mm[Hg]", "/min", "Cel"). The presenter
+  now renders units a person reads, or none for a counted type. Test:
+  `noReadingShowsAUcumCode`.
+- **The wording gate skipped plurals and string-arrays**, so every plural B10 added was
+  unscanned copy. The scan now includes them, with a test that holds the coverage.
+- **`PrivacySourceTest` skipped a missing root**, so a rename could have narrowed it
+  silently. A missing root now fails (except `:sync`, which is empty until B13).
+- **The colour-blind test checked one theme per simulation**, leaving three combinations
+  untested. All three now run against both themes.
+- **A Maestro flow asserted nothing.** The water flow's optional tap was replaced with a
+  real assertion on the one-tap button, the confirmation and the absence of a sheet.
+
+The audit also ran the whole suite: `check` green (602 JVM tests, 300 goldens), the
+instrumented suite 50/50 on the emulator and Maestro 7/7. It reported, and this log
+records, that chart series hues do not all clear a 40-point separation under simulated
+colour blindness (light/tritanopia green–teal 19, dark/tritanopia frost–teal 31,
+light/deuteranopia frost–purple 40) — charts carry series labels and legends, but making
+the hues separate would change closed tokens, so it is an owner decision and is listed
+below.
+
+### Placeholders and open issues
+
+- The public privacy-policy URL is a bracketed placeholder in the Fastlane metadata; the
+  owner hosts `docs/privacy-policy.md` when they choose (see the B10 question).
+- Import dry run and per-source health (`pr.md` §6.28) are not built; the inbox covers
+  duplicates, out-of-range values and disagreeing sources. Recorded for B11/B12.
+- The phone's Macrobenchmark tracing is still misconfigured (`DEVICE-TRACING-MISCONFIGURED`),
+  so the budgets are measured by direct activity start, as in B9.
+- `:tools:benchmark` alone sits outside ktlint/Detekt/licence/telemetry gates; the other
+  three `:tools/*` modules are gated.
+- The phone's own force-RTL toggle needs a reboot; the RTL pass is the 59 goldens and the
+  layout-direction fix, not a live RTL phone.
+- Running `connectedAndroidTest` against the phone uninstalls the app when it finishes,
+  so the record it was run against is deleted. The suite is run on the emulator now; the
+  phone is for the release install and the manual walk.
+- The review inbox caps one duplicate item at five drawn readings; a longer run is still
+  merged whole, and the list is not paginated.
+- Chart series hues are not all separable under simulated colour blindness (measurements
+  above). The charts label every series and every chart has a table, but the §14.5
+  colour-blind line for charts would need a token change, which is the owner's call.
+- The phone's record was wiped twice during this phase: once by Gradle's
+  `connectedAndroidTest` (it uninstalls the app afterwards) and once by a Maestro run
+  without `--device`, whose onboarding flow clears state. Both times the install was
+  fresh or demo data. Use `maestro --device <emulator>` and run instrumented suites on
+  the emulator.
+- The iOS gate (`pr.md` §13.17) is **not yet** reviewed: Android ships first.

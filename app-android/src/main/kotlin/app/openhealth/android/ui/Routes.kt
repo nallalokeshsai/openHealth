@@ -34,6 +34,10 @@ data object TimelineRoute
 @Serializable
 data object TrashRoute
 
+/** B10: the review inbox for duplicates, out-of-range values and disagreeing sources. */
+@Serializable
+data object ReviewRoute
+
 @Serializable
 data class RoutineRoute(val id: String)
 

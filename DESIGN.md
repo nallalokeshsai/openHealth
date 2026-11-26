@@ -1,9 +1,12 @@
 # openHealth — Design System
 
-**Version:** 0.3
+**Version:** 0.4
 **Status:** Living document, first pass
-**Last revision:** 2026-11-25 — B9 adds the KPI band's 12 sp range line to §5.6 and the
-Today and Stats recipes to §14.2; no new colour, type role, spacing value or component.
+**Last revision:** 2026-11-26 — B10 maps the three accessibility options named in §12.4
+onto existing tokens (§12.4.1): high contrast, reduce transparency and reduce motion add
+no colour, type role, spacing value or component. Previous: 2026-11-25 — B9 adds the KPI
+band's 12 sp range line to §5.6 and the Today and Stats recipes to §14.2; no new colour,
+type role, spacing value or component.
 Previous: 2026-11-25 — B8 adds the Devices recipe to §14.2 (a pushed page under
 Settings: grouped lists, one accent for the winning source, no new colour, type role,
 spacing value or component). Previous: 2026-11-25 — B7 records the measurement anchor's 30 % glow, the
@@ -392,8 +395,8 @@ the person explicitly configured as an alert (`pr.md` §12.1).
   The graphic inks (`streak`, `frost`) reach 3:1 and never carry body text.
 - Never put text on `surface-3` without checking it.
 - Never rely on hue alone: every status carries an icon or a word.
-- Increase Contrast (Android high-contrast) steps the system palette up and
-  firms `label-2` and `sep`.
+- The high-contrast option (§12.4.1) firms `label-2`, `label-dim` and `sep-op`.
+  It is an app preference, not a branch on an Android setting.
 - Colour-blind simulation is part of the review gate (§14.5).
 
 ### 2.10 Forbidden
@@ -1553,6 +1556,22 @@ transparency, contrast, and (V1) home-card order. Everything else is fixed.
 
 Dynamic colour (Material You) is **off**: it would let the wallpaper choose the
 colour of a clinical value.
+
+#### 12.4.1 The three accessibility options, mapped to existing values
+
+They are preferences in Settings → Appearance rather than device-dependent branches,
+because Android does not expose all three consistently; "Remove animations" is honoured
+from the system as well.
+
+- **High contrast.** `label-2` and `label-dim` take `label` and the optional `sep-op`
+  hairline takes `sep`. No new value: the same tokens at full strength. Full-strength
+  body copy in dark is the one place the high-contrast choice overrules §2.10, and only
+  while the option is on.
+- **Reduce transparency.** `barFill` becomes opaque `bg-el`, `toastFill` and
+  `timerBarFill` become opaque `surface-2`. This is exactly what §4.3 asks of the tab bar.
+- **Reduce motion.** Every motion token built on `OhMotion` resolves to its instant state
+  (§6.9), which covers press, selection, charts and the timer bar; Material's own sheet
+  animation is outside the token and is unchanged, and the setting's copy says so.
 
 ### 12.5 Contrast audit
 

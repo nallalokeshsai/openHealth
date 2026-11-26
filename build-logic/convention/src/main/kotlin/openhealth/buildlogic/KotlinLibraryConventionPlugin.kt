@@ -12,6 +12,7 @@ class KotlinLibraryConventionPlugin : Plugin<Project> {
         applyCodeQuality()
         registerPortabilityCheck()
         registerLicenceCheck()
+        registerTelemetryCheck()
         configureTestTask()
     }
 }

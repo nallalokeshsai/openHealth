@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- App lock uses the platform BiometricPrompt on API 28+ (pr.md §6.23). The
          permission is declared; it is only exercised when the person turns the lock on. -->
@@ -17,6 +18,14 @@
          in, so without this line the lookup fails on that build and silently falls back
          to the manual path. Nothing else in the app opens a socket. -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Nothing needs the network state: the one call is a foreground, explicit action.
+         CameraX's video module (which this app never records with) merges it in, so it is
+         removed here and the permission audit test holds the merged manifest to the list
+         of permissions the product actually uses (`pr.md` §6.23; B10). -->
+    <uses-permission
+        android:name="android.permission.ACCESS_NETWORK_STATE"
+        tools:node="remove" />
 
     <!-- The rest timer is an ongoing foreground service (pr.md §6.5, Tech-Stack.md §4):
          health, a short rest countdown for a training session. Sound and vibration at
@@ -71,6 +80,8 @@
     <application
         android:name="app.openhealth.android.OpenHealthApp"
         android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:label="@string/app_name"

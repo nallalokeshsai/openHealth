@@ -1,0 +1,20 @@
+# pr.md §6.16: every chart has a table alternative. Opens Today's weight chart,
+# shows its table, and closes it. The scroll is generous because the card order is
+# the §14.2 order and the weight card sits below the fold.
+appId: app.openhealth
+---
+- launchApp
+- tapOn: "Stats"
+- assertVisible: "Stats"
+- scrollUntilVisible:
+    element:
+      text: "Show as table"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    text: "Show as table"
+    index: 0
+- assertVisible:
+    text: "Day|Week of|Muscle|Reading"
+- tapOn: "Close"
+- assertVisible: "Stats"

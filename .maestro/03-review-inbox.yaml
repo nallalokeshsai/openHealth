@@ -1,0 +1,16 @@
+# pr.md §6.28: the review inbox is reachable from Settings → Data and always states a
+# result, populated or empty. The back path is the header control, not the empty state's
+# button, so the flow passes on both.
+appId: app.openhealth
+---
+- launchApp
+- tapOn: "Settings"
+- assertVisible: "Settings"
+- tapOn: "Data and backups"
+- tapOn: "Review inbox"
+- assertVisible: "Review inbox"
+# The page header's back control, which exists whether the inbox is populated or empty.
+- tapOn:
+    text: "Back"
+    index: 0
+- assertVisible: "Data and backups"

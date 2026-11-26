@@ -56,6 +56,7 @@ import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
 import app.openhealth.ui.screens.common.OhPageHeader
+import app.openhealth.ui.screens.common.OhSectionTitle
 import app.openhealth.ui.theme.OhAccent
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
@@ -88,12 +89,16 @@ fun SettingsScreen(
     onWeightNeutral: (Boolean) -> Unit,
     onTheme: (ThemeChoice) -> Unit,
     onAccent: (OhAccent) -> Unit,
+    onHighContrast: (Boolean) -> Unit,
+    onReduceTransparency: (Boolean) -> Unit,
+    onReducedMotion: (Boolean) -> Unit,
     onAppLock: (Boolean) -> Unit,
     onExport: (Uri, CharArray) -> Unit,
     onRestore: (Uri, CharArray) -> Unit,
     onOpenDevices: () -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
+    onOpenReview: () -> Unit,
     onExternalActivity: () -> Unit,
     onDeleteAllNotes: () -> Unit,
     onEmptyTrash: () -> Unit,
@@ -234,6 +239,7 @@ fun SettingsScreen(
         onDismiss = { sheet = SettingsSheet.NONE },
         onOpenTimeline = onOpenTimeline,
         onOpenTrash = onOpenTrash,
+        onOpenReview = onOpenReview,
         onExport = {
             sheet = SettingsSheet.NONE
             onExternalActivity()
@@ -253,6 +259,9 @@ fun SettingsScreen(
         onTheme = onTheme,
         onAccent = onAccent,
         onWeightNeutral = onWeightNeutral,
+        onHighContrast = onHighContrast,
+        onReduceTransparency = onReduceTransparency,
+        onReducedMotion = onReducedMotion,
     )
     PrivacySheet(
         visible = sheet == SettingsSheet.PRIVACY,
@@ -621,6 +630,7 @@ private fun DataSheet(
     onDismiss: () -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
+    onOpenReview: () -> Unit,
     onExport: () -> Unit,
     onRestore: () -> Unit,
     onUndoRestore: () -> Unit,
@@ -652,6 +662,22 @@ private fun DataSheet(
                 showDivider = true,
                 showChevron = true,
                 onClick = onOpenTrash,
+            )
+            OhRow(
+                title = stringResource(R.string.review_settings_row),
+                subtitle = if (state.reviewCount > 0) {
+                    pluralStringResource(
+                        R.plurals.review_count,
+                        state.reviewCount,
+                        state.reviewCount,
+                    )
+                } else {
+                    stringResource(R.string.review_settings_empty)
+                },
+                leadingIcon = OhIcons.info,
+                showDivider = true,
+                showChevron = true,
+                onClick = onOpenReview,
             )
         }
         Spacer(Modifier.height(OhTheme.space.s5))
@@ -694,6 +720,14 @@ private fun DataSheet(
                 )
             }
         }
+        state.recoveryNote?.let { note ->
+            Spacer(Modifier.height(OhTheme.space.s5))
+            Text(
+                text = stringResource(R.string.settings_recovered, note),
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
+        }
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
             text = stringResource(
@@ -716,6 +750,9 @@ private fun AppearanceSheet(
     onTheme: (ThemeChoice) -> Unit,
     onAccent: (OhAccent) -> Unit,
     onWeightNeutral: (Boolean) -> Unit,
+    onHighContrast: (Boolean) -> Unit,
+    onReduceTransparency: (Boolean) -> Unit,
+    onReducedMotion: (Boolean) -> Unit,
 ) {
     if (!visible) return
     OhModalSheet(
@@ -783,6 +820,46 @@ private fun AppearanceSheet(
                 },
             )
         }
+        OhSectionTitle(text = stringResource(R.string.settings_accessibility))
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.settings_high_contrast),
+                subtitle = stringResource(R.string.settings_high_contrast_body),
+                trailing = {
+                    OhSwitch(
+                        checked = state.highContrast,
+                        onCheckedChange = onHighContrast,
+                        contentDescription = stringResource(R.string.settings_high_contrast),
+                    )
+                },
+            )
+            OhRow(
+                title = stringResource(R.string.settings_reduce_transparency),
+                showDivider = true,
+                subtitle = stringResource(R.string.settings_reduce_transparency_body),
+                trailing = {
+                    OhSwitch(
+                        checked = state.reduceTransparency,
+                        onCheckedChange = onReduceTransparency,
+                        contentDescription = stringResource(
+                            R.string.settings_reduce_transparency,
+                        ),
+                    )
+                },
+            )
+            OhRow(
+                title = stringResource(R.string.settings_reduced_motion),
+                showDivider = true,
+                subtitle = stringResource(R.string.settings_reduced_motion_body),
+                trailing = {
+                    OhSwitch(
+                        checked = state.reducedMotion,
+                        onCheckedChange = onReducedMotion,
+                        contentDescription = stringResource(R.string.settings_reduced_motion),
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -824,6 +901,12 @@ private fun PrivacySheet(
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
             text = stringResource(R.string.settings_privacy_body),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s4))
+        Text(
+            text = stringResource(R.string.settings_privacy_policy_body),
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,
         )

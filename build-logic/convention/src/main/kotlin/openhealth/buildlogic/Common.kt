@@ -88,6 +88,60 @@ internal fun Project.registerLicenceCheck() {
 }
 
 /**
+ * Adds `checkNoTelemetrySdks` to `check`: no analytics, crash-reporting or attribution
+ * SDK on any runtime classpath (`pr.md` §6.23, §6.31; `BUILD-ROADMAP.md` §B10). It is a
+ * deny list, separate from the licence allowlist, so a permissively licensed telemetry
+ * SDK cannot enter by adding an allowlist row.
+ */
+internal fun Project.registerTelemetryCheck() {
+    val telemetryConfigurations = configurations.matching {
+        it.name.endsWith("RuntimeClasspath")
+    }
+    val coordinates: Provider<List<String>> = provider {
+        val matched = telemetryConfigurations.toList()
+        check(matched.isNotEmpty()) {
+            "checkNoTelemetrySdks found no runtime classpath in ${path}: the gate would " +
+                "pass without inspecting anything."
+        }
+        matched
+            .flatMap { configuration ->
+                configuration.incoming.resolutionResult.allComponents.mapNotNull { component ->
+                    (component.id as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" }
+                }
+            }
+            .distinct()
+            .sorted()
+    }
+    val checkNoTelemetrySdks = tasks.register<CheckTelemetryTask>("checkNoTelemetrySdks") {
+        group = "verification"
+        description = "Fails when an analytics, crash-reporting or attribution SDK resolves."
+        modules.set(coordinates)
+        deniedGroups.set(
+            listOf(
+                "com.google.firebase",
+                "com.google.android.gms",
+                "com.google.android.datatransport",
+                "com.google.analytics",
+                "com.crashlytics",
+                "io.sentry",
+                "com.datadog",
+                "com.amplitude",
+                "com.mixpanel",
+                "com.bugsnag",
+                "com.newrelic",
+                "com.instabug",
+                "com.microsoft.appcenter",
+                "com.flurry",
+                "com.adjust.sdk",
+                "com.appsflyer",
+                "com.facebook.appevents",
+            ),
+        )
+    }
+    tasks.matching { it.name == "check" }.configureEach { dependsOn(checkNoTelemetrySdks) }
+}
+
+/**
  * Adds `checkDesignTokens` to `check`: no colour literal, raw `.dp`/`.sp` or
  * `MaterialTheme` reference outside the theme package (`DESIGN.md` §12.6, Appendix B;
  * `BUILD-ROADMAP.md` §B1 exit).
@@ -96,7 +150,16 @@ internal fun Project.registerDesignTokenCheck() {
     val checkDesignTokens = tasks.register<CheckDesignTokensTask>("checkDesignTokens") {
         group = "verification"
         description = "Fails on a colour, .dp or .sp literal outside the theme package."
-        sources.from(fileTree("src") { include("**/*.kt") })
+        sources.from(
+            fileTree("src") {
+                include("**/*.kt")
+                // Tests compose components and, where a test is about colour itself,
+                // need a literal to reason with. They are never shipped, so the rule
+                // applies to production source only.
+                // The tree root is `src`, so the patterns are relative to it.
+                exclude("test/**", "androidTest/**")
+            },
+        )
         // The allowlist is module-relative, so a checkout path can never widen it.
         modulePath.set(projectDir.invariantSeparatorsPath)
         allowedPrefixes.set(

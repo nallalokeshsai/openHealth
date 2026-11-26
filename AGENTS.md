@@ -217,43 +217,36 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B9 Today and Stats** (2026-11-25); next is **B10 Hardening and MVP
-  release**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **573 JVM tests**
-  (296 `:core`, 111 `:data`, 27 `:integrations`, 129 `:ui`, 10 across the three tools) and
-  **266 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body map,
-  the B5 Train surfaces, the B6 Nutrition surfaces, the B7 Vitals surfaces, the B8 Devices
-  page and the B9 Today and Stats surfaces are in `:ui`. Both the `play` and `fdroid` debug
-  APKs build.
-- Today is the §14.2 order: body hero, readiness with its explanation sheet, week strip
-  and plan, energy with in/out/net ranges and the goal-ETA what-if, steps with its source
-  and goal, weight with its trend and goal line, due items. Stats has Overview, Body,
-  Training, Sleep and Nutrition, a KPI band and one card per chart with a table and a
-  formula sheet.
-- `:core` adds `EnergyBalanceCalculator` (BMR, step energy, workouts, ranges), the
-  readiness baseline assembly, `SleepTotalsCalculator`/`SleepSessions` (staged nights and
-  midnight crossings), `StatsMath` and the goal-ETA states.
-- `:ui` adds the hand-built chart kit (line, bar with a zero axis, heatmap, sparkline,
-  stat bars, stacked bar, rings), `ChartTableModel`/`OhChartCard`, the `ChartRegistry`
-  gate, the filled Today and the five Stats segments.
-- `:app-android` adds `TodayPresenter`, `StatsPresenter`, the goal-target save, the step
-  goal setting and the boot receiver's off-main-thread setting read. `:tools:benchmark`
-  is a test-only macrobenchmark module whose `.bench` package carries the five-year
-  seed; no synthetic data can enter the owner's record.
-- B9's decisions are `docs/adr/0014-today-and-stats.md`; `DESIGN.md` §5.6 gained the
-  12 sp range line in a dated 0.3 revision.
-- An independent B0–B9 audit (2026-11-25) fixed six defects a passing build hid: sleep
-  bypassed source dedup (two sources became two nights, or were summed), Today's steps
-  provenance read a losing source's observation, every Stats KPI opened the first card's
-  table, a saved what-if target dropped its macro targets, the wording gate did not scan
-  `app-android`'s strings, and Stats re-read the nights five times per build. It left
-  three things for the owner: imported workout energy is still absent from Today's "out"
-  and needs a decision on double-counting with step energy, `:tools:benchmark` sits
-  outside every guard, and demo data is written under real source ids.
-- Open issues (see `docs/build-log.md`): the five-tab labels clip at 200 % text; Stats is
-  kilograms-only; the owner's phone reports `DEVICE-TRACING-MISCONFIGURED`, so
-  Macrobenchmark was reported from the emulator and flagged, while the phone was measured
-  with `am start -W` (re-measured after the audit: cold 515–536 ms, warm 24–152 ms); the
-  full instrumented suite has five B3/B6 tests that fail only in class sequence and pass
-  alone (test isolation, B10); B8's battery run, real strap pairing and Garmin export
-  remain owner hand-overs.
+- Last completed phase: **B10 Hardening and MVP release** (2026-11-26); next is **B11
+  Yoga, cardio, GPS**.
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **602 JVM tests**
+  (308 `:core`, 112 `:data`, 27 `:integrations`, 145 `:ui`, 10 across the three tools) and
+  **300 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body
+  map, the B5 Train surfaces, the B6 Nutrition surfaces, the B7 Vitals surfaces, the B8
+  Devices page, the B9 Today and Stats surfaces and the B10 review inbox are in `:ui`.
+  Both the `play` and `fdroid` debug APKs build, and the signed `play`/`fdroid` release
+  APKs and AABs build from the owner's keystore in `.env.local`.
+- B10 delivers: the accessibility sweep (tab labels decide as a set from measurement,
+  segmented control growth and scroll affordance, focus ring on every clickable, high
+  contrast / reduce transparency / reduced motion preferences, colour-blind simulation
+  test, block-direction RTL fix), 300 goldens including the body map at 200 %/RTL and the
+  review inbox, R8 plus resource shrinking plus a generated baseline profile, a signed
+  AAB/APK and the Play-Services-free flavour, Fastlane metadata, the privacy policy and
+  the reproducible-build notes, migration tests from every schema version (v1–v8),
+  corrupt-database recovery from the pre-migration snapshot, the `pr.md` §6.28 review
+  inbox, `checkNoTelemetrySdks`, a cleartext-free manifest with an explicit network
+  security config, and the security posture test.
+- B10's decisions are in `docs/adr/0015-hardening-and-release.md`; `DESIGN.md` §12.4.1
+  maps the three accessibility options onto existing tokens (0.4).
+- Verification: the full instrumented suite is **48/48 on the emulator**; 6 device tests
+  (security posture, database recovery) pass on the owner's phone; the Maestro suite is
+  6/6 on the emulator and 5/5 app flows on the phone; the signed release APK is installed
+  on the phone as 1.0.0. Cold start **484–511 ms**, warm Today **18–33 ms**, one-tap set
+  **240 ms**, barcode to logged **753 ms**.
+- Open issues (see `docs/build-log.md`): the phone's Macrobenchmark tracing is still
+  misconfigured so the budgets are direct `am start -W` measurements; `:tools:benchmark`
+  sits outside every guard; the review inbox covers duplicates, out-of-range readings and
+  disagreeing sources but not the §6.28 import dry run or per-source health; the public
+  privacy-policy URL is a placeholder the owner hosts; force-RTL needs a device reboot so
+  RTL is golden-verified only; running `connectedAndroidTest` against a phone uninstalls
+  the app and deletes its record (run it on the emulator).

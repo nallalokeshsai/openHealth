@@ -5,6 +5,7 @@ package app.openhealth.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,9 +28,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.withStrokeWidth
@@ -99,6 +103,7 @@ fun OhTopBar(
                     style = type.body.copy(fontWeight = OhWeight.semibold),
                     color = colors.label,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(text = dateLabel, style = type.caption, color = colors.label2, maxLines = 1)
             }
@@ -156,21 +161,28 @@ fun OhTabBar(
                     atBottom = false,
                 ),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(dims.tabBarHeight)
-                    .selectableGroup(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                tabs.forEachIndexed { index, tab ->
-                    TabCell(
-                        tab = tab,
-                        selected = index == selectedIndex,
-                        showDot = index in dotIndices,
-                        onClick = { onSelect(index) },
-                        modifier = Modifier.weight(1f),
-                    )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                // One decision for the whole bar: either every label is drawn or, at the
+                // largest font scales, none is. A half-labelled bar reads as a bug, and
+                // the accessible name stays on every cell either way (§4.3, §11.1).
+                val labelsFit = labelsFit(tabs, constraints.maxWidth)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(dims.tabBarHeight)
+                        .selectableGroup(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        TabCell(
+                            tab = tab,
+                            selected = index == selectedIndex,
+                            showDot = index in dotIndices,
+                            showLabel = labelsFit,
+                            onClick = { onSelect(index) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }
@@ -190,6 +202,7 @@ private fun TabCell(
     tab: OhTabItem,
     selected: Boolean,
     showDot: Boolean,
+    showLabel: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -203,9 +216,7 @@ private fun TabCell(
     }
     val tint = if (selected) colors.accInk else colors.label2
     val interaction = rememberInteraction()
-    // At the very largest font scales the tab bar keeps its icons and drops its labels,
-    // but the name stays on the accessibility node and a target never shrinks (§4.3, §11.1).
-    val showLabel = LocalDensity.current.fontScale < LABEL_DROP_FONT_SCALE
+    val labelStyle = type.caption2.copy(fontWeight = OhWeight.medium)
     Column(
         modifier = modifier
             .height(dims.tabBarHeight)
@@ -254,10 +265,39 @@ private fun TabCell(
             Spacer(Modifier.height(OhTheme.space.s0))
             Text(
                 text = tab.label,
-                style = type.caption2.copy(fontWeight = OhWeight.medium),
+                style = labelStyle,
                 color = tint,
                 maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                // The cell's content description is the one name; the drawn word is
+                // decoration for the screen reader, never a second copy of it.
+                modifier = Modifier.clearAndSetSemantics {},
             )
+        }
+    }
+}
+
+/**
+ * True when every label fits its cell and the icon-label stack fits the bar at the
+ * current font scale. Measured rather than guessed from a threshold, so a shorter set of
+ * names keeps its words on a narrow screen and a translated name that grows drops the
+ * whole row instead of half of it.
+ */
+@Composable
+private fun labelsFit(tabs: List<OhTabItem>, cellWidthPx: Int): Boolean {
+    val dims = OhTheme.dims
+    val style = OhTheme.type.caption2.copy(fontWeight = OhWeight.medium)
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    return remember(tabs.map { it.label }, cellWidthPx, density.fontScale) {
+        val cell = with(density) { cellWidthPx.toDp() } / TAB_COUNT
+        val room = cell - OhTheme.space.s1 * 2
+        tabs.all { tab ->
+            val layout = measurer.measure(tab.label, style, maxLines = 1)
+            val width = with(density) { layout.size.width.toDp() }
+            val height = with(density) { layout.size.height.toDp() }
+            width <= room && dims.tabIcon + OhTheme.space.s0 + height <= dims.tabBarHeight
         }
     }
 }
@@ -303,9 +343,6 @@ private fun RaisedDisc(
         )
     }
 }
-
-/** At this font scale the tab bar keeps icons and drops labels (§4.3). */
-private const val LABEL_DROP_FONT_SCALE = 1.75f
 
 /** The five destinations of DESIGN.md §5.15. */
 private const val TAB_COUNT = 5

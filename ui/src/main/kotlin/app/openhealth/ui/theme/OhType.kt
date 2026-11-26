@@ -2,11 +2,14 @@
 
 package app.openhealth.ui.theme
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
@@ -73,6 +76,21 @@ private fun role(sizeSp: Float, lineHeightMultiplier: Float, trackingEm: Float):
         // keeps its full stop on the right (§11.5).
         textDirection = TextDirection.Content,
     )
+
+/**
+ * The paragraph direction for a block whose lines must align to the layout's start.
+ *
+ * The roles themselves resolve bidi from the content (English prose on an RTL phone
+ * keeps its own direction), but a block that fills a column has to lay its lines out
+ * from the same edge the column starts at, or a right-to-left screen left-aligns its
+ * titles while its rows start on the right. Only those blocks ask for this.
+ */
+@Composable
+fun ohBlockDirection(): TextDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) {
+    TextDirection.Rtl
+} else {
+    TextDirection.Content
+}
 
 /** Builds the scale for a window width: 34 sp titles, 30 sp below 420 dp (§3.2). */
 fun ohType(windowWidthDp: Int): OhType = OhType(largeSizeSp = if (windowWidthDp < 420) 30f else 34f)

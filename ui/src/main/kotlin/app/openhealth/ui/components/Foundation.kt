@@ -8,10 +8,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -48,20 +51,32 @@ fun Modifier.ohPressScale(interactionSource: MutableInteractionSource, scale: Fl
 /**
  * A ripple-less pressable control. No ripple, no long-press highlight, no grey
  * overlay (`DESIGN.md` §6.1).
+ *
+ * It is focusable, because `clickable` is, and it draws the §11.6 focus ring while it
+ * has focus. The ring lives here rather than in each control so a keyboard or switch
+ * user gets one on every row, button, chip and cell without any screen remembering to
+ * add it. `focusRadius` only tunes the corner to the control's own shape.
  */
 @Composable
 fun Modifier.ohClickable(
     interactionSource: MutableInteractionSource,
     enabled: Boolean = true,
     role: Role? = null,
+    focusRadius: Dp = OhTheme.radius.card,
     onClick: () -> Unit,
-): Modifier = clickable(
-    interactionSource = interactionSource,
-    indication = null,
-    enabled = enabled,
-    role = role,
-    onClick = onClick,
-)
+): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.isFocused }
+        .ohFocusRing(focused && enabled, focusRadius)
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = enabled,
+            role = role,
+            onClick = onClick,
+        )
+}
 
 /** A row's press response: its fill becomes `surface-2`, it does not move (§6.1). */
 @Composable

@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -111,14 +112,48 @@ fun OhSegmentedControl(
         contentAlignment = Alignment.Center,
     ) {
         if (scrollable) {
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                SegmentedContent(
-                    options = options,
-                    selectedIndex = selectedIndex,
-                    onSelect = onSelect,
-                    scrollable = true,
-                    modifier = Modifier.width(IntrinsicSize.Max),
-                )
+            val scroll = rememberScrollState()
+            val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            Box {
+                Row(modifier = Modifier.horizontalScroll(scroll)) {
+                    SegmentedContent(
+                        options = options,
+                        selectedIndex = selectedIndex,
+                        onSelect = onSelect,
+                        scrollable = true,
+                        modifier = Modifier.width(IntrinsicSize.Max),
+                    )
+                }
+                // At 200 % text the segments scroll; this fade is the affordance that
+                // says so. It is drawn from the page colour, never a new token.
+                if (scroll.canScrollForward) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(OhTheme.space.s7)
+                            // Bounded to the track, never the viewport: a fillMaxHeight
+                            // here made the whole control screen-tall.
+                            .height(
+                                if (scrollable) {
+                                    OhTheme.dims.touchTarget
+                                } else {
+                                    OhTheme.dims.segmentHeight + OhTheme.dims.segmentPad * 2f
+                                },
+                            )
+                            .background(
+                                // It fades into the track, not the page: the segment
+                                // behind it is `surface-3`, so the last word softens
+                                // into the control instead of onto the background.
+                                Brush.horizontalGradient(
+                                    if (rtl) {
+                                        listOf(OhTheme.colors.surface3, Color.Transparent)
+                                    } else {
+                                        listOf(Color.Transparent, OhTheme.colors.surface3)
+                                    },
+                                ),
+                            ),
+                    )
+                }
             }
         } else {
             SegmentedContent(
@@ -147,16 +182,26 @@ private fun SegmentedContent(
     Box(modifier = modifier) {
         Box(
             modifier = Modifier
-                .matchParentSize()
-                .height(dims.segmentHeight + dims.segmentPad * 2f)
+                // §5.10: a 32 dp segment inside a 2 dp pad is a 36 dp track; at the
+                // largest text sizes the track grows to the touch target so the label
+                // fits. It is positioned, not matchParentSize, or the 44 dp hit row
+                // would make the track 44 dp at every scale.
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(
+                    if (scrollable) {
+                        dims.touchTarget
+                    } else {
+                        dims.segmentHeight + dims.segmentPad * 2f
+                    },
+                )
                 .clip(shape)
-                .background(colors.surface3)
-                .align(Alignment.Center),
+                .background(colors.surface3),
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(dims.touchTarget)
+                .heightIn(min = dims.touchTarget)
                 .padding(horizontal = dims.segmentPad)
                 .selectableGroup(),
             verticalAlignment = Alignment.CenterVertically,
@@ -173,7 +218,7 @@ private fun SegmentedContent(
                                 Modifier.weight(1f)
                             },
                         )
-                        .height(dims.touchTarget)
+                        .heightIn(min = dims.touchTarget)
                         .selectable(
                             selected = selected,
                             interactionSource = rememberInteraction(),
@@ -185,7 +230,9 @@ private fun SegmentedContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .height(dims.segmentHeight)
+                            .heightIn(
+                                min = if (scrollable) dims.touchTarget else dims.segmentHeight,
+                            )
                             .then(if (scrollable) Modifier else Modifier.fillMaxWidth())
                             .clip(thumbShape)
                             .then(
@@ -221,6 +268,8 @@ private fun SegmentedContent(
                             ),
                             color = if (selected) colors.label else colors.label2,
                             maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -394,6 +443,7 @@ fun OhStepper(
                             .ltrFigures(),
                         color = colors.label,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (unit != null) {
                         Spacer(Modifier.width(OhTheme.space.s0))
@@ -402,6 +452,7 @@ fun OhStepper(
                             style = type.footnote,
                             color = colors.label2,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }

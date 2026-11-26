@@ -65,6 +65,8 @@ import kotlinx.datetime.toLocalDateTime
  * the line and a named row in its table; a card only exists when it has data, and every
  * card carries the table and the registry formula the screen needs.
  */
+private const val POUNDS_PER_KILOGRAM = 2.2046226218
+
 class StatsPresenter(
     private val context: Context,
     private val store: LocalStore,
@@ -80,8 +82,19 @@ class StatsPresenter(
      */
     private var sleepCache: Pair<LocalDate, List<SleepSession>>? = null
 
+    /**
+     * Whether mass is shown in pounds. Set once per [model] from the profile's unit
+     * setting, exactly as Today does; B10's internationalisation pass removed Stats'
+     * kilograms-only display.
+     */
+    private var imperial: Boolean = false
+
     fun model(segment: StatsSegment, preferences: Preferences): StatsModel {
         sleepCache = null
+        // The profile is the one source of units (Today and Body read it too); the
+        // settings mirror is written with it but a demo or a restored bundle can carry
+        // one without the other.
+        imperial = store.profile.active()?.units == "imperial"
         val date = today()
         val hidden = preferences.displayPolicy
         val modules = preferences.modules
@@ -225,15 +238,15 @@ class StatsPresenter(
                 add(
                     weightChange(date, 30)?.let {
                         StatsKpi(
-                            value = signed(it, 1),
+                            value = signed(mass(it), 1),
                             label = context.getString(UiR.string.stats_kpi_weight),
-                            unit = context.getString(UiR.string.unit_kg),
+                            unit = massUnit(),
                             chart = ChartId.WEIGHT_TREND,
                         )
                     } ?: StatsKpi(
                         value = DASH,
                         label = context.getString(UiR.string.stats_kpi_weight),
-                        unit = context.getString(UiR.string.unit_kg),
+                        unit = massUnit(),
                     ),
                 )
             }
@@ -250,17 +263,17 @@ class StatsPresenter(
             listOf(
                 latest(ObservationType.WEIGHT, date)?.let {
                     StatsKpi(
-                        value = decimal(it, 1),
+                        value = decimal(mass(it), 1),
                         label = context.getString(UiR.string.stats_card_weight_title),
-                        unit = context.getString(UiR.string.unit_kg),
+                        unit = massUnit(),
                         chart = ChartId.WEIGHT_TREND,
                     )
                 } ?: StatsKpi(DASH, context.getString(UiR.string.stats_card_weight_title)),
                 weeklyRate(date)?.let {
                     StatsKpi(
-                        value = signed(it, 2),
+                        value = signed(mass(it), 2),
                         label = context.getString(UiR.string.stats_weekly_rate_label),
-                        unit = context.getString(UiR.string.stats_unit_kg_week),
+                        unit = massPerWeekUnit(),
                         chart = ChartId.WEIGHT_TREND,
                     )
                 } ?: StatsKpi(
@@ -283,9 +296,11 @@ class StatsPresenter(
         } else {
             listOf(
                 StatsKpi(
-                    value = numberFormat.format(weeklyTotal(date, ObservationType.TRAINING_VOLUME)),
+                    value = numberFormat.format(
+                        mass(weeklyTotal(date, ObservationType.TRAINING_VOLUME)),
+                    ),
                     label = context.getString(UiR.string.stats_kpi_volume),
-                    unit = context.getString(UiR.string.unit_kg),
+                    unit = massUnit(),
                     chart = ChartId.TRAINING_VOLUME,
                 ),
                 StatsKpi(
@@ -307,17 +322,17 @@ class StatsPresenter(
             listOf(
                 StatsKpi(
                     value = nights.map { it.totals.asleepMinutes }.average().takeIf { !it.isNaN() }
-                        ?.let { duration(it) } ?: DASH,
+                        ?.let { kpiDuration(it) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_sleep),
                     chart = ChartId.SLEEP_DURATION,
                 ),
                 StatsKpi(
-                    value = sleepDebt(date)?.let { duration(it.debtMinutes) } ?: DASH,
+                    value = sleepDebt(date)?.let { kpiDuration(it.debtMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_debt),
                     chart = ChartId.SLEEP_DURATION,
                 ),
                 StatsKpi(
-                    value = sleepDebt(date)?.let { duration(it.consistencyMinutes) } ?: DASH,
+                    value = sleepDebt(date)?.let { kpiDuration(it.consistencyMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_consistency),
                     chart = ChartId.SLEEP_DURATION,
                 ),
@@ -374,7 +389,7 @@ class StatsPresenter(
             change == null -> context.getString(UiR.string.stats_desc_weight_flat)
             abs(change) < 0.05 -> context.getString(
                 UiR.string.stats_desc_weight_same,
-                decimal(trend!!.points.first().trendKg, 1),
+                decimal(mass(trend!!.points.first().trendKg), 1),
             )
 
             else -> context.getString(
@@ -383,9 +398,9 @@ class StatsPresenter(
                 } else {
                     UiR.string.stats_desc_weight_up
                 },
-                decimal(abs(change), 1),
-                decimal(trend!!.points.first().trendKg, 1),
-                decimal(trend.points.last().trendKg, 1),
+                decimal(mass(abs(change)), 1),
+                decimal(mass(trend!!.points.first().trendKg), 1),
+                decimal(mass(trend.points.last().trendKg), 1),
             )
         }
         return StatsCard(
@@ -393,8 +408,8 @@ class StatsPresenter(
             title = context.getString(UiR.string.stats_card_weight_title),
             description = description,
             plot = StatsPlot.Line(
-                trend?.points?.map { ChartPoint(it.date, it.trendKg) }
-                    ?: rollups.map { ChartPoint(it.first, it.second) },
+                trend?.points?.map { ChartPoint(it.date, mass(it.trendKg)) }
+                    ?: rollups.map { ChartPoint(it.first, mass(it.second)) },
             ),
             table = table(
                 title = context.getString(UiR.string.stats_card_weight_title),
@@ -403,13 +418,13 @@ class StatsPresenter(
                     context.getString(UiR.string.stats_table_weight),
                 ),
                 rows = trend?.points?.map {
-                    shortDate(it.date) to decimal(it.trendKg, 1)
-                } ?: rollups.map { shortDate(it.first) to decimal(it.second, 1) },
+                    shortDate(it.date) to decimal(mass(it.trendKg), 1)
+                } ?: rollups.map { shortDate(it.first) to decimal(mass(it.second), 1) },
                 chart = ChartId.WEIGHT_TREND,
             ),
-            unitText = context.getString(UiR.string.unit_kg),
+            unitText = massUnit(),
             decimals = 1,
-            goal = store.settings.get(SettingKeys.GOAL_WEIGHT_KG)?.toDoubleOrNull(),
+            goal = store.settings.get(SettingKeys.GOAL_WEIGHT_KG)?.toDoubleOrNull()?.let(::mass),
         )
     }
 
@@ -545,14 +560,14 @@ class StatsPresenter(
         val values = weeklyValues(date, ObservationType.TRAINING_VOLUME, WEEKS)
         if (values.all { it.value == 0.0 }) return null
         val bars = values.map {
-            ChartBar(it.start.day.toString(), it.value)
+            ChartBar(it.start.day.toString(), mass(it.value))
         }
         return StatsCard(
             chart = ChartId.TRAINING_VOLUME,
             title = context.getString(UiR.string.stats_card_volume_title),
             description = context.getString(
                 UiR.string.stats_desc_volume,
-                numberFormat.format(values.last().value.roundToInt()),
+                numberFormat.format(mass(values.last().value).roundToInt()),
             ),
             plot = StatsPlot.Bars(bars),
             table = table(
@@ -562,11 +577,11 @@ class StatsPresenter(
                     context.getString(UiR.string.stats_table_volume),
                 ),
                 rows = values.map {
-                    shortDate(it.start) to numberFormat.format(it.value.roundToInt())
+                    shortDate(it.start) to numberFormat.format(mass(it.value).roundToInt())
                 },
                 chart = ChartId.TRAINING_VOLUME,
             ),
-            unitText = context.getString(UiR.string.unit_kg),
+            unitText = massUnit(),
         )
     }
 
@@ -818,8 +833,8 @@ class StatsPresenter(
                 context.getString(
                     UiR.string.stats_record_row,
                     name,
-                    decimal(weight, 1),
-                    decimal(oneRep, 1),
+                    decimal(mass(weight), 1),
+                    decimal(mass(oneRep), 1),
                 )
             },
         )
@@ -835,6 +850,17 @@ class StatsPresenter(
     )
 
     private fun today(): LocalDate = clock.now().toLocalDateTime(zone).date
+
+    /** A mass in the profile's unit. Canonical storage is always kilograms. */
+    private fun mass(kilograms: Double): Double =
+        if (imperial) kilograms * POUNDS_PER_KILOGRAM else kilograms
+
+    private fun massUnit(): String =
+        context.getString(if (imperial) UiR.string.unit_pounds else UiR.string.unit_kg)
+
+    private fun massPerWeekUnit(): String = context.getString(
+        if (imperial) UiR.string.stats_unit_lb_week else UiR.string.stats_unit_kg_week,
+    )
 
     private fun rollups(
         date: LocalDate,
@@ -989,6 +1015,22 @@ class StatsPresenter(
             else -> ""
         }
         return "$sign${decimal(rounded, decimals)}"
+    }
+
+    /**
+     * A KPI figure is one line at 28/600 (§5.6); "7 h 18 min" ellipsises in a third of
+     * the band, so the band's form drops the word "min" (the label already says what the
+     * figure is). The full form stays in cards and tables.
+     */
+    private fun kpiDuration(minutes: Double): String {
+        val total = minutes.roundToInt()
+        val hours = total / 60
+        val remainder = total % 60
+        return if (hours > 0) {
+            context.getString(UiR.string.stats_kpi_hours_minutes, hours, remainder)
+        } else {
+            context.getString(UiR.string.stats_kpi_minutes, remainder)
+        }
     }
 
     private fun duration(minutes: Double): String {

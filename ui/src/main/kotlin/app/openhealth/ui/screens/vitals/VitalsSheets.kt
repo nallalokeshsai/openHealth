@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import app.openhealth.core.citation.CitationKey
 import app.openhealth.ui.R
@@ -141,7 +142,7 @@ private fun delayWords(delay: Duration): String = when {
         if (days == 1) {
             stringResource(R.string.vitals_weight_day)
         } else {
-            stringResource(R.string.vitals_weight_days, days)
+            pluralStringResource(R.plurals.vitals_weight_days, days, days)
         }
     }
 

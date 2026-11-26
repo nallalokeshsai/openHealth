@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.core.stats.RampLevel
 import app.openhealth.ui.screens.common.observedLocale
@@ -193,14 +194,16 @@ fun OhBarChart(bars: List<ChartBar>, description: String, modifier: Modifier = M
             Spacer(Modifier.height(OhTheme.space.s1))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.width(OhTheme.dims.chartAxisWidth))
-                val everyOther = bars.size > SEVEN
-                bars.forEachIndexed { index, bar ->
-                    val show = !everyOther || index % 2 == 0 || index == bars.lastIndex
+                // A dense series labels every other bar, and each shown label gets two
+                // slots so a full date fits instead of ellipsising to "13 …".
+                val labelled = if (bars.size > SEVEN) bars.chunked(2) else bars.map { listOf(it) }
+                labelled.forEach { group ->
                     Text(
-                        text = if (show) bar.label else "",
+                        text = group.first().label,
                         style = type.caption2.tabular(),
                         color = colors.label2,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -240,6 +243,7 @@ fun OhHeatmap(weeks: List<List<HeatCellUi>>, description: String, modifier: Modi
                         style = type.caption2,
                         color = colors.label3,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.width((cell + gap) * span),
                     )
                 }

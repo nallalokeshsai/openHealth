@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -669,7 +670,11 @@ fun OhBeforeAfterSlider(model: PhotoCompareModel, modifier: Modifier = Modifier)
                 .padding(OhTheme.space.s2),
         )
         Text(
-            text = stringResource(R.string.vitals_photo_range, model.daysApart),
+            text = pluralStringResource(
+                R.plurals.vitals_photo_range,
+                model.daysApart,
+                model.daysApart,
+            ),
             style = type.caption,
             color = colors.knob,
             modifier = Modifier

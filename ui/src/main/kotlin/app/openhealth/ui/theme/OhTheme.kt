@@ -36,10 +36,16 @@ fun OhTheme(
     dark: Boolean = isSystemInDarkTheme(),
     accent: OhAccent = OhAccent.Brand,
     motion: OhMotion = rememberOhMotion(),
+    highContrast: Boolean = false,
+    reduceTransparency: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colors =
-        remember(dark, accent) { if (dark) ohDarkColors(accent) else ohLightColors(accent) }
+    val colors = remember(dark, accent, highContrast, reduceTransparency) {
+        (if (dark) ohDarkColors(accent) else ohLightColors(accent)).withAccessibility(
+            highContrast = highContrast,
+            reduceTransparency = reduceTransparency,
+        )
+    }
     val windowWidth = LocalConfiguration.current.screenWidthDp
     val type = remember(windowWidth) { ohType(windowWidth) }
     CompositionLocalProvider(
@@ -77,8 +83,9 @@ object OhTheme {
  * zero; every motion token then resolves to instant (`DESIGN.md` §6.9).
  */
 @Composable
-fun rememberOhMotion(): OhMotion {
+fun rememberOhMotion(preference: Boolean = false): OhMotion {
     val context = LocalContext.current
+    if (preference) return remember { OhMotion(reduced = true) }
     val reduced = remember(context) {
         Settings.Global.getFloat(
             context.contentResolver,

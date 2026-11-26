@@ -1,0 +1,23 @@
+# pr.md §6.3 and DESIGN.md §14.3: logging water is one tap. The row's own button logs
+# the last container without opening a sheet, and the entry is confirmed. The flow logs
+# a real glass, so it runs on the emulator, not on a phone holding a record.
+appId: app.openhealth
+---
+- launchApp
+- tapOn: "Nutrition"
+- assertVisible: "Nutrition"
+- scrollUntilVisible:
+    element:
+      text: "Water"
+    direction: DOWN
+    timeout: 20000
+# The one-tap button names the container it logs, so its label carries the volume.
+# The value and its unit are joined by a non-breaking space (DESIGN.md §11.7), which
+# is why the gap is matched with "." rather than a literal space.
+- assertVisible:
+    text: "Log [0-9.,]+.ml"
+- tapOn:
+    text: "Log [0-9.,]+.ml"
+# One tap logged it: the entry is confirmed and no sheet was opened on the way.
+- assertVisible: "Logged"
+- assertVisible: "Water"

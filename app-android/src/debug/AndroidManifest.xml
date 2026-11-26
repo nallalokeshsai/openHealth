@@ -1,25 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Debug builds only: the B1 component gallery (BUILD-ROADMAP.md §B1). -->
+    <!--
+      Debug builds only: the B1 component gallery and the B4 body-model lab.
+      They are not launcher entries, so a debug install has one app icon and one launch
+      path like the release. Open either explicitly:
+        adb shell am start -n app.openhealth/app.openhealth.android.gallery.GalleryActivity
+        adb shell am start -n app.openhealth/app.openhealth.android.bodylab.BodyLabActivity
+    -->
     <application>
         <activity
             android:name="app.openhealth.android.gallery.GalleryActivity"
             android:exported="true"
-            android:label="openHealth design gallery">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:label="openHealth design gallery" />
         <activity
             android:name="app.openhealth.android.bodylab.BodyLabActivity"
             android:exported="true"
-            android:label="openHealth body model lab">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:label="openHealth body model lab" />
     </application>
 </manifest>

@@ -62,6 +62,12 @@ object SettingKeys {
     const val STEP_GOAL = "goal.steps"
     const val THEME = "appearance.theme"
     const val ACCENT_PRESET = "appearance.accent"
+
+    /** B10 accessibility options (`DESIGN.md` §11.1, §12.4). They change how the same
+     * tokens are drawn, never which value a screen shows. */
+    const val HIGH_CONTRAST = "appearance.high_contrast"
+    const val REDUCE_TRANSPARENCY = "appearance.reduce_transparency"
+    const val REDUCED_MOTION = "appearance.reduced_motion"
     const val ONBOARDING_COMPLETE = "onboarding.complete"
     const val ONBOARDING_TIER = "onboarding.tier"
     const val MODULE_PRESET = "module.preset"
@@ -112,4 +118,7 @@ object SettingKeys {
     const val BODY_PHOTOS_HIDDEN = "body.photos_hidden"
     const val BODY_PHOTOS_IN_EXPORT = "body.photos_in_export"
     const val VITALS_BP_PROTOCOL_START = "vitals.bp_protocol_start"
+
+    /** B10: the review inbox remembers only which questions the person has answered. */
+    const val REVIEW_DISMISSED = "review.dismissed"
 }
