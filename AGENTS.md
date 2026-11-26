@@ -219,8 +219,8 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
 - Last completed phase: **B10 Hardening and MVP release** (2026-11-26); next is **B11
   Yoga, cardio, GPS**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **599 JVM tests**
-  (306 `:core`, 112 `:data`, 27 `:integrations`, 144 `:ui`, 10 across the three tools) and
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **602 JVM tests**
+  (308 `:core`, 112 `:data`, 27 `:integrations`, 145 `:ui`, 10 across the three tools) and
   **300 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body
   map, the B5 Train surfaces, the B6 Nutrition surfaces, the B7 Vitals surfaces, the B8
   Devices page, the B9 Today and Stats surfaces and the B10 review inbox are in `:ui`.

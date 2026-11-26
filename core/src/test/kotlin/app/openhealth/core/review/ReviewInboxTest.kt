@@ -78,6 +78,27 @@ class ReviewInboxTest {
     }
 
     @Test
+    fun aDisagreementOrdersItsReadingsHighestFirstSoTheEndsAreTheTwoThatDiffer() {
+        // The screen names the ends of this list when the day has no winner yet, so the
+        // order is part of the contract, not an accident of grouping.
+        val items = ReviewInbox.build(
+            listOf(
+                observation("a", "fitbit", 6_100.0),
+                observation("b", "garmin", 8_400.0),
+                observation("c", "manual", 7_200.0),
+            ),
+            labels,
+        )
+        val disagreement = items.single { it.kind == ReviewKind.DISAGREEMENT }
+        assertEquals(
+            listOf(8_400.0, 7_200.0, 6_100.0),
+            disagreement.readings.map { it.value },
+        )
+        assertEquals("Garmin", disagreement.readings.first().sourceLabel)
+        assertEquals("Fitbit", disagreement.readings.last().sourceLabel)
+    }
+
+    @Test
     fun oneSourceNeverDisagreesWithItself() {
         val items = ReviewInbox.build(
             listOf(
@@ -136,6 +157,30 @@ class ReviewInboxTest {
         val duplicate = items.single { it.kind == ReviewKind.DUPLICATE }
         // The kept reading is shown first so the sheet can state the gap; only "b" moves.
         assertEquals(listOf("a", "b"), duplicate.readings.map { it.observationId })
+        assertEquals(listOf("b"), duplicate.mergeIds)
+    }
+
+    @Test
+    fun theKeptReadingBelongsToTheSourceThatRepeatedItself() {
+        // "fitbit" sorts before "garmin" and reports the day once; "garmin" writes the
+        // same value twice a minute apart. The question is about Garmin's pair, so the
+        // reading it keeps must be Garmin's first, not Fitbit's unrelated one.
+        val items = ReviewInbox.build(
+            listOf(
+                observation("f", "fitbit", 5_000.0, at = Instant.parse("2026-11-25T08:00:00Z")),
+                observation("a", "garmin", 8_412.0, at = noon),
+                observation(
+                    "b",
+                    "garmin",
+                    8_412.0,
+                    at = Instant.parse("2026-11-25T11:01:00Z"),
+                ),
+            ),
+            labels,
+        )
+        val duplicate = items.single { it.kind == ReviewKind.DUPLICATE }
+        assertEquals(listOf("a", "b"), duplicate.readings.map { it.observationId })
+        assertEquals(listOf("Garmin", "Garmin"), duplicate.readings.map { it.sourceLabel })
         assertEquals(listOf("b"), duplicate.mergeIds)
     }
 

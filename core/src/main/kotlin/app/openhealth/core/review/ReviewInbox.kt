@@ -129,9 +129,10 @@ object ReviewInbox {
         // (and could produce a hundred-row item from one FIT import). A type that is a
         // value, a total or an interval for a day can be written twice by mistake.
         if (type.shape == TemporalShape.INSTANT) return null
-        val extra = duplicateExtras(readings)
-        val kept = readings.minWithOrNull(compareBy({ it.sourceId }, { it.happenedAt }))
-        return if (extra.isEmpty() || kept == null) {
+        val runs = duplicateRuns(readings)
+        val extra = runs.flatMap { it.extras }
+        val kept = runs.firstOrNull()?.kept
+        return if (kept == null) {
             null
         } else {
             ReviewItem(
@@ -141,7 +142,9 @@ object ReviewInbox {
                 type = type,
                 localDate = date,
                 // The kept reading comes first so the sheet can show the pair and its
-                // gap; every extra id is merged even when the sheet draws fewer rows.
+                // gap; every extra id is merged even when the sheet draws fewer rows. It
+                // is the reading the extras repeat, never another source's reading that
+                // merely sorts earlier in the day.
                 readings = listOf(kept) + extra.take(MAX_DUPLICATE_ROWS - 1),
                 mergeIds = extra.map { it.observationId },
             )
@@ -179,23 +182,37 @@ object ReviewInbox {
         }
     }
 
+    /** One source's reading and the later readings that repeat it. */
+    private data class DuplicateRun(val kept: ReviewReading, val extras: List<ReviewReading>)
+
     /**
-     * The readings that repeat the one before them. Readings are ordered by source and
-     * time, so the first of a run is the one kept and every later match is an extra.
+     * The runs of repeated readings. Readings are ordered by source and time, so the
+     * first of a run is the one kept and every later match is an extra. A run belongs to
+     * one source: the reading a question keeps is the reading its extras repeat, so a
+     * second source on the same day can never be named as the duplicate's survivor.
      */
-    private fun duplicateExtras(readings: List<ReviewReading>): List<ReviewReading> {
+    private fun duplicateRuns(readings: List<ReviewReading>): List<DuplicateRun> {
         val ordered = readings.sortedWith(compareBy({ it.sourceId }, { it.happenedAt }))
-        val extra = mutableListOf<ReviewReading>()
+        val runs = mutableListOf<DuplicateRun>()
+        val extras = mutableListOf<ReviewReading>()
         var keep: ReviewReading? = null
         ordered.forEach { reading ->
             val previous = keep
             if (previous != null && isDuplicate(previous, reading)) {
-                extra += reading
+                extras += reading
             } else {
+                if (previous != null && extras.isNotEmpty()) {
+                    runs += DuplicateRun(previous, extras.toList())
+                }
+                extras.clear()
                 keep = reading
             }
         }
-        return extra
+        val last = keep
+        if (last != null && extras.isNotEmpty()) {
+            runs += DuplicateRun(last, extras.toList())
+        }
+        return runs
     }
 
     private fun isDuplicate(previous: ReviewReading, reading: ReviewReading): Boolean {

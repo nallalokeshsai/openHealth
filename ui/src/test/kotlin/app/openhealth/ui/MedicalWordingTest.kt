@@ -59,13 +59,54 @@ class MedicalWordingTest {
         assertNoVerdict(entries)
     }
 
-    private fun stringsIn(file: File): List<Pair<String, String>> = Regex(
-        """<string name="([^"]+)">(.*?)</string>""",
-        RegexOption.DOT_MATCHES_ALL,
+    /**
+     * Every piece of copy in a resource file, by name. A plural or an array is product
+     * copy too: the counts, the durations and the day sentences live there, so a verdict
+     * word inside one has to fail the same way a plain string does.
+     */
+    private fun stringsIn(file: File): List<Pair<String, String>> {
+        val text = file.readText()
+        val singles = Regex(
+            """<string name="([^"]+)">(.*?)</string>""",
+            RegexOption.DOT_MATCHES_ALL,
+        )
+            .findAll(text)
+            .map { it.groupValues[1] to it.groupValues[2] }
+        val grouped = Regex(
+            """<(plurals|string-array) name="([^"]+)">(.*?)</\1>""",
+            RegexOption.DOT_MATCHES_ALL,
+        )
+            .findAll(text)
+            .flatMap { group ->
+                Regex("""<item[^>]*>(.*?)</item>""", RegexOption.DOT_MATCHES_ALL)
+                    .findAll(group.groupValues[3])
+                    .map { group.groupValues[2] to it.groupValues[1] }
+            }
+        return (singles + grouped).toList()
+    }
+
+    private fun groupedNamesIn(file: File): Set<String> = Regex(
+        """<(?:plurals|string-array) name="([^"]+)"""",
     )
         .findAll(file.readText())
-        .map { it.groupValues[1] to it.groupValues[2] }
-        .toList()
+        .map { it.groupValues[1] }
+        .toSet()
+
+    /**
+     * The scan must see the plural and array resources, not only the plain strings:
+     * a gate that looks at a subset of the copy passes by looking away.
+     */
+    @Test
+    fun theScanCoversPluralsAndArrays() {
+        val file = File("src/main/res/values/strings.xml")
+        val declared = groupedNamesIn(file)
+        assertTrue(declared.isNotEmpty(), "expected the resource file to declare plurals")
+        val scanned = stringsIn(file).map { it.first }.toSet()
+        assertTrue(
+            (declared - scanned).isEmpty(),
+            "the wording scan skips: ${declared - scanned}",
+        )
+    }
 
     private fun assertNoVerdict(entries: List<Pair<String, String>>) {
         val offenders = entries.filter { (name, text) ->

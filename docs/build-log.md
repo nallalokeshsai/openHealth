@@ -2717,8 +2717,8 @@ Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
   APKs and AABs build; Fastlane metadata under `fastlane/metadata/android/en-US/`;
   `docs/privacy-policy.md` and an in-app privacy paragraph; `docs/reproducible-builds.md`
   with the signing and rebuild procedure; version `1.0.0` (code 1).
-- **E2E.** Six Maestro flows under `.maestro/`: onboarding with sample data, the five
-  tabs, a chart table, the review inbox, privacy, appearance.
+- **E2E.** Seven Maestro flows under `.maestro/`: onboarding with sample data, the five
+  tabs, a chart table, the review inbox, privacy, appearance, and one-tap water.
 
 ### Decisions taken
 
@@ -2742,12 +2742,12 @@ Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
 
 | Command | Result |
 |---|---|
-| `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkNoTelemetrySdks`, `checkDesignTokens`, both lint variants, **599 JVM tests** (306 `:core`, 112 `:data`, 27 `:integrations`, 144 `:ui`, 10 tools) and **300 goldens**. |
+| `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkNoTelemetrySdks`, `checkDesignTokens`, both lint variants, **602 JVM tests** (308 `:core`, 112 `:data`, 27 `:integrations`, 145 `:ui`, 10 tools) and **300 goldens**. |
 | `./gradlew :app-android:assembleDebug :app-android:assembleFdroidDebug` | **BUILD SUCCESSFUL**. |
 | `assembleRelease` + `bundleRelease`, owner's keystore from `.env.local` | **BUILD SUCCESSFUL**: signed play APK 23 MB, play AAB 17 MB, fdroid APK and AAB; `apksigner` reports `CN=openHealth, OU=Android Release`. |
 | `:tools:benchmark:connectedPlayBenchmarkAndroidTest` `BaselineProfileGenerator` on `oh35` | **BUILD SUCCESSFUL**: `baseline-prof.txt` generated and committed. |
 | `:app-android:connectedPlayDebugAndroidTest` on the emulator | **47 tests, 0 failures** — the whole instrumented suite in class order. |
-| Maestro suite on the emulator (release APK) | **6/6 flows pass** in 1 m 43 s. |
+| Maestro suite on the emulator (release APK) | **7/7 flows pass**; the audit re-ran them. |
 | `QueryBenchmarkTest` (`:tools:fixtures`) | passes inside `check`: no query over 16 ms on the five-year corpus. |
 
 ### Fixed during the phase's own verification
@@ -2868,6 +2868,37 @@ pass is the 59 RTL goldens (including the body map and the review inbox) plus th
 | A signed APK installs on the owner's phone | The signed `play` release APK (`CN=openHealth`) is installed on the phone as version 1.0.0 and launches; `apksigner` verified the certificate. | **pass** |
 | Open issues listed honestly | This section and the list below. | **pass** |
 
+### What the headless plan audit found, and what was fixed
+
+A fresh Claude Code session audited the branch against B0–B10 with permissions skipped.
+Its diff was read and its gates re-run; everything below was kept because it is right.
+
+- **A duplicate question named the wrong source.** The kept reading was the earliest of
+  the day across sources, so with Fitbit reporting once and Garmin twice the row said
+  "Fitbit recorded steps twice" while merging Garmin's reading. Duplicate runs are now
+  per source. Test: `ReviewInboxTest`.
+- **The no-winner disagreement sentence named one source twice** ("Garmin says 8,400 and
+  Garmin says 8,400"). It now names the highest and lowest. Test: `ReviewPresenterTest`.
+- **UCUM codes reached the screen** ("{steps}", "mm[Hg]", "/min", "Cel"). The presenter
+  now renders units a person reads, or none for a counted type. Test:
+  `noReadingShowsAUcumCode`.
+- **The wording gate skipped plurals and string-arrays**, so every plural B10 added was
+  unscanned copy. The scan now includes them, with a test that holds the coverage.
+- **`PrivacySourceTest` skipped a missing root**, so a rename could have narrowed it
+  silently. A missing root now fails (except `:sync`, which is empty until B13).
+- **The colour-blind test checked one theme per simulation**, leaving three combinations
+  untested. All three now run against both themes.
+- **A Maestro flow asserted nothing.** The water flow's optional tap was replaced with a
+  real assertion on the one-tap button, the confirmation and the absence of a sheet.
+
+The audit also ran the whole suite: `check` green (602 JVM tests, 300 goldens), the
+instrumented suite 50/50 on the emulator and Maestro 7/7. It reported, and this log
+records, that chart series hues do not all clear a 40-point separation under simulated
+colour blindness (light/tritanopia green–teal 19, dark/tritanopia frost–teal 31,
+light/deuteranopia frost–purple 40) — charts carry series labels and legends, but making
+the hues separate would change closed tokens, so it is an owner decision and is listed
+below.
+
 ### Placeholders and open issues
 
 - The public privacy-policy URL is a bracketed placeholder in the Fastlane metadata; the
@@ -2876,7 +2907,8 @@ pass is the 59 RTL goldens (including the body map and the review inbox) plus th
   duplicates, out-of-range values and disagreeing sources. Recorded for B11/B12.
 - The phone's Macrobenchmark tracing is still misconfigured (`DEVICE-TRACING-MISCONFIGURED`),
   so the budgets are measured by direct activity start, as in B9.
-- `:tools:benchmark` and `:tools/*` still sit outside ktlint/Detekt/portability gates.
+- `:tools:benchmark` alone sits outside ktlint/Detekt/licence/telemetry gates; the other
+  three `:tools/*` modules are gated.
 - The phone's own force-RTL toggle needs a reboot; the RTL pass is the 59 goldens and the
   layout-direction fix, not a live RTL phone.
 - Running `connectedAndroidTest` against the phone uninstalls the app when it finishes,
@@ -2884,4 +2916,12 @@ pass is the 59 RTL goldens (including the body map and the review inbox) plus th
   phone is for the release install and the manual walk.
 - The review inbox caps one duplicate item at five drawn readings; a longer run is still
   merged whole, and the list is not paginated.
+- Chart series hues are not all separable under simulated colour blindness (measurements
+  above). The charts label every series and every chart has a table, but the §14.5
+  colour-blind line for charts would need a token change, which is the owner's call.
+- The phone's record was wiped twice during this phase: once by Gradle's
+  `connectedAndroidTest` (it uninstalls the app afterwards) and once by a Maestro run
+  without `--device`, whose onboarding flow clears state. Both times the install was
+  fresh or demo data. Use `maestro --device <emulator>` and run instrumented suites on
+  the emulator.
 - The iOS gate (`pr.md` §13.17) is **not yet** reviewed: Android ships first.

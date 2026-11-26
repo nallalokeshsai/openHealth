@@ -55,13 +55,13 @@ class ColourBlindTest {
     )
 
     @Test
-    fun everyStatusInkKeepsItsContrastUnderDeuteranopia() = checkTheme(dark, "dark", deuteranopia)
+    fun everyStatusInkKeepsItsContrastUnderDeuteranopia() = checkBothThemes(deuteranopia)
 
     @Test
-    fun everyStatusInkKeepsItsContrastUnderProtanopia() = checkTheme(light, "light", protanopia)
+    fun everyStatusInkKeepsItsContrastUnderProtanopia() = checkBothThemes(protanopia)
 
     @Test
-    fun everyStatusInkKeepsItsContrastUnderTritanopia() = checkTheme(dark, "dark", tritanopia)
+    fun everyStatusInkKeepsItsContrastUnderTritanopia() = checkBothThemes(tritanopia)
 
     @Test
     fun theRecoveryRampStaysThreeDistinctStatesUnderEverySimulation() {
@@ -81,6 +81,15 @@ class ColourBlindTest {
                 )
             }
         }
+    }
+
+    /**
+     * Dark is canonical and light is its verified sibling (`DESIGN.md` §12), so a
+     * simulation is only checked when it is checked against both palettes.
+     */
+    private fun checkBothThemes(matrix: Array<DoubleArray>) {
+        checkTheme(dark, "dark", matrix)
+        checkTheme(light, "light", matrix)
     }
 
     private fun checkTheme(colors: OhColors, theme: String, matrix: Array<DoubleArray>) {

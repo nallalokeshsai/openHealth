@@ -12,6 +12,7 @@ import app.openhealth.core.review.ReviewItem
 import app.openhealth.core.review.ReviewKind
 import app.openhealth.core.review.ReviewReading
 import app.openhealth.core.seam.ClockSeam
+import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.LocalStore
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.ui.R as UiR
@@ -177,16 +178,21 @@ class ReviewPresenter(
 
     private fun disagreementBody(item: ReviewItem): String {
         val winner = item.readings.firstOrNull { it.sourceId == item.winnerSourceId }
-        val other = item.readings.firstOrNull { it != winner } ?: item.readings.first()
         return if (winner == null) {
+            // A disagreement carries one reading per source, highest value first, so the
+            // ends of the list are the two that differ. Naming the first reading twice
+            // would read as "Garmin says 8,400 and Garmin says 8,400. The two differ."
+            val highest = item.readings.first()
+            val lowest = item.readings.last()
             context.getString(
                 UiR.string.review_disagreement_body_no_winner,
-                other.sourceLabel,
-                value(item.type, other.value),
-                item.readings.first().sourceLabel,
-                value(item.type, item.readings.first().value),
+                highest.sourceLabel,
+                value(item.type, highest.value),
+                lowest.sourceLabel,
+                value(item.type, lowest.value),
             )
         } else {
+            val other = item.readings.firstOrNull { it != winner } ?: item.readings.first()
             context.getString(
                 UiR.string.review_disagreement_body,
                 winner.sourceLabel,
@@ -297,12 +303,30 @@ class ReviewPresenter(
         } else {
             number.format(Math.round(shown * SINGLE_DECIMAL) / SINGLE_DECIMAL)
         }
-        val unit = if (type in MASS_TYPES && imperial()) {
-            context.getString(UiR.string.unit_pounds)
-        } else {
-            type.canonicalUnit.ucum
+        val unit = unitLabel(type)
+        return if (unit.isEmpty()) scaled else "$scaled $unit"
+    }
+
+    /**
+     * The unit a person reads, not the UCUM code the value is stored in. "{steps}",
+     * "{count}", "mm[Hg]", "/min" and "Cel" are machine codes and never belong on a
+     * screen (`DESIGN.md` §11.7); a counted type is named by its row title instead, so
+     * it carries no unit at all.
+     */
+    private fun unitLabel(type: ObservationType): String {
+        if (type in MASS_TYPES) {
+            return context.getString(
+                if (imperial()) UiR.string.unit_pounds else UiR.string.unit_kg,
+            )
         }
-        return "$scaled $unit"
+        return when (type.canonicalUnit) {
+            UcumUnit.STEP, UcumUnit.COUNT, UcumUnit.SCORE -> ""
+            UcumUnit.MILLIMETRE_MERCURY -> context.getString(UiR.string.unit_mmhg)
+            UcumUnit.PER_MINUTE -> context.getString(UiR.string.unit_bpm)
+            UcumUnit.CELSIUS -> context.getString(UiR.string.unit_degrees_c)
+            UcumUnit.MILLILITRE -> context.getString(UiR.string.unit_ml)
+            else -> type.canonicalUnit.ucum
+        }
     }
 
     private fun mass(kilograms: Double): Double =

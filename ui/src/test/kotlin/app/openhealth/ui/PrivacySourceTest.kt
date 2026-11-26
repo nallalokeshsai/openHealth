@@ -23,12 +23,22 @@ class PrivacySourceTest {
         "../app-android/src/main",
     )
 
-    private fun kotlinFiles(): List<File> = roots
-        .map(::File)
-        .filter { it.exists() }
-        .flatMap { root ->
-            root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
-        }
+    /** `:sync` has no sources until B13; every other root has to be there to be read. */
+    private val mayBeEmpty = setOf("../sync/src")
+
+    private fun kotlinFiles(): List<File> {
+        val missing = roots.filterNot { it in mayBeEmpty }.filterNot { File(it).exists() }
+        assertTrue(
+            missing.isEmpty(),
+            "the privacy scan cannot read $missing, so it would pass by looking away",
+        )
+        return roots
+            .map(::File)
+            .filter { it.exists() }
+            .flatMap { root ->
+                root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+            }
+    }
 
     @Test
     fun theOnlyTransportIsTheOpenFoodFactsBarcodeLookup() {
