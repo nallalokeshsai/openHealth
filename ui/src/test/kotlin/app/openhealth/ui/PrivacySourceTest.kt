@@ -41,7 +41,7 @@ class PrivacySourceTest {
     }
 
     @Test
-    fun theOnlyTransportIsTheOpenFoodFactsBarcodeLookup() {
+    fun theOnlyTransportsAreTheBarcodeLookupTheMapPackDownloadAndTheSyncClient() {
         val files = kotlinFiles()
         assertTrue(files.size > 100, "the scan found only ${files.size} files")
         val network = files.filter { file ->
@@ -62,12 +62,18 @@ class PrivacySourceTest {
                 "HttpClient(",
             ).any { it in text }
         }
-        // B11 adds exactly one path beside the barcode lookup: the user-initiated,
-        // HTTPS-only, 50 MB-capped PMTiles map-pack download (`pr.md` §6.11, B11).
+        // The barcode lookup and the map-pack download are B6/B11; the paired sync
+        // client is B13 and is reached only after a pairing code is exchanged
+        // (`pr.md` §6.24, §6.11). No screen may open a socket of its own.
         assertEquals(
-            listOf("HttpUrlConnectionTransport.kt", "MapPackStore.kt"),
-            network.map { it.name }.sortedBy { it != "HttpUrlConnectionTransport.kt" },
-            "a third network path exists; only the barcode lookup and the map-pack download are allowed",
+            listOf(
+                "HttpUrlConnectionTransport.kt",
+                "KtorSyncTransport.kt",
+                "MapPackStore.kt",
+            ),
+            network.map { it.name }.sorted(),
+            "an unexpected network path exists; only the barcode lookup, the map-pack " +
+                "download and the sync client are allowed",
         )
         // The one transport is reached through the :core seam, not called from a screen.
         assertTrue(

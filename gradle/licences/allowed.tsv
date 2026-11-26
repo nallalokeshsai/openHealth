@@ -79,3 +79,25 @@ com.fasterxml.jackson.core:jackson-databind	Apache-2.0	Pulled in by the test-onl
 com.fasterxml.jackson.dataformat:jackson-dataformat-yaml	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
 com.fasterxml.jackson:jackson-bom	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
 com.ethlo.time:itu	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
+com.charleskorn.kaml:kaml	Apache-2.0	YAML config parsing pulled in by Ktor client CIO; no network or telemetry
+com.charleskorn.kaml:kaml-jvm	Apache-2.0	JVM artifact of the Ktor client config parser
+it.krzeminski:snakeyaml-engine-kmp	Apache-2.0	YAML engine inside the Ktor client config parser
+it.krzeminski:snakeyaml-engine-kmp-jvm	Apache-2.0	JVM artifact of the YAML engine
+net.thauvin.erik.urlencoder:urlencoder-lib	Apache-2.0	URL encoding helper in the Ktor client config parser
+net.thauvin.erik.urlencoder:urlencoder-lib-jvm	Apache-2.0	JVM artifact of the URL encoder helper
+# Server-only (AGPL-3.0, Tech-Stack.md §7); every one is permissive and none reaches a client.
+at.favre.lib:bcrypt	Apache-2.0	Optional password fallback hash on the server
+at.favre.lib:bytes	Apache-2.0	Byte utilities pulled in by bcrypt
+com.typesafe:config	Apache-2.0	Ktor server configuration loader
+com.webauthn4j:webauthn4j-core	Apache-2.0	Passkey registration and assertion verification
+com.zaxxer:HikariCP	Apache-2.0	PostgreSQL connection pool
+io.netty:*	Apache-2.0	Ktor Netty server transport
+org.apache.httpcomponents.client5:*	Apache-2.0	HTTP client pulled in by webauthn4j
+org.apache.httpcomponents.core5:*	Apache-2.0	HTTP core pulled in by webauthn4j
+org.eclipse.jetty.alpn:alpn-api	Apache-2.0	ALPN API pulled in by the Netty/HTTP stack
+org.flywaydb:*	Apache-2.0	Forward-only PostgreSQL migrations
+org.fusesource.jansi:jansi	Apache-2.0	ANSI console support pulled in by the server stack
+org.postgresql:postgresql	BSD-2-Clause	PostgreSQL 16 JDBC driver
+tools.jackson.core:*	Apache-2.0	Jackson 3 JSON/CBOR inside webauthn4j
+tools.jackson.dataformat:*	Apache-2.0	Jackson 3 CBOR inside webauthn4j
+tools.jackson:jackson-bom	Apache-2.0	Jackson 3 version alignment inside webauthn4j

@@ -22,6 +22,11 @@ class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSea
     private val json = Json { ignoreUnknownKeys = true }
     private val prioritiesSerializer = MapSerializer(String.serializer(), Int.serializer())
     private var rebuildAllRollups: (() -> Unit)? = null
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
 
     fun invalidateAllRollupsWith(rebuild: (() -> Unit)?) {
         rebuildAllRollups = rebuild
@@ -53,6 +58,7 @@ class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSea
             createdAt = createdAt,
             updatedAt = now.toEpochMilliseconds(),
         )
+        sync?.capture("source", source.id.value)
     }
 
     fun upsertAll(sources: List<Source>) {
@@ -76,6 +82,7 @@ class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSea
             at.toEpochMilliseconds(),
             id.value,
         )
+        sync?.capture("source", id.value)
     }
 
     private fun SourceRow.toDomain(): Source {

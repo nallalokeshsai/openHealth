@@ -12,6 +12,12 @@ import kotlinx.datetime.LocalDate
  * replayed note never rewrites its `recorded_at`; removal is [TrashService]'s job.
  */
 class NoteRepository(private val db: OpenHealthDb) {
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
+
     fun insert(note: Note): NoteId {
         requireConsistentDay(note.local_date, note.zone_id, note.happened_at)
         db.noteQueries.insertNote(
@@ -29,6 +35,7 @@ class NoteRepository(private val db: OpenHealthDb) {
             appVersion = note.app_version,
             revision = note.revision,
         )
+        sync?.capture("note", note.id, note.local_date)
         return NoteId(note.id)
     }
 

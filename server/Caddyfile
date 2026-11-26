@@ -1,0 +1,11 @@
+# Automatic HTTPS for the domain in OPENHEALTH_DOMAIN. Caddy obtains and renews the
+# certificate itself; the server is only reachable from this network.
+{$OPENHEALTH_DOMAIN:localhost} {
+	encode gzip
+	reverse_proxy server:8080
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+	}
+}

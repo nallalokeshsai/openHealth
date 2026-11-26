@@ -97,6 +97,7 @@ import app.openhealth.ui.screens.review.ReviewScreen
 import app.openhealth.ui.screens.settings.SettingsScreen
 import app.openhealth.ui.screens.settings.TrashScreen
 import app.openhealth.ui.screens.shell.OhRootShell
+import app.openhealth.ui.screens.sync.SyncScreen
 import app.openhealth.ui.screens.timeline.TimelineScreen
 import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayScreen
@@ -854,6 +855,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onExport = viewModel::export,
                     onRestore = viewModel::restore,
                     onOpenDevices = { nav.navigate(DevicesRoute) },
+                    onOpenSync = { nav.navigate(SyncRoute) },
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
                     onOpenReview = { nav.navigate(ReviewRoute) },
@@ -867,6 +869,17 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onUndoRestore = viewModel::undoLastRestore,
                 )
             }
+        }
+        composable<SyncRoute> {
+            LaunchedEffect(Unit) { viewModel.openSync() }
+            SyncScreen(
+                state = state.sync ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onPair = viewModel::pairSync,
+                onSyncNow = viewModel::syncNow,
+                onDisconnect = viewModel::disconnectSync,
+                onKeep = viewModel::keepSyncConflict,
+            )
         }
         composable<SleepRoute> {
             LaunchedEffect(Unit) {

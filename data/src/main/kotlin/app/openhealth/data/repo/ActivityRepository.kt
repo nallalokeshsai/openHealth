@@ -26,6 +26,11 @@ class ActivityRepository(
     private val clock: ClockSeam = SystemClock,
 ) {
     private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
 
     fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
         rollupInvalidator = invalidator
@@ -82,23 +87,35 @@ class ActivityRepository(
                 createdAt = now.toEpochMilliseconds(),
                 updatedAt = now.toEpochMilliseconds(),
             )
-            activity.points.forEachIndexed { index, point ->
-                db.activityQueries.insertPoint(
-                    activityId = activity.id,
-                    position = index.toLong(),
-                    latitude = point.latitude,
-                    longitude = point.longitude,
-                    elevationM = point.elevationM,
-                    elapsedS = point.elapsedSeconds,
-                    heartRate = point.heartRate,
-                    cadence = point.cadence,
-                    powerW = point.powerWatts,
-                    speedMps = point.speedMps,
-                )
-            }
+            insertPoints(activity)
+            sync?.capture("activity", activity.id, activity.localDate.toString())
         }
         rollupInvalidator?.invoke(activity.localDate)
         return activity.id
+    }
+
+    private fun insertPoints(activity: ActivityRecord) {
+        activity.points.forEachIndexed { index, point ->
+            db.activityQueries.insertPoint(
+                activityId = activity.id,
+                position = index.toLong(),
+                latitude = point.latitude,
+                longitude = point.longitude,
+                elevationM = point.elevationM,
+                elapsedS = point.elapsedSeconds,
+                heartRate = point.heartRate,
+                cadence = point.cadence,
+                powerW = point.powerWatts,
+                speedMps = point.speedMps,
+            )
+            sync?.capture(
+                "activity_point",
+                app.openhealth.data.sync.SyncRowCodec.entityId(
+                    listOf(activity.id, index.toString()),
+                ),
+                activity.localDate.toString(),
+            )
+        }
     }
 
     fun byId(id: String): ActivityRecord? = db.activityQueries.activityById(id)
@@ -142,6 +159,7 @@ class ActivityRepository(
             updatedAt = clock.now().toEpochMilliseconds(),
             id = id,
         )
+        sync?.capture("activity", id, row.local_date)
         rollupInvalidator?.invoke(LocalDate.parse(row.local_date))
         return true
     }
@@ -150,8 +168,17 @@ class ActivityRepository(
     fun delete(id: String): Boolean {
         val row = db.activityQueries.activityById(id).executeAsOneOrNull() ?: return false
         db.transaction {
+            db.activityQueries.pointsForActivity(id).executeAsList().forEach { point ->
+                sync?.captureDelete(
+                    "activity_point",
+                    app.openhealth.data.sync.SyncRowCodec.entityId(
+                        listOf(id, point.position.toString()),
+                    ),
+                )
+            }
             db.activityQueries.deletePointsForActivity(id)
             db.activityQueries.deleteActivity(id)
+            sync?.captureDelete("activity", id, row.local_date)
         }
         rollupInvalidator?.invoke(LocalDate.parse(row.local_date))
         return true

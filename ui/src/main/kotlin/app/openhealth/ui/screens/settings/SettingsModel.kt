@@ -55,6 +55,8 @@ data class SettingsState(
 
     /** What the Devices row says: which sources are on, or nothing yet. */
     val devicesDetail: String,
+    /** What the Sync row says: local only, synced, or waiting (`pr.md` §6.24). */
+    val syncDetail: String,
     val preset: ModulePreset,
     /** The switch's own state; it is the control, not a display decision. */
     val weightNeutral: Boolean,

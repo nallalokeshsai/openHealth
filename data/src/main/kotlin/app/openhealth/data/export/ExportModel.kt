@@ -447,6 +447,39 @@ object ExportTables {
                 text("reason"),
             ),
         ),
+        // B13. The change log is part of the record: it preserves every prior version and
+        // the provenance of an edit, so an export restores it too (`pr.md` §7.9).
+        ExportTable(
+            "change_log",
+            listOf(
+                long("seq"), text("entity"), text("entity_id"), text("operation"),
+                text("fields"), text("field_clocks"), text("idempotency_key"), text("hlc"),
+                text("device_id"), long("schema_version"), text("local_date"),
+                long("recorded_at"), long("synced_at"), long("server_seq"),
+            ),
+        ),
+        ExportTable(
+            "sync_row_state",
+            listOf(
+                text("entity"),
+                text("entity_id"),
+                text("hlc"),
+                text("field_clocks"),
+                bool("deleted"),
+            ),
+        ),
+        ExportTable(
+            "sync_conflict",
+            listOf(
+                text("id"),
+                text("entity"),
+                text("entity_id"),
+                text("local_change"),
+                text("remote_change"),
+                text("reason"),
+                long("created_at"),
+            ),
+        ),
     )
 
     fun byName(name: String): ExportTable? = all.firstOrNull { it.name == name }

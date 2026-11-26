@@ -110,3 +110,7 @@ data object ReportsRoute
 
 @Serializable
 data object WeeklyReviewRoute
+
+/** B13: the optional server, pairing and the conflict list. */
+@Serializable
+data object SyncRoute

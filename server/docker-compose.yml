@@ -1,0 +1,91 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openhealth
+      POSTGRES_USER: ${OPENHEALTH_DB_USER:-openhealth}
+      POSTGRES_PASSWORD: ${OPENHEALTH_DB_PASSWORD:-change-me}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OPENHEALTH_DB_USER:-openhealth} -d openhealth"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${OPENHEALTH_S3_ACCESS_KEY:-openhealth}
+      MINIO_ROOT_PASSWORD: ${OPENHEALTH_S3_SECRET_KEY:-change-me-too}
+    volumes:
+      - media:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${OPENHEALTH_S3_ACCESS_KEY:-openhealth} ${OPENHEALTH_S3_SECRET_KEY:-change-me-too};
+      mc mb --ignore-existing local/${OPENHEALTH_S3_BUCKET:-openhealth-media};
+      exit 0
+      "
+
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      OPENHEALTH_HOST: 0.0.0.0
+      OPENHEALTH_PORT: 8080
+      OPENHEALTH_DOMAIN: ${OPENHEALTH_DOMAIN:-localhost}
+      OPENHEALTH_RP_ID: ${OPENHEALTH_RP_ID:-localhost}
+      OPENHEALTH_ORIGIN: ${OPENHEALTH_ORIGIN:-http://localhost:8080}
+      OPENHEALTH_ALLOWED_USERS: ${OPENHEALTH_ALLOWED_USERS:-owner}
+      OPENHEALTH_ALLOW_PASSWORD: ${OPENHEALTH_ALLOW_PASSWORD:-false}
+      OPENHEALTH_DB_URL: jdbc:postgresql://db:5432/openhealth
+      OPENHEALTH_DB_USER: ${OPENHEALTH_DB_USER:-openhealth}
+      OPENHEALTH_DB_PASSWORD: ${OPENHEALTH_DB_PASSWORD:-change-me}
+      OPENHEALTH_S3_ENDPOINT: http://minio:9000
+      OPENHEALTH_S3_BUCKET: ${OPENHEALTH_S3_BUCKET:-openhealth-media}
+      OPENHEALTH_S3_ACCESS_KEY: ${OPENHEALTH_S3_ACCESS_KEY:-openhealth}
+      OPENHEALTH_S3_SECRET_KEY: ${OPENHEALTH_S3_SECRET_KEY:-change-me-too}
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      OPENHEALTH_DOMAIN: ${OPENHEALTH_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  db:
+  media:
+  caddy_data:
+  caddy_config:

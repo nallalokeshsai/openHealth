@@ -30,12 +30,22 @@ import kotlinx.datetime.toLocalDateTime
  */
 class TrainingRepository(private val db: OpenHealthDb) {
     private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
 
     fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
         rollupInvalidator = invalidator
     }
 
     fun upsertExercise(exercise: Exercise) {
+        writeExercise(exercise)
+        sync?.capture("exercise", exercise.id)
+    }
+
+    private fun writeExercise(exercise: Exercise) {
         db.trainingQueries.insertExercise(
             id = exercise.id,
             name = exercise.name,
@@ -65,7 +75,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
      * model are the same list, so no reader has to re-map one to the other.
      */
     fun insertCatalogueExercise(exercise: CatalogueExercise, sourceId: String?, nowMillis: Long) {
-        upsertExercise(
+        writeExercise(
             Exercise(
                 id = exercise.id,
                 name = exercise.name,
@@ -164,6 +174,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             progression = routine.progression,
             targetRestSeconds = routine.target_rest_seconds,
         )
+        sync?.capture("routine", routine.id)
     }
 
     fun routines(): List<Routine> = db.trainingQueries.allRoutines().executeAsList()
@@ -186,6 +197,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             progression = entry.progression,
             groupIndex = entry.group_index,
         )
+        sync?.capture("routine_exercise", entry.id)
     }
 
     fun routineEntries(routineId: String): List<Routine_exercise> =
@@ -196,6 +208,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
 
     fun deleteRoutineEntry(id: String) {
         db.trainingQueries.deleteRoutineExercise(id)
+        sync?.captureDelete("routine_exercise", id)
     }
 
     fun exercisesInRoutine(routineId: String): List<Exercise> =
@@ -213,6 +226,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             sourceId = programme.source_id,
             revision = programme.revision,
         )
+        sync?.capture("programme", programme.id)
     }
 
     fun programmes(): List<Programme> = db.trainingQueries.allProgrammes().executeAsList()
@@ -225,6 +239,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
         position: Long,
     ) {
         db.trainingQueries.insertProgrammeRoutine(id, programmeId, routineId, week, position)
+        sync?.capture("programme_routine", id)
     }
 
     fun routinesInProgramme(programmeId: String): List<Routine> =
@@ -257,6 +272,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             feeling = session.feeling,
             perceivedEffort = session.perceived_effort,
         )
+        sync?.capture("session", session.id, session.local_date)
         invalidate(LocalDate.parse(session.local_date))
     }
 
@@ -298,6 +314,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             progression = entry.progression,
             restSeconds = entry.rest_seconds,
         )
+        sync?.capture("session_exercise", entry.id)
     }
 
     fun sessionExercises(sessionId: String): List<Session_exercise> =
@@ -305,6 +322,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
 
     fun deleteSessionExercise(id: String) {
         db.trainingQueries.deleteSessionExercise(id)
+        sync?.captureDelete("session_exercise", id)
     }
 
     /** Finishes an open session; the day's training rollups then include it. */
@@ -321,12 +339,14 @@ class TrainingRepository(private val db: OpenHealthDb) {
             happenedAt = session.happened_at,
             updatedAt = nowMillis,
         )
+        sync?.capture("session", id, session.local_date)
         invalidate(LocalDate.parse(session.local_date))
         return true
     }
 
     fun updateSessionNotes(id: String, notes: String?, nowMillis: Long) {
         db.trainingQueries.updateSessionNotes(notes, nowMillis, id)
+        sessionDate(id)?.let { date -> sync?.capture("session", id, date.toString()) }
     }
 
     fun updateSessionDetails(
@@ -345,6 +365,7 @@ class TrainingRepository(private val db: OpenHealthDb) {
             endedAt = endedAt,
             updatedAt = nowMillis,
         )
+        sync?.capture("session", id, session.local_date)
         invalidate(LocalDate.parse(session.local_date))
         return true
     }
@@ -376,8 +397,10 @@ class TrainingRepository(private val db: OpenHealthDb) {
                     completedAt = set.completed_at + delta,
                     happenedAt = set.happened_at + delta,
                 )
+                sync?.capture("work_set", set.id, newDate.toString())
             }
         }
+        sync?.capture("session", id, newDate.toString())
         invalidate(oldDate)
         invalidate(newDate)
         return true
@@ -443,7 +466,10 @@ class TrainingRepository(private val db: OpenHealthDb) {
             assistanceKg = set.assistance_kg,
             bandKg = set.band_kg,
         )
-        sessionDate(set.session_id)?.let(::invalidate)
+        sessionDate(set.session_id)?.let { date ->
+            sync?.capture("work_set", set.id, date.toString())
+            invalidate(date)
+        }
     }
 
     fun setById(id: String): Work_set? = db.trainingQueries.workSetById(id).executeAsOneOrNull()
@@ -471,7 +497,10 @@ class TrainingRepository(private val db: OpenHealthDb) {
             reason = values.reason,
             editedAt = values.editedAt,
         )
-        sessionDate(set.session_id)?.let(::invalidate)
+        sessionDate(set.session_id)?.let { date ->
+            sync?.capture("work_set", id, date.toString())
+            invalidate(date)
+        }
         return true
     }
 

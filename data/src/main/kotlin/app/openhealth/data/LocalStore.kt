@@ -20,6 +20,8 @@ import app.openhealth.data.repo.TimelineRepository
 import app.openhealth.data.repo.TrainingRepository
 import app.openhealth.data.repo.TrashService
 import app.openhealth.data.rollup.RollupEngine
+import app.openhealth.data.sync.SyncRepository
+import java.util.UUID
 
 /**
  * The only production way to write: every repository that can change a day is wired to
@@ -56,7 +58,34 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
     val raw = RawRecordRepository(db)
     val timeline = TimelineRepository(db, driver)
 
+    /** The change log and merge state (B13); the app builds the transport around it. */
+    val sync: SyncRepository
+
     init {
+        val deviceId = settings.get(app.openhealth.data.repo.SettingKeys.SYNC_DEVICE_ID)
+            ?: UUID.randomUUID().toString().also {
+                settings.put(app.openhealth.data.repo.SettingKeys.SYNC_DEVICE_ID, it)
+            }
+        sync = SyncRepository(
+            db = db,
+            driver = driver,
+            clock = clock,
+            device = deviceId,
+            schemaVersion = OpenHealthDb.Schema.version.toInt(),
+        )
+        observations.recordChangesWith(sync)
+        nutrition.recordChangesWith(sync)
+        body.recordChangesWith(sync)
+        training.recordChangesWith(sync)
+        activities.recordChangesWith(sync)
+        profile.recordChangesWith(sync)
+        settings.recordChangesWith(sync)
+        notes.recordChangesWith(sync)
+        sources.recordChangesWith(sync)
+        clinical.recordChangesWith(sync)
+        trash.recordChangesWith(sync)
+        sync.invalidateRollupsWith(engine::rebuildDay)
+
         observations.invalidateRollupsWith(engine::rebuildDay)
         nutrition.invalidateRollupsWith(engine::rebuildDay)
         body.invalidateRollupsWith(engine::rebuildDay)

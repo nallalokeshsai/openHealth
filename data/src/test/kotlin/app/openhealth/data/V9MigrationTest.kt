@@ -62,7 +62,7 @@ class V9MigrationTest {
         setupV9(path)
 
         val store = open(path)
-        assertEquals(10L, store.schemaVersion)
+        assertEquals(11L, store.schemaVersion)
         assertEquals(
             "Before the upgrade",
             store.db.noteQueries.noteById("n1").executeAsOne().body,

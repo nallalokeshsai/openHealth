@@ -61,6 +61,11 @@ import app.openhealth.ui.screens.settings.ThemeChoice
 import app.openhealth.ui.screens.settings.TrashItemModel
 import app.openhealth.ui.screens.settings.TrashKind
 import app.openhealth.ui.screens.settings.TrashScreen
+import app.openhealth.ui.screens.sync.SyncConflictModel
+import app.openhealth.ui.screens.sync.SyncFieldModel
+import app.openhealth.ui.screens.sync.SyncModel
+import app.openhealth.ui.screens.sync.SyncScreen
+import app.openhealth.ui.screens.sync.SyncSideModel
 import app.openhealth.ui.screens.timeline.TimelineFilter
 import app.openhealth.ui.screens.timeline.TimelineModel
 import app.openhealth.ui.screens.timeline.TimelineScreen
@@ -153,6 +158,7 @@ class ScreenScreenshotTest {
     private val settings = SettingsState(
         profileName = "Sam",
         devicesDetail = "None connected",
+        syncDetail = "Local only",
         profileSubtitle = "Just track · metric",
         profileBirthDate = "1990-04-12",
         profileGoal = ProfileGoal.JUST_TRACK,
@@ -198,6 +204,7 @@ class ScreenScreenshotTest {
         onExport = { _, _ -> },
         onRestore = { _, _ -> },
         onOpenDevices = {},
+        onOpenSync = {},
         onOpenTimeline = {},
         onOpenTrash = {},
         onOpenReview = {},
@@ -347,6 +354,46 @@ class ScreenScreenshotTest {
     @Test
     fun settings() {
         shot("screen-settings") { noopSettings() }
+    }
+
+    @Test
+    fun syncConflict() {
+        shot("screen-sync") {
+            SyncScreen(
+                state = SyncModel(
+                    paired = true,
+                    serverUrl = "https://health.example.com",
+                    status = app.openhealth.core.sync.SyncStatus.SYNCED,
+                    lastSyncedLabel = "2026-11-26 08:12",
+                    pending = 0,
+                    error = null,
+                    conflicts = listOf(
+                        SyncConflictModel(
+                            id = "profile:me:key",
+                            entityLabel = "Profile",
+                            entityId = "me",
+                            reason = "Both devices edited the same revision.",
+                            local = SyncSideModel(
+                                device = "This device · 4f2a1c9e",
+                                whenLabel = "2026-11-25 19:04",
+                                fields = listOf(SyncFieldModel("Name", "Sam")),
+                            ),
+                            remote = SyncSideModel(
+                                device = "Other device · 91bb0d22",
+                                whenLabel = "2026-11-26 07:40",
+                                fields = listOf(SyncFieldModel("Name", "Alex")),
+                            ),
+                        ),
+                    ),
+                    busy = false,
+                ),
+                onBack = {},
+                onPair = { _, _ -> },
+                onSyncNow = {},
+                onDisconnect = {},
+                onKeep = { _, _ -> },
+            )
+        }
     }
 
     @Test

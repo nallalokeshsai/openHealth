@@ -77,6 +77,16 @@ class AppContainer(
         )
     val clock: ClockSeam = SystemClock
     val ids: IdGenerator = RandomIdGenerator()
+
+    /** Pairing, sync passes and the conflict list (B13). The server is optional. */
+    val sync: app.openhealth.android.sync.SyncPresenter by lazy {
+        app.openhealth.android.sync.SyncPresenter(
+            store = store,
+            vault = vault,
+            clock = clock,
+            zone = zone,
+        )
+    }
     val preferences: PreferencesStore by lazy { PreferencesStore(store.settings, store.profile) }
     val restTimer: app.openhealth.core.seam.RestTimerSeam by lazy {
         app.openhealth.android.training.AndroidRestTimer(appContext)
@@ -317,16 +327,23 @@ class AppContainer(
         profileId: String,
         writeProfile: Boolean = false,
     ): Int {
-        val stats = CorpusGenerator(store.db, ids, clock).generate(
-            CorpusRequest(
-                days = days,
-                seed = 42L,
-                endDate = today,
-                zone = zone,
-                profileId = profileId,
-                writeProfile = writeProfile,
-            ),
-        )
+        // A demo corpus is sample data, not the person's record: keep it out of the
+        // change log so it can never reach the server or another device.
+        store.sync.pauseCapture()
+        val stats = try {
+            CorpusGenerator(store.db, ids, clock).generate(
+                CorpusRequest(
+                    days = days,
+                    seed = 42L,
+                    endDate = today,
+                    zone = zone,
+                    profileId = profileId,
+                    writeProfile = writeProfile,
+                ),
+            )
+        } finally {
+            store.sync.resumeCapture()
+        }
         store.engine.rebuildAll()
         return stats.observations
     }

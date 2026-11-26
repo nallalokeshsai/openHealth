@@ -1,0 +1,15 @@
+# Build context is the repository root. Everything the server build does not need is
+# excluded, so the reference library (several GB) never enters a Docker layer.
+references/
+.git/
+.gradle/
+build/
+**/build/
+.idea/
+.vscode/
+.env
+.env.*
+*.jks
+*.keystore
+local.properties
+issues.md

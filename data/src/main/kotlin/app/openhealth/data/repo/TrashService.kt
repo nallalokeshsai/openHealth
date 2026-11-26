@@ -502,6 +502,11 @@ class TrashService(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
 
     fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
         rollupInvalidator = invalidator
@@ -568,7 +573,11 @@ class TrashService(
             payload = json.encodeToString(SessionPayload.serializer(), payload),
             invalidateOn = LocalDate.parse(row.local_date),
         ) {
-            sets.forEach { db.trainingQueries.deleteWorkSet(it.id) }
+            sets.forEach {
+                sync?.captureDelete("work_set", it.id, row.local_date)
+                db.trainingQueries.deleteWorkSet(it.id)
+            }
+            exercises.forEach { sync?.captureDelete("session_exercise", it.id, row.local_date) }
             db.trainingQueries.deleteSessionExercises(row.id)
             db.trainingQueries.deleteSession(row.id)
         }
@@ -657,9 +666,21 @@ class TrashService(
             payload = json.encodeToString(ActivityPayload.serializer(), payload),
             invalidateOn = LocalDate.parse(row.local_date),
         ) {
+            points.forEach { point ->
+                sync?.captureDelete(
+                    "activity_point",
+                    app.openhealth.data.sync.SyncRowCodec.entityId(
+                        listOf(row.id, point.position.toString()),
+                    ),
+                    row.local_date,
+                )
+            }
+            observations.forEach {
+                sync?.captureDelete("observation", it.id, it.local_date)
+                db.observationQueries.deleteObservationById(it.id)
+            }
             db.activityQueries.deletePointsForActivity(row.id)
             db.activityQueries.deleteActivity(row.id)
-            observations.forEach { db.observationQueries.deleteObservationById(it.id) }
         }
     }
 
@@ -774,6 +795,7 @@ class TrashService(
             if (rowExists(entity, tombstone.entity_id)) {
                 db.tombstoneQueries.markRestored(clock.now().toEpochMilliseconds(), tombstone.id)
                 invalidateRestoredDay(entity, payload)
+                captureRestored(entity, tombstone.entity_id, payload)
                 restored = true
             }
         }
@@ -915,9 +937,60 @@ class TrashService(
                 reason = null,
             )
             remove()
+            sync?.captureDelete(entity.table, entityId, invalidateOn?.toString())
             invalidateOn?.let { rollupInvalidator?.invoke(it) }
         }
         return id
+    }
+
+    /** An undo is a write: the restored rows go back into the change log (`pr.md` §7.7). */
+    private fun captureRestored(entity: TrashEntity, id: String, payload: String) {
+        val date = restoredDate(entity, payload)
+        sync?.capture(entity.table, id, date)
+        if (entity == TrashEntity.SESSION) {
+            val session = json.decodeFromString(SessionPayload.serializer(), payload)
+            session.exercises.forEach { sync?.capture("session_exercise", it.id, date) }
+            session.sets.forEach { sync?.capture("work_set", it.id, date) }
+        }
+        if (entity == TrashEntity.ACTIVITY) {
+            val activity = json.decodeFromString(ActivityPayload.serializer(), payload)
+            activity.points.forEach { point ->
+                sync?.capture(
+                    "activity_point",
+                    app.openhealth.data.sync.SyncRowCodec.entityId(
+                        listOf(id, point.position.toString()),
+                    ),
+                    date,
+                )
+            }
+        }
+    }
+
+    private fun restoredDate(entity: TrashEntity, payload: String): String? = when (entity) {
+        TrashEntity.ENTRY -> json.decodeFromString(EntryPayload.serializer(), payload).localDate
+        TrashEntity.MEASUREMENT ->
+            json.decodeFromString(MeasurementPayload.serializer(), payload).localDate
+        TrashEntity.VITAL -> json.decodeFromString(VitalPayload.serializer(), payload).localDate
+        TrashEntity.OBSERVATION ->
+            json.decodeFromString(ObservationPayload.serializer(), payload).localDate
+        TrashEntity.SESSION ->
+            json.decodeFromString(SessionPayload.serializer(), payload).session.localDate
+        TrashEntity.WORK_SET ->
+            json.decodeFromString(WorkSetPayload.serializer(), payload).localDate
+        TrashEntity.PHOTO -> json.decodeFromString(PhotoPayload.serializer(), payload).localDate
+        TrashEntity.ACTIVITY ->
+            json.decodeFromString(ActivityPayload.serializer(), payload).localDate
+        TrashEntity.MEDICATION_DOSE ->
+            json.decodeFromString(MedicationDosePayload.serializer(), payload).localDate
+        TrashEntity.SYMPTOM_EPISODE ->
+            json.decodeFromString(SymptomEpisodePayload.serializer(), payload).localDate
+        TrashEntity.LAB_RESULT ->
+            json.decodeFromString(LabResultPayload.serializer(), payload).localDate
+        TrashEntity.VACCINATION ->
+            json.decodeFromString(VaccinationPayload.serializer(), payload).localDate
+        TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE, TrashEntity.ALLERGY,
+        TrashEntity.CONDITION,
+        -> null
     }
 
     private fun rowExists(entity: TrashEntity, id: String): Boolean = when (entity) {

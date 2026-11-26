@@ -97,6 +97,7 @@ fun SettingsScreen(
     onExport: (Uri, CharArray) -> Unit,
     onRestore: (Uri, CharArray) -> Unit,
     onOpenDevices: () -> Unit,
+    onOpenSync: () -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenReview: () -> Unit,
@@ -160,6 +161,13 @@ fun SettingsScreen(
                     icon = OhModuleIcons.integrations,
                     showDivider = true,
                     onClick = onOpenDevices,
+                )
+                GroupRow(
+                    title = stringResource(R.string.settings_sync),
+                    detail = state.syncDetail,
+                    icon = OhIcons.refresh,
+                    showDivider = true,
+                    onClick = onOpenSync,
                 )
                 if (HealthModule.SLEEP in state.modules) {
                     GroupRow(

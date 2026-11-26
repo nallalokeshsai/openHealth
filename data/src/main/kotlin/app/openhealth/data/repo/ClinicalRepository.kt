@@ -33,6 +33,11 @@ import kotlinx.serialization.json.Json
 @Suppress("TooManyFunctions", "LargeClass")
 class ClinicalRepository(private val db: OpenHealthDb) {
     private val json = Json { ignoreUnknownKeys = true }
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
 
     // ------------------------------------------------------------------ medications
 
@@ -82,6 +87,11 @@ class ClinicalRepository(private val db: OpenHealthDb) {
                 id = medication.id,
             )
         }
+        sync?.capture(
+            "medication",
+            medication.id,
+            medication.provenance.localDate.toString(),
+        )
     }
 
     fun medications(): List<Medication> =
@@ -123,6 +133,7 @@ class ClinicalRepository(private val db: OpenHealthDb) {
             notes = dose.notes,
             revision = 1,
         )
+        sync?.capture("medication_dose", dose.id, dose.provenance.localDate.toString())
     }
 
     fun dosesBetween(from: LocalDate, to: LocalDate): List<MedicationDose> =
@@ -167,6 +178,7 @@ class ClinicalRepository(private val db: OpenHealthDb) {
                 id = symptom.id,
             )
         }
+        sync?.capture("symptom", symptom.id, symptom.provenance.localDate.toString())
     }
 
     fun symptoms(): List<Symptom> =
@@ -209,6 +221,11 @@ class ClinicalRepository(private val db: OpenHealthDb) {
             device = episode.provenance.device,
             appVersion = episode.provenance.appVersion,
             revision = 1,
+        )
+        sync?.capture(
+            "symptom_episode",
+            episode.id,
+            episode.provenance.localDate.toString(),
         )
     }
 
@@ -270,6 +287,7 @@ class ClinicalRepository(private val db: OpenHealthDb) {
             appVersion = lab.provenance.appVersion,
             revision = lab.revision,
         )
+        sync?.capture("lab_result", lab.id, lab.provenance.localDate.toString())
     }
 
     fun labsBetween(from: LocalDate, to: LocalDate): List<LabResult> =
@@ -324,6 +342,7 @@ class ClinicalRepository(private val db: OpenHealthDb) {
             appVersion = allergy.provenance.appVersion,
             revision = allergy.revision,
         )
+        sync?.capture("allergy", allergy.id, allergy.provenance.localDate.toString())
     }
 
     fun allergies(): List<Allergy> =
@@ -367,6 +386,7 @@ class ClinicalRepository(private val db: OpenHealthDb) {
             appVersion = condition.provenance.appVersion,
             revision = condition.revision,
         )
+        sync?.capture("condition", condition.id, condition.provenance.localDate.toString())
     }
 
     fun conditions(): List<Condition> =
@@ -406,6 +426,7 @@ class ClinicalRepository(private val db: OpenHealthDb) {
             appVersion = vaccination.provenance.appVersion,
             revision = vaccination.revision,
         )
+        sync?.capture("vaccination", vaccination.id, vaccination.provenance.localDate.toString())
     }
 
     fun vaccinations(): List<Vaccination> =
