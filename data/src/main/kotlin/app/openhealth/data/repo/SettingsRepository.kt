@@ -13,6 +13,12 @@ class SettingsRepository(
     private val db: OpenHealthDb,
     private val clock: ClockSeam = SystemClock,
 ) {
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
+
     fun get(key: String): String? = db.settingsQueries.setting(key).executeAsOneOrNull()?.value_
 
     fun updatedAt(key: String): Long? =
@@ -25,10 +31,12 @@ class SettingsRepository(
             updatedAt = clock.now().toEpochMilliseconds(),
             schemaVersion = SCHEMA_VERSION,
         )
+        sync?.capture("settings", key)
     }
 
     fun remove(key: String) {
         db.settingsQueries.deleteSetting(key)
+        sync?.captureDelete("settings", key)
     }
 
     fun all(): Map<String, String> =
@@ -122,4 +130,30 @@ object SettingKeys {
 
     /** B10: the review inbox remembers only which questions the person has answered. */
     const val REVIEW_DISMISSED = "review.dismissed"
+
+    /** B13 sync: configuration and cursor are per-device and never captured or synced. */
+    const val SYNC_DEVICE_ID = "sync.device_id"
+    const val SYNC_SERVER_URL = "sync.server_url"
+    const val SYNC_PULL_CURSOR = "sync.pull_cursor"
+    const val SYNC_STATUS = "sync.status"
+    const val SYNC_LAST_ERROR = "sync.last_error"
+    const val SYNC_LAST_SYNCED = "sync.last_synced"
+    const val SYNC_ENABLED = "sync.enabled"
+    const val SYNC_WIFI_ONLY = "sync.wifi_only"
+}
+
+/** A setting is user data unless it only describes this device or its sync state. */
+object SyncSettingsPolicy {
+    private val localPrefixes = listOf("sync.", "demo.", "steps.", "device.", "health_connect.")
+
+    /**
+     * Device-local bookkeeping whose key does not carry a local prefix. The sync book
+     * records when each source last reached **this** phone, so another device's copy
+     * would make the Devices screen state something untrue; the catalogue version marks
+     * what this install has seeded and would stop a later upgrade re-seeding.
+     */
+    private val localKeys = setOf(SettingKeys.SYNC_BOOK, SettingKeys.EXERCISE_CATALOGUE)
+
+    fun shouldSync(key: String): Boolean =
+        key !in localKeys && localPrefixes.none { key.startsWith(it) }
 }

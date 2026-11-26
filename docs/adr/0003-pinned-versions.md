@@ -99,3 +99,23 @@ enters the client (ADR 0007).
 The FHIR R4 JSON schema itself is vendored at
 `core/src/test/resources/fhir/fhir.schema.json` (CC0, HL7, 3.3 MB) and is test-only.
 `android.graphics.pdf` is a platform API, so the PDF renderer adds no dependency.
+
+## B13 additions (2026-11-26)
+
+| Library | Version | Verified | Why |
+|---|---|---|---|
+| Ktor client (`core`, `cio`, `content-negotiation`, `encoding`) | 3.6.1 (pinned in B0) | first used in B13 | JSON, gzip, HTTPS sync transport in `:sync`; the same version runs the server. Apache-2.0. |
+| Ktor server (`core`, `netty`, `content-negotiation`, `status-pages`, `auth`, `call-logging`) | 3.6.1 | same pin | The optional sync server (Tech-Stack.md §7). |
+| `com.webauthn4j:webauthn4j-core` | 0.32.0.RELEASE | latest on Maven Central on 2026-11-26 | Passkey registration/assertion verification; Apache-2.0. Server only. |
+| `org.postgresql:postgresql` | 42.7.7 | latest 42.7.x on Maven Central on 2026-11-26 | PostgreSQL 16 driver; BSD-2-Clause. |
+| `com.zaxxer:HikariCP` | 6.3.0 | latest on Maven Central on 2026-11-26 | Connection pool; Apache-2.0. |
+| `org.flywaydb:flyway-core` / `flyway-database-postgresql` | 11.8.2 | latest on Maven Central on 2026-11-26 | Forward-only migrations; Apache-2.0. |
+| `at.favre.lib:bcrypt` | 0.10.2 | latest on Maven Central on 2026-11-26 | Optional password fallback; Apache-2.0. |
+| `org.slf4j:slf4j-simple` | 2.0.17 | same 2.0 line as the SLF4J API Ktor resolves | Logging without adding Logback (LGPL/EPL) to the server classpath. MIT. |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-test` | 1.11.0 | same pin as coroutines | Test-only coroutine test host. |
+
+Server dependencies are allowed to be AGPL-compatible because `server/` is AGPL-3.0;
+every coordinate above is permissive and recorded in `gradle/licences/allowed.tsv`.
+MinIO and Caddy are separate container images, not Gradle dependencies. The server is
+built with `./gradlew --configure-on-demand :server:installDist`, so the Android SDK is
+not required inside the Docker build.

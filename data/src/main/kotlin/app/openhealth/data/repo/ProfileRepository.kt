@@ -5,6 +5,12 @@ import app.openhealth.data.db.Profile
 
 /** Layer 4 profile rows. One active profile in the MVP; the table already keys by id. */
 class ProfileRepository(private val db: OpenHealthDb) {
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
+
     fun upsert(profile: Profile) {
         db.profileQueries.upsertProfile(
             id = profile.id,
@@ -27,6 +33,7 @@ class ProfileRepository(private val db: OpenHealthDb) {
             sourceId = profile.source_id,
             revision = profile.revision,
         )
+        sync?.capture("profile", profile.id)
     }
 
     fun byId(id: String): Profile? = db.profileQueries.profileById(id).executeAsOneOrNull()

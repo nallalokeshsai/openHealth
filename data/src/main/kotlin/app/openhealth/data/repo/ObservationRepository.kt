@@ -25,6 +25,12 @@ class ObservationRepository(
     private val clock: app.openhealth.core.seam.ClockSeam = app.openhealth.core.seam.SystemClock,
 ) {
     private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    /** Wired by the composition root once the sync engine exists (B13). */
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
 
     /**
      * Wired by the composition root once the rollup engine exists. Every write that
@@ -127,6 +133,7 @@ class ObservationRepository(
             idempotencyKey = provenance.idempotencyKey,
             rawRecordId = provenance.rawRecordId?.value,
         )
+        sync?.capture("observation", observation.id.value, observation.localDate.toString())
     }
 
     fun byId(id: ObservationId): Observation? =
@@ -175,6 +182,7 @@ class ObservationRepository(
                 id = id.value,
             )
             rollupInvalidator?.invoke(LocalDate.parse(existing.local_date))
+            sync?.capture("observation", id.value, existing.local_date)
         }
         return true
     }
@@ -183,6 +191,7 @@ class ObservationRepository(
         val existing =
             db.observationQueries.observationById(id.value).executeAsOneOrNull() ?: return
         db.observationQueries.setExcludedFromTrends(excluded, id.value)
+        sync?.capture("observation", id.value, existing.local_date)
         rollupInvalidator?.invoke(LocalDate.parse(existing.local_date))
     }
 

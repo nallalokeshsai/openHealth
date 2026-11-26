@@ -32,6 +32,7 @@ kotlin {
 
 dependencies {
     api(project(":core"))
+    api(project(":sync"))
 
     implementation(libs.sqldelight.runtime)
     implementation(libs.sqldelight.coroutines)

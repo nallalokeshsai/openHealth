@@ -1,8 +1,11 @@
 # openHealth — Design System
 
-**Version:** 0.5
+**Version:** 0.6
 **Status:** Living document, first pass
-**Last revision:** 2026-11-26 — B12 adds the clinical report paper (§8.9): the report is
+**Last revision:** 2026-11-26 — B13 adds Settings → Data → Sync (§14.2): local-only,
+synced, offline and conflict states from existing components and inks, with the sync
+problem in orange (§6.5) and no new colour, type role, spacing value or component.
+Previous: 2026-11-26 — B12 adds the clinical report paper (§8.9): the report is
 always light, its type roles and tables are the existing ones, and the sleep, clinical
 hub, editor, reports and weekly-review pages reuse existing components and recipes. No
 new colour, type role, spacing value or component. Previous: 2026-11-26 — B11 adds the route map as a chart surface (§8.8): the
@@ -1732,7 +1735,7 @@ the §4.4 skeleton; each detail is a sheet or a pushed page.
 | **Train** (raised centre) | Week strip + today's session | Gym, yoga, cardio and imported activities, programmes, routines, history, recovery map, programme coverage map | Body map on session and routine rows |
 | **Nutrition** | Energy ring + macro bars | Meals as inset lists, micros, water, fasting | Barcode action, product thumbs |
 | **Stats** | KPI band | Trends by domain, body and workout statistics, weekly review, reports | Line charts, heatmap, stat bars |
-| **Settings** (top-bar gear, not a tab) | Profile row | Modules, devices, data, appearance, privacy | Grouped settings list, status inks |
+| **Settings** (top-bar gear, not a tab) | Profile row | Modules, devices, data (Sync, export, Trash, review), appearance, privacy | Grouped settings list, status inks |
 
 ### 14.2 Composition recipes
 
@@ -1802,6 +1805,18 @@ formula and its inputs (`pr.md` §6.4).
 **Settings** (opened by the top-bar gear; formerly More). Profile row (avatar, name, goal), then groups: Modules, Devices and
 integrations, Data and backups, Appearance, Privacy and security, About. A
 destructive action is its own group at the bottom, 22 dp away, in `red-ink`.
+
+**Settings → Data → Sync** (pushed from the Data sheet, not a root). One page in the
+Settings surface language: the page header, then the server row and either the pairing
+form (URL and one-time code) or the paired block (server, status, waiting count, last
+synced), with one primary action (**Pair this device** or **Sync now**) and a secondary
+**Disconnect**. A failed sync is stated in `orange-ink` under the block ("Offline",
+"Needs attention", the reason), never red (§6.5). The conflicts section is a
+`label-2` heading followed by one card per conflict: the entity title, a 13 sp
+`label-2` sentence, the two sides side by side (device, time, differing fields) and two
+buttons that name the value they keep ("Keep 8 412" / "Keep 9 103"). Every row is a
+46 dp target; the empty state is the §6.7 pattern ("Nothing to review"). No server is
+required for any other screen.
 
 **Devices and integrations** (pushed from the Settings row, not a root). One scrolling
 page in the Settings surface language: a page header with a back chevron, then five

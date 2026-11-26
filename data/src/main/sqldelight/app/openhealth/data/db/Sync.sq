@@ -1,0 +1,108 @@
+-- B13: the append-only change log (`Tech-Stack.md` §6, `pr.md` §7.7).
+--
+-- One row per logical write. `fields` and `field_clocks` are JSON text so an unknown
+-- column or entity crosses the wire untouched (`pr.md` §7.9). `synced_at` is null until
+-- the server acknowledges the idempotency key; a retried push is free.
+
+CREATE TABLE change_log (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    fields TEXT NOT NULL,
+    field_clocks TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    hlc TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    local_date TEXT,
+    recorded_at INTEGER NOT NULL,
+    synced_at INTEGER,
+    server_seq INTEGER
+);
+
+CREATE INDEX change_log_pending ON change_log(synced_at, seq);
+CREATE INDEX change_log_entity ON change_log(entity, entity_id);
+
+-- The last write per row and the clock of each field, kept after the domain row is
+-- applied so a later merge knows what this device has seen.
+CREATE TABLE sync_row_state (
+    entity TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    hlc TEXT NOT NULL,
+    field_clocks TEXT NOT NULL,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (entity, entity_id)
+);
+
+-- A conflict a policy could not settle. Both full changes are stored; the UI shows
+-- both sides with their provenance and the user resolves one (`pr.md` §7.7).
+CREATE TABLE sync_conflict (
+    id TEXT NOT NULL PRIMARY KEY,
+    entity TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    local_change TEXT NOT NULL,
+    remote_change TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX sync_conflict_entity ON sync_conflict(entity, entity_id);
+
+insertChange:
+INSERT OR IGNORE INTO change_log(
+    entity, entity_id, operation, fields, field_clocks, idempotency_key, hlc,
+    device_id, schema_version, local_date, recorded_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+insertAppliedChange:
+INSERT OR IGNORE INTO change_log(
+    entity, entity_id, operation, fields, field_clocks, idempotency_key, hlc,
+    device_id, schema_version, local_date, recorded_at, synced_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+changeByKey:
+SELECT idempotency_key FROM change_log WHERE idempotency_key = ?;
+
+pendingChanges:
+SELECT * FROM change_log WHERE synced_at IS NULL ORDER BY seq LIMIT ?;
+
+pendingChangeCount:
+SELECT COUNT(*) FROM change_log WHERE synced_at IS NULL;
+
+markChangeAcknowledged:
+UPDATE change_log SET synced_at = ?, server_seq = ? WHERE idempotency_key = ?;
+
+acknowledgedServerSeq:
+SELECT MAX(server_seq) FROM change_log;
+
+upsertRowState:
+INSERT INTO sync_row_state(entity, entity_id, hlc, field_clocks, deleted)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(entity, entity_id) DO UPDATE SET
+    hlc = excluded.hlc,
+    field_clocks = excluded.field_clocks,
+    deleted = excluded.deleted;
+
+rowState:
+SELECT * FROM sync_row_state WHERE entity = ? AND entity_id = ?;
+
+insertConflict:
+INSERT OR REPLACE INTO sync_conflict(
+    id, entity, entity_id, local_change, remote_change, reason, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+conflicts:
+SELECT * FROM sync_conflict ORDER BY created_at DESC;
+
+conflictById:
+SELECT * FROM sync_conflict WHERE id = ?;
+
+openConflictCount:
+SELECT COUNT(*) FROM sync_conflict;
+
+deleteConflict:
+DELETE FROM sync_conflict WHERE id = ?;
+
+deleteConflictsForEntity:
+DELETE FROM sync_conflict WHERE entity = ? AND entity_id = ?;

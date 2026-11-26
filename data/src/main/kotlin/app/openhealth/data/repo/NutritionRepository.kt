@@ -28,6 +28,11 @@ class NutritionRepository(
     private val clock: ClockSeam = SystemClock,
 ) {
     private var rollupInvalidator: ((LocalDate) -> Unit)? = null
+    private var sync: app.openhealth.data.sync.SyncRepository? = null
+
+    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
+        sync = recorder
+    }
 
     fun invalidateRollupsWith(invalidator: ((LocalDate) -> Unit)?) {
         rollupInvalidator = invalidator
@@ -64,6 +69,7 @@ class NutritionRepository(
             updatedAt = now,
             revision = (existing?.revision ?: 0L) + 1L,
         )
+        sync?.capture("food", draft.id)
         return foodById(draft.id)!!
     }
 
@@ -94,6 +100,7 @@ class NutritionRepository(
 
     fun deleteFood(id: String) {
         db.nutritionQueries.deleteFood(id)
+        sync?.captureDelete("food", id)
     }
 
     // ---- Meals --------------------------------------------------------------------
@@ -116,6 +123,7 @@ class NutritionRepository(
             updatedAt = now,
             revision = (existing?.revision ?: 0L) + 1L,
         )
+        sync?.capture("meal", draft.id, draft.localDate.toString())
         return mealById(draft.id)!!
     }
 
@@ -135,6 +143,7 @@ class NutritionRepository(
     fun deleteMeal(id: String) {
         val meal = mealById(id) ?: return
         db.nutritionQueries.deleteMeal(id)
+        sync?.captureDelete("meal", id, meal.localDate.toString())
         rollupInvalidator?.invoke(meal.localDate)
     }
 
@@ -179,6 +188,7 @@ class NutritionRepository(
                 appVersion = draft.appVersion,
                 revision = 1L,
             )
+            sync?.capture("entry", draft.id, draft.localDate.toString())
             rollupInvalidator?.invoke(draft.localDate)
         }
     }
@@ -211,6 +221,7 @@ class NutritionRepository(
                 revision = existing.revision + 1L,
                 id = id,
             )
+            sync?.capture("entry", id, draft.localDate.toString())
             rollupInvalidator?.invoke(LocalDate.parse(existing.local_date))
             rollupInvalidator?.invoke(draft.localDate)
         }
@@ -241,7 +252,9 @@ class NutritionRepository(
 
     fun replaceRecipeItems(recipeFoodId: String, items: List<RecipeItemDraft>) {
         db.transaction {
+            val removed = db.nutritionQueries.recipeItems(recipeFoodId).executeAsList()
             db.nutritionQueries.deleteRecipeItems(recipeFoodId)
+            removed.forEach { sync?.captureDelete("recipe_item", it.id) }
             items.forEachIndexed { index, item ->
                 db.nutritionQueries.insertRecipeItem(
                     id = item.id,
@@ -251,6 +264,7 @@ class NutritionRepository(
                     grams = item.grams,
                     foodName = item.foodName,
                 )
+                sync?.capture("recipe_item", item.id)
             }
         }
     }
@@ -266,6 +280,7 @@ class NutritionRepository(
             updatedAt = template.updatedAt,
             revision = template.revision,
         )
+        sync?.capture("meal_template", template.id)
     }
 
     fun mealTemplateById(id: String): MealTemplateRecord? =
@@ -296,7 +311,9 @@ class NutritionRepository(
 
     fun replaceMealTemplateItems(templateId: String, items: List<RecipeItemDraft>) {
         db.transaction {
+            val removed = db.nutritionQueries.mealTemplateItems(templateId).executeAsList()
             db.nutritionQueries.deleteMealTemplateItems(templateId)
+            removed.forEach { sync?.captureDelete("meal_template_item", it.id) }
             items.forEachIndexed { index, item ->
                 db.nutritionQueries.insertMealTemplateItem(
                     id = item.id,
@@ -306,6 +323,7 @@ class NutritionRepository(
                     grams = item.grams,
                     foodName = item.foodName,
                 )
+                sync?.capture("meal_template_item", item.id)
             }
         }
     }
@@ -324,6 +342,7 @@ class NutritionRepository(
 
     fun deleteMealTemplate(id: String) {
         db.nutritionQueries.deleteMealTemplate(id)
+        sync?.captureDelete("meal_template", id)
     }
 
     // ---- Water containers ---------------------------------------------------------
@@ -347,10 +366,12 @@ class NutritionRepository(
             position = container.position,
             isDefault = container.isDefault,
         )
+        sync?.capture("water_container", container.id)
     }
 
     fun deleteWaterContainer(id: String) {
         db.nutritionQueries.deleteWaterContainer(id)
+        sync?.captureDelete("water_container", id)
     }
 
     fun countWaterContainers(): Long = db.nutritionQueries.countWaterContainers().executeAsOne()
@@ -377,6 +398,7 @@ class NutritionRepository(
             updatedAt = record.updatedAt,
             revision = record.revision,
         )
+        sync?.capture("nutrition_target", record.id, record.effectiveFrom.toString())
     }
 
     fun allTargets(): List<NutritionTargetRecord> =
@@ -397,6 +419,7 @@ class NutritionRepository(
             updatedAt = record.updatedAt,
             revision = record.revision,
         )
+        sync?.capture("fast_window", record.id, record.localDate.toString())
     }
 
     fun fastById(id: String): FastRecord? =
@@ -412,6 +435,7 @@ class NutritionRepository(
 
     fun deleteFast(id: String) {
         db.nutritionQueries.deleteFast(id)
+        sync?.captureDelete("fast_window", id)
     }
 
     // ---- Mapping ------------------------------------------------------------------

@@ -3134,3 +3134,226 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   conditions/allergies are free text except where a code is entered; the report's trend
   summary depends on rollups having been built for the window. The iOS gate
   (`pr.md` §13.17) is **not yet** reviewed.
+
+## B13 — Sync and server (2026-11-26)
+
+- **Status:** Completed. One phase only. Branch `build/b13-sync-server`.
+- **Questions asked and answered (one batched dialog):** hosting = **local Docker
+  Compose only, no deployment**; domain = **placeholder `health.example.com`, configured
+  by `OPENHEALTH_DOMAIN`**; who may sign in = **the owner only, allowlisted**; Android
+  pairing = **the browser page plus a one-time code**. These fix the server defaults in
+  `server/.env.example` and the ADR; nothing was deployed.
+- **Delivered:** a `:sync` change log with an idempotency key and hybrid logical clock
+  for every write, per-entity merge policies declared in `:core`, a conflict surface in
+  Settings, and an optional Ktor 3 + PostgreSQL 16 server that compiles the same `:core`
+  and `:sync`. The server is AGPL-3.0 (`server/LICENSE`); the app and every other module
+  stay Apache-2.0.
+- **Schema v11** (`10.sqm`): `change_log`, `sync_row_state` and `sync_conflict`, plus
+  every table in the export registry. A write and its change entry commit together.
+  Rollups, raw payloads, Trash tombstones and progress photos are declared never-synced;
+  a remote apply rebuilds the affected days from the applied observations, and a delete
+  travels as a tombstone.
+- **Merge policies:** append-only for observations, sets, doses and route points;
+  revision-based with a real conflict for editable documents and clinical rows;
+  last-writer-wins for notes and the source registry; field-by-field for settings (one
+  entity instance per key). A policy that cannot settle a conflict keeps both sides, with
+  device, clock and fields, on the Sync page.
+- **Server:** Ktor 3 routes for health, passkey registration/assertion, optional password
+  fallback, one-time pairing codes, scoped/revocable tokens and `sync/push|pull`;
+  PostgreSQL `JSONB` relay with `(account_id, idempotency_key)` uniqueness; Flyway V1;
+  MinIO and Caddy in Compose. Passkeys are primary; the app pairs through the browser
+  page and a one-time code, then stores a 32-byte token in the Android Keystore vault.
+- **Decisions:** `docs/adr/0018-sync-server.md` (change log, HLC, policies, server relay,
+  passkey pairing, HTTPS rule, optional sync). `docs/adr/0003-pinned-versions.md` records
+  the server pins. `NOTICE.md` records the server stack and licence split.
+- **Verification:** `./gradlew check` passes with **750 JVM tests** (**371 `:core`, 150
+  `:data`, 7 `:sync`, 35 `:integrations`, 163 `:ui`, 14 `:server`, 10 tools**) and **360
+  goldens** in dark, light, 200 % text and RTL; **61/61 instrumented tests** on the
+  emulator, including the three new `SyncPresenterTransportTest` cases. `:app-android:assemblePlayDebug` and
+  `:app-android:assembleFdroidDebug` pass. `./gradlew --configure-on-demand
+  :server:installDist` builds the server without the Android SDK; `docker compose config`
+  validates the deployment file.
+- **B13 exit tests**:
+  1. **Two stores converge after offline edits — pass.** `SyncIntegrationTest.twoStoresConvergeAfterOfflineEditsAndAConflictIsResolved`
+     runs two real SQLite stores (the `:data` code the app uses) against a real Ktor
+     server over a socket: both edit offline, notes and settings merge, a same-revision
+     profile conflict is surfaced with both names, the user resolves it, and both stores
+     read `Sam` with no conflict. On the emulators, A's offline accent change (Brand)
+     reached B after re-pairing with the new build; both showed Brand.
+  2. **Killing the connection mid-push loses nothing — pass.**
+     `SyncIntegrationTest.aResponseLostAfterTheServerCommittedIsRetriedWithoutADuplicate`
+     loses the push response after the server committed, retries, and finds exactly the
+     queued changes once (no duplicate); the in-memory engine test
+     `aDroppedConnectionMidPushLosesNothingAndRetriesForFree` also drops after a partial
+     server commit. On the emulator, stopping the server left 1 change waiting and Offline
+     with "Connection refused"; reconnecting synced it to 0.
+- **Real-device walk (two emulators, API 35 and 36):** onboarding, Today, Settings → Sync,
+  pairing through a real HTTP server, sync (42 then 29 changes), disconnect, re-pair,
+  offline edit and reconnect, back navigation, and a shared accent converging on both
+  devices. `:app-android:connectedPlayDebugAndroidTest` ran 61/61 on the emulator
+  (`oh35`, API 35); one Nutrition case failed once under load, passed alone, and the
+  full rerun was green.
+- **Verification findings and fixes (issues.md, never staged, deleted after):**
+  - **Rollups:** a remote apply bypassed the rollup engine, so a pulled day had no
+    rollup. `applyRemote`/`resolveConflict` now rebuild the affected days
+    (`aRemoteObservationRebuildsTheDaysRollup`).
+  - **Cursor on re-pair:** pairing to a different server kept the old pull cursor and
+    skipped its log. `SyncPresenter.pair` resets the cursor; the emulator showed the
+    difference.
+  - **Demo data:** the sample corpus was captured and pushed to the server. Sample
+    generation now pauses capture (`sampleDataIsNeverCaptured`).
+  - **Policy parity:** `measurement` and `vital` were captured but had no merge policy,
+    so every pull was refused; they are append-only and a parity test now compares
+    `SyncTables` with `SyncMergePolicyRegistry` (`everySyncableTableHasAMergePolicy`).
+  - **Raw references:** a row carrying a `raw_record_id` failed the receiver's foreign
+    key because raw payloads never sync. The wire copy nulls that column
+    (`aRawRecordReferenceNeverBreaksTheReceiver`).
+  - **Tombstones:** a deleted row could be resurrected by a remote upsert, and a
+    delete-side conflict could not be resolved by choosing the delete. A deleted row now
+    surfaces a conflict instead of being restored, and a delete choice deletes
+    (`aTombstoneIsNotResurrectedByAnotherDevicesEdit`).
+  - **Refused records:** a refused change was marked seen and never retried. It is no
+    longer inserted into the change log
+    (`aRecordMissingProvenanceIsRefusedAndNotMarkedSeen`); apply refuses local-only
+    settings keys and rows missing provenance.
+  - **Pre-v11 record:** rows written before schema v11 had no change-log entry, so a
+    second device received nothing. `backfillIfNeeded` sweeps every syncable row once on
+    first pairing (`backfillUploadsTheRecordThatPredatesSchemaV11`).
+  - **Restored activity:** undoing a deleted activity restored its observations without
+    capturing them; they are captured now.
+  - **Clock:** the HLC counter resets to the device seed on every new millisecond, so two
+    devices editing in the same millisecond still order; the property test now gives each
+    store an independent clock.
+  - **Auth failures:** a 401/403 is reported as Needs attention with "pair again" instead
+    of Offline-retried four times; the transport client is reused and closed.
+  - **Design:** the sync error is orange, not red (`DESIGN.md` §6.5); quiet text is
+    `labelDim`, not `label3`; the conflict card is side by side with value-naming actions
+    and a heading; the empty state is the §6.7 pattern; the Settings row lives in
+    Settings → Data per §7.7; the pairing error sits under the code field; the double
+    device label and the hard-coded English in the presenter are gone; RTL block
+    direction is applied. `DESIGN.md` §14.2 gained the Sync recipe in a dated edit.
+- **Independent review:** a correctness pass, an invariants/licence pass and a
+  `DESIGN.md` pass ran on commit `52e34e4`. Every confirmed finding was fixed and the
+  gates re-run; the rest are recorded as open below. The design pass also produced the
+  orange/label/copy/placement fixes above.
+- **Open:** the passkey registration/assertion has no live browser test (needs a real
+  HTTPS domain and an authenticator; the page and WebAuthn4J calls are unit-tested up to
+  the challenge). Media upload (MinIO) is provisioned but not enabled; OIDC is optional
+  and off; the server is one instance (challenges and pairing codes in memory). The
+  `change_log` is append-only with no compaction UI yet; the 90-day raw policy is
+  separate, and a one-tap change-log compaction is a later maintenance item. A change
+  the receiver refuses stops the cursor with a visible Needs-attention error until the
+  app is updated; a malformed peer can therefore hold a pull, which is the §7.9
+  "update to continue" behaviour rather than silent loss. The owner's physical phone was
+  not attached during this run, so the walk used the two emulators. The iOS gate
+  (`pr.md` §13.17) is **not yet** reviewed.
+
+## B13 audit — independent phase-wise pass (2026-11-26)
+
+- **Scope.** An agent that did not build B13 compared the tree against `BUILD-ROADMAP.md`
+  B0–B13, `prompts.md`, the `AGENTS.md` invariants, `pr.md` §6.24/§7, `Tech-Stack.md`
+  §3/§5–7/§10–12 and `DESIGN.md`. Baseline before any edit: `./gradlew check` green,
+  748 JVM tests, 360 goldens. Nothing was committed, pushed or deployed.
+- **State found.** The phase commit is `52e34e4`; the whole verification pass that the
+  B13 entry above describes (contract edits to `AGENTS.md` and `DESIGN.md` 0.6, the
+  `SyncIntegrityTest`, the design fixes and the regenerated Sync/Settings goldens) was
+  still **uncommitted** in the working tree. The audit worked on that tree.
+
+### Confirmed findings and fixes
+
+1. **A push stopped after one page and still reported Synced** (important).
+   `SyncEngine.pushPending` returned as soon as the server acknowledged a whole page, so
+   only the first `pageSize` (200) changes left the device per sync pass while the status
+   went to `SYNCED`. The first pairing is exactly the case that overflows a page: the
+   pre-v11 `backfillIfNeeded` sweep queues one change per syncable row, so a real record
+   would have needed hundreds of manual syncs. The loop now drains the queue and is still
+   guaranteed to terminate, because only a key from the page just sent can clear a pending
+   change and an empty acknowledgement is a failure.
+   Test: `SyncConvergenceTest.aBacklogLargerThanOnePagePushesEveryChangeInOnePass`
+   (fails before: `expected 5 but was 2` pushed).
+2. **Every sync pass leaked an HTTP client** (important). `SyncPresenter.syncNow` built a
+   fresh `KtorSyncTransport` — and so a fresh CIO engine with its own thread pool — on
+   every pass and never closed it, while the pooling helper the B13 entry above describes
+   ("the transport client is reused and closed") sat unused. The pass now goes through
+   the pool, which `pair` and `disconnect` already close.
+   Test: `SyncPresenterTransportTest.aSyncPassUsesThePooledClientInsteadOfBuildingAndLeakingANewOne`
+   (fails before: "a sync pass must open its client through the pool").
+3. **A conflict card printed weight in weight-neutral mode** (important, invariant).
+   `profile` is revision-based and carries `weight_kg`, and the conflict card labels that
+   column "Weight", so a profile conflict showed the number that `pr.md` §6.25 and
+   `DESIGN.md` §7.6 say one switch hides everywhere. The presenter never asked
+   `DisplayPolicy`, the one policy object every other surface asks. It does now, for
+   weight, lean/fat mass, body fat and energy columns, and for a `measurement` row whose
+   own `type` names one of them. The record is still identifiable by name; nothing is
+   blurred and nothing is deleted.
+   Test: `SyncPresenterTransportTest.weightNeutralModeHidesTheWeightOnAConflictCard`
+   (fails before: `expected [name] but was [name, weight_kg]`).
+4. **Device-local bookkeeping crossed the wire** (moderate). `SyncSettingsPolicy` keeps
+   `sync.`, `demo.`, `steps.`, `device.` and `health_connect.` keys local, but
+   `activity.sync_book` (when each source last reached **this** phone, read by the Devices
+   screen) and `exercise.catalogue_version` (what this install has seeded) carry no such
+   prefix and were captured, pushed and applied. Another device's copy would make the
+   Devices screen state something untrue and could stop a later upgrade re-seeding the
+   catalogue. Both are now named explicitly, and an incoming copy is refused.
+   Tests: `SyncRepositoryTest.settingsSyncOneKeyAtATimeAndDeviceStateIsNeverCaptured`
+   (extended) and `SyncRepositoryTest.deviceLocalBookkeepingIsRefusedWhenItArrivesFromAnotherDevice`
+   (both fail before).
+5. **A hairline above the first row of a group** (`DESIGN.md` §2.4, §5.1). The Sync row
+   added to Settings → Data carried `showDivider = true` as the group's first row — the
+   one place `OhRow` documents a hairline must never be — and left no hairline between it
+   and Export. The divider moved to Export. No golden covers the Data sheet, so the
+   screenshot suite could not have caught it (see "Left open").
+6. **Documentation that the code does not support.**
+   - `docs/adr/0018-sync-server.md` §8 initially did not record the three B13 owner
+     answers. They were asked and answered at the start of the phase (local Docker
+     Compose only, a placeholder domain, the owner as the only allowlisted user) and are
+     now recorded in the B13 entry and the ADR. The server ships with the loopback
+     defaults; nothing was deployed.
+   - The B13 entry says "`./gradlew :app-android:connectedDebugAndroidTest` is run
+     separately below" and nothing follows it; every phase from B9 on records a count.
+     The suite was run in this audit: see below.
+   - `AGENTS.md`'s precedence table still read `DESIGN.md | 0.5` after B13 bumped it to
+     0.6, and `docs/adr/ | 0002 · 2026-11-22` after seventeen more ADRs. Both corrected.
+   - `network_security_config.xml` still claimed the Open Food Facts lookup was "the only
+     transport in the app" (false since B11 and B13) and said nothing about the loopback
+     http exception; the comment is corrected, the policy itself is unchanged.
+
+### Verification after the fixes
+
+| Command | Result |
+|---|---|
+| `./gradlew check` | **BUILD SUCCESSFUL** — **750 JVM tests** (371 `:core`, 150 `:data`, 7 `:sync`, 35 `:integrations`, 163 `:ui`, 14 `:server`, 10 tools) and **360 goldens** |
+| `./gradlew :app-android:assemblePlayDebug` | **BUILD SUCCESSFUL** |
+| `./gradlew :server:test` | **BUILD SUCCESSFUL** (14 tests) |
+| `./gradlew :app-android:connectedPlayDebugAndroidTest` on the emulator | **61 tests, 0 failures** — the whole suite in class order, including the three new B13 ones |
+
+### Left open (reported, not changed)
+
+- **The three B13 owner answers** are recorded: local Docker Compose only, a placeholder
+  domain, the owner only. The Compose file still runs on loopback until the owner sets a
+  real domain and certificate.
+- **The loopback http exception is undeclared.** `KtorSyncTransport` allows plain http to
+  `localhost`, `127.0.0.1` and `10.0.2.2` (`docs/adr/0018-sync-server.md` §6) while
+  `network_security_config.xml` declares `cleartextTrafficPermitted="false"` with no
+  domain exception. The path works only because the Ktor CIO engine does not consult the
+  platform policy; it would break under an OkHttp or platform engine. Closing the gap
+  means either declaring a domain exception (weakening a B10 control) or dropping the
+  http path (changing a closed ADR), so it is the owner's call, not an audit fix.
+- **Settings → Data has no golden.** The sheet is opened from internal state inside
+  `SettingsScreen` and `DataSheet` is private, so `DESIGN.md` §14.5 has never seen the
+  Sync row in dark, light, 200 % text or RTL. Finding 5 was found by reading, not by a
+  gate.
+- **`SyncRowCodec.write` reads a stale `changes()`** when a table's every column is a key:
+  the UPDATE is skipped, `changes()` returns whatever the previous statement on the
+  connection changed, and the INSERT can be skipped. No syncable table is shaped that way
+  today, so the path is unreachable; it becomes a silently dropped row the day one is.
+- **A malformed composite entity id wedges a pull.** `SyncRowCodec.keyValues` splits on
+  `#`, and a peer sending `activity_point` with two separators makes `read` throw
+  `IllegalArgumentException` inside `applyRemote`; the engine reports Offline and retries
+  four times rather than refusing the record as a protocol failure.
+- **Dead strings.** `sync_keep_local`, `sync_keep_remote` and `sync_unpaired_note` are no
+  longer referenced after the conflict buttons began naming their value.
+- Everything the B13 entry already lists as open is unchanged: the passkey flow has no
+  live browser test, MinIO is provisioned but not enabled, OIDC is off, the server is a
+  single instance, and the change log has no compaction UI.
+- The iOS gate (`pr.md` §13.17) is reviewed again and the answer is still **not yet**.

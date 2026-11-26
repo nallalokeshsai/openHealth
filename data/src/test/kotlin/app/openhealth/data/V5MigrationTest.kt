@@ -114,7 +114,7 @@ class V5MigrationTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(10L, store.schemaVersion)
+        assertEquals(11L, store.schemaVersion)
 
         // The training rows survive v6, v7 and v8 untouched.
         val set = store.db.trainingQueries.workSetById("w1").executeAsOne()

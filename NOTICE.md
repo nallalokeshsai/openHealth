@@ -1,13 +1,38 @@
 # openHealth — notices
 
 openHealth is licensed **Apache-2.0** (see [`LICENSE`](LICENSE)), except the optional
-server: `server/` is **AGPL-3.0** when it is built in B13 (`pr.md` §12.4,
-`Tech-Stack.md` §13). Nothing under `server/` exists yet, so this repository is
-currently Apache-2.0 throughout.
+server: `server/` is **AGPL-3.0** (see [`server/LICENSE`](server/LICENSE)) because it is
+the network-facing half of the product (`pr.md` §12.4, `Tech-Stack.md` §13). The Android
+app, the shared Kotlin modules and every tool remain Apache-2.0 and do not link the
+server.
 
 It is not a medical device (`pr.md` §12.1).
 
 ## Third-party notices
+
+### Server stack (server/, AGPL-3.0)
+
+| Component | Licence | Role |
+|---|---|---|
+| Ktor 3 (server and client) | Apache-2.0 | HTTPS API and the device transport |
+| PostgreSQL JDBC 42.7 | BSD-2-Clause | Database driver |
+| HikariCP 6.3 | Apache-2.0 | Connection pool |
+| Flyway 11.8 | Apache-2.0 | Forward-only schema migrations |
+| WebAuthn4J 0.32 | Apache-2.0 | Passkey registration and assertion verification |
+| bcrypt 0.10 | Apache-2.0 | Optional password fallback |
+| Netty, Jackson 3, SLF4J-simple | Apache-2.0 / MIT | Runtime, CBOR/JSON and logging |
+
+MinIO (AGPL-3.0) and Caddy (Apache-2.0) run as separate containers and are not linked
+into the server binary; Caddy is the TLS terminator and MinIO is the object store for
+media that a later phase uploads (`pr.md` §7.7). No health value is sent to either
+unless the owner runs them and pairs a device.
+
+### Passkey and standard data
+
+WebAuthn (W3C) is implemented through WebAuthn4J under Apache-2.0. The server stores a
+credential's attestation object and client-data bytes so a later assertion can be
+verified; it never stores a biometric template. FHIR R4, LOINC and UCUM notices remain
+as recorded for B12 (§12.2).
 
 ### Typefaces — none bundled
 

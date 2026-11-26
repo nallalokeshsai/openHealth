@@ -221,6 +221,8 @@ data class AppState(
     val reports: app.openhealth.ui.screens.clinical.ReportsModel? = null,
     val reportDays: Int = 90,
     val weeklyReview: app.openhealth.ui.screens.clinical.WeeklyReviewModel? = null,
+    val sync: app.openhealth.ui.screens.sync.SyncModel? = null,
+    val syncBusy: Boolean = false,
     val statsSegment: app.openhealth.ui.screens.stats.StatsSegment =
         app.openhealth.ui.screens.stats.StatsSegment.OVERVIEW,
     val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
@@ -3246,6 +3248,70 @@ class AppViewModel(
         }
     }
 
+    // ----------------------------------------------------------------------- sync
+
+    fun openSync() {
+        _state.update { it.copy(sync = container.sync.model(busy = it.syncBusy)) }
+    }
+
+    fun pairSync(serverUrl: String, code: String) {
+        if (serverUrl.isBlank() || code.isBlank()) return
+        _state.update { it.copy(syncBusy = true, sync = it.sync?.copy(busy = true)) }
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { container.sync.pair(serverUrl, code) }
+            _state.update {
+                it.copy(
+                    syncBusy = false,
+                    sync = model ?: container.sync.model(),
+                )
+            }
+            if (model == null) {
+                _state.update {
+                    it.copy(
+                        sync = (it.sync ?: container.sync.model()).copy(
+                            pairError = container.context.getString(UiR.string.sync_pair_failed),
+                            busy = false,
+                        ),
+                    )
+                }
+                showToast(UiR.string.sync_pair_failed, undo = false)
+            } else {
+                rebuild()
+            }
+        }
+    }
+
+    fun syncNow() {
+        if (!container.sync.isPaired()) return
+        _state.update { it.copy(syncBusy = true, sync = it.sync?.copy(busy = true)) }
+        launchGuarded {
+            val result = withContext(Dispatchers.IO) { container.sync.syncNow() }
+            _state.update { it.copy(syncBusy = false, sync = container.sync.model()) }
+            rebuild()
+            if (result.status == app.openhealth.core.sync.SyncStatus.OFFLINE ||
+                result.status == app.openhealth.core.sync.SyncStatus.ERROR
+            ) {
+                showToast(UiR.string.sync_sync_failed, undo = false)
+            }
+        }
+    }
+
+    fun disconnectSync() {
+        container.sync.disconnect()
+        _state.update { it.copy(sync = container.sync.model()) }
+        launchGuarded { rebuild() }
+    }
+
+    fun keepSyncConflict(id: String, keepLocal: Boolean) {
+        _state.update { it.copy(syncBusy = true, sync = it.sync?.copy(busy = true)) }
+        launchGuarded {
+            withContext(Dispatchers.IO) { container.sync.keep(id, keepLocal) }
+            withContext(Dispatchers.IO) { container.sync.syncNow() }
+            _state.update { it.copy(syncBusy = false, sync = container.sync.model()) }
+            rebuild()
+        }
+    }
+
     // -------------------------------------------------------------------- devices
 
     fun openDevices() {
@@ -3906,6 +3972,7 @@ class AppViewModel(
             ?.let(::parseRecoveryDate),
         modules = preferences.modules,
         devicesDetail = activity.summary(),
+        syncDetail = container.sync.summary(),
         preset = preferences.preset,
         weightNeutral = preferences.weightNeutral,
         displayPolicy = preferences.displayPolicy,
