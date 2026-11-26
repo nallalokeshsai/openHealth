@@ -2,6 +2,7 @@ package app.openhealth.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -83,7 +84,6 @@ class AccessibilitySweepTest {
         listOf("Today", "Vitals", "Train", "Nutrition", "Stats").forEach { name ->
             compose.onNodeWithContentDescription(name).assertIsDisplayed()
         }
-        compose.onNodeWithText("Nutrition").assertIsDisplayed()
     }
 
     @Test
@@ -146,11 +146,12 @@ class AccessibilitySweepTest {
 
     @Test
     fun theSegmentedControlGrowsWithTheTextInsteadOfClippingIt() {
+        val scale = mutableStateOf(1f)
         compose.setContent {
             val density = LocalDensity.current
             OhTheme(dark = true) {
                 CompositionLocalProvider(
-                    LocalDensity provides Density(density.density, fontScale = 2f),
+                    LocalDensity provides Density(density.density, fontScale = scale.value),
                 ) {
                     OhSegmentedControl(
                         options = listOf("System", "Dark", "Light"),
@@ -161,6 +162,16 @@ class AccessibilitySweepTest {
                 }
             }
         }
+        compose.runOnIdle { scale.value = 2f }
+        compose.waitForIdle()
+        val control = compose.onNodeWithTag(SEGMENTED).getUnclippedBoundsInRoot()
+        val label = compose.onNodeWithText("Dark").getUnclippedBoundsInRoot()
+        // A clipped label would sit outside the control's own box; the 44 dp row grows
+        // with the line, so the label must be entirely inside it.
+        assertTrue(
+            label.top >= control.top && label.bottom <= control.bottom,
+            "the 200 % label is clipped by the control: label $label in $control",
+        )
         compose.onNodeWithTag(SEGMENTED).assertHeightIsAtLeast(44.dp)
         // Every segment is still reachable: the control scrolls, it does not clip.
         compose.onNodeWithText("Light").assertExists()

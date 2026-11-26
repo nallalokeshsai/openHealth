@@ -25,6 +25,9 @@ class DatabaseRecoveryTest {
         context.deleteDatabase(name)
         val backups = java.io.File(context.filesDir, "database-backups")
         backups.listFiles()?.filter { it.name.startsWith("$name-v") }?.forEach { it.delete() }
+        context.getDatabasePath(name).parentFile?.listFiles()
+            ?.filter { it.name.startsWith("$name.corrupt-") || it.name.contains(".restore-") }
+            ?.forEach { it.delete() }
     }
 
     @Test
@@ -66,5 +69,33 @@ class DatabaseRecoveryTest {
         } finally {
             recovered.close()
         }
+        // Nothing is deleted: the damaged bytes stay beside the database, renamed.
+        assertTrue(
+            "the damaged database must be kept aside",
+            context.getDatabasePath(name).parentFile?.listFiles()
+                ?.any { it.name.startsWith("$name.corrupt-") } == true,
+        )
     }
+
+    @Test
+    fun aSnapshotBelongsToItsOwnDatabase() {
+        val other = "b10-other-test.db"
+        val directory = java.io.File(context.filesDir, "database-backups").apply { mkdirs() }
+        val mine = java.io.File(directory, "$name-v1-v2-100")
+        val theirs = java.io.File(directory, "$other-v1-v2-200")
+        mine.writeBytes("mine".toByteArray())
+        theirs.writeBytes("theirs".toByteArray())
+        try {
+            val latest = AndroidMigrationBackup(context, name).latest()
+            assertEquals(
+                "only this database's snapshots may be restored",
+                mine.name,
+                latest?.name,
+            )
+        } finally {
+            mine.delete()
+            theirs.delete()
+        }
+    }
+
 }

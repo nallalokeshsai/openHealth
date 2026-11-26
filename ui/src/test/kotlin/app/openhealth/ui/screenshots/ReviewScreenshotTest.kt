@@ -95,8 +95,20 @@ class ReviewScreenshotTest {
                 subtitle = "Garmin says 8 412 and Fitbit says 6 108. Today shows Garmin.",
                 dateLabel = "2026-11-25",
                 readings = listOf(
-                    ReviewReadingModel("Garmin", "8 412 steps", "08:12", true),
-                    ReviewReadingModel("Fitbit", "6 108 steps", "08:20", false),
+                    ReviewReadingModel(
+                        "Garmin",
+                        "8 412 steps",
+                        "08:12",
+                        detail = null,
+                        winner = true,
+                    ),
+                    ReviewReadingModel(
+                        "Fitbit",
+                        "6 108 steps",
+                        "08:20",
+                        detail = null,
+                        winner = false,
+                    ),
                 ),
                 explanation = null,
                 actions = listOf(
@@ -113,7 +125,7 @@ class ReviewScreenshotTest {
                 subtitle = "Scale recorded 512 kg in weight. The plausible range is 1 to 500 kg.",
                 dateLabel = "2026-11-24",
                 readings = listOf(
-                    ReviewReadingModel("Scale", "512 kg", "07:02", false),
+                    ReviewReadingModel("Scale", "512 kg", "07:02", detail = null, winner = false),
                 ),
                 explanation = "The range is a screen for entry mistakes, not a clinical " +
                     "judgement. Nothing is changed unless you choose to.",
@@ -127,17 +139,18 @@ class ReviewScreenshotTest {
                 ),
             ),
             ReviewRowModel(
-                key = "duplicate:HEART_RATE:2026-11-23",
+                key = "duplicate:WEIGHT:2026-11-23",
                 kind = ReviewKind.DUPLICATE,
-                title = "Garmin recorded heart rate twice",
-                subtitle = "Two readings under a minute apart. Merging keeps the first one.",
+                title = "Scale recorded weight twice",
+                subtitle = "Readings under a minute apart. Merging keeps the first one.",
                 dateLabel = "2026-11-23",
                 readings = listOf(
-                    ReviewReadingModel("Garmin", "62 bpm", "09:00", false),
+                    ReviewReadingModel("Scale", "80.1 kg", "07:02", detail = null, winner = false),
+                    ReviewReadingModel("Scale", "80.1 kg", "07:02", detail = null, winner = false),
                 ),
                 explanation = null,
                 actions = listOf(
-                    ReviewActionModel(ReviewAction.MERGE, "Merge into one"),
+                    ReviewActionModel(ReviewAction.MERGE, "Move the duplicate to Trash"),
                     ReviewActionModel(ReviewAction.EDIT, "Open the timeline"),
                     ReviewActionModel(ReviewAction.IGNORE, "Ignore this"),
                 ),

@@ -91,7 +91,10 @@ class StatsPresenter(
 
     fun model(segment: StatsSegment, preferences: Preferences): StatsModel {
         sleepCache = null
-        imperial = store.settings.get(SettingKeys.UNITS) == "imperial"
+        // The profile is the one source of units (Today and Body read it too); the
+        // settings mirror is written with it but a demo or a restored bundle can carry
+        // one without the other.
+        imperial = store.profile.active()?.units == "imperial"
         val date = today()
         val hidden = preferences.displayPolicy
         val modules = preferences.modules
@@ -853,7 +856,7 @@ class StatsPresenter(
         if (imperial) kilograms * POUNDS_PER_KILOGRAM else kilograms
 
     private fun massUnit(): String =
-        context.getString(if (imperial) UiR.string.unit_lb else UiR.string.unit_kg)
+        context.getString(if (imperial) UiR.string.unit_pounds else UiR.string.unit_kg)
 
     private fun massPerWeekUnit(): String = context.getString(
         if (imperial) UiR.string.stats_unit_lb_week else UiR.string.stats_unit_kg_week,

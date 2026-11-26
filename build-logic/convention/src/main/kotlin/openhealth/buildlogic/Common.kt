@@ -98,7 +98,12 @@ internal fun Project.registerTelemetryCheck() {
         it.name.endsWith("RuntimeClasspath")
     }
     val coordinates: Provider<List<String>> = provider {
-        telemetryConfigurations
+        val matched = telemetryConfigurations.toList()
+        check(matched.isNotEmpty()) {
+            "checkNoTelemetrySdks found no runtime classpath in ${path}: the gate would " +
+                "pass without inspecting anything."
+        }
+        matched
             .flatMap { configuration ->
                 configuration.incoming.resolutionResult.allComponents.mapNotNull { component ->
                     (component.id as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" }

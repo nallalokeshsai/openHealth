@@ -202,6 +202,7 @@ data class AppState(
     val devices: app.openhealth.ui.screens.devices.DevicesModel? = null,
     val stats: app.openhealth.ui.screens.stats.StatsModel? = null,
     val review: app.openhealth.ui.screens.review.ReviewModel? = null,
+    val reviewCount: Int = 0,
     val statsSegment: app.openhealth.ui.screens.stats.StatsSegment =
         app.openhealth.ui.screens.stats.StatsSegment.OVERVIEW,
     val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
@@ -419,6 +420,7 @@ class AppViewModel(
         val timeline = buildTimeline(preferences)
         val trash = buildTrash(preferences)
         val recent = buildRecent(preferences)
+        val firstLoad = !_state.value.loaded
         _state.update { previous ->
             val lockOnFirstLoad = !previous.loaded &&
                 complete &&
@@ -442,6 +444,7 @@ class AppViewModel(
         // add's timeline or a settings change is never held behind the exercise library.
         val train = profile?.let { training.train(preferences, it) }
         _state.update { it.copy(train = train) }
+        firstLoadRefreshReviewCount(firstLoad)
         val vitals = profile?.let { body.model(it, preferences, preferences.demo) }
         _state.update { it.copy(vitals = vitals) }
         refreshStats(preferences, profile)
@@ -2323,8 +2326,30 @@ class AppViewModel(
 
     fun openReview() {
         launchGuarded {
-            val model = withContext(Dispatchers.IO) { reviewPresenter.model() }
-            _state.value = _state.value.copy(review = model)
+            val preferences = _state.value.preferences
+            val model = withContext(Dispatchers.IO) { reviewPresenter.model(preferences) }
+            _state.value = _state.value.copy(
+                review = model,
+                reviewCount = model.rows.size,
+                settings = _state.value.settings?.copy(reviewCount = model.rows.size),
+            )
+        }
+    }
+
+    /** One branch in [rebuild] instead of two (`CyclomaticComplexMethod`). */
+    private fun firstLoadRefreshReviewCount(firstLoad: Boolean) {
+        if (firstLoad) refreshReviewCount()
+    }
+
+    /** Refreshes the Settings badge without building the screen. */
+    private fun refreshReviewCount() {
+        launchGuarded {
+            val preferences = _state.value.preferences
+            val count = withContext(Dispatchers.IO) { reviewPresenter.count(preferences) }
+            _state.value = _state.value.copy(
+                reviewCount = count,
+                settings = _state.value.settings?.copy(reviewCount = count),
+            )
         }
     }
 
@@ -2354,32 +2379,33 @@ class AppViewModel(
                             )
                         }
 
-                    app.openhealth.ui.screens.review.ReviewAction.MERGE ->
-                        action.observationId?.let {
+                    app.openhealth.ui.screens.review.ReviewAction.MERGE -> {
+                        val ids = action.mergeIds.ifEmpty {
+                            listOfNotNull(action.observationId)
+                        }
+                        ids.forEach {
                             store.trash.deleteObservation(
                                 app.openhealth.core.ids.ObservationId(it),
                             )
                         }
+                    }
 
-                    app.openhealth.ui.screens.review.ReviewAction.EDIT,
                     app.openhealth.ui.screens.review.ReviewAction.KEEP,
                     app.openhealth.ui.screens.review.ReviewAction.IGNORE,
+                    app.openhealth.ui.screens.review.ReviewAction.EDIT,
                     -> Unit
                 }
-                if (action.action != app.openhealth.ui.screens.review.ReviewAction.EDIT) {
-                    reviewPresenter.dismiss(row.key)
-                }
-            }
-            if (action.action ==
-                app.openhealth.ui.screens.review.ReviewAction.EDIT
-            ) {
-                return@launchGuarded
+                // Every answer closes the question; the screen routes EDIT to the
+                // timeline itself and never calls this.
+                reviewPresenter.dismiss(row.key)
             }
             rebuild()
+            val preferences = _state.value.preferences
+            val model = withContext(Dispatchers.IO) { reviewPresenter.model(preferences) }
             _state.value = _state.value.copy(
-                review = withContext(Dispatchers.IO) {
-                    reviewPresenter.model()
-                },
+                review = model,
+                reviewCount = model.rows.size,
+                settings = _state.value.settings?.copy(reviewCount = model.rows.size),
             )
         }
     }
@@ -3319,6 +3345,7 @@ class AppViewModel(
         appLockAvailable = app.openhealth.android.security.BiometricGate()
             .available(container.context),
         demo = preferences.demo,
+        reviewCount = _state.value.reviewCount,
         versionName = container.versionName,
         counts = SettingsCounts(
             notes = store.notes.count(),
@@ -3678,11 +3705,12 @@ class AppViewModel(
 
     private fun buildTrash(
         preferences: app.openhealth.android.preferences.Preferences,
-    ): List<TrashItemModel> = store.trash.active().also {
-        // The 30-day window is enforced whenever the list is read, not only at process
+    ): List<TrashItemModel> = run {
+        // The 30-day window is enforced before the list is read, not only at process
         // start: an app left open past the window must not keep deleted rows restorable
         // (`pr.md` §6.29).
         store.trash.purgeExpired()
+        store.trash.active()
     }
         .filterNot { preferences.weightNeutral && store.trash.isSensitive(it) }
         .map { row ->

@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.ui.icons.OhIcon
@@ -37,6 +38,7 @@ import app.openhealth.ui.theme.OhAlpha
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
 import app.openhealth.ui.theme.ltrFigures
+import app.openhealth.ui.theme.ohBlockDirection
 import app.openhealth.ui.theme.tabular
 
 /**
@@ -221,13 +223,22 @@ fun OhRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = type.body,
+                style = type.body.copy(textDirection = ohBlockDirection()),
                 color = if (destructive) colors.redInk else colors.label,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                // The row's title and its subtitle share one edge in both directions.
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Start,
             )
             if (subtitle != null) {
-                Text(text = subtitle, style = type.footnote, color = colors.label2)
+                Text(
+                    text = subtitle,
+                    style = type.footnote.copy(textDirection = ohBlockDirection()),
+                    color = colors.label2,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start,
+                )
             }
             if (wordsValue) {
                 Text(text = value.orEmpty(), style = type.footnote, color = colors.label2)

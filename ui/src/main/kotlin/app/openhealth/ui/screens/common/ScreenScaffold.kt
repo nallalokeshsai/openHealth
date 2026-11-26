@@ -82,7 +82,10 @@ fun OhPageHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifie
         Spacer(Modifier.width(OhTheme.space.s3))
         Text(
             text = title,
-            style = OhTheme.type.title3.copy(fontWeight = OhWeight.semibold),
+            style = OhTheme.type.title3.copy(
+                fontWeight = OhWeight.semibold,
+                textDirection = app.openhealth.ui.theme.ohBlockDirection(),
+            ),
             color = OhTheme.colors.label,
             modifier = Modifier.weight(1f).semantics { heading() },
             textAlign = TextAlign.Start,

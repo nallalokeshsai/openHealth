@@ -142,6 +142,7 @@ class ScreenScreenshotTest {
         profileMayLoseWeight = true,
         hasRestoreSnapshot = false,
         recoveryNote = null,
+        reviewCount = 0,
         modules = HealthModule.entries.toSet(),
         preset = ModulePreset.EVERYTHING,
         weightNeutral = false,

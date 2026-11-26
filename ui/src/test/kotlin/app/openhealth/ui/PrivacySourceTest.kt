@@ -38,9 +38,16 @@ class PrivacySourceTest {
             val text = file.readText()
             listOf(
                 "openConnection(",
+                "openStream(",
                 "HttpURLConnection(",
                 "OkHttpClient",
+                "okhttp3.",
+                "io.ktor.client",
                 "java.net.Socket",
+                "java.net.DatagramSocket",
+                "java.nio.channels.SocketChannel",
+                "CronetEngine",
+                "DownloadManager",
                 "WebView",
                 "HttpClient(",
             ).any { it in text }

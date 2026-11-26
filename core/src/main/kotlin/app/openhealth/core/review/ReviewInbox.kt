@@ -2,6 +2,7 @@ package app.openhealth.core.review
 
 import app.openhealth.core.observation.Observation
 import app.openhealth.core.observation.ObservationType
+import app.openhealth.core.observation.TemporalShape
 import app.openhealth.core.validate.PlausibilityRanges
 import app.openhealth.core.validate.PlausibleRange
 import kotlin.math.abs
@@ -27,6 +28,9 @@ data class ReviewReading(
     val sourceLabel: String,
     val value: Double,
     val happenedAt: Instant,
+    val recordedAt: Instant,
+    val method: String? = null,
+    val device: String? = null,
 )
 
 /**
@@ -43,6 +47,8 @@ data class ReviewItem(
     /** The source the day's rollup used, when there is one (disagreements). */
     val winnerSourceId: String? = null,
     val range: PlausibleRange? = null,
+    /** For a duplicate: the readings that would move to Trash; the first is kept. */
+    val mergeIds: List<String> = emptyList(),
 ) {
     init {
         require(readings.isNotEmpty()) { "a review item is about at least one reading" }
@@ -68,6 +74,9 @@ object ReviewInbox {
     const val DUPLICATE_FRACTION = 0.01
 
     private const val MILLIS_PER_SECOND = 1_000L
+
+    /** How many readings one duplicate item draws; a longer run is still merged whole. */
+    const val MAX_DUPLICATE_ROWS = 5
 
     fun build(
         observations: List<Observation>,
@@ -115,19 +124,14 @@ object ReviewInbox {
         date: LocalDate,
         readings: List<ReviewReading>,
     ): ReviewItem? {
-        // Deterministic order so the "first" reading is the one kept.
-        val ordered = readings.sortedWith(compareBy({ it.sourceId }, { it.happenedAt }))
-        val extra = mutableListOf<ReviewReading>()
-        var kept: ReviewReading? = null
-        ordered.forEach { reading ->
-            val previous = kept
-            if (previous != null && isDuplicate(previous, reading)) {
-                extra += reading
-            } else {
-                kept = reading
-            }
-        }
-        return if (extra.isEmpty()) {
+        // A stream of samples is not a duplicate: a heart-rate strap records the same
+        // value every second, and offering each of those for deletion would be wrong
+        // (and could produce a hundred-row item from one FIT import). A type that is a
+        // value, a total or an interval for a day can be written twice by mistake.
+        if (type.shape == TemporalShape.INSTANT) return null
+        val extra = duplicateExtras(readings)
+        val kept = readings.minWithOrNull(compareBy({ it.sourceId }, { it.happenedAt }))
+        return if (extra.isEmpty() || kept == null) {
             null
         } else {
             ReviewItem(
@@ -136,7 +140,10 @@ object ReviewInbox {
                 kind = ReviewKind.DUPLICATE,
                 type = type,
                 localDate = date,
-                readings = extra,
+                // The kept reading comes first so the sheet can show the pair and its
+                // gap; every extra id is merged even when the sheet draws fewer rows.
+                readings = listOf(kept) + extra.take(MAX_DUPLICATE_ROWS - 1),
+                mergeIds = extra.map { it.observationId },
             )
         }
     }
@@ -172,6 +179,25 @@ object ReviewInbox {
         }
     }
 
+    /**
+     * The readings that repeat the one before them. Readings are ordered by source and
+     * time, so the first of a run is the one kept and every later match is an extra.
+     */
+    private fun duplicateExtras(readings: List<ReviewReading>): List<ReviewReading> {
+        val ordered = readings.sortedWith(compareBy({ it.sourceId }, { it.happenedAt }))
+        val extra = mutableListOf<ReviewReading>()
+        var keep: ReviewReading? = null
+        ordered.forEach { reading ->
+            val previous = keep
+            if (previous != null && isDuplicate(previous, reading)) {
+                extra += reading
+            } else {
+                keep = reading
+            }
+        }
+        return extra
+    }
+
     private fun isDuplicate(previous: ReviewReading, reading: ReviewReading): Boolean {
         if (previous.sourceId != reading.sourceId) return false
         val seconds = abs(
@@ -193,5 +219,8 @@ object ReviewInbox {
         sourceLabel = labels[provenance.sourceId.value] ?: provenance.sourceId.value,
         value = value.value,
         happenedAt = provenance.happenedAt,
+        recordedAt = provenance.recordedAt,
+        method = provenance.method?.name,
+        device = provenance.device,
     )
 }

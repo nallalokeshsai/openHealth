@@ -48,6 +48,9 @@ data class SettingsState(
 
     /** Set when a corrupt database was replaced from the snapshot taken before a migration. */
     val recoveryNote: String?,
+
+    /** How many review questions are waiting; 0 hides nothing, the row stays visible. */
+    val reviewCount: Int,
     val modules: Set<HealthModule>,
 
     /** What the Devices row says: which sources are on, or nothing yet. */

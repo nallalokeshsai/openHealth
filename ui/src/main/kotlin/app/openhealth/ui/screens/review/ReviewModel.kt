@@ -25,6 +25,8 @@ data class ReviewActionModel(
     val action: ReviewAction,
     val label: String,
     val observationId: String? = null,
+    /** Every reading a merge moves to Trash; empty for every other action. */
+    val mergeIds: List<String> = emptyList(),
 )
 
 /** One line of the "what each source said" block. */
@@ -32,6 +34,8 @@ data class ReviewReadingModel(
     val sourceLabel: String,
     val valueText: String,
     val timeText: String,
+    /** How and when it was recorded, so every number keeps its provenance (§7.2). */
+    val detail: String?,
     val winner: Boolean,
 )
 

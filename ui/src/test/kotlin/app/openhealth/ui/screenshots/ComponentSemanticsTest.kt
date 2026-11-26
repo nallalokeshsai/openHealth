@@ -130,7 +130,7 @@ class ComponentSemanticsTest {
                 onSelect = {},
             )
         }
-        compose.onNodeWithText("Today").assertIsSelected()
+        compose.onNodeWithContentDescription("Today").assertIsSelected()
         compose.onNodeWithContentDescription("Train").assertHasClickAction().assertIsNotSelected()
         compose.onAllNodes(hasClickAction()).assertCountEquals(5)
     }

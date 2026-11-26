@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,12 +57,14 @@ fun ReviewScreen(
             .padding(horizontal = OhTheme.space.s6),
     ) {
         OhPageHeader(title = stringResource(R.string.review_title), onBack = onBack)
-        androidx.compose.material3.Text(
-            text = model.countLabel,
-            style = OhTheme.type.footnote,
-            color = OhTheme.colors.label2,
-            modifier = Modifier.padding(bottom = OhTheme.space.s5),
-        )
+        if (model.rows.isNotEmpty()) {
+            Text(
+                text = model.countLabel,
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+                modifier = Modifier.padding(bottom = OhTheme.space.s5),
+            )
+        }
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             if (model.rows.isEmpty()) {
                 OhCard {
@@ -79,6 +82,7 @@ fun ReviewScreen(
                         OhRow(
                             title = row.title,
                             subtitle = row.subtitle,
+                            value = row.dateLabel,
                             leadingIcon = row.kind.icon(),
                             // Neutral glyph tiles: the accent on this screen belongs to
                             // nothing yet, so it is not spent on three decorations.
@@ -106,18 +110,17 @@ fun ReviewScreen(
             item.readings.forEach { reading ->
                 OhRow(
                     title = reading.sourceLabel,
-                    subtitle = "${reading.timeText} · ${reading.valueText}",
+                    subtitle = reading.detail ?: reading.timeText,
+                    value = reading.valueText,
                     trailing = if (reading.winner) {
                         {
-                            Column {
-                                OhButton(
-                                    text = stringResource(R.string.review_shown),
-                                    onClick = {},
-                                    enabled = false,
-                                    variant = OhButtonVariant.Ghost,
-                                    size = OhButtonSize.ExtraSmall,
-                                )
-                            }
+                            // §7.4 marks the winner with the word "wins" in neutral ink;
+                            // it is a status, not a control.
+                            Text(
+                                text = stringResource(R.string.review_wins),
+                                style = OhTheme.type.caption2,
+                                color = OhTheme.colors.label2,
+                            )
                         }
                     } else {
                         null
@@ -133,17 +136,19 @@ fun ReviewScreen(
                 )
             }
             Spacer(Modifier.height(OhTheme.space.s7))
-            item.actions.forEach { action ->
+            item.actions.forEachIndexed { index, action ->
                 OhButton(
                     text = action.label,
                     onClick = {
                         open = null
                         onAction(item, action)
                     },
-                    variant = if (action.action == ReviewAction.IGNORE) {
-                        OhButtonVariant.Ghost
-                    } else {
-                        OhButtonVariant.Secondary
+                    // The first answer is the next action; Ignore is quiet so the
+                    // accent is never spent on dismissing the question.
+                    variant = when {
+                        action.action == ReviewAction.IGNORE -> OhButtonVariant.Quiet
+                        index == 0 -> OhButtonVariant.Primary
+                        else -> OhButtonVariant.Secondary
                     },
                     size = OhButtonSize.Default,
                 )

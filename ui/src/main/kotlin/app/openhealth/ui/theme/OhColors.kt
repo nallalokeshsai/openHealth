@@ -278,7 +278,6 @@ fun OhColors.withAccessibility(
     return copy(
         label2 = if (highContrast) label else label2,
         labelDim = if (highContrast) label else labelDim,
-        sep = if (highContrast) label2 else sep,
         sepOp = if (highContrast) sep else sepOp,
         barFill = if (reduceTransparency) bgEl else barFill,
         toastFill = if (reduceTransparency) surface2 else toastFill,

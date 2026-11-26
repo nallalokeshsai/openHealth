@@ -395,8 +395,8 @@ the person explicitly configured as an alert (`pr.md` §12.1).
   The graphic inks (`streak`, `frost`) reach 3:1 and never carry body text.
 - Never put text on `surface-3` without checking it.
 - Never rely on hue alone: every status carries an icon or a word.
-- Increase Contrast (Android high-contrast) steps the system palette up and
-  firms `label-2` and `sep`.
+- The high-contrast option (§12.4.1) firms `label-2`, `label-dim` and `sep-op`.
+  It is an app preference, not a branch on an Android setting.
 - Colour-blind simulation is part of the review gate (§14.5).
 
 ### 2.10 Forbidden
@@ -1563,13 +1563,15 @@ They are preferences in Settings → Appearance rather than device-dependent bra
 because Android does not expose all three consistently; "Remove animations" is honoured
 from the system as well.
 
-- **High contrast.** Secondary text moves to `label` (already the measured body pair) and
-  `label-2`/`label-dim` take the strong value; the optional `sep-op` hairline takes `sep`.
-  No new value: the same tokens at full strength.
+- **High contrast.** `label-2` and `label-dim` take `label` and the optional `sep-op`
+  hairline takes `sep`. No new value: the same tokens at full strength. Full-strength
+  body copy in dark is the one place the high-contrast choice overrules §2.10, and only
+  while the option is on.
 - **Reduce transparency.** `barFill` becomes opaque `bg-el`, `toastFill` and
   `timerBarFill` become opaque `surface-2`. This is exactly what §4.3 asks of the tab bar.
-- **Reduce motion.** Every motion token resolves to its instant state (§6.9). The timer
-  bar still counts; it stops sliding.
+- **Reduce motion.** Every motion token built on `OhMotion` resolves to its instant state
+  (§6.9), which covers press, selection, charts and the timer bar; Material's own sheet
+  animation is outside the token and is unchanged, and the setting's copy says so.
 
 ### 12.5 Contrast audit
 

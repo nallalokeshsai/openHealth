@@ -56,6 +56,7 @@ import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
 import app.openhealth.ui.screens.common.OhPageHeader
+import app.openhealth.ui.screens.common.OhSectionTitle
 import app.openhealth.ui.theme.OhAccent
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.OhWeight
@@ -664,7 +665,15 @@ private fun DataSheet(
             )
             OhRow(
                 title = stringResource(R.string.review_settings_row),
-                subtitle = stringResource(R.string.review_settings_empty),
+                subtitle = if (state.reviewCount > 0) {
+                    pluralStringResource(
+                        R.plurals.review_count,
+                        state.reviewCount,
+                        state.reviewCount,
+                    )
+                } else {
+                    stringResource(R.string.review_settings_empty)
+                },
                 leadingIcon = OhIcons.info,
                 showDivider = true,
                 showChevron = true,
@@ -811,18 +820,11 @@ private fun AppearanceSheet(
                 },
             )
         }
-        Spacer(Modifier.height(OhTheme.space.s7))
-        Text(
-            text = stringResource(R.string.settings_accessibility),
-            style = OhTheme.type.footnote,
-            color = OhTheme.colors.label2,
-        )
-        Spacer(Modifier.height(OhTheme.space.s2))
+        OhSectionTitle(text = stringResource(R.string.settings_accessibility))
         OhInsetGroup {
             OhRow(
                 title = stringResource(R.string.settings_high_contrast),
                 subtitle = stringResource(R.string.settings_high_contrast_body),
-                mergeSemantics = false,
                 trailing = {
                     OhSwitch(
                         checked = state.highContrast,
@@ -833,8 +835,8 @@ private fun AppearanceSheet(
             )
             OhRow(
                 title = stringResource(R.string.settings_reduce_transparency),
+                showDivider = true,
                 subtitle = stringResource(R.string.settings_reduce_transparency_body),
-                mergeSemantics = false,
                 trailing = {
                     OhSwitch(
                         checked = state.reduceTransparency,
@@ -847,8 +849,8 @@ private fun AppearanceSheet(
             )
             OhRow(
                 title = stringResource(R.string.settings_reduced_motion),
+                showDivider = true,
                 subtitle = stringResource(R.string.settings_reduced_motion_body),
-                mergeSemantics = false,
                 trailing = {
                     OhSwitch(
                         checked = state.reducedMotion,

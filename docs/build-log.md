@@ -2768,6 +2768,56 @@ Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
   the refresh was running; it now waits for the rebuilt value. This was one of the B9
   class-sequence flakes.
 
+### What the independent review found, and what was fixed
+
+Three fresh reviewers (correctness, invariants/licence, DESIGN conformance) read only the
+diff and the contract. Everything below was confirmed and fixed in this run, with the
+gates re-run afterwards.
+
+- **Weight-neutral mode was bypassed by the inbox.** The presenter ignored
+  `DisplayPolicy`, so a weight or energy question would have shown its number. It now
+  hides every sensitive type before the inbox is built, and the golden that proved the
+  leak was replaced.
+- **Module switches were ignored.** A switched-off module's questions no longer appear.
+- **A corrupt database was deleted before the snapshot was copied.** Recovery now renames
+  the broken file and its sidecars aside (`.corrupt-<stamp>`), copies the snapshot to a
+  temporary file and moves it in atomically; a failed copy leaves the record in place.
+  The database driver is closed before the file is replaced.
+- **A heart-rate stream was offered as duplicates.** Duplicate detection is skipped for
+  `INSTANT` types (a FIT import writes one sample per second), the kept reading is shown
+  with the extras, and one item draws at most five rows while merging every extra.
+- **Two "leave out" buttons with the same label** could exclude the wrong reading; each
+  now names its value. The duplicate gap is measured across the kept reading and the
+  extras, not the extras alone.
+- **The inbox never said which day a row was about**, its readings carried no provenance,
+  and its count was not in Settings. The date is the row's trailing value, each reading
+  has its method, device and recorded time, and Settings → Data shows the count.
+- **Copy and localisation.** "under a minute"/"N minutes" became plurals, the count
+  became a plural, "Shown today" became "Wins", "Keep %s" now names the value, and the
+  empty action is "Back". Units in the inbox follow the profile (lb or kg).
+- **RTL: a filled text block resolved alignment from the content, not the layout**, so
+  the page title sat at the far edge from its back control and row titles staggered
+  against their subtitles. `ohBlockDirection()` gives those blocks the layout's
+  direction; the RTL goldens show the title beside the chevron and one row edge.
+- **The segmented control's scroll fade was screen-tall** (a `fillMaxHeight` under loose
+  constraints) and the track measured 44 dp where §5.10 says 36. Both were fixed: the
+  fade is bounded to the track and the track is 36 dp (44 dp at the largest text).
+- **Accent spend.** The only accent in the review sheet was "Ignore this"; the first
+  answer is now Primary, Ignore is Quiet, and the winner is a neutral "Wins" word, not a
+  disabled button.
+- **Stats read units from the settings mirror** while Today and Body read the profile; it
+  now reads the profile, and the duplicate `unit_lb` key is gone.
+- **The telemetry gate could pass having inspected nothing**; it now fails on an empty
+  classpath like the licence gate. `PrivacySourceTest` requires every scan root to exist
+  and matches more transport types.
+- **Two B1/B10 tests asserted the tab label as text**, which the single-name fix removed;
+  they assert the content description now.
+- **The permission audit assumed the legacy Bluetooth pair on every API level** and did
+  not know Android 17's `OTHER_SENSORS`; it now accepts either shape and still fails on
+  any other permission.
+- **`aDaysTotalsEqualTheSumOfItsEntriesExactly` raced a rebuild** and asserted against the
+  stale model (the B9 class-sequence flake); it waits for the rebuilt value now.
+
 ### Placeholders and open issues
 
 - The public privacy-policy URL is a bracketed placeholder in the Fastlane metadata; the

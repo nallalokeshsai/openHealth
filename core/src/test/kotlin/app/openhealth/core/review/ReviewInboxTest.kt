@@ -134,7 +134,33 @@ class ReviewInboxTest {
             labels,
         )
         val duplicate = items.single { it.kind == ReviewKind.DUPLICATE }
-        assertEquals(listOf("b"), duplicate.readings.map { it.observationId })
+        // The kept reading is shown first so the sheet can state the gap; only "b" moves.
+        assertEquals(listOf("a", "b"), duplicate.readings.map { it.observationId })
+        assertEquals(listOf("b"), duplicate.mergeIds)
+    }
+
+    @Test
+    fun aHeartRateStreamIsNotADuplicate() {
+        val items = ReviewInbox.build(
+            listOf(
+                observation(
+                    "a",
+                    "garmin",
+                    62.0,
+                    type = ObservationType.HEART_RATE,
+                    at = noon,
+                ),
+                observation(
+                    "b",
+                    "garmin",
+                    62.0,
+                    type = ObservationType.HEART_RATE,
+                    at = Instant.parse("2026-11-25T11:00:01Z"),
+                ),
+            ),
+            labels,
+        )
+        assertTrue(items.none { it.kind == ReviewKind.DUPLICATE }, "$items")
     }
 
     @Test

@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -132,7 +131,15 @@ fun OhSegmentedControl(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .width(OhTheme.space.s7)
-                            .fillMaxHeight()
+                            // Bounded to the track, never the viewport: a fillMaxHeight
+                            // here made the whole control screen-tall.
+                            .height(
+                                if (scrollable) {
+                                    OhTheme.dims.touchTarget
+                                } else {
+                                    OhTheme.dims.segmentHeight + OhTheme.dims.segmentPad * 2f
+                                },
+                            )
                             .background(
                                 // It fades into the track, not the page: the segment
                                 // behind it is `surface-3`, so the last word softens
@@ -175,11 +182,21 @@ private fun SegmentedContent(
     Box(modifier = modifier) {
         Box(
             modifier = Modifier
-                .matchParentSize()
-                .height(dims.segmentHeight + dims.segmentPad * 2f)
+                // §5.10: a 32 dp segment inside a 2 dp pad is a 36 dp track; at the
+                // largest text sizes the track grows to the touch target so the label
+                // fits. It is positioned, not matchParentSize, or the 44 dp hit row
+                // would make the track 44 dp at every scale.
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(
+                    if (scrollable) {
+                        dims.touchTarget
+                    } else {
+                        dims.segmentHeight + dims.segmentPad * 2f
+                    },
+                )
                 .clip(shape)
-                .background(colors.surface3)
-                .align(Alignment.Center),
+                .background(colors.surface3),
         )
         Row(
             modifier = Modifier
@@ -213,7 +230,9 @@ private fun SegmentedContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .heightIn(min = dims.segmentHeight)
+                            .heightIn(
+                                min = if (scrollable) dims.touchTarget else dims.segmentHeight,
+                            )
                             .then(if (scrollable) Modifier else Modifier.fillMaxWidth())
                             .clip(thumbShape)
                             .then(

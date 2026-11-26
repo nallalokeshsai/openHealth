@@ -46,6 +46,7 @@ class AndroidDatabaseFactory(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught") // Any failure here must close the driver.
     private fun openOnce(): OpenHealthStore {
         // SQLCipher ships its native library in the AAR and does not load it for you.
         System.loadLibrary("sqlcipher")
@@ -68,7 +69,14 @@ class AndroidDatabaseFactory(
             },
             parameters = 0,
         )
-        verifyDatabaseIntegrity(driver, databaseName)
+        try {
+            verifyDatabaseIntegrity(driver, databaseName)
+        } catch (failure: RuntimeException) {
+            // The connection holds native handles on the file the recovery is about to
+            // replace; close it before the corruption handler touches the path.
+            runCatching { driver.close() }
+            throw failure
+        }
         return OpenHealthStore(driver, openHealthDatabase(driver), OpenHealthDb.Schema.version)
     }
 
