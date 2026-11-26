@@ -254,7 +254,8 @@ class GpsRecordingService : Service() {
         }.getOrNull() ?: return
         // A last-known fix from another city or another day must not become the first
         // sample and make every real fix look like an impossible jump.
-        val ageMillis = android.os.SystemClock.elapsedRealtime() - last.elapsedRealtimeNanos / 1_000_000
+        val ageMillis = android.os.SystemClock.elapsedRealtime() -
+            last.elapsedRealtimeNanos / NANOS_PER_MILLISECOND
         if (ageMillis in 0..LAST_KNOWN_MAX_AGE_MILLIS) onFix(last)
     }
 
@@ -431,6 +432,7 @@ class GpsRecordingService : Service() {
         private const val MIN_TIME_MILLIS = 2_000L
         private const val MIN_DISTANCE_METRES = 3f
         private const val LAST_KNOWN_MAX_AGE_MILLIS = 30_000L
+        private const val NANOS_PER_MILLISECOND = 1_000_000L
 
         fun start(context: Context, type: ActivityType) {
             val intent = Intent(context, GpsRecordingService::class.java)
