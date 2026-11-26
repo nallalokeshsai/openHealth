@@ -2927,3 +2927,129 @@ below.
   fresh or demo data. Use `maestro --device <emulator>` and run instrumented suites on
   the emulator.
 - The iOS gate (`pr.md` §13.17) is **not yet** reviewed: Android ships first.
+
+## B11 — Yoga, cardio, GPS
+
+**Status:** Completed · **Date:** 2026-11-26 · **Branch:** `build/b11-yoga-cardio-gps`
+**Goal:** a movement loop that feeds the same record as strength: yoga, cardio, GPS,
+imports, maps and training load (`BUILD-ROADMAP.md` §B11).
+
+### What this phase added
+
+- **Yoga (deliverable 1).** `core/activity/Yoga.kt` holds 29 poses (name, Sanskrit,
+  muscles, difficulty, instructions, why, modification, contraindications, breath cue)
+  and the eight built-in flows: Sun Salutation A and B, beginner full-body, hip opener,
+  spine, post-run, desk reset, bedtime. The text and muscle lists are ours; the body map
+  is the diagram and there is no scraped or licensed media. `YogaPlayer.kt` is the pure
+  player (settle, hold, pause, resume, skip, back, repeat, side prompt, progress) with a
+  four-phase breath pacer. `YogaSessionService` is a `specialUse` foreground service: it
+  ticks the player, persists the snapshot every second, speaks the pose cue when voice is
+  on, and saves the session through the activity repository. The finish screen is a
+  confirmation; Delete is the ordinary Trash path.
+- **Manual cardio (deliverable 2).** The Train root gains a Movement card (record a
+  route, log cardio, yoga, activity history). `CardioLogScreen` records type, day,
+  duration, distance, average/maximum heart rate, energy and notes as a manual activity.
+- **GPS (deliverable 3).** `GpsRecordingService` is a `location` foreground service at
+  2 s / 3 m. Every accepted fix is persisted before the notification updates; pause
+  excludes time and fixes; finish writes the activity and its points. `START_STICKY` plus
+  `recoverIfNeeded` at activity start resumes an interrupted recording; a last-known
+  poll covers a provider that updates its cache without delivering to the listener.
+  `GpsRecorder` is pure and has its own tests.
+- **Imports and export (deliverable 4).** `:integrations` gains GPX and TCX readers, a
+  FIT activity reader over the existing decoder (positions, altitude, cadence, speed,
+  power, laps), and a GPX 1.1 writer. `ActivityFiles` dispatches by extension.
+  `ActivityLogPresenter` writes raw record → activity + points → observations with
+  provenance. The Devices Garmin path now also stores a FIT activity row, so its route
+  opens.
+- **Strava (deliverable 5).** `StravaArchive` reads a bulk-export ZIP locally (no live
+  API): `activities.csv` supplies names, types and totals, per-activity GPX/TCX/FIT
+  supplies the route, gzip and ZIP entries are bounded, and duplicates are refused by
+  raw hash. Source family `strava` is separate from Garmin and CSV.
+- **Maps (deliverable 6).** MapLibre Native (BSD-2-Clause) renders a PMTiles pack;
+  `MapPackStore` downloads one pack on the person's action, HTTPS only, ≤ 50 MB, PMTiles
+  magic checked, app-private and deletable. The PMTiles header bounds decide whether a
+  pack covers the route; otherwise the neutral grid draws. The map uses the theme's
+  existing background/surface/accent ramp (no new token), a 2.5 dp route and 4 dp end
+  dots, plus the required `© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors`
+  line. The route is also drawn as a Compose overlay so the track is visible even when a
+  tile pack does not cover it. `DESIGN.md` §8.8 records the map as a chart surface (0.5).
+- **Activity detail and training load (deliverables 7–8).** Activity detail has the map,
+  distance, duration, pace, elevation, average heart rate, energy, per-kilometre splits,
+  five heart-rate zones with a table, source/record provenance, notes, Hide the route,
+  GPX export and Trash-backed delete. Stats → Training gains a training-load card:
+  Banister TRIMP or duration × MET for cardio, RPE × minutes for strength, 42-day
+  fitness, 7-day fatigue, form = fitness − fatigue (Allen & Coggan), with a table and
+  formula sheet. Today's energy card adds activity calories; the recovery map merges
+  activity loads, so yoga poses and cardio muscle maps feed it.
+- **Data.** Schema v9 adds `activity` and `activity_point` (migration `8.sqm`), the
+  timeline branch, the export tables, a Trash entity with a restorable payload, and an
+  `ActivityRepository` wired to the rollup engine. Layer-2 distance/active minutes/
+  active calories come from `ActivityObservationMapper`, so the existing dedup policy
+  still decides one source per day.
+- **Sources and privacy.** New sources `phone-activity` and `strava-archive`; the
+  privacy policy and store description name the optional map-pack download; the
+  privacy source scan allows exactly the barcode lookup and the map pack, and treats GPX/
+  TCX namespaces as identifiers rather than endpoints. `ACCESS_NETWORK_STATE` is
+  declared for MapLibre's receiver; `ACCESS_WIFI_STATE` stays removed.
+
+### Decisions taken
+
+`docs/adr/0016-yoga-cardio-gps.md`: OpenFreeMap/OSM PMTiles, explicit capped pack
+download, own yoga content, relative TRIMP/CTL/ATL load, Strava as files only, activities
+as layer-4 rows with layer-2 observations, location and yoga foreground services.
+
+### What was run, and its result
+
+- `./gradlew check` green: 655 JVM tests (337 `:core`, 119 `:data`, 35 `:integrations`,
+  154 `:ui`, 10 tools) and **336 goldens** in dark, light, 200 % text and RTL (9 new
+  B11 screens × 4).
+- `./gradlew :app-android:assembleDebug` and `:app-android:assembleFdroidDebug` green.
+- The signed `play` release APK builds from the owner's keystore; it installs over the
+  existing release install without deleting the record.
+- **53/53 instrumented tests on the emulator**, including the 3 new B11 exit tests and
+  every earlier phase's suite.
+- `B11 exit tests`:
+  1. **30-minute GPS survives process death and exports valid GPX — pass.**
+     `MovementExitTest.aThirtyMinuteRecordingSurvivesProcessDeathAndExportsValidGpx`:
+     181 fixes over 1,800 s, the persisted snapshot reloads through a second
+     `PreferencesGpsStore`, the stored activity has 181 points and 1,800 s, and
+     `GpxReader` reads the exported 181-point GPX 1.1 back.
+  2. **Strava archive imports correct totals and one winner per day — pass.**
+     `aStravaArchiveImportsCorrectTotalsAndOneSourceWinsTheDay`: two archive activities
+     totalling 8,000 m, a 2,000 m CSV-kind file on the same day is not added, and the
+     day's distance rollup names `strava-archive` with 8,000 m.
+  3. **Yoga feeds recovery and the energy card — pass.**
+     `aYogaSessionFeedsRecoveryAndTheEnergyCard`: the saved 25-minute flow creates active
+     minutes, shades the quadriceps in the Train recovery map, raises the Today energy
+     card's high bound, and produces the Stats training-load card.
+- **Real-device walk**: signed release installed on the owner's phone over the existing
+  record; Today, Train/Movement, Yoga library and player (pause), Activity list and
+  detail, Stats/Training (training load 80) and a live GPS start/finish were exercised.
+  GPS was stopped without a fix indoors and left no crash. The earlier
+  ForegroundServiceDidNotStart crash was reproduced without permission and fixed.
+- **QA sweep**: 11 issues found and fixed (OH-01 to OH-11 in `issues.md`, deleted after
+  the fixes): finish-screen back state, missing permission request/FGS timeout, GPX
+  export on a route-less session, duplicate source label, MapLibre network-state crash,
+  wrong map colour conversion, black tileless map, map lifecycle not resumed, batched GPS
+  provider timestamps, FIT activity rows missing, and stale activity history.
+- **Regression**: full instrumented suite, all goldens, B8 FIT import, B9 Today/Stats,
+  B10 security posture and database recovery. No earlier exit test was weakened.
+
+### Placeholders and open issues
+
+- The map-pack screen takes an HTTPS URL; the app does not host or extract a region from
+  a planet archive. The QA sample is OpenFreeMap's Monaco pack (473 KB); the owner's own
+  region needs a pack URL. A real visual check of an installed pack that **covers** the
+  route was not possible on the sample data (Berlin route, Monaco pack); the bounds-aware
+  fallback and the route overlay are what the QA exercised. This is the one verification
+  item left for the owner.
+- Gear tracking, best-effort display, monthly totals, FIT/TCX export, custom flow
+  builder, programmes, mobility tests, music and Health Connect mindful-session export
+  are V1/Later or not in the B11 deliverable and remain unbuilt.
+- A FIT imported from Activities writes the activity row and summary observations but
+  not a day file's steps/HR series; the Devices → Garmin path remains the day-file path.
+- The Strava archive is read into memory through `DocumentStore`; the ZIP entries are
+  capped, but a very large archive could still pressure memory. Recorded as a limitation.
+- The phone's Macrobenchmark tracing is still misconfigured; budgets remain direct
+  `am start -W` numbers. The review inbox still lacks the §6.28 import dry run.
+- The iOS gate (`pr.md` §13.17) is **not yet** reviewed: Android ships first.

@@ -252,7 +252,10 @@ class GpsRecordingService : Service() {
         val last = runCatching {
             locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
         }.getOrNull() ?: return
-        onFix(last)
+        // A last-known fix from another city or another day must not become the first
+        // sample and make every real fix look like an impossible jump.
+        val ageMillis = android.os.SystemClock.elapsedRealtime() - last.elapsedRealtimeNanos / 1_000_000
+        if (ageMillis in 0..LAST_KNOWN_MAX_AGE_MILLIS) onFix(last)
     }
 
     private fun onFix(location: Location) {
@@ -287,7 +290,6 @@ class GpsRecordingService : Service() {
                 listener,
                 Looper.getMainLooper(),
             )
-            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { onFix(it) }
         }
     }
 
@@ -428,6 +430,7 @@ class GpsRecordingService : Service() {
         private const val TICK_MILLIS = 1_000L
         private const val MIN_TIME_MILLIS = 2_000L
         private const val MIN_DISTANCE_METRES = 3f
+        private const val LAST_KNOWN_MAX_AGE_MILLIS = 30_000L
 
         fun start(context: Context, type: ActivityType) {
             val intent = Intent(context, GpsRecordingService::class.java)

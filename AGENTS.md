@@ -19,7 +19,7 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 | File | Version | Owns | Authority |
 |---|---|---|---|
 | `pr.md` | 0.4 · 2026-11-22 | Features and MVP/V1/Later tags (§6); five-layer data model (§7); architecture summary (§8); product roadmap (§9); metrics (§10); non-goals (§11); regulatory, licensing and platform constraints (§12); open decisions (§13); cut list (§14.5) | **Behaviour contract.** Wins on scope, wording and what a screen does. |
-| `DESIGN.md` | 0.2 · 2026-11-25 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
+| `DESIGN.md` | 0.5 · 2026-11-26 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
 | `Tech-Stack.md` | 2.4 · 2026-11-25 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
 | `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
 | `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
@@ -217,36 +217,33 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B10 Hardening and MVP release** (2026-11-26); next is **B11
-  Yoga, cardio, GPS**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **602 JVM tests**
-  (308 `:core`, 112 `:data`, 27 `:integrations`, 145 `:ui`, 10 across the three tools) and
-  **300 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body
-  map, the B5 Train surfaces, the B6 Nutrition surfaces, the B7 Vitals surfaces, the B8
-  Devices page, the B9 Today and Stats surfaces and the B10 review inbox are in `:ui`.
-  Both the `play` and `fdroid` debug APKs build, and the signed `play`/`fdroid` release
-  APKs and AABs build from the owner's keystore in `.env.local`.
-- B10 delivers: the accessibility sweep (tab labels decide as a set from measurement,
-  segmented control growth and scroll affordance, focus ring on every clickable, high
-  contrast / reduce transparency / reduced motion preferences, colour-blind simulation
-  test, block-direction RTL fix), 300 goldens including the body map at 200 %/RTL and the
-  review inbox, R8 plus resource shrinking plus a generated baseline profile, a signed
-  AAB/APK and the Play-Services-free flavour, Fastlane metadata, the privacy policy and
-  the reproducible-build notes, migration tests from every schema version (v1–v8),
-  corrupt-database recovery from the pre-migration snapshot, the `pr.md` §6.28 review
-  inbox, `checkNoTelemetrySdks`, a cleartext-free manifest with an explicit network
-  security config, and the security posture test.
-- B10's decisions are in `docs/adr/0015-hardening-and-release.md`; `DESIGN.md` §12.4.1
-  maps the three accessibility options onto existing tokens (0.4).
-- Verification: the full instrumented suite is **48/48 on the emulator**; 6 device tests
-  (security posture, database recovery) pass on the owner's phone; the Maestro suite is
-  6/6 on the emulator and 5/5 app flows on the phone; the signed release APK is installed
-  on the phone as 1.0.0. Cold start **484–511 ms**, warm Today **18–33 ms**, one-tap set
-  **240 ms**, barcode to logged **753 ms**.
-- Open issues (see `docs/build-log.md`): the phone's Macrobenchmark tracing is still
-  misconfigured so the budgets are direct `am start -W` measurements; `:tools:benchmark`
-  sits outside every guard; the review inbox covers duplicates, out-of-range readings and
-  disagreeing sources but not the §6.28 import dry run or per-source health; the public
-  privacy-policy URL is a placeholder the owner hosts; force-RTL needs a device reboot so
-  RTL is golden-verified only; running `connectedAndroidTest` against a phone uninstalls
-  the app and deletes its record (run it on the emulator).
+- Last completed phase: **B11 Yoga, cardio, GPS** (2026-11-26); next is **B12 Sleep,
+  clinical, reports**.
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **655 JVM tests**
+  (337 `:core`, 119 `:data`, 35 `:integrations`, 154 `:ui`, 10 across the three tools) and
+  **336 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body
+  map, B5 Train, B6 Nutrition, B7 Vitals, B8 Devices, B9 Today and Stats, B10 review and
+  the B11 movement surfaces are in `:ui`. Both `play` and `fdroid` debug APKs build, and
+  the signed `play`/`fdroid` release APKs and AABs build from the owner's keystore.
+- B11 delivers: the 29-pose, 8-flow yoga library with a screen-off player and voice cues;
+  manual cardio; a `location` foreground GPS service with pause and process-death
+  recovery; GPX/TCX/FIT import and GPX export; a local Strava bulk-export importer; a
+  MapLibre + PMTiles map with one explicit, capped pack download, bounds-aware fallback
+  and OpenStreetMap attribution; activity detail with splits and heart-rate zones;
+  training load (fitness/fatigue/form) in Stats; activity and yoga loads in the recovery
+  map and energy card; schema v9 (`activity`, `activity_point`) with timeline, export and
+  Trash support.
+- B11's decisions are in `docs/adr/0016-yoga-cardio-gps.md`; `DESIGN.md` §8.8 records the
+  map as a chart surface on existing tokens (0.5).
+- Verification: the full instrumented suite is **53/53 on the emulator**, including the
+  three B11 exit tests. Released APK installs over the existing record on the phone; the
+  movement, yoga, activity and Stats/training-load surfaces were exercised by hand. Cold
+  start/warm Today budgets are unchanged from B10 (484–511 ms / 18–33 ms).
+- Open issues (see `docs/build-log.md`): a map pack that covers the route was not visually
+  verified on the owner's Berlin sample (the QA pack is Monaco; the bounds fallback and
+  route overlay were); a URL is needed for the owner's own region pack; gear tracking,
+  best-effort display, monthly totals, FIT/TCX export, custom flows/programmes and the
+  Strava memory cap remain; the phone's Macrobenchmark tracing is still misconfigured;
+  `:tools:benchmark` sits outside every guard; the review inbox lacks the §6.28 import dry
+  run; the public privacy-policy URL is a placeholder; force-RTL needs a reboot; run
+  `connectedAndroidTest` on the emulator, never the phone.
