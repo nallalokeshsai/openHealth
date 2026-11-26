@@ -163,6 +163,11 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                 "start_at",
             ),
             Branch(
+                "SELECT 'activity', id, local_date, happened_at, recorded_at, source_id, " +
+                    "type, 0 FROM activity",
+                "happened_at",
+            ),
+            Branch(
                 "SELECT 'note', id, local_date, happened_at, recorded_at, " +
                     "COALESCE(source_id, ''), NULL, 0 FROM note",
                 "happened_at",

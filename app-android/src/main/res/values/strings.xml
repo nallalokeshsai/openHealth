@@ -54,4 +54,9 @@
     <string name="toast_csv_none">The file had no body readings.</string>
     <string name="toast_goal_saved">Daily target saved</string>
     <string name="toast_step_goal_saved">Step goal saved</string>
+    <string name="gps_channel_name">Route recording</string>
+    <string name="gps_channel_body">Keeps a GPS recording alive with the screen off.</string>
+    <string name="gps_notification_text">%1$s · %2$s km</string>
+    <string name="yoga_channel_name">Yoga session</string>
+    <string name="yoga_channel_body">Keeps the pose timer and voice cues running with the screen off.</string>
 </resources>

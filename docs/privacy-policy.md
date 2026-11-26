@@ -15,7 +15,7 @@ inside the app under Settings → Privacy.
 
 Everything you log is stored on your phone, in a database encrypted with a key that never
 leaves the device's keystore. There is no account and there is no openHealth cloud: the
-app works with no network at all.
+app works with no network at all unless you choose one of two network actions.
 
 The record holds what you enter and what a source you connected reports: steps, distance,
 floors, heart rate, sleep, workouts, weight, body measurements, body-fat figures, blood
@@ -31,6 +31,12 @@ Nothing leaves the phone unless you start an action that says so:
   the product's public nutrition data. The request carries the barcode, a User-Agent and
   nothing else. It is offered only after a disclosure that names the service, and the
   answer is cached on the phone.
+- **A map pack you download.** In Activities → Map packs, when you press Download a
+  pack, the app fetches the single PMTiles file at the HTTPS address you entered. The
+  request carries that address and a User-Agent, no account and no health value. The
+  pack is stored in app-private storage and can be deleted there. With a pack installed
+  the map draws from the local file, so a route is never sent to a tile server. A map
+  pack is optional: logging, import and export work without one.
 - **An export you share.** Settings → Data → Export writes an encrypted file that you
   choose where to put. It goes nowhere unless you send it.
 - **A server you configure yourself.** A self-hosted openHealth server is optional. If
@@ -49,8 +55,9 @@ rule.
 ## Permissions
 
 The app asks for a permission at the moment it is needed, never at launch: camera for a
-barcode, activity recognition for step counting, Bluetooth for a heart-rate strap or
-scale, notifications for the rest timer, and biometrics if you turn on the app lock. The
+barcode, activity recognition for step counting, location while you record a route,
+Bluetooth for a heart-rate strap or scale, notifications for the rest timer and a
+running session, and biometrics if you turn on the app lock. The
 full list is visible in Android's app settings.
 
 ## Backups and deletion

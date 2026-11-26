@@ -258,6 +258,19 @@ class FitWriter(
             FieldSpecNumbers.RECORD_DISTANCE to BASE_UINT32,
         )
 
+        /** A record with position and the sensors an outdoor activity carries (B11). */
+        val RECORD_ROUTE = listOf(
+            FieldSpecNumbers.RECORD_TIMESTAMP to BASE_UINT32,
+            FieldSpecNumbers.RECORD_LATITUDE to BASE_SINT32,
+            FieldSpecNumbers.RECORD_LONGITUDE to BASE_SINT32,
+            FieldSpecNumbers.RECORD_ALTITUDE to BASE_UINT16,
+            FieldSpecNumbers.RECORD_HEART_RATE to BASE_UINT8,
+            FieldSpecNumbers.RECORD_CADENCE to BASE_UINT8,
+            FieldSpecNumbers.RECORD_DISTANCE to BASE_UINT32,
+            FieldSpecNumbers.RECORD_SPEED to BASE_UINT16,
+            FieldSpecNumbers.RECORD_POWER to BASE_UINT16,
+        )
+
         /** The same record without field 253, for compressed-timestamp messages. */
         val RECORD_TIMED_BY_HEADER = RECORD.filterNot {
             it.first == FieldSpecNumbers.RECORD_TIMESTAMP
@@ -318,6 +331,12 @@ class FitWriter(
         const val RECORD_TIMESTAMP = 253
         const val RECORD_HEART_RATE = 3
         const val RECORD_DISTANCE = 5
+        const val RECORD_LATITUDE = 0
+        const val RECORD_LONGITUDE = 1
+        const val RECORD_ALTITUDE = 2
+        const val RECORD_CADENCE = 4
+        const val RECORD_SPEED = 6
+        const val RECORD_POWER = 7
 
         const val MONITORING_TIMESTAMP = 253
         const val MONITORING_LOCAL_TIMESTAMP = 11
@@ -416,6 +435,89 @@ object FitFixtures {
         )
         return writer.toByteArray()
     }
+
+    /**
+     * A 10-minute outdoor run with a route, altitude, cadence, speed and power (B11).
+     * Twenty record messages at 30 s intervals; the position moves north by 0.0005
+     * degrees each step, about 55 m, for a little over a kilometre.
+     */
+    fun activityRoute(): ByteArray {
+        val writer = FitWriter()
+        writer.define(
+            localType = 0,
+            globalNumber = FitWriter.Numbers.GLOBAL_FILE_ID,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.FILE_ID),
+        )
+        writer.data(
+            0,
+            mapOf(
+                FitWriter.FieldSpecNumbers.FILE_ID_TYPE to 4,
+                FitWriter.FieldSpecNumbers.FILE_ID_MANUFACTURER to GARMIN_MANUFACTURER,
+                FitWriter.FieldSpecNumbers.FILE_ID_PRODUCT to VIVOACTIVE_5_PRODUCT,
+                FitWriter.FieldSpecNumbers.FILE_ID_TIME_CREATED to DAY_START_SECONDS,
+                FitWriter.FieldSpecNumbers.FILE_ID_PRODUCT_NAME to "vivoactive 5",
+            ),
+        )
+        writer.define(
+            localType = 1,
+            globalNumber = FitWriter.Numbers.GLOBAL_RECORD,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.RECORD_ROUTE),
+        )
+        val start = DAY_START_SECONDS + ROUTE_START_OFFSET_SECONDS
+        repeat(ROUTE_POINTS) { index ->
+            val metres = index * ROUTE_METRES_PER_STEP
+            writer.data(
+                1,
+                mapOf(
+                    FitWriter.FieldSpecNumbers.RECORD_TIMESTAMP to
+                        start + index * ROUTE_SECONDS_PER_STEP,
+                    FitWriter.FieldSpecNumbers.RECORD_LATITUDE to
+                        semicircles(52.5200 + index * 0.0005),
+                    FitWriter.FieldSpecNumbers.RECORD_LONGITUDE to
+                        semicircles(13.4050 + index * 0.0001),
+                    FitWriter.FieldSpecNumbers.RECORD_ALTITUDE to (34.0 * 5).toInt() + index,
+                    FitWriter.FieldSpecNumbers.RECORD_HEART_RATE to 150 + index / 5,
+                    FitWriter.FieldSpecNumbers.RECORD_CADENCE to 84,
+                    FitWriter.FieldSpecNumbers.RECORD_DISTANCE to (metres * 100).toLong(),
+                    FitWriter.FieldSpecNumbers.RECORD_SPEED to ROUTE_SPEED_MPS * 1000,
+                    FitWriter.FieldSpecNumbers.RECORD_POWER to 240 + index,
+                ),
+            )
+        }
+        writer.define(
+            localType = 2,
+            globalNumber = FitWriter.Numbers.GLOBAL_SESSION,
+            fields = FitWriter.Fields.specs(FitWriter.Fields.SESSION),
+        )
+        writer.data(
+            2,
+            mapOf(
+                FitWriter.FieldSpecNumbers.SESSION_START_TIME to start,
+                FitWriter.FieldSpecNumbers.SESSION_SPORT to SPORT_RUNNING,
+                FitWriter.FieldSpecNumbers.SESSION_SUB_SPORT to 0,
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_ELAPSED to
+                    ROUTE_DURATION_SECONDS * MILLIS_PER_SECOND,
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_DISTANCE to
+                    (ROUTE_DISTANCE_METRES * 100).toLong(),
+                FitWriter.FieldSpecNumbers.SESSION_TOTAL_CALORIES to 92,
+                FitWriter.FieldSpecNumbers.SESSION_AVG_HR to 152,
+                FitWriter.FieldSpecNumbers.SESSION_MAX_HR to 168,
+            ),
+        )
+        return writer.toByteArray()
+    }
+
+    private const val ROUTE_START_OFFSET_SECONDS = 18L * 60 * 60
+    private const val ROUTE_POINTS = 20
+    private const val ROUTE_SECONDS_PER_STEP = 30L
+    private const val ROUTE_METRES_PER_STEP = 55.0
+    private const val ROUTE_DISTANCE_METRES = ROUTE_METRES_PER_STEP * (ROUTE_POINTS - 1)
+    private const val ROUTE_DURATION_SECONDS = ROUTE_SECONDS_PER_STEP * (ROUTE_POINTS - 1)
+    private const val ROUTE_SPEED_MPS = 1
+
+    private const val SEMICIRCLES_PER_DEGREE = 11_930_464.711111111
+
+    private fun semicircles(degrees: Double): Long = (degrees * SEMICIRCLES_PER_DEGREE).toLong()
 
     /**
      * A daily monitoring file: quarter-hour buckets from 08:00, each carrying one

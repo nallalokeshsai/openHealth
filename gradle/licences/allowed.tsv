@@ -6,6 +6,9 @@
 # (GPL, LGPL, AGPL) is never allowed in the client (pr.md §12.4, Tech-Stack.md §16);
 # only server/ is AGPL-3.0.
 #
+org.maplibre.*	BSD-2-Clause	MapLibre Native map rendering for the activity route (no telemetry, no Google Maps)
+com.google.code.gson:gson	Apache-2.0	JSON parsing inside MapLibre Native (no network, no telemetry)
+com.jakewharton.timber:timber	Apache-2.0	Logging facade inside MapLibre Native; no crash reporting or network sink
 # Add a row with its real licence and the reason it is present. Do not widen a pattern
 # to make a GPL-family dependency pass.
 

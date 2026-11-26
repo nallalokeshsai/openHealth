@@ -72,3 +72,25 @@ data class MicrosRoute(val date: String)
 // process death without a live object.
 @Serializable
 data class VitalDetailRoute(val type: String)
+
+// B11: movement. Routes carry ids/names only; the live session lives in the services.
+@Serializable
+data object ActivityListRoute
+
+@Serializable
+data class ActivityDetailRoute(val id: String)
+
+@Serializable
+data object CardioLogRoute
+
+@Serializable
+data object GpsRecordRoute
+
+@Serializable
+data object YogaLibraryRoute
+
+@Serializable
+data class YogaPlayerRoute(val flowId: String)
+
+@Serializable
+data object MapPacksRoute

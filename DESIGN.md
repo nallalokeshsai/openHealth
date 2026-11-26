@@ -1,8 +1,10 @@
 # openHealth — Design System
 
-**Version:** 0.4
+**Version:** 0.5
 **Status:** Living document, first pass
-**Last revision:** 2026-11-26 — B10 maps the three accessibility options named in §12.4
+**Last revision:** 2026-11-26 — B11 adds the route map as a chart surface (§8.8): the
+theme's existing background, surface and accent ramp, a 2.5 dp route and 4 dp end dots,
+no new colour, type role, spacing value or component. Previous: 2026-11-26 — B10 maps the three accessibility options named in §12.4
 onto existing tokens (§12.4.1): high contrast, reduce transparency and reduce motion add
 no colour, type role, spacing value or component. Previous: 2026-11-25 — B9 adds the KPI
 band's 12 sp range line to §5.6 and the Today and Stats recipes to §14.2; no new colour,
@@ -1183,6 +1185,26 @@ Doctor-ready PDF and shared images are **always light**, regardless of theme:
   clinical report, never buried.
 - Shared progress images use the dark card at 1080 × 1350, the app mark, the
   date range, and only the values the person ticked.
+
+### 8.8 The route map (added 2026-11-26)
+
+A route is a chart over geography, so it follows §8.1's chrome rather than inventing a
+panel: no border, no inner card and no shadow. It uses the theme's existing ramp and
+accent, with no new token:
+
+- **Base:** `bg` behind the tiles; land `surface-2`; water `surface-3`; boundaries
+  `sep-op`; roads `sep`. Labels are optional and, when a pack provides glyphs, use
+  `label-3`; no label is required for the map to be readable.
+- **Route:** 2.5 dp `acc`, round joins and caps. Start and end are 4 dp dots, start in
+  `green-ink` and end in `label`; the shape itself carries the direction.
+- **No pack:** the same route on `surface-2` with `sep-op` gridlines. The map is an
+  enhancement, never a condition for logging or export.
+- **Privacy:** a "Hide the route" switch removes the map and keeps the splits, zones and
+  export. The route is never mirrored in RTL (§11.5).
+- **Attribution:** `© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors` sits below
+  the map at `caption-2`/`label-3`, never over the route.
+- **Table:** the activity detail already carries splits and heart-rate zones as text; the
+  map is not the only way to read the activity.
 
 ---
 

@@ -19,12 +19,15 @@
          to the manual path. Nothing else in the app opens a socket. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Nothing needs the network state: the one call is a foreground, explicit action.
-         CameraX's video module (which this app never records with) merges it in, so it is
-         removed here and the permission audit test holds the merged manifest to the list
-         of permissions the product actually uses (`pr.md` §6.23; B10). -->
+    <!-- MapLibre registers a connectivity receiver so it can pause tile fetching. The
+         map otherwise reads a local PMTiles file; this normal permission grants no data
+         access and the permission audit still holds the merged manifest to the list the
+         product actually uses (`pr.md` §6.23). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- MapLibre's library manifest declares Wi-Fi state; the map reads a local file, so
+         the permission is removed rather than granted. -->
     <uses-permission
-        android:name="android.permission.ACCESS_NETWORK_STATE"
+        android:name="android.permission.ACCESS_WIFI_STATE"
         tools:node="remove" />
 
     <!-- The rest timer is an ongoing foreground service (pr.md §6.5, Tech-Stack.md §4):
@@ -42,6 +45,13 @@
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- GPS route recording (pr.md §6.11, Tech-Stack.md §8). Location is requested
+         when a recording starts, never at launch, and only while the location
+         foreground service runs. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <!-- Standard-GATT Bluetooth (pr.md §6.18). neverForLocation keeps the scan from being
          usable for location; on Android 11 and lower the scan needs the legacy pair. -->
@@ -117,6 +127,25 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- A GPS recording keeps running with the screen off (pr.md §6.11). Every fix
+             is persisted, so a process death leaves a recoverable track. -->
+        <service
+            android:name="app.openhealth.android.activity.GpsRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="location"
+            android:stopWithTask="false" />
+
+        <!-- A yoga flow keeps its timer and voice cues with the screen off. -->
+        <service
+            android:name="app.openhealth.android.activity.YogaSessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Yoga session timer and voice cues" />
+        </service>
 
         <!-- The privacy rationale the Health Connect permission screen links to. -->
         <activity

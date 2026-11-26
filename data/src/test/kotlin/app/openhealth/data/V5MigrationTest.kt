@@ -114,7 +114,7 @@ class V5MigrationTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(8L, store.schemaVersion)
+        assertEquals(9L, store.schemaVersion)
 
         // The training rows survive v6, v7 and v8 untouched.
         val set = store.db.trainingQueries.workSetById("w1").executeAsOne()
@@ -222,6 +222,7 @@ class V5MigrationTest {
             "meal_template_item_template",
             "nutrition_target_effective",
             "fast_window_start",
+            "meal_effective_time",
         ).forEach { driver.execute(null, "DROP INDEX IF EXISTS $it", 0) }
         listOf(
             "recipe_item",

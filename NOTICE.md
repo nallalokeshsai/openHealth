@@ -293,3 +293,55 @@ intensity minutes or training status. A URL and a fact, not reproduced text.
 The heart-rate, weight-scale and blood-pressure decoders implement the published GATT
 specifications (services 0x180D, 0x181D, 0x1810 and their measurement characteristics).
 They are original implementations of a public standard; no vendor code or licence applies.
+
+### MapLibre Native — map rendering (BSD-2-Clause)
+
+The activity route is drawn with MapLibre Native for Android
+(`org.maplibre.gl:android-sdk`). Its licence is BSD-2-Clause:
+
+```
+BSD 2-Clause License
+
+Copyright (c) 2021 MapLibre contributors
+Copyright (c) 2018-2021 MapTiler.com
+Copyright (c) 2014-2020 Mapbox
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+```
+
+MapLibre's Android artifact also resolves Gson (Apache-2.0) and Timber
+(Apache-2.0), both recorded in `gradle/licences/allowed.tsv`; neither is used as
+a telemetry or crash-reporting path.
+
+### Map data — OpenFreeMap, OpenMapTiles and OpenStreetMap (ODbL)
+
+A map pack is a PMTiles archive the person downloads from an HTTPS address they
+choose. The QA sample and the documented source are the **OpenFreeMap** planet
+build (MIT tooling) cut from OpenStreetMap; its map data is a Produced Work of
+OpenStreetMap under the **Open Database License 1.0**. Every map this app draws
+carries the visible attribution:
+
+> © OpenFreeMap © OpenMapTiles © OpenStreetMap contributors
+
+The pack is stored only in app-private storage and can be deleted in Settings.
+No tile server is contacted when a pack is present, and no route is ever sent to
+one.

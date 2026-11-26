@@ -70,6 +70,8 @@ class SecurityPostureTest {
             "android.permission.USE_BIOMETRIC",
             "android.permission.CAMERA",
             "android.permission.INTERNET",
+            // MapLibre's connectivity receiver; the map itself reads a local pack.
+            "android.permission.ACCESS_NETWORK_STATE",
             "android.permission.POST_NOTIFICATIONS",
             "android.permission.FOREGROUND_SERVICE",
             "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
@@ -77,6 +79,10 @@ class SecurityPostureTest {
             "android.permission.VIBRATE",
             "android.permission.ACTIVITY_RECOGNITION",
             "android.permission.RECEIVE_BOOT_COMPLETED",
+            // B11: the location foreground service records a route only while running.
+            "android.permission.ACCESS_FINE_LOCATION",
+            "android.permission.ACCESS_COARSE_LOCATION",
+            "android.permission.FOREGROUND_SERVICE_LOCATION",
             "android.permission.BLUETOOTH_SCAN",
             "android.permission.BLUETOOTH_CONNECT",
             // Health Connect: reads only, one per data type the Devices page offers.
@@ -119,12 +125,16 @@ class SecurityPostureTest {
                 product.none { it in legacyBluetooth },
             )
         }
-        // The one permission a merged library used to add; the audit keeps it out.
-        assertFalse(
-            "ACCESS_NETWORK_STATE is not needed",
-            "android.permission.ACCESS_NETWORK_STATE" in product,
+        // Location is exactly the pair plus its service type, never a background grant.
+        assertEquals(
+            setOf(
+                "android.permission.ACCESS_FINE_LOCATION",
+                "android.permission.ACCESS_COARSE_LOCATION",
+            ),
+            product.filter {
+                it.startsWith("android.permission.ACCESS_") && it.contains("LOCATION")
+            }.toSet(),
         )
-        assertFalse("no location permission", product.any { it.contains("LOCATION") })
         assertFalse("no storage permission", product.any { it.contains("EXTERNAL_STORAGE") })
         assertFalse(
             "no install-referrer permission",

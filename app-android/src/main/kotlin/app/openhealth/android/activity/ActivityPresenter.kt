@@ -33,6 +33,7 @@ import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
 import app.openhealth.data.LocalStore
 import app.openhealth.data.ingestion.PayloadHash
+import app.openhealth.integrations.activity.FitActivityReader
 import app.openhealth.integrations.fit.FitFormatException
 import app.openhealth.integrations.fit.FitImport
 import app.openhealth.integrations.fit.FitImportContext
@@ -637,6 +638,40 @@ class ActivityPresenter(
             ),
         )
         val inserted = store.observations.recordAll(observations, listOf(raw))
+        runCatching {
+            FitActivityReader.from(imported).forEachIndexed { index, parsed ->
+                val weight = store.profile.active()?.weight_kg
+                val record = app.openhealth.core.activity.ActivityEnergy.withEstimate(
+                    app.openhealth.core.activity.ActivityRecord(
+                        id = ids.newId(),
+                        type = parsed.type,
+                        source = app.openhealth.core.activity.ActivitySource.IMPORTED,
+                        startedAt = parsed.startedAt,
+                        endedAt = parsed.endedAt,
+                        localDate = parsed.startedAt.toLocalDateTime(zone).date,
+                        zoneId = zone.id,
+                        distanceM = parsed.distanceM,
+                        averageHeartRate = parsed.averageHeartRate,
+                        maxHeartRate = parsed.maximumHeartRate,
+                        averageCadence = parsed.averageCadence,
+                        averagePowerWatts = parsed.averagePowerWatts,
+                        energyKcal = parsed.calories,
+                        name = parsed.name,
+                        points = parsed.points,
+                    ),
+                    weight,
+                )
+                store.activities.record(
+                    activity = record,
+                    sourceId = GARMIN_SOURCE.value,
+                    idempotencyKey = "fit-activity:$hash:$index",
+                    rawRecordId = rawId.value,
+                    device = imported.device,
+                    appVersion = appVersion,
+                    now = at,
+                )
+            }
+        }
         val detail = context.getString(
             UiR.string.devices_garmin_detail,
             formatSteps(imported.stepTotal.toDouble()),

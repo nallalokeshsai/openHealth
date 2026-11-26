@@ -23,6 +23,7 @@ object FitFixtureWriter {
         directory.mkdirs()
         val files = listOf(
             "activity-walk.fit" to FitFixtures.activityWalk(),
+            "activity-route.fit" to FitFixtures.activityRoute(),
             "daily-monitoring.fit" to FitFixtures.dailyMonitoring(),
             "monitoring-16bit.fit" to FitFixtures.monitoringTimestamp16(),
             "big-endian.fit" to FitFixtures.bigEndian(),

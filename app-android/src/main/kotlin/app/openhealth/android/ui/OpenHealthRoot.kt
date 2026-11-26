@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -26,6 +27,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -56,6 +60,14 @@ import app.openhealth.ui.R as UiR
 import app.openhealth.ui.components.OhTabItem
 import app.openhealth.ui.components.OhToast
 import app.openhealth.ui.icons.OhIcons
+import app.openhealth.ui.screens.activity.ActivityDetailScreen
+import app.openhealth.ui.screens.activity.ActivityListScreen
+import app.openhealth.ui.screens.activity.CardioLogScreen
+import app.openhealth.ui.screens.activity.GpsRecordScreen
+import app.openhealth.ui.screens.activity.MapPacksScreen
+import app.openhealth.ui.screens.activity.YogaFinishScreen
+import app.openhealth.ui.screens.activity.YogaLibraryScreen
+import app.openhealth.ui.screens.activity.YogaPlayerScreen
 import app.openhealth.ui.screens.devices.DevicesScreen
 import app.openhealth.ui.screens.lock.LockScreen
 import app.openhealth.ui.screens.nutrition.BarcodeScanScreen
@@ -340,7 +352,23 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         onNewRoutine = { nav.navigate(RoutineEditorRoute(null)) },
                         onOpenSession = { id -> nav.navigate(SessionSummaryRoute(id)) },
                         onOpenSettings = { nav.navigate(SettingsRoute) },
-                        moduleOff = HealthModule.TRAINING !in state.preferences.modules,
+                        moduleOff = HealthModule.TRAINING !in state.preferences.modules &&
+                            HealthModule.YOGA !in state.preferences.modules,
+                        strengthOff = HealthModule.TRAINING !in state.preferences.modules,
+                        movement = state.movement,
+                        onMovement = { key ->
+                            when (key) {
+                                app.openhealth.android.activity.ActivityLogPresenter.KEY_GPS ->
+                                    nav.navigate(GpsRecordRoute)
+                                app.openhealth.android.activity.ActivityLogPresenter.KEY_CARDIO ->
+                                    viewModel.openCardio().also { nav.navigate(CardioLogRoute) }
+                                app.openhealth.android.activity.ActivityLogPresenter.KEY_YOGA ->
+                                    viewModel.openYogaLibrary().also {
+                                        nav.navigate(YogaLibraryRoute)
+                                    }
+                                else -> nav.navigate(ActivityListRoute)
+                            }
+                        },
                     )
                 }
             }
@@ -632,6 +660,157 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     },
                 )
             }
+        }
+
+        composable<ActivityListRoute> {
+            val openImport = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument(),
+            ) { uri -> if (uri != null) viewModel.importActivities(uri) }
+            ActivityListScreen(
+                model = state.activities ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onOpen = { id ->
+                    viewModel.openActivityDetail(id)
+                    nav.navigate(ActivityDetailRoute(id))
+                },
+                onImport = { openImport.launch(arrayOf("*/*")) },
+            )
+        }
+        composable<ActivityDetailRoute> { entry ->
+            val id = entry.toRoute<ActivityDetailRoute>().id
+            LaunchedEffect(id) { viewModel.openActivityDetail(id) }
+            val detail = state.activityDetail
+            if (detail == null || detail.id != id) {
+                Loading()
+            } else {
+                val export = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/gpx+xml"),
+                ) { uri -> if (uri != null) viewModel.exportActivity(uri) }
+                ActivityDetailScreen(
+                    model = detail,
+                    onBack = {
+                        viewModel.closeActivityDetail()
+                        nav.popBackStack()
+                    },
+                    onExport = { export.launch("openHealth-activity.gpx") },
+                    onDelete = { activityId ->
+                        viewModel.deleteActivity(activityId)
+                        nav.popBackStack()
+                    },
+                    onOpenMapPacks = { nav.navigate(MapPacksRoute) },
+                    mapContent = {
+                        app.openhealth.android.activity.ActivityRouteMap(
+                            points = detail.route,
+                            packPath = viewModel.mapPackForRoute(detail.route),
+                        )
+                    },
+                )
+            }
+        }
+        composable<CardioLogRoute> {
+            CardioLogScreen(
+                date = state.cardioDate ?: java.time.LocalDate.now().let {
+                    kotlinx.datetime.LocalDate(it.year, it.monthValue, it.dayOfMonth)
+                },
+                onBack = { nav.popBackStack() },
+                onSave = { entry ->
+                    viewModel.saveCardio(entry)
+                    nav.popBackStack()
+                },
+                showEnergy = !state.preferences.weightNeutral,
+            )
+        }
+        composable<GpsRecordRoute> {
+            val context = LocalContext.current
+            var pendingGpsType by remember {
+                mutableStateOf(app.openhealth.core.activity.ActivityType.RUN)
+            }
+            val requestLocation = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) { granted ->
+                if (granted) viewModel.startGps(pendingGpsType) else viewModel.gpsPermissionDenied()
+            }
+            GpsRecordScreen(
+                recording = state.gps,
+                onBack = { nav.popBackStack() },
+                onStart = { type ->
+                    pendingGpsType = type
+                    if (ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        viewModel.startGps(type)
+                    } else {
+                        requestLocation.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    }
+                },
+                onPause = viewModel::pauseGps,
+                onResume = viewModel::resumeGps,
+                onFinish = {
+                    viewModel.finishGps()
+                    nav.navigate(ActivityListRoute)
+                },
+            )
+        }
+        composable<YogaLibraryRoute> {
+            YogaLibraryScreen(
+                model = state.yogaLibrary ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onStart = { flowId ->
+                    viewModel.startYoga(flowId)
+                    nav.navigate(YogaPlayerRoute(flowId))
+                },
+                onFavourite = viewModel::toggleYogaFavourite,
+            )
+        }
+        composable<YogaPlayerRoute> { entry ->
+            val flowId = entry.toRoute<YogaPlayerRoute>().flowId
+            AskNotificationPermission()
+            val player = state.yogaPlayer
+            val finish = state.yogaFinish
+            BackHandler(enabled = finish != null) {
+                viewModel.closeYogaFinish()
+                nav.popBackStack()
+            }
+            if (finish != null) {
+                YogaFinishScreen(
+                    flowName = finish.flowName,
+                    minutes = finish.minutes,
+                    posesHeld = finish.posesHeld,
+                    muscleLabels = finish.muscleLabels,
+                    onDone = {
+                        viewModel.closeYogaFinish()
+                        nav.popBackStack()
+                    },
+                )
+            } else if (player == null || player.flow.id != flowId) {
+                Loading()
+            } else {
+                YogaPlayerScreen(
+                    flow = player.flow,
+                    state = player.state,
+                    breath = player.breath,
+                    voiceOn = player.voiceOn,
+                    onPause = {
+                        if (player.state.paused) viewModel.resumeYoga() else viewModel.pauseYoga()
+                    },
+                    onSkip = viewModel::skipYoga,
+                    onPrevious = viewModel::previousYoga,
+                    onRepeat = viewModel::repeatYoga,
+                    onFinish = viewModel::finishYoga,
+                    onVoice = { viewModel.toggleYogaVoice(it) },
+                )
+            }
+        }
+        composable<MapPacksRoute> {
+            LaunchedEffect(Unit) { viewModel.openMapPacks() }
+            MapPacksScreen(
+                model = state.mapPacks ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onDownload = viewModel::downloadMapPack,
+                onDelete = viewModel::deleteMapPack,
+            )
         }
         composable<SettingsRoute> {
             val settings = state.settings

@@ -50,6 +50,10 @@ SELECT
 FROM fast_window
 UNION ALL
 SELECT
+    'activity', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM activity
+UNION ALL
+SELECT
     'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
 FROM note;
 

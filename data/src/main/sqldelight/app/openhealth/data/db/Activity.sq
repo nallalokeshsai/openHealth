@@ -1,0 +1,121 @@
+-- Layer-4 activities (pr.md §6.11, §7.4): a completed run, ride, swim or yoga session.
+-- The row keeps the provenance of every value and the route keeps the samples; a route
+-- is never inferred from a summary. Recorded, imported and manual are different sources
+-- and the UI says which one it is.
+
+CREATE TABLE activity (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    name TEXT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER NOT NULL,
+    duration_s INTEGER NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    distance_m REAL NOT NULL DEFAULT 0,
+    elevation_gain_m REAL,
+    avg_heart_rate REAL,
+    max_heart_rate REAL,
+    avg_cadence REAL,
+    avg_power_w REAL,
+    energy_kcal REAL,
+    notes TEXT,
+    flow_id TEXT,
+    muscle_keys TEXT,
+    device TEXT,
+    app_version TEXT,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    fingerprint TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX activity_local_date ON activity(local_date);
+CREATE INDEX activity_started ON activity(started_at);
+CREATE INDEX activity_happened ON activity(happened_at);
+CREATE INDEX activity_type_date ON activity(type, local_date);
+
+CREATE TABLE activity_point (
+    activity_id TEXT NOT NULL REFERENCES activity(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    elevation_m REAL,
+    elapsed_s INTEGER NOT NULL,
+    heart_rate REAL,
+    cadence REAL,
+    power_w REAL,
+    speed_mps REAL,
+    PRIMARY KEY (activity_id, position)
+);
+
+insertActivity:
+INSERT OR IGNORE INTO activity(
+    id, type, source, name, started_at, ended_at, duration_s, local_date, zone_id,
+    happened_at, recorded_at, distance_m, elevation_gain_m, avg_heart_rate,
+    max_heart_rate, avg_cadence, avg_power_w, energy_kcal, notes, flow_id,
+    muscle_keys, device, app_version, source_id, raw_record_id, idempotency_key,
+    fingerprint, revision, created_at, updated_at
+) VALUES (
+    :id, :type, :source, :name, :startedAt, :endedAt, :durationS, :localDate, :zoneId,
+    :happenedAt, :recordedAt, :distanceM, :elevationGainM, :avgHeartRate,
+    :maxHeartRate, :avgCadence, :avgPowerW, :energyKcal, :notes, :flowId,
+    :muscleKeys, :device, :appVersion, :sourceId, :rawRecordId, :idempotencyKey,
+    :fingerprint, :revision, :createdAt, :updatedAt
+);
+
+activityById:
+SELECT * FROM activity WHERE id = :id;
+
+activityByIdempotencyKey:
+SELECT * FROM activity WHERE idempotency_key = :key;
+
+activitiesBetween:
+SELECT * FROM activity
+WHERE local_date >= :from AND local_date <= :to
+ORDER BY started_at DESC;
+
+activitiesForDay:
+SELECT * FROM activity
+WHERE local_date = :localDate
+ORDER BY started_at ASC;
+
+recentActivities:
+SELECT * FROM activity ORDER BY started_at DESC LIMIT :limit;
+
+allActivities:
+SELECT * FROM activity ORDER BY started_at ASC;
+
+updateActivityNotes:
+UPDATE activity SET notes = :notes, updated_at = :updatedAt, revision = revision + 1
+WHERE id = :id;
+
+deleteActivity:
+DELETE FROM activity WHERE id = :id;
+
+countActivities:
+SELECT count(*) FROM activity;
+
+insertPoint:
+INSERT OR IGNORE INTO activity_point(
+    activity_id, position, latitude, longitude, elevation_m, elapsed_s,
+    heart_rate, cadence, power_w, speed_mps
+) VALUES (
+    :activityId, :position, :latitude, :longitude, :elevationM, :elapsedS,
+    :heartRate, :cadence, :powerW, :speedMps
+);
+
+pointsForActivity:
+SELECT * FROM activity_point WHERE activity_id = :activityId ORDER BY position ASC;
+
+countPointsForActivity:
+SELECT count(*) FROM activity_point WHERE activity_id = :activityId;
+
+deletePointsForActivity:
+DELETE FROM activity_point WHERE activity_id = :activityId;

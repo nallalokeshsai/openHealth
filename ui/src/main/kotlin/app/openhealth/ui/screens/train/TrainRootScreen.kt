@@ -40,6 +40,7 @@ import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhCardHeader
 import app.openhealth.ui.components.OhMediaRow
 import app.openhealth.ui.components.OhModalSheet
+import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhSegmentedControl
 import app.openhealth.ui.components.OhStepper
 import app.openhealth.ui.icons.OhIcons
@@ -76,6 +77,9 @@ fun TrainRootScreen(
     onOpenSettings: () -> Unit,
     moduleOff: Boolean = false,
     modifier: Modifier = Modifier,
+    movement: app.openhealth.ui.screens.activity.MovementModel? = null,
+    onMovement: (String) -> Unit = {},
+    strengthOff: Boolean = false,
 ) {
     if (moduleOff) {
         app.openhealth.ui.screens.roots.ModuleOffRoot(
@@ -101,63 +105,88 @@ fun TrainRootScreen(
                 .semantics { heading() },
         )
         Spacer(Modifier.height(OhTheme.space.s5))
-        WeekStrip(model)
-        Spacer(Modifier.height(OhTheme.space.s5))
-        model.openSession?.let { open ->
-            OpenSessionCard(open, onResume)
+        if (!strengthOff) {
+            WeekStrip(model)
             Spacer(Modifier.height(OhTheme.space.s5))
-        }
-        PlanCard(model, onStartPlan, onStartFreestyle, onPast = { pastOpen = true })
-        Spacer(Modifier.height(OhTheme.space.s5))
-        OhCard {
-            OhCardHeader(
-                eyebrow = stringResource(R.string.train_map_title),
-                title = if (segment == 0) {
-                    stringResource(R.string.train_map_recovery)
-                } else {
-                    stringResource(R.string.train_map_plan)
-                },
-                glyph = OhModuleIcons.workout,
-            )
-            Spacer(Modifier.height(OhTheme.space.s5))
-            OhSegmentedControl(
-                options = listOf(
-                    stringResource(R.string.train_map_recovery),
-                    stringResource(R.string.train_map_plan),
-                ),
-                selectedIndex = segment,
-                onSelect = { segment = it },
-            )
-            Spacer(Modifier.height(OhTheme.space.s5))
-            if (shown == null) {
-                OhEmptyState(
-                    title = stringResource(R.string.train_map_plan),
-                    body = stringResource(R.string.train_routines_empty_body),
-                )
-            } else {
-                OhBodyMap(
-                    model = shown.copy(selected = selected?.let(Muscle::fromKey)),
-                    onMuscle = { selected = it.key },
-                    onShowTable = { showTable = true },
-                )
+            model.openSession?.let { open ->
+                OpenSessionCard(open, onResume)
                 Spacer(Modifier.height(OhTheme.space.s5))
-                OhBodyMapLegend(shown)
-                Spacer(Modifier.height(OhTheme.space.s3))
-                Text(
-                    text = if (segment == 0) {
-                        stringResource(R.string.train_map_recovery)
-                    } else if (model.planUsesCycle) {
-                        stringResource(R.string.train_plan_caption_cycle)
-                    } else {
-                        stringResource(R.string.train_plan_caption_week)
-                    },
-                    style = OhTheme.type.footnote,
-                    color = OhTheme.colors.label2,
+            }
+            PlanCard(model, onStartPlan, onStartFreestyle, onPast = { pastOpen = true })
+        }
+        if (movement != null) {
+            Spacer(Modifier.height(OhTheme.space.s5))
+            OhCard {
+                OhCardHeader(
+                    eyebrow = stringResource(R.string.movement_title),
+                    title = stringResource(R.string.movement_title),
+                    subtitle = movement.note,
+                    glyph = app.openhealth.ui.icons.OhModuleIcons.activity,
                 )
+                Spacer(Modifier.height(OhTheme.space.s2))
+                movement.rows.forEachIndexed { index, row ->
+                    OhRow(
+                        title = row.title,
+                        subtitle = row.subtitle,
+                        showDivider = index > 0,
+                        showChevron = true,
+                        onClick = { onMovement(row.key) },
+                    )
+                }
             }
         }
-        OhSectionTitle(stringResource(R.string.train_routines))
-        if (model.routines.isEmpty()) {
+        Spacer(Modifier.height(OhTheme.space.s5))
+        if (!strengthOff) {
+            OhCard {
+                OhCardHeader(
+                    eyebrow = stringResource(R.string.train_map_title),
+                    title = if (segment == 0) {
+                        stringResource(R.string.train_map_recovery)
+                    } else {
+                        stringResource(R.string.train_map_plan)
+                    },
+                    glyph = OhModuleIcons.workout,
+                )
+                Spacer(Modifier.height(OhTheme.space.s5))
+                OhSegmentedControl(
+                    options = listOf(
+                        stringResource(R.string.train_map_recovery),
+                        stringResource(R.string.train_map_plan),
+                    ),
+                    selectedIndex = segment,
+                    onSelect = { segment = it },
+                )
+                Spacer(Modifier.height(OhTheme.space.s5))
+                if (shown == null) {
+                    OhEmptyState(
+                        title = stringResource(R.string.train_map_plan),
+                        body = stringResource(R.string.train_routines_empty_body),
+                    )
+                } else {
+                    OhBodyMap(
+                        model = shown.copy(selected = selected?.let(Muscle::fromKey)),
+                        onMuscle = { selected = it.key },
+                        onShowTable = { showTable = true },
+                    )
+                    Spacer(Modifier.height(OhTheme.space.s5))
+                    OhBodyMapLegend(shown)
+                    Spacer(Modifier.height(OhTheme.space.s3))
+                    Text(
+                        text = if (segment == 0) {
+                            stringResource(R.string.train_map_recovery)
+                        } else if (model.planUsesCycle) {
+                            stringResource(R.string.train_plan_caption_cycle)
+                        } else {
+                            stringResource(R.string.train_plan_caption_week)
+                        },
+                        style = OhTheme.type.footnote,
+                        color = OhTheme.colors.label2,
+                    )
+                }
+            }
+        }
+        if (!strengthOff) OhSectionTitle(stringResource(R.string.train_routines))
+        if (!strengthOff && model.routines.isEmpty()) {
             OhCard {
                 OhEmptyState(
                     title = stringResource(R.string.train_routines_empty_title),
@@ -166,7 +195,7 @@ fun TrainRootScreen(
                     onAction = onNewRoutine,
                 )
             }
-        } else {
+        } else if (!strengthOff) {
             Column(verticalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
                 model.routines.forEach { routine ->
                     OhMediaRow(
@@ -207,15 +236,15 @@ fun TrainRootScreen(
                 variant = app.openhealth.ui.components.OhButtonVariant.Secondary,
             )
         }
-        OhSectionTitle(stringResource(R.string.train_history))
-        if (model.history.isEmpty()) {
+        if (!strengthOff) OhSectionTitle(stringResource(R.string.train_history))
+        if (!strengthOff && model.history.isEmpty()) {
             OhCard {
                 OhEmptyState(
                     title = stringResource(R.string.train_history_empty_title),
                     body = stringResource(R.string.train_history_empty_body),
                 )
             }
-        } else {
+        } else if (!strengthOff) {
             Column(verticalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
                 model.history.forEach { row ->
                     OhMediaRow(

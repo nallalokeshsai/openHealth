@@ -1,3 +1,5 @@
+@file:Suppress("ReturnCount")
+
 package app.openhealth.core.body
 
 import app.openhealth.core.formula.FormulaOutcome
@@ -46,10 +48,27 @@ data class MuscleRecoveryState(
 )
 
 /**
+ * A load that is not a set, such as a yoga pose or a run (`pr.md` §6.11: activities feed
+ * the recovery map). [intensity] is 1.0 for a session that loads a muscle directly and
+ * 0.5 for a supporting one; it contributes no tonnage, so it can never make a strength
+ * session look hard.
+ */
+data class ActivityMuscleLoad(
+    val activityId: String,
+    val at: Instant,
+    val primary: List<Muscle>,
+    val secondary: List<Muscle> = emptyList(),
+    val sourceId: String? = null,
+    val recordedAt: Instant? = null,
+    val intensity: Double = 1.0,
+)
+
+/**
  * The recovery engine (`pr.md` §6.5, `DESIGN.md` §9.1): every logged set loads the muscles
  * its exercise names, primary full and secondary half; a muscle's step comes from the hours
  * since its last load through [MuscleRecovery]; a session above that muscle's own four-week
- * median holds it one step longer through [HardSession].
+ * median holds it one step longer through [HardSession]. A finished activity is the same
+ * kind of load with no tonnage.
  *
  * Nothing is stored: the map is computed from the sets every time and a backfilled set
  * therefore changes it (pr.md §7.3).
@@ -66,10 +85,14 @@ object RecoveryMap {
         sets: List<LoadedSet>,
         thresholds: RecoveryThresholds = RecoveryThresholds(),
         historyDays: Int = HISTORY_DAYS,
+        activityLoads: List<ActivityMuscleLoad> = emptyList(),
     ): Map<Muscle, MuscleRecoveryState> {
         val windowStart = now - historyDays.days
         val usable = sets.filter {
             !it.isWarmup && it.completedAt <= now && it.completedAt >= windowStart
+        }
+        val usableActivities = activityLoads.filter {
+            it.at <= now && it.at >= windowStart
         }
         val perMuscle = Muscle.entries.associateWith { muscle ->
             val sessions = usable
@@ -77,7 +100,10 @@ object RecoveryMap {
                 .groupBy { it.sessionId }
                 .map { (_, sessionSets) -> sessionLoad(sessionSets, muscle) }
                 .sortedBy { it.completedAt }
-            stateOf(muscle, now, sessions, thresholds)
+            val activity = usableActivities
+                .filter { muscle in it.primary || muscle in it.secondary }
+                .maxByOrNull { it.at }
+            stateOf(muscle, now, sessions, thresholds, activity)
         }
         return perMuscle
     }
@@ -115,11 +141,36 @@ object RecoveryMap {
         now: Instant,
         sessions: List<SessionLoad>,
         thresholds: RecoveryThresholds,
+        activity: ActivityMuscleLoad?,
     ): MuscleRecoveryState {
-        val last = sessions.lastOrNull() ?: return MuscleRecoveryState(
-            muscle = muscle,
-            step = RecoveryStep.UNTRAINED,
-        )
+        val last = sessions.lastOrNull()
+        if (last == null && activity == null) {
+            return MuscleRecoveryState(muscle = muscle, step = RecoveryStep.UNTRAINED)
+        }
+        if (last == null || (activity != null && activity.at > last.completedAt)) {
+            val loadedAt = activity!!.at
+            val hours = (now - loadedAt).inWholeSeconds / SECONDS_PER_HOUR
+            val step = (
+                MuscleRecovery.stepAtHours(hours, hardSession = false, thresholds)
+                    as? FormulaOutcome.Computed
+                )?.value ?: RecoveryStep.UNTRAINED
+            return MuscleRecoveryState(
+                muscle = muscle,
+                step = step,
+                lastLoadedAt = loadedAt,
+                hoursSinceLoad = hours,
+                hardSession = false,
+                sets = if (muscle in activity.primary) {
+                    activity.intensity
+                } else {
+                    activity.intensity * Muscle.SECONDARY_WEIGHT
+                },
+                tonnageKg = 0.0,
+                lastSessionId = activity.activityId,
+                lastSourceId = activity.sourceId,
+                lastRecordedAt = activity.recordedAt,
+            )
+        }
         val history = historyOf(sessions)
         val hard = history != null &&
             HardSession.isHard(
