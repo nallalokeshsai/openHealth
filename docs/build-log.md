@@ -3008,6 +3008,12 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   existing release install without deleting the record.
 - **53/53 instrumented tests on the emulator**, including the 3 new B11 exit tests and
   every earlier phase's suite.
+- **CI**: the first run failed the five-year query benchmark
+  (`observationsForDayAndType` 18.57 ms against the 16 ms budget) while Gradle ran it
+  beside compilation and lint on the shared runner; the same query measures 2.26 ms
+  locally. `org.gradle.parallel` is now false with a comment, so the benchmark is not
+  competing for a runner's cores. This isolates the measurement rather than weakening the
+  budget. The second run passed in 9m03s.
 - `B11 exit tests`:
   1. **30-minute GPS survives process death and exports valid GPX — pass.**
      `MovementExitTest.aThirtyMinuteRecordingSurvivesProcessDeathAndExportsValidGpx`:
