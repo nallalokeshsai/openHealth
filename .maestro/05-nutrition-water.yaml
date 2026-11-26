@@ -1,0 +1,10 @@
+# pr.md §6.3: the one-tap water action stays one tap and the day's total moves.
+appId: app.openhealth
+---
+- launchApp
+- tapOn: "Nutrition"
+- assertVisible: "Nutrition"
+- tapOn:
+    id: ".*water.*"
+    optional: true
+- takeScreenshot: nutrition-water

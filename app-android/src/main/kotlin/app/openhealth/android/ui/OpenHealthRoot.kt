@@ -72,6 +72,7 @@ import app.openhealth.ui.screens.nutrition.TargetsSheet
 import app.openhealth.ui.screens.nutrition.WaterSheet
 import app.openhealth.ui.screens.onboarding.OnboardingScreen
 import app.openhealth.ui.screens.quickadd.QuickAddSheet
+import app.openhealth.ui.screens.review.ReviewScreen
 import app.openhealth.ui.screens.settings.SettingsScreen
 import app.openhealth.ui.screens.settings.TrashScreen
 import app.openhealth.ui.screens.shell.OhRootShell
@@ -112,7 +113,13 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
     }
-    OhTheme(dark = dark, accent = state.preferences.accent) {
+    OhTheme(
+        dark = dark,
+        accent = state.preferences.accent,
+        motion = app.openhealth.ui.theme.rememberOhMotion(state.preferences.reducedMotion),
+        highContrast = state.preferences.highContrast,
+        reduceTransparency = state.preferences.reduceTransparency,
+    ) {
         SystemBars(dark = dark)
         Box(modifier = Modifier.fillMaxSize().background(OhTheme.colors.bg)) {
             when {
@@ -638,12 +645,16 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onWeightNeutral = viewModel::setWeightNeutral,
                     onTheme = viewModel::setTheme,
                     onAccent = viewModel::setAccent,
+                    onHighContrast = viewModel::setHighContrast,
+                    onReduceTransparency = viewModel::setReduceTransparency,
+                    onReducedMotion = viewModel::setReducedMotion,
                     onAppLock = viewModel::setAppLock,
                     onExport = viewModel::export,
                     onRestore = viewModel::restore,
                     onOpenDevices = { nav.navigate(DevicesRoute) },
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
+                    onOpenReview = { nav.navigate(ReviewRoute) },
                     onExternalActivity = viewModel::suppressLockForExternalActivity,
                     onDeleteAllNotes = viewModel::deleteAllNotes,
                     onEmptyTrash = viewModel::emptyTrash,
@@ -744,6 +755,31 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onExclude = viewModel::excludeFromTrends,
                     onLogNote = { viewModel.openQuickAdd(QuickAction.NOTE) },
                     onLoadMore = viewModel::loadMoreTimeline,
+                )
+            }
+        }
+        composable<ReviewRoute> {
+            LaunchedEffect(Unit) { viewModel.openReview() }
+            val review = state.review
+            if (review == null) {
+                Loading()
+            } else {
+                ReviewScreen(
+                    model = review,
+                    onBack = {
+                        viewModel.closeReview()
+                        nav.popBackStack()
+                    },
+                    onAction = { row, action ->
+                        if (action.action ==
+                            app.openhealth.ui.screens.review.ReviewAction.EDIT
+                        ) {
+                            viewModel.closeReview()
+                            nav.navigate(TimelineRoute)
+                        } else {
+                            viewModel.answerReview(row, action)
+                        }
+                    },
                 )
             }
         }

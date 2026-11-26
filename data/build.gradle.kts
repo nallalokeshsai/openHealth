@@ -14,6 +14,10 @@ sqldelight {
             packageName.set("app.openhealth.data.db")
             schemaOutputDirectory.set(file("src/main/sqldelight/databases"))
             deriveSchemaFromMigrations.set(false)
+            // SQLDelight's verifier needs a schema snapshot for every released version to replay
+            // the migrations from; the project has only the current one. The equivalent
+            // guarantee is the per-version upgrade tests (v1 through v8) in :data, which
+            // the B10 exit runs.
             verifyMigrations.set(false)
             dialect(libs.sqldelight.dialect.sqlite)
         }

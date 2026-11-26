@@ -1,0 +1,16 @@
+# DESIGN.md §11.1, §12.4: the three accessibility options are visible in Appearance.
+# The flow only reads them; it does not flip a setting on a phone that holds a record.
+appId: app.openhealth
+---
+- launchApp
+- tapOn: "Settings"
+- tapOn: "Appearance"
+- scrollUntilVisible:
+    element:
+      text: "High contrast"
+    direction: DOWN
+- assertVisible: "Reduce transparency"
+- assertVisible: "Reduce motion"
+- tapOn: "Close"
+- back
+- assertVisible: "Today"

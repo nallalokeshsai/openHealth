@@ -255,3 +255,33 @@ fun ohLightColors(accent: OhAccent = OhAccent.Brand): OhColors = OhColors(
     bodyBase = Color(0xFF000000).copy(alpha = 0.14f),
     fatLayerAlpha = OhAlpha.full,
 )
+
+/**
+ * The accessibility options of `DESIGN.md` §11.1 and §12.4, applied to the closed
+ * palette rather than inventing a second one:
+ *
+ * - **High contrast** moves secondary text onto the primary ink (`label` on `bg` is
+ *   already the measured 21:1 dark and 21:1 light pair) and draws the optional
+ *   separators at their solid value. Nothing is added: it is the same tokens at full
+ *   strength, which is why it needs no new contrast measurement.
+ * - **Reduce transparency** makes the bar and the floating fills opaque `bg-el`
+ *   (§4.3 says exactly this for the tab bar).
+ *
+ * Both are preferences in Appearance, so they work on every device instead of
+ * depending on a platform setting that Android does not expose consistently.
+ */
+fun OhColors.withAccessibility(
+    highContrast: Boolean = false,
+    reduceTransparency: Boolean = false,
+): OhColors {
+    if (!highContrast && !reduceTransparency) return this
+    return copy(
+        label2 = if (highContrast) label else label2,
+        labelDim = if (highContrast) label else labelDim,
+        sep = if (highContrast) label2 else sep,
+        sepOp = if (highContrast) sep else sepOp,
+        barFill = if (reduceTransparency) bgEl else barFill,
+        toastFill = if (reduceTransparency) surface2 else toastFill,
+        timerBarFill = if (reduceTransparency) surface2 else timerBarFill,
+    )
+}

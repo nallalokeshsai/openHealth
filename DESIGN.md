@@ -1,9 +1,12 @@
 # openHealth — Design System
 
-**Version:** 0.3
+**Version:** 0.4
 **Status:** Living document, first pass
-**Last revision:** 2026-11-25 — B9 adds the KPI band's 12 sp range line to §5.6 and the
-Today and Stats recipes to §14.2; no new colour, type role, spacing value or component.
+**Last revision:** 2026-11-26 — B10 maps the three accessibility options named in §12.4
+onto existing tokens (§12.4.1): high contrast, reduce transparency and reduce motion add
+no colour, type role, spacing value or component. Previous: 2026-11-25 — B9 adds the KPI
+band's 12 sp range line to §5.6 and the Today and Stats recipes to §14.2; no new colour,
+type role, spacing value or component.
 Previous: 2026-11-25 — B8 adds the Devices recipe to §14.2 (a pushed page under
 Settings: grouped lists, one accent for the winning source, no new colour, type role,
 spacing value or component). Previous: 2026-11-25 — B7 records the measurement anchor's 30 % glow, the
@@ -1553,6 +1556,20 @@ transparency, contrast, and (V1) home-card order. Everything else is fixed.
 
 Dynamic colour (Material You) is **off**: it would let the wallpaper choose the
 colour of a clinical value.
+
+#### 12.4.1 The three accessibility options, mapped to existing values
+
+They are preferences in Settings → Appearance rather than device-dependent branches,
+because Android does not expose all three consistently; "Remove animations" is honoured
+from the system as well.
+
+- **High contrast.** Secondary text moves to `label` (already the measured body pair) and
+  `label-2`/`label-dim` take the strong value; the optional `sep-op` hairline takes `sep`.
+  No new value: the same tokens at full strength.
+- **Reduce transparency.** `barFill` becomes opaque `bg-el`, `toastFill` and
+  `timerBarFill` become opaque `surface-2`. This is exactly what §4.3 asks of the tab bar.
+- **Reduce motion.** Every motion token resolves to its instant state (§6.9). The timer
+  bar still counts; it stops sliding.
 
 ### 12.5 Contrast audit
 

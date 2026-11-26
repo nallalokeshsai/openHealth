@@ -1,0 +1,11 @@
+# A fresh install can reach Today in one action with sample data. This flow clears
+# state, so it runs on the emulator only, never on a phone holding a real record.
+appId: app.openhealth
+---
+- launchApp:
+    clearState: true
+- assertVisible: "openHealth"
+- tapOn: "Try with sample data"
+- extendedWaitUntil:
+    visible: "Today"
+    timeout: 60000

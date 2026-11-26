@@ -33,6 +33,39 @@ class AndroidMigrationBackup(private val context: Context, private val databaseN
         }
     }
 
+    /** The newest snapshot, or null when no migration has ever run on this install. */
+    fun latest(): File? = directory()?.listFiles()
+        // Only this database's snapshots: the directory is shared by every install of
+        // the app, and a test database must never restore the owner's record.
+        ?.filter { it.isFile && it.name.startsWith("$databaseName-v") }
+        ?.maxByOrNull { it.lastModified() }
+
+    /**
+     * Puts the newest snapshot back in place of the database (`B10` corrupted-database
+     * recovery). The broken file and its sidecars are removed first, because the copy
+     * replaces the whole database; a failure leaves the broken file in place rather
+     * than half of a snapshot.
+     */
+    fun restoreLatest(): File? {
+        val snapshot = latest() ?: return null
+        val target = context.getDatabasePath(databaseName)
+        target.parentFile?.mkdirs()
+        return try {
+            listOf(target, File(target.path + "-wal"), File(target.path + "-shm"))
+                .forEach { it.delete() }
+            Files.copy(snapshot.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            copyIfPresent(File(snapshot.path + "-wal"), File(target.path + "-wal"))
+            copyIfPresent(File(snapshot.path + "-shm"), File(target.path + "-shm"))
+            snapshot
+        } catch (failure: IOException) {
+            android.util.Log.w(TAG, "Could not restore the database snapshot", failure)
+            null
+        }
+    }
+
+    private fun directory(): File? =
+        File(context.filesDir, BACKUP_DIRECTORY).takeIf { it.isDirectory }
+
     private fun copyIfPresent(source: File, target: File) {
         if (!source.exists()) return
         Files.copy(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)

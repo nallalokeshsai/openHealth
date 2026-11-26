@@ -201,6 +201,7 @@ data class AppState(
     val vitalFilter: ObservationContext? = null,
     val devices: app.openhealth.ui.screens.devices.DevicesModel? = null,
     val stats: app.openhealth.ui.screens.stats.StatsModel? = null,
+    val review: app.openhealth.ui.screens.review.ReviewModel? = null,
     val statsSegment: app.openhealth.ui.screens.stats.StatsSegment =
         app.openhealth.ui.screens.stats.StatsSegment.OVERVIEW,
     val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
@@ -276,6 +277,14 @@ class AppViewModel(
             zone = zone,
         )
     }
+    private val reviewPresenter: app.openhealth.android.review.ReviewPresenter by lazy {
+        app.openhealth.android.review.ReviewPresenter(
+            context = container.context,
+            store = store,
+            clock = container.clock,
+            zone = zone,
+        )
+    }
     private val nutritionPresenter: NutritionPresenter by lazy {
         NutritionPresenter(
             store = store,
@@ -300,6 +309,9 @@ class AppViewModel(
                 accent = OhAccent.Brand,
                 appLock = false,
                 demo = false,
+                highContrast = false,
+                reduceTransparency = false,
+                reducedMotion = false,
             ),
             onboarding = OnboardingUi(answers = OnboardingAnswers(units = detectedUnits)),
             quickAdd = newQuickAdd(container),
@@ -2309,6 +2321,69 @@ class AppViewModel(
         }
     }
 
+    fun openReview() {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { reviewPresenter.model() }
+            _state.value = _state.value.copy(review = model)
+        }
+    }
+
+    fun closeReview() {
+        _state.value = _state.value.copy(review = null)
+    }
+
+    /**
+     * Answers one inbox question (`pr.md` §6.28). "Keep" and "Ignore" change nothing but
+     * the question; "Leave out" excludes the reading from trends; "Merge" moves the
+     * extra duplicate to Trash, restorable for 30 days. Each one dismisses the item so
+     * it does not return on the next rebuild.
+     */
+    fun answerReview(
+        row: app.openhealth.ui.screens.review.ReviewRowModel,
+        action: app.openhealth.ui.screens.review.ReviewActionModel,
+    ) {
+        message = null
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                when (action.action) {
+                    app.openhealth.ui.screens.review.ReviewAction.EXCLUDE ->
+                        action.observationId?.let {
+                            store.observations.excludeFromTrends(
+                                app.openhealth.core.ids.ObservationId(it),
+                                true,
+                            )
+                        }
+
+                    app.openhealth.ui.screens.review.ReviewAction.MERGE ->
+                        action.observationId?.let {
+                            store.trash.deleteObservation(
+                                app.openhealth.core.ids.ObservationId(it),
+                            )
+                        }
+
+                    app.openhealth.ui.screens.review.ReviewAction.EDIT,
+                    app.openhealth.ui.screens.review.ReviewAction.KEEP,
+                    app.openhealth.ui.screens.review.ReviewAction.IGNORE,
+                    -> Unit
+                }
+                if (action.action != app.openhealth.ui.screens.review.ReviewAction.EDIT) {
+                    reviewPresenter.dismiss(row.key)
+                }
+            }
+            if (action.action ==
+                app.openhealth.ui.screens.review.ReviewAction.EDIT
+            ) {
+                return@launchGuarded
+            }
+            rebuild()
+            _state.value = _state.value.copy(
+                review = withContext(Dispatchers.IO) {
+                    reviewPresenter.model()
+                },
+            )
+        }
+    }
+
     fun setWeightNeutral(enabled: Boolean) {
         message = null
         launchGuarded {
@@ -2335,6 +2410,29 @@ class AppViewModel(
     fun setAccent(accent: OhAccent) {
         launchGuarded {
             withContext(Dispatchers.IO) { container.preferences.setAccent(accent) }
+            rebuild()
+        }
+    }
+
+    fun setHighContrast(enabled: Boolean) = setAccessibility(highContrast = enabled)
+
+    fun setReduceTransparency(enabled: Boolean) = setAccessibility(reduceTransparency = enabled)
+
+    fun setReducedMotion(enabled: Boolean) = setAccessibility(reducedMotion = enabled)
+
+    private fun setAccessibility(
+        highContrast: Boolean = _state.value.preferences.highContrast,
+        reduceTransparency: Boolean = _state.value.preferences.reduceTransparency,
+        reducedMotion: Boolean = _state.value.preferences.reducedMotion,
+    ) {
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                container.preferences.setAccessibility(
+                    highContrast = highContrast,
+                    reduceTransparency = reduceTransparency,
+                    reducedMotion = reducedMotion,
+                )
+            }
             rebuild()
         }
     }
@@ -3165,6 +3263,19 @@ class AppViewModel(
         return result.take(RECENT_LIMIT)
     }
 
+    /** The Settings line for a recovered database; a bad value simply shows nothing. */
+    private fun parseRecoveryDate(raw: String): String? = runCatching {
+        val instant = kotlin.time.Instant.parse(raw)
+        val local = instant.toLocalDateTime(zone)
+        "%04d-%02d-%02d %02d:%02d".format(
+            local.year,
+            local.monthNumber,
+            local.dayOfMonth,
+            local.hour,
+            local.minute,
+        )
+    }.getOrNull()
+
     private fun buildSettings(
         preferences: app.openhealth.android.preferences.Preferences,
         profile: Profile?,
@@ -3187,6 +3298,9 @@ class AppViewModel(
             AgeRules.mayUseWeightLossGoal(it, now().toLocalDateTime(zone).date)
         } ?: true,
         hasRestoreSnapshot = container.hasPreRestoreSnapshot(),
+        recoveryNote = store.settings
+            .get(app.openhealth.android.data.AndroidDatabaseFactory.RECOVERED_AT)
+            ?.let(::parseRecoveryDate),
         modules = preferences.modules,
         devicesDetail = activity.summary(),
         preset = preferences.preset,
@@ -3198,6 +3312,9 @@ class AppViewModel(
             app.openhealth.android.preferences.ThemeMode.LIGHT -> ThemeChoice.LIGHT
         },
         accent = preferences.accent,
+        highContrast = preferences.highContrast,
+        reduceTransparency = preferences.reduceTransparency,
+        reducedMotion = preferences.reducedMotion,
         appLock = preferences.appLock,
         appLockAvailable = app.openhealth.android.security.BiometricGate()
             .available(container.context),
@@ -3561,7 +3678,12 @@ class AppViewModel(
 
     private fun buildTrash(
         preferences: app.openhealth.android.preferences.Preferences,
-    ): List<TrashItemModel> = store.trash.active()
+    ): List<TrashItemModel> = store.trash.active().also {
+        // The 30-day window is enforced whenever the list is read, not only at process
+        // start: an app left open past the window must not keep deleted rows restorable
+        // (`pr.md` §6.29).
+        store.trash.purgeExpired()
+    }
         .filterNot { preferences.weightNeutral && store.trash.isSensitive(it) }
         .map { row ->
             val kind = when (row.entity_table) {

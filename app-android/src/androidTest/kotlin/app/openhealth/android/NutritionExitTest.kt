@@ -176,7 +176,12 @@ class NutritionExitTest {
             )
         }
         viewModel.refresh()
-        waitFor("nutrition loaded") { viewModel.state.value.nutrition != null }
+        // Wait for the rebuilt model, not merely for a model: the previous one is still
+        // in state while the refresh runs, and asserting against it is the B9/B10
+        // class-sequence flake.
+        waitFor("energy rebuilt") {
+            viewModel.state.value.nutrition?.energy?.kcalIn == 3.2
+        }
         val model = viewModel.state.value.nutrition!!
         val expected = container.store.nutrition.entriesForDay(today)
             .fold(0.0) { acc, entry -> acc + (entry.totals.of(Nutrient.ENERGY) ?: 0.0) }

@@ -249,6 +249,7 @@ fun OhRow(
                         style = type.caption.ltrFigures(),
                         color = colors.label2,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -360,6 +361,7 @@ fun OhStatTile(
                 style = type.display.copy(fontWeight = OhWeight.semibold).tabular().ltrFigures(),
                 color = colors.label,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (unit != null) {
                 Spacer(Modifier.width(OhTheme.space.s0))
@@ -368,6 +370,7 @@ fun OhStatTile(
                     style = type.subhead.ltrFigures(),
                     color = colors.label2,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -486,6 +489,7 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                                         .ltrFigures(),
                                     color = figure.ink ?: colors.label,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 if (figure.unit != null) {
                                     Spacer(Modifier.width(OhTheme.space.s0))
@@ -494,6 +498,7 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                                         style = type.caption.ltrFigures(),
                                         color = colors.label2,
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
@@ -505,6 +510,7 @@ fun OhKpiBand(figures: List<OhKpiFigure>, modifier: Modifier = Modifier, footer:
                                 style = type.caption.tabular().ltrFigures(),
                                 color = colors.label2,
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }

@@ -10,9 +10,15 @@
 # to make a GPL-family dependency pass.
 
 androidx.*:*	Apache-2.0	AndroidX libraries
-com.google.android.*:*	Apache-2.0	Android support libraries
-com.google.*:*	Apache-2.0	Guava, errorprone annotations, auto-value
+# The two former `com.google.*` wildcards were removed in B10: they would have matched a
+# Firebase or Play Services coordinate, which the telemetry gate and pr.md §6.23 forbid.
+# Every Google artifact the client resolves is listed by name below.
 com.google.zxing:*	Apache-2.0	ZXing barcode decoding in every store flavour (offline, free and telemetry-free)
+com.google.auto.value:auto-value-annotations	Apache-2.0	Annotations pulled in by AndroidX and Guava
+com.google.errorprone:error_prone_annotations	Apache-2.0	Annotations pulled in by Guava and Robolectric
+com.google.j2objc:j2objc-annotations	Apache-2.0	Annotations pulled in by Guava
+com.google.testparameterinjector:test-parameter-injector	Apache-2.0	Test-only, pulled in by Robolectric
+com.google.dagger:dagger	Apache-2.0	Test-only transitive, not used as the DI framework (Tech-Stack.md §3 keeps Koin)
 com.google.code.findbugs:jsr305	BSD-3-Clause	Annotations pulled in by AndroidX
 com.google.guava:*	Apache-2.0	ListenableFuture, pulled in by AndroidX
 org.jetbrains:*	Apache-2.0	Kotlin annotations and JetBrains tooling runtime

@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
@@ -17,6 +19,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.core.body.AdiposeInputs
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
@@ -68,6 +72,8 @@ class BodyMapScreenshotTest {
         val model: BodyMapModel,
         val sides: Set<BodySide>,
         val variant: BodyMapVariant = BodyMapVariant.FULL,
+        val scale: Float = 1f,
+        val rtl: Boolean = false,
     )
 
     /** One setContent per test: switching the whole shot through state is allowed. */
@@ -76,28 +82,46 @@ class BodyMapScreenshotTest {
         compose.setContent {
             val shot = state.value
             OhTheme(dark = shot.dark, accent = OhAccent.Brand) {
-                Box(
-                    modifier = Modifier
-                        .testTag(SHOT)
-                        .fillMaxSize()
-                        .background(OhTheme.colors.surface),
-                    contentAlignment = Alignment.Center,
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalDensity provides Density(
+                        LocalDensity.current.density,
+                        fontScale = shot.scale,
+                    ),
+                    LocalLayoutDirection provides if (shot.rtl) {
+                        LayoutDirection.Rtl
+                    } else {
+                        LayoutDirection.Ltr
+                    },
                 ) {
-                    OhBodyMap(
-                        model = shot.model,
-                        geometry = geometry,
-                        sides = shot.sides,
-                        variant = shot.variant,
-                        synchronousLayers = true,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .testTag(SHOT)
+                            .fillMaxSize()
+                            .background(OhTheme.colors.surface),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        OhBodyMap(
+                            model = shot.model,
+                            geometry = geometry,
+                            sides = shot.sides,
+                            variant = shot.variant,
+                            synchronousLayers = true,
+                        )
+                    }
                 }
             }
         }
         shots.forEach { shot ->
             compose.runOnIdle { state.value = shot }
             compose.waitForIdle()
+            val directory = when {
+                shot.rtl -> "rtl"
+                shot.scale > 1f -> "text200"
+                shot.dark -> "dark"
+                else -> "light"
+            }
             compose.onNodeWithTag(SHOT).captureRoboImage(
-                "src/test/screenshots/${if (shot.dark) "dark" else "light"}/${shot.name}.png",
+                "src/test/screenshots/$directory/${shot.name}.png",
             )
         }
     }
@@ -115,6 +139,10 @@ class BodyMapScreenshotTest {
                         val name = "body-${sex.name.lowercase()}-${side.name.lowercase()}-$type"
                         add(Shot(name, true, model, setOf(side)))
                         add(Shot(name, false, model, setOf(side)))
+                        // The map is text-scaled and never mirrored, so both extra
+                        // variants exist to prove that (`DESIGN.md` §11.1, §11.5).
+                        add(Shot(name, true, model, setOf(side), scale = 2f))
+                        add(Shot(name, true, model, setOf(side), rtl = true))
                     }
                 }
             }
@@ -132,6 +160,8 @@ class BodyMapScreenshotTest {
                 Shot("body-pair-recovery", false, Models.recovery(BodySex.MALE), pair),
                 Shot("body-selected-forearms", true, selected, pair),
                 Shot("body-selected-forearms", false, selected, pair),
+                Shot("body-pair-recovery", true, Models.recovery(BodySex.MALE), pair, scale = 2f),
+                Shot("body-pair-recovery", true, Models.recovery(BodySex.MALE), pair, rtl = true),
             ),
         )
     }

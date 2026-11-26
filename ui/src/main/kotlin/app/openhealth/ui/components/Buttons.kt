@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import app.openhealth.ui.icons.OhIcon
 import app.openhealth.ui.theme.OhAlpha
 import app.openhealth.ui.theme.OhTheme
@@ -291,6 +292,7 @@ fun OhChip(
                 ),
                 color = ink,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

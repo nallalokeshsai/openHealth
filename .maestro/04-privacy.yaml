@@ -1,0 +1,10 @@
+# pr.md §6.23: the privacy surface is one tap from Settings and names the lock.
+appId: app.openhealth
+---
+- launchApp
+- tapOn: "Settings"
+- tapOn: "Privacy and security"
+- assertVisible: "App lock"
+- tapOn: "Close"
+- back
+- assertVisible: "Today"

@@ -30,6 +30,9 @@ data class Preferences(
     val accent: OhAccent,
     val appLock: Boolean,
     val demo: Boolean,
+    val highContrast: Boolean,
+    val reduceTransparency: Boolean,
+    val reducedMotion: Boolean,
 ) {
     /** The object screens ask; none of them reads [weightNeutral] (`pr.md` §6.25). */
     val displayPolicy: DisplayPolicy get() = DisplayPolicy.of(weightNeutral)
@@ -45,6 +48,7 @@ data class Preferences(
  * `weight_neutral` column is kept in step for export completeness only; no screen reads
  * it (the policy object is the only door).
  */
+@Suppress("TooManyFunctions") // One writer for the layer-5 settings, one method per switch.
 class PreferencesStore(
     private val settings: SettingsRepository,
     private val profiles: ProfileRepository,
@@ -64,6 +68,9 @@ class PreferencesStore(
             accent = OhAccent.fromKey(settings.get(SettingKeys.ACCENT_PRESET)) ?: OhAccent.Brand,
             appLock = settings.get(SettingKeys.APP_LOCK) == "true",
             demo = settings.get(SettingKeys.DEMO_DATA) == "true",
+            highContrast = settings.get(SettingKeys.HIGH_CONTRAST) == "true",
+            reduceTransparency = settings.get(SettingKeys.REDUCE_TRANSPARENCY) == "true",
+            reducedMotion = settings.get(SettingKeys.REDUCED_MOTION) == "true",
         )
     }
 
@@ -111,6 +118,17 @@ class PreferencesStore(
 
     fun setDemo(enabled: Boolean) {
         settings.put(SettingKeys.DEMO_DATA, enabled.toString())
+    }
+
+    /** One write for the three accessibility options (`DESIGN.md` §12.4.1). */
+    fun setAccessibility(
+        highContrast: Boolean,
+        reduceTransparency: Boolean,
+        reducedMotion: Boolean,
+    ) {
+        settings.put(SettingKeys.HIGH_CONTRAST, highContrast.toString())
+        settings.put(SettingKeys.REDUCE_TRANSPARENCY, reduceTransparency.toString())
+        settings.put(SettingKeys.REDUCED_MOTION, reducedMotion.toString())
     }
 
     fun markOnboardingComplete(tier: Int) {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -52,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -111,14 +113,40 @@ fun OhSegmentedControl(
         contentAlignment = Alignment.Center,
     ) {
         if (scrollable) {
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                SegmentedContent(
-                    options = options,
-                    selectedIndex = selectedIndex,
-                    onSelect = onSelect,
-                    scrollable = true,
-                    modifier = Modifier.width(IntrinsicSize.Max),
-                )
+            val scroll = rememberScrollState()
+            val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            Box {
+                Row(modifier = Modifier.horizontalScroll(scroll)) {
+                    SegmentedContent(
+                        options = options,
+                        selectedIndex = selectedIndex,
+                        onSelect = onSelect,
+                        scrollable = true,
+                        modifier = Modifier.width(IntrinsicSize.Max),
+                    )
+                }
+                // At 200 % text the segments scroll; this fade is the affordance that
+                // says so. It is drawn from the page colour, never a new token.
+                if (scroll.canScrollForward) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(OhTheme.space.s7)
+                            .fillMaxHeight()
+                            .background(
+                                // It fades into the track, not the page: the segment
+                                // behind it is `surface-3`, so the last word softens
+                                // into the control instead of onto the background.
+                                Brush.horizontalGradient(
+                                    if (rtl) {
+                                        listOf(OhTheme.colors.surface3, Color.Transparent)
+                                    } else {
+                                        listOf(Color.Transparent, OhTheme.colors.surface3)
+                                    },
+                                ),
+                            ),
+                    )
+                }
             }
         } else {
             SegmentedContent(
@@ -156,7 +184,7 @@ private fun SegmentedContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(dims.touchTarget)
+                .heightIn(min = dims.touchTarget)
                 .padding(horizontal = dims.segmentPad)
                 .selectableGroup(),
             verticalAlignment = Alignment.CenterVertically,
@@ -173,7 +201,7 @@ private fun SegmentedContent(
                                 Modifier.weight(1f)
                             },
                         )
-                        .height(dims.touchTarget)
+                        .heightIn(min = dims.touchTarget)
                         .selectable(
                             selected = selected,
                             interactionSource = rememberInteraction(),
@@ -185,7 +213,7 @@ private fun SegmentedContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .height(dims.segmentHeight)
+                            .heightIn(min = dims.segmentHeight)
                             .then(if (scrollable) Modifier else Modifier.fillMaxWidth())
                             .clip(thumbShape)
                             .then(
@@ -221,6 +249,8 @@ private fun SegmentedContent(
                             ),
                             color = if (selected) colors.label else colors.label2,
                             maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -394,6 +424,7 @@ fun OhStepper(
                             .ltrFigures(),
                         color = colors.label,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (unit != null) {
                         Spacer(Modifier.width(OhTheme.space.s0))
@@ -402,6 +433,7 @@ fun OhStepper(
                             style = type.footnote,
                             color = colors.label2,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }

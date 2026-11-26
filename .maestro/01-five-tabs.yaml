@@ -1,0 +1,16 @@
+# BUILD-ROADMAP.md §B10: the five roots are peers and every one opens.
+# Runs without clearing state, so it is safe on a phone holding a real record.
+appId: app.openhealth
+---
+- launchApp
+- assertVisible: "Today"
+- tapOn: "Vitals"
+- assertVisible: "Vitals"
+- tapOn: "Train"
+- assertVisible: "Train"
+- tapOn: "Nutrition"
+- assertVisible: "Nutrition"
+- tapOn: "Stats"
+- assertVisible: "Stats"
+- tapOn: "Today"
+- assertVisible: "Readiness"

@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.core.stats.RampLevel
 import app.openhealth.ui.screens.common.observedLocale
@@ -201,6 +202,7 @@ fun OhBarChart(bars: List<ChartBar>, description: String, modifier: Modifier = M
                         style = type.caption2.tabular(),
                         color = colors.label2,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -240,6 +242,7 @@ fun OhHeatmap(weeks: List<List<HeatCellUi>>, description: String, modifier: Modi
                         style = type.caption2,
                         color = colors.label3,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.width((cell + gap) * span),
                     )
                 }

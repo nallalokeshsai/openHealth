@@ -88,12 +88,16 @@ fun SettingsScreen(
     onWeightNeutral: (Boolean) -> Unit,
     onTheme: (ThemeChoice) -> Unit,
     onAccent: (OhAccent) -> Unit,
+    onHighContrast: (Boolean) -> Unit,
+    onReduceTransparency: (Boolean) -> Unit,
+    onReducedMotion: (Boolean) -> Unit,
     onAppLock: (Boolean) -> Unit,
     onExport: (Uri, CharArray) -> Unit,
     onRestore: (Uri, CharArray) -> Unit,
     onOpenDevices: () -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
+    onOpenReview: () -> Unit,
     onExternalActivity: () -> Unit,
     onDeleteAllNotes: () -> Unit,
     onEmptyTrash: () -> Unit,
@@ -234,6 +238,7 @@ fun SettingsScreen(
         onDismiss = { sheet = SettingsSheet.NONE },
         onOpenTimeline = onOpenTimeline,
         onOpenTrash = onOpenTrash,
+        onOpenReview = onOpenReview,
         onExport = {
             sheet = SettingsSheet.NONE
             onExternalActivity()
@@ -253,6 +258,9 @@ fun SettingsScreen(
         onTheme = onTheme,
         onAccent = onAccent,
         onWeightNeutral = onWeightNeutral,
+        onHighContrast = onHighContrast,
+        onReduceTransparency = onReduceTransparency,
+        onReducedMotion = onReducedMotion,
     )
     PrivacySheet(
         visible = sheet == SettingsSheet.PRIVACY,
@@ -621,6 +629,7 @@ private fun DataSheet(
     onDismiss: () -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
+    onOpenReview: () -> Unit,
     onExport: () -> Unit,
     onRestore: () -> Unit,
     onUndoRestore: () -> Unit,
@@ -652,6 +661,14 @@ private fun DataSheet(
                 showDivider = true,
                 showChevron = true,
                 onClick = onOpenTrash,
+            )
+            OhRow(
+                title = stringResource(R.string.review_settings_row),
+                subtitle = stringResource(R.string.review_settings_empty),
+                leadingIcon = OhIcons.info,
+                showDivider = true,
+                showChevron = true,
+                onClick = onOpenReview,
             )
         }
         Spacer(Modifier.height(OhTheme.space.s5))
@@ -694,6 +711,14 @@ private fun DataSheet(
                 )
             }
         }
+        state.recoveryNote?.let { note ->
+            Spacer(Modifier.height(OhTheme.space.s5))
+            Text(
+                text = stringResource(R.string.settings_recovered, note),
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
+        }
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
             text = stringResource(
@@ -716,6 +741,9 @@ private fun AppearanceSheet(
     onTheme: (ThemeChoice) -> Unit,
     onAccent: (OhAccent) -> Unit,
     onWeightNeutral: (Boolean) -> Unit,
+    onHighContrast: (Boolean) -> Unit,
+    onReduceTransparency: (Boolean) -> Unit,
+    onReducedMotion: (Boolean) -> Unit,
 ) {
     if (!visible) return
     OhModalSheet(
@@ -783,6 +811,53 @@ private fun AppearanceSheet(
                 },
             )
         }
+        Spacer(Modifier.height(OhTheme.space.s7))
+        Text(
+            text = stringResource(R.string.settings_accessibility),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s2))
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.settings_high_contrast),
+                subtitle = stringResource(R.string.settings_high_contrast_body),
+                mergeSemantics = false,
+                trailing = {
+                    OhSwitch(
+                        checked = state.highContrast,
+                        onCheckedChange = onHighContrast,
+                        contentDescription = stringResource(R.string.settings_high_contrast),
+                    )
+                },
+            )
+            OhRow(
+                title = stringResource(R.string.settings_reduce_transparency),
+                subtitle = stringResource(R.string.settings_reduce_transparency_body),
+                mergeSemantics = false,
+                trailing = {
+                    OhSwitch(
+                        checked = state.reduceTransparency,
+                        onCheckedChange = onReduceTransparency,
+                        contentDescription = stringResource(
+                            R.string.settings_reduce_transparency,
+                        ),
+                    )
+                },
+            )
+            OhRow(
+                title = stringResource(R.string.settings_reduced_motion),
+                subtitle = stringResource(R.string.settings_reduced_motion_body),
+                mergeSemantics = false,
+                trailing = {
+                    OhSwitch(
+                        checked = state.reducedMotion,
+                        onCheckedChange = onReducedMotion,
+                        contentDescription = stringResource(R.string.settings_reduced_motion),
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -824,6 +899,12 @@ private fun PrivacySheet(
         Spacer(Modifier.height(OhTheme.space.s5))
         Text(
             text = stringResource(R.string.settings_privacy_body),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s4))
+        Text(
+            text = stringResource(R.string.settings_privacy_policy_body),
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,
         )

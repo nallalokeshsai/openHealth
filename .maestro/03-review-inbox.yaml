@@ -1,0 +1,12 @@
+# pr.md §6.28: the review inbox is reachable from Settings → Data and always states a
+# result, populated or empty.
+appId: app.openhealth
+---
+- launchApp
+- tapOn: "Settings"
+- assertVisible: "Settings"
+- tapOn: "Data and backups"
+- tapOn: "Review inbox"
+- assertVisible: "Review inbox"
+- tapOn: "Back to settings"
+- assertVisible: "Data and backups"

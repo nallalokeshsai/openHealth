@@ -15,15 +15,54 @@ android {
         create("fdroid") { dimension = "store" }
     }
 
-    // Macrobenchmark (B9) installs this variant beside the benchmark test APK. It is a
-    // release-shaped build signed with the debug key so `connectedBenchmarkAndroidTest`
-    // can launch it without the owner's release keystore.
+    // Release signing reads the owner's keystore from the environment, never from the
+    // repository (B10). `.env.local` is gitignored and holds the four values; a machine
+    // without them still builds an unsigned release for inspection, and the release
+    // pipeline fails loudly rather than silently shipping a debug key.
+    val releaseKeystore = providers.environmentVariable("OH_KEYSTORE").orNull
+    val releaseStorePassword = providers.environmentVariable("OH_KEYSTORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.environmentVariable("OH_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.environmentVariable("OH_KEY_PASSWORD").orNull
+    if (releaseKeystore != null &&
+        releaseStorePassword != null &&
+        releaseKeyAlias != null &&
+        releaseKeyPassword != null
+    ) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    // R8 and resource shrinking are on for release (Tech-Stack.md §11, §12). The
+    // benchmark variant inherits them because it must measure the shape that ships.
     buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = signingConfigs.findByName("release")
+        }
+        // Macrobenchmark (B9) installs this variant beside the benchmark test APK. It is a
+        // release-shaped build signed with the debug key so `connectedBenchmarkAndroidTest`
+        // can launch it without the owner's release keystore.
         create("benchmark") {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
             signingConfig = signingConfigs.getByName("debug")
             isDebuggable = false
+            // The profile generator reads the running app's class names; R8 renames them
+            // into a mapping that only this build shares, so the benchmark variant stays
+            // unmangled. It still shrinks and runs the release dependency graph.
+            isMinifyEnabled = false
+            isShrinkResources = false
             // A separate package and data directory: a benchmark run must never merge
             // its synthetic corpus into the record on the owner's phone (ADR 0014).
             applicationIdSuffix = ".bench"

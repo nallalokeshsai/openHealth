@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  No cleartext, ever (pr.md §6.23; BUILD-ROADMAP.md §B10). The one outbound call is the
+  Open Food Facts barcode lookup over HTTPS, and that is the only transport in the app.
+  This file makes the rule explicit rather than inheriting the targetSdk default, so a
+  future change that adds an http:// URL fails review instead of silently working.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

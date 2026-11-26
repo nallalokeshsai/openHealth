@@ -1,0 +1,10 @@
+First MVP release.
+
+- Today with readiness, energy, steps, weight and the plan for the day.
+- Training with routines, live sessions, rest timer and personal records.
+- Nutrition with a bundled offline food index, barcode lookup on request, and water.
+- Vitals, body measurements, progress photos and a body map.
+- Stats across body, training, sleep and nutrition, every chart with a table.
+- Devices: Health Connect, Garmin FIT import, a Bluetooth strap, scale and cuff.
+- Encrypted export and restore, a 30-day Trash, and a review inbox for disagreeing data.
+- Dark and light themes, 200% text, and an RTL pass.

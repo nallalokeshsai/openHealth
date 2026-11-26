@@ -45,6 +45,9 @@ data class SettingsState(
     val profileUnits: UnitSystem,
     val profileMayLoseWeight: Boolean,
     val hasRestoreSnapshot: Boolean,
+
+    /** Set when a corrupt database was replaced from the snapshot taken before a migration. */
+    val recoveryNote: String?,
     val modules: Set<HealthModule>,
 
     /** What the Devices row says: which sources are on, or nothing yet. */
@@ -57,6 +60,9 @@ data class SettingsState(
     val displayPolicy: app.openhealth.core.preferences.DisplayPolicy,
     val theme: ThemeChoice,
     val accent: OhAccent,
+    val highContrast: Boolean,
+    val reduceTransparency: Boolean,
+    val reducedMotion: Boolean,
     val appLock: Boolean,
     val appLockAvailable: Boolean,
     val demo: Boolean,

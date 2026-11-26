@@ -667,6 +667,7 @@ private fun CompositionTile(
                     .ltrFigures(),
                 color = OhTheme.colors.label,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             tile.unitText?.let {
                 Spacer(Modifier.width(OhTheme.space.s0))
@@ -675,6 +676,7 @@ private fun CompositionTile(
                     style = OhTheme.type.caption,
                     color = OhTheme.colors.label2,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

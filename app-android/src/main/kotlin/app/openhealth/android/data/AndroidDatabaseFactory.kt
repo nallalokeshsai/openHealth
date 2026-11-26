@@ -21,14 +21,36 @@ class AndroidDatabaseFactory(
     private val vault: AndroidSecretVault,
     private val databaseName: String = DEFAULT_DATABASE,
 ) {
-    fun open(): OpenHealthStore {
+    private val backup = AndroidMigrationBackup(context, databaseName)
+
+    /**
+     * Opens the record. If the file is corrupt, the newest pre-migration snapshot is
+     * put back and the database is opened again (`BUILD-ROADMAP.md` §B10). That is the
+     * one automatic destructive step the app takes, and it is taken only because the
+     * alternative is a record that cannot open at all; the restore is recorded so the
+     * person can see it happened.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun open(): OpenHealthStore = try {
+        openOnce()
+    } catch (failure: RuntimeException) {
+        if (!isCorruption(failure) || backup.restoreLatest() == null) throw failure
+        android.util.Log.w(TAG, "Database $databaseName was corrupt; restored the snapshot")
+        openOnce().also { recovered ->
+            recovered.db.settingsQueries.putSetting(
+                key = RECOVERED_AT,
+                value = java.time.Instant.now().toString(),
+                updatedAt = System.currentTimeMillis(),
+                schemaVersion = OpenHealthDb.Schema.version,
+            )
+        }
+    }
+
+    private fun openOnce(): OpenHealthStore {
         // SQLCipher ships its native library in the AAR and does not load it for you.
         System.loadLibrary("sqlcipher")
         val passphrase = vault.getOrCreate(DATABASE_PASSPHRASE)
-        val schema = BackupBeforeMigrationSchema(
-            OpenHealthDb.Schema,
-            AndroidMigrationBackup(context, databaseName),
-        )
+        val schema = BackupBeforeMigrationSchema(OpenHealthDb.Schema, backup)
         val driver = AndroidSqliteDriver(
             schema = schema,
             context = context,
@@ -77,8 +99,25 @@ class AndroidDatabaseFactory(
         }
     }
 
+    /** True for the failures that mean "this file is not a usable database". */
+    private fun isCorruption(failure: RuntimeException): Boolean {
+        if (failure is android.database.sqlite.SQLiteException) {
+            val message = failure.message.orEmpty().lowercase()
+            return "corrupt" in message ||
+                "not a database" in message ||
+                "encrypted" in message ||
+                "malformed" in message
+        }
+        return failure is IllegalStateException &&
+            failure.message.orEmpty().contains("failed its integrity check")
+    }
+
     companion object {
         const val DEFAULT_DATABASE = "openhealth.db"
         const val DATABASE_PASSPHRASE = "database.passphrase"
+
+        /** Set when a corrupt database was replaced from a snapshot, so Settings can say so. */
+        const val RECOVERED_AT = "recovery.restored_at"
+        private const val TAG = "openhealth.database"
     }
 }
