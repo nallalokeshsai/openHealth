@@ -10,6 +10,8 @@ import app.openhealth.core.ids.TombstoneId
 import app.openhealth.core.ids.VitalId
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SystemClock
+import app.openhealth.data.db.Activity
+import app.openhealth.data.db.Activity_point
 import app.openhealth.data.db.Body_photo
 import app.openhealth.data.db.Entry
 import app.openhealth.data.db.Measurement
@@ -38,6 +40,7 @@ enum class TrashEntity(val table: String) {
     PHOTO("body_photo"),
     NOTE("note"),
     OBSERVATION("observation"),
+    ACTIVITY("activity"),
 }
 
 @Serializable
@@ -293,6 +296,56 @@ data class NotePayload(
     val revision: Long,
 )
 
+/** One route sample, with the same fields the activity_point table stores. */
+@Serializable
+data class ActivityPointPayload(
+    val position: Long,
+    val latitude: Double,
+    val longitude: Double,
+    val elevationM: Double? = null,
+    val elapsedS: Long,
+    val heartRate: Double? = null,
+    val cadence: Double? = null,
+    val powerW: Double? = null,
+    val speedMps: Double? = null,
+)
+
+/** An activity and its route travel together, so undo restores the track exactly. */
+@Serializable
+data class ActivityPayload(
+    val id: String,
+    val type: String,
+    val source: String,
+    val name: String?,
+    val startedAt: Long,
+    val endedAt: Long,
+    val durationS: Long,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val distanceM: Double,
+    val elevationGainM: Double?,
+    val avgHeartRate: Double?,
+    val maxHeartRate: Double?,
+    val avgCadence: Double?,
+    val avgPowerW: Double?,
+    val energyKcal: Double?,
+    val notes: String?,
+    val flowId: String?,
+    val muscleKeys: String?,
+    val device: String?,
+    val appVersion: String?,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val fingerprint: String?,
+    val revision: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val points: List<ActivityPointPayload> = emptyList(),
+)
+
 /**
  * Undo, Trash and recovery (`pr.md` §6.29). A delete writes a tombstone holding the row
  * it removes, then removes the row, in one transaction. Undo restores it for the rest of
@@ -444,6 +497,21 @@ class TrashService(
         }
     }
 
+    /** Deletes an activity with its route; the tombstone carries both (`pr.md` §6.29). */
+    fun deleteActivity(id: String): TombstoneId? = activity(id)?.let { row ->
+        val points = db.activityQueries.pointsForActivity(row.id).executeAsList()
+        val payload = row.toPayload(points)
+        record(
+            entity = TrashEntity.ACTIVITY,
+            entityId = row.id,
+            payload = json.encodeToString(ActivityPayload.serializer(), payload),
+            invalidateOn = LocalDate.parse(row.local_date),
+        ) {
+            db.activityQueries.deletePointsForActivity(row.id)
+            db.activityQueries.deleteActivity(row.id)
+        }
+    }
+
     /** Restores one tombstoned row. Returns false when it is gone or already restored. */
     @Suppress("CyclomaticComplexMethod")
     fun undo(id: TombstoneId): Boolean {
@@ -466,6 +534,7 @@ class TrashService(
                 TrashEntity.PHOTO -> restorePhoto(payload)
                 TrashEntity.NOTE -> restoreNote(payload)
                 TrashEntity.OBSERVATION -> restoreObservation(payload)
+                TrashEntity.ACTIVITY -> restoreActivity(payload)
             }
             // Append-only inserts ignore an id that a re-created row owns. The undo is
             // only complete when the row is really there afterwards.
@@ -555,6 +624,10 @@ class TrashService(
                 val e = json.decodeFromString(RoutineExercisePayload.serializer(), payload)
                 "routine exercise ${e.position + 1}"
             }
+            TrashEntity.ACTIVITY.table -> {
+                val a = json.decodeFromString(ActivityPayload.serializer(), payload)
+                a.name ?: "${a.type.lowercase()} · ${a.localDate}"
+            }
             else -> row.entity_id
         }
     }.getOrElse { row.entity_id.take(TRASH_PREVIEW_FALLBACK) }
@@ -602,6 +675,7 @@ class TrashService(
         TrashEntity.NOTE -> db.noteQueries.noteById(id).executeAsOneOrNull() != null
         TrashEntity.OBSERVATION ->
             db.observationQueries.observationById(id).executeAsOneOrNull() != null
+        TrashEntity.ACTIVITY -> db.activityQueries.activityById(id).executeAsOneOrNull() != null
     }
 
     private fun invalidateRestoredDay(entity: TrashEntity, payload: String) {
@@ -620,6 +694,8 @@ class TrashService(
                 json.decodeFromString(WorkSetPayload.serializer(), payload).localDate
             TrashEntity.PHOTO ->
                 json.decodeFromString(PhotoPayload.serializer(), payload).localDate
+            TrashEntity.ACTIVITY ->
+                json.decodeFromString(ActivityPayload.serializer(), payload).localDate
             TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE -> null
         }
         date?.let { rollupInvalidator?.invoke(LocalDate.parse(it)) }
@@ -645,6 +721,59 @@ class TrashService(
     private fun vital(id: String): Vital? = db.bodyQueries.vitalById(id).executeAsOneOrNull()
 
     private fun photo(id: String): Body_photo? = db.bodyQueries.photoById(id).executeAsOneOrNull()
+
+    private fun activity(id: String): Activity? =
+        db.activityQueries.activityById(id).executeAsOneOrNull()
+
+    private fun restoreActivity(payload: String) {
+        val row = json.decodeFromString(ActivityPayload.serializer(), payload)
+        db.activityQueries.insertActivity(
+            id = row.id,
+            type = row.type,
+            source = row.source,
+            name = row.name,
+            startedAt = row.startedAt,
+            endedAt = row.endedAt,
+            durationS = row.durationS,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            distanceM = row.distanceM,
+            elevationGainM = row.elevationGainM,
+            avgHeartRate = row.avgHeartRate,
+            maxHeartRate = row.maxHeartRate,
+            avgCadence = row.avgCadence,
+            avgPowerW = row.avgPowerW,
+            energyKcal = row.energyKcal,
+            notes = row.notes,
+            flowId = row.flowId,
+            muscleKeys = row.muscleKeys,
+            device = row.device,
+            appVersion = row.appVersion,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            fingerprint = row.fingerprint,
+            revision = row.revision,
+            createdAt = row.createdAt,
+            updatedAt = row.updatedAt,
+        )
+        row.points.forEach { point ->
+            db.activityQueries.insertPoint(
+                activityId = row.id,
+                position = point.position,
+                latitude = point.latitude,
+                longitude = point.longitude,
+                elevationM = point.elevationM,
+                elapsedS = point.elapsedS,
+                heartRate = point.heartRate,
+                cadence = point.cadence,
+                powerW = point.powerW,
+                speedMps = point.speedMps,
+            )
+        }
+    }
 
     private fun restorePhoto(payload: String) {
         val row = json.decodeFromString(PhotoPayload.serializer(), payload)
@@ -689,6 +818,52 @@ class TrashService(
         device = device,
         appVersion = app_version,
         revision = revision,
+    )
+
+    private fun Activity.toPayload(points: List<Activity_point>): ActivityPayload = ActivityPayload(
+        id = id,
+        type = type,
+        source = source,
+        name = name,
+        startedAt = started_at,
+        endedAt = ended_at,
+        durationS = duration_s,
+        localDate = local_date,
+        zoneId = zone_id,
+        happenedAt = happened_at,
+        recordedAt = recorded_at,
+        distanceM = distance_m,
+        elevationGainM = elevation_gain_m,
+        avgHeartRate = avg_heart_rate,
+        maxHeartRate = max_heart_rate,
+        avgCadence = avg_cadence,
+        avgPowerW = avg_power_w,
+        energyKcal = energy_kcal,
+        notes = notes,
+        flowId = flow_id,
+        muscleKeys = muscle_keys,
+        device = device,
+        appVersion = app_version,
+        sourceId = source_id,
+        rawRecordId = raw_record_id,
+        idempotencyKey = idempotency_key,
+        fingerprint = fingerprint,
+        revision = revision,
+        createdAt = created_at,
+        updatedAt = updated_at,
+        points = points.map { point ->
+            ActivityPointPayload(
+                position = point.position,
+                latitude = point.latitude,
+                longitude = point.longitude,
+                elevationM = point.elevation_m,
+                elapsedS = point.elapsed_s,
+                heartRate = point.heart_rate,
+                cadence = point.cadence,
+                powerW = point.power_w,
+                speedMps = point.speed_mps,
+            )
+        },
     )
 
     private fun unitLabel(unit: String): String = when (unit) {

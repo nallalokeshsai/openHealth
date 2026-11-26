@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import app.openhealth.android.activity.GpsRecordingService
+import app.openhealth.android.activity.YogaSessionService
 import app.openhealth.android.ui.OpenHealthRoot
 import app.openhealth.android.ui.StartupErrorScreen
 
@@ -23,6 +25,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as OpenHealthApp
+        if (app.startupError == null) {
+            runCatching {
+                GpsRecordingService.recoverIfNeeded(this)
+                YogaSessionService.recoverIfNeeded(this)
+            }
+        }
         setContent {
             // Retrying rebuilds the container; the state is read through `attempt` so the
             // screen recomposes and the button is never a dead control.

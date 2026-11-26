@@ -287,6 +287,29 @@ object ExportTables {
             ),
         ),
         ExportTable(
+            "activity",
+            listOf(
+                text("id"), text("type"), text("source"), text("name"),
+                long("started_at"), long("ended_at"), long("duration_s"),
+                text("local_date"), text("zone_id"), long("happened_at"),
+                long("recorded_at"), double("distance_m"), double("elevation_gain_m"),
+                double("avg_heart_rate"), double("max_heart_rate"), double("avg_cadence"),
+                double("avg_power_w"), double("energy_kcal"), text("notes"), text("flow_id"),
+                text("muscle_keys"), text("device"), text("app_version"), text("source_id"),
+                text("raw_record_id"), text("idempotency_key"), text("fingerprint"),
+                long("revision"), long("created_at"), long("updated_at"),
+            ),
+        ),
+        ExportTable(
+            "activity_point",
+            listOf(
+                text("activity_id"), long("position"), double("latitude"),
+                double("longitude"), double("elevation_m"), long("elapsed_s"),
+                double("heart_rate"), double("cadence"), double("power_w"),
+                double("speed_mps"),
+            ),
+        ),
+        ExportTable(
             "observation",
             listOf(
                 text("id"), text("type"), double("value"), text("unit"),

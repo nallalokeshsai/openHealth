@@ -1,0 +1,112 @@
+-- Migration 8 -> 9 (2026-11-26, B11). Activities and their routes (pr.md §6.11):
+-- recorded GPS, imported GPX/TCX/FIT, manual cardio and yoga sessions. The summary is a
+-- layer-4 row and every route sample is a layer-4 child, so a process death or a crash
+-- cannot lose the track (pr.md §6.11 acceptance; §7.4). Activity rows are in the timeline
+-- so nothing the app stores is invisible (pr.md §6.27).
+
+CREATE TABLE IF NOT EXISTS activity (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    name TEXT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER NOT NULL,
+    duration_s INTEGER NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    distance_m REAL NOT NULL DEFAULT 0,
+    elevation_gain_m REAL,
+    avg_heart_rate REAL,
+    max_heart_rate REAL,
+    avg_cadence REAL,
+    avg_power_w REAL,
+    energy_kcal REAL,
+    notes TEXT,
+    flow_id TEXT,
+    muscle_keys TEXT,
+    device TEXT,
+    app_version TEXT,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    fingerprint TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS activity_local_date ON activity(local_date);
+CREATE INDEX IF NOT EXISTS activity_started ON activity(started_at);
+CREATE INDEX IF NOT EXISTS activity_type_date ON activity(type, local_date);
+
+CREATE TABLE IF NOT EXISTS activity_point (
+    activity_id TEXT NOT NULL REFERENCES activity(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    elevation_m REAL,
+    elapsed_s INTEGER NOT NULL,
+    heart_rate REAL,
+    cadence REAL,
+    power_w REAL,
+    speed_mps REAL,
+    PRIMARY KEY (activity_id, position)
+);
+
+DROP VIEW timeline;
+CREATE VIEW timeline AS
+SELECT
+    'observation' AS kind,
+    id AS entity_id,
+    local_date AS local_date,
+    happened_at AS happened_at,
+    recorded_at AS recorded_at,
+    source_id AS source_id,
+    type AS detail,
+    user_edited AS edited
+FROM observation
+UNION ALL
+SELECT
+    'session', id, local_date, happened_at, recorded_at, source_id, routine_id, 0
+FROM session
+UNION ALL
+SELECT
+    'work_set', work_set.id, session.local_date, work_set.happened_at,
+    work_set.recorded_at, work_set.source_id, work_set.exercise_id, 0
+FROM work_set
+JOIN session ON session.id = work_set.session_id
+UNION ALL
+SELECT
+    'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
+FROM entry
+UNION ALL
+SELECT
+    'measurement', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM measurement
+UNION ALL
+SELECT
+    'vital', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM vital
+UNION ALL
+SELECT
+    'meal', id, local_date, COALESCE(happened_at, created_at),
+    COALESCE(recorded_at, created_at), COALESCE(source_id, 'manual'), kind, 0
+FROM meal
+UNION ALL
+SELECT
+    'fast', id, local_date, start_at, recorded_at, 'manual', NULL, 0
+FROM fast_window
+UNION ALL
+SELECT
+    'body_photo', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM body_photo
+UNION ALL
+SELECT
+    'activity', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM activity
+UNION ALL
+SELECT
+    'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM note;

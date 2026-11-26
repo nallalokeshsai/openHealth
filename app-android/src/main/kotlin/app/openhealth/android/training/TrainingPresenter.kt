@@ -238,7 +238,8 @@ class TrainingPresenter(
         profile: Profile,
     ): BodyMapModel {
         val instant = now()
-        val enabled = HealthModule.TRAINING in preferences.modules
+        val enabled = HealthModule.TRAINING in preferences.modules ||
+            HealthModule.YOGA in preferences.modules
         val sets = if (enabled) {
             store.training.loadedSets(
                 (instant - RecoveryMap.HISTORY_DAYS.days).toEpochMilliseconds(),
@@ -246,7 +247,35 @@ class TrainingPresenter(
         } else {
             emptyList<LoadedSet>()
         }
-        val states = RecoveryMap.compute(instant, sets, thresholds = thresholds())
+        val activityLoads = store.activities
+            .between(
+                (instant - RecoveryMap.HISTORY_DAYS.days).toLocalDateTime(zone).date,
+                instant.toLocalDateTime(zone).date,
+            )
+            .map { record ->
+                val primary = if (record.muscles.isNotEmpty()) {
+                    record.muscles
+                } else {
+                    record.type.primaryMuscles
+                }
+                val secondary = if (record.muscles.isNotEmpty()) {
+                    emptyList()
+                } else {
+                    record.type.secondaryMuscles
+                }
+                app.openhealth.core.body.ActivityMuscleLoad(
+                    activityId = record.id,
+                    at = record.endedAt,
+                    primary = primary,
+                    secondary = secondary,
+                )
+            }
+        val states = RecoveryMap.compute(
+            instant,
+            sets,
+            thresholds = thresholds(),
+            activityLoads = activityLoads,
+        )
         val labels = store.sources.all().associate { it.id.value to it.label }
         return BodyMapModel.recovery(
             sex = sex(profile),

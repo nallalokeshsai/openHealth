@@ -452,7 +452,8 @@ class TodayPresenter(
             ?.let { StepEnergy.compute(it, weight) }
             ?.let { (it as? FormulaOutcome.Computed)?.value }
         val sessions = store.training.sessionsForDay(date)
-        val workoutRanges = sessions.mapNotNull { session ->
+        val activityRows = store.activities.forDay(date)
+        val sessionRanges = sessions.mapNotNull { session ->
             val end = session.ended_at ?: return@mapNotNull null
             val minutes = (end - session.started_at) / MILLIS_PER_MINUTE
             (
@@ -463,6 +464,16 @@ class TodayPresenter(
                 ) as? FormulaOutcome.Computed
                 )?.value
         }
+        val activityRanges = activityRows.mapNotNull { activity ->
+            val kcal = app.openhealth.core.activity.ActivityEnergy.estimate(activity, weight)
+                ?: return@mapNotNull null
+            app.openhealth.core.formula.EnergyRange(
+                low = kcal * 0.8,
+                central = kcal,
+                high = kcal * 1.2,
+            )
+        }
+        val workoutRanges = sessionRanges + activityRanges
         val workoutKcal = workoutRanges.takeIf { it.isNotEmpty() }?.let { ranges ->
             app.openhealth.core.formula.EnergyRange(
                 low = ranges.sumOf { it.low },
@@ -510,7 +521,7 @@ class TodayPresenter(
                 if (stepKcal == null) {
                     add(context.getString(UiR.string.today_energy_no_steps))
                 }
-                if (sessions.isEmpty()) {
+                if (sessions.isEmpty() && activityRows.isEmpty()) {
                     add(context.getString(UiR.string.today_energy_no_workout))
                 }
                 if (weightKg == null) {

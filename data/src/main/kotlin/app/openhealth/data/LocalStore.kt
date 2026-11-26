@@ -4,6 +4,7 @@ import app.cash.sqldelight.db.SqlDriver
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SystemClock
 import app.openhealth.data.db.OpenHealthDb
+import app.openhealth.data.repo.ActivityRepository
 import app.openhealth.data.repo.BodyRepository
 import app.openhealth.data.repo.DeviceRepository
 import app.openhealth.data.repo.NoteRepository
@@ -44,6 +45,7 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
     val nutrition = NutritionRepository(db, clock)
     val body = BodyRepository(db)
     val training = TrainingRepository(db)
+    val activities = ActivityRepository(db, clock)
     val profile = ProfileRepository(db)
     val settings = SettingsRepository(db, clock)
     val devices = DeviceRepository(db, settings, clock)
@@ -57,6 +59,7 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
         nutrition.invalidateRollupsWith(engine::rebuildDay)
         body.invalidateRollupsWith(engine::rebuildDay)
         training.invalidateRollupsWith(engine::rebuildDay)
+        activities.invalidateRollupsWith(engine::rebuildDay)
         trash.invalidateRollupsWith(engine::rebuildDay)
         sources.invalidateAllRollupsWith {
             engine.refreshRegistry()

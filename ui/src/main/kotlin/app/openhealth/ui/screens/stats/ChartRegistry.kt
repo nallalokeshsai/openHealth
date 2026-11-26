@@ -26,6 +26,7 @@ enum class ChartId {
     SLEEP_DURATION,
     SLEEP_STAGES,
     PROTEIN_TREND,
+    TRAINING_LOAD,
 }
 
 /** A chart's fixed text: what it is called, and the sheet that explains its arithmetic. */
@@ -136,6 +137,13 @@ object ChartRegistry {
             formulaTitleRes = R.string.chart_sleep_stages_formula_title,
             formulaBodyRes = R.string.chart_sleep_stages_formula_body,
             citation = CitationKey.SLEEP_CONSENSUS_2015,
+        ),
+        ChartMeta(
+            id = ChartId.TRAINING_LOAD,
+            titleRes = R.string.stats_training_load,
+            formulaTitleRes = R.string.chart_training_load_formula_title,
+            formulaBodyRes = R.string.chart_training_load_formula_body,
+            citation = CitationKey.ALLEN_COGGAN_2019,
         ),
         ChartMeta(
             id = ChartId.PROTEIN_TREND,

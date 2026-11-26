@@ -31,8 +31,35 @@ data class FitActivity(
     val maximumHeartRate: Int?,
     val averageCadence: Int?,
     val steps: Long?,
+    val averagePowerWatts: Int? = null,
+    val laps: List<FitLap> = emptyList(),
 ) {
     val durationMinutes: Double get() = (end - start).inWholeSeconds / SECONDS_PER_MINUTE
+}
+
+/** One lap as the file wrote it (`pr.md` §6.11: a FIT import preserves laps). */
+data class FitLap(
+    val start: Instant,
+    val end: Instant?,
+    val distanceMetres: Double?,
+    val durationSeconds: Double?,
+    val averageHeartRate: Int?,
+    val maximumHeartRate: Int?,
+)
+
+/** One record-message sample with its position and sensors. */
+data class FitTrackPoint(
+    val at: Instant,
+    val latitude: Double?,
+    val longitude: Double?,
+    val altitudeMetres: Double?,
+    val heartRate: Int?,
+    val cadence: Int?,
+    val powerWatts: Int?,
+    val speedMetresPerSecond: Double?,
+    val distanceMetres: Double?,
+) {
+    val hasPosition: Boolean get() = latitude != null && longitude != null
 }
 
 data class FitHeartRateSample(val at: Instant, val bpm: Int)
@@ -51,6 +78,8 @@ data class FitImport(
     val device: String?,
     val manufacturer: Long?,
     val profileVersion: Int,
+    val track: List<FitTrackPoint> = emptyList(),
+    val laps: List<FitLap> = emptyList(),
 ) {
     val stepTotal: Long get() = steps.sumOf { it.steps }
     val isEmpty: Boolean
@@ -71,17 +100,33 @@ object FitImporter {
     private const val GARMIN_MANUFACTURER = 1L
     private const val DISTANCE_SCALE = 100.0
     private const val DURATION_SCALE = 1000.0
+    private const val ALTITUDE_SCALE = 5.0
+    private const val SPEED_SCALE = 1000.0
     private val DEFAULT_BUCKET_MINUTES = 1.minutes
     private const val MILLIS_PER_SECOND = 1000.0
     private const val MIN_PLAUSIBLE_HEART_RATE = 25
     private const val MAX_PLAUSIBLE_HEART_RATE = 250
+    private const val SEMICIRCLES_PER_DEGREE = 11_930_464.711111111
+    private const val MIN_PLAUSIBLE_LATITUDE = -90.0
+    private const val MAX_PLAUSIBLE_LATITUDE = 90.0
+    private const val MIN_PLAUSIBLE_LONGITUDE = -180.0
+    private const val MAX_PLAUSIBLE_LONGITUDE = 180.0
 
     fun import(bytes: ByteArray, zone: TimeZone = TimeZone.UTC): FitImport {
         val file = FitDecoder(bytes).decode()
         if (!file.headerCrcValid || !file.fileCrcValid) {
             throw FitFormatException("the FIT checksum does not match; the file is corrupt")
         }
+        val track = trackPoints(file)
+        val laps = laps(file)
         val activities = file.messagesOf(FitGlobal.SESSION).mapNotNull { session(it) }
+            .map { activity ->
+                activity.copy(
+                    laps = laps.filter { lap ->
+                        lap.start >= activity.start && (lap.end == null || lap.end <= activity.end)
+                    },
+                )
+            }
         val records = heartRatesFromRecords(file)
         val monitoring = monitoringBuckets(file, zone)
         val monitoringHeartRate = file.messagesOf(FitGlobal.MONITORING).mapNotNull { message ->
@@ -119,6 +164,8 @@ object FitImporter {
             device = deviceLabel(file),
             manufacturer = file.fileId?.whole(FitGlobal.FileId.MANUFACTURER),
             profileVersion = file.profileVersion,
+            track = track,
+            laps = laps,
         )
     }
 
@@ -165,8 +212,61 @@ object FitImporter {
             maximumHeartRate = message.whole(FitGlobal.Session.MAX_HEART_RATE)?.toInt(),
             averageCadence = message.whole(FitGlobal.Session.AVG_CADENCE)?.toInt(),
             steps = steps,
+            averagePowerWatts = message.whole(FitGlobal.Session.AVG_POWER)?.toInt(),
         )
     }
+
+    /**
+     * The record messages that carry a position, a heart rate or a sensor. A record with
+     * a timestamp but no position still matters: it is a heart-rate sample on a
+     * treadmill. A semicircle outside the globe is dropped rather than clamped.
+     */
+    private fun trackPoints(file: FitFile): List<FitTrackPoint> =
+        file.messagesOf(FitGlobal.RECORD).mapNotNull { record ->
+            val timestamp = record.timestampSeconds ?: return@mapNotNull null
+            val latitude = record.scaled(FitGlobal.Record.POSITION_LAT, SEMICIRCLES_PER_DEGREE)
+                ?.takeIf { it in MIN_PLAUSIBLE_LATITUDE..MAX_PLAUSIBLE_LATITUDE }
+            val longitude = record.scaled(FitGlobal.Record.POSITION_LONG, SEMICIRCLES_PER_DEGREE)
+                ?.takeIf { it in MIN_PLAUSIBLE_LONGITUDE..MAX_PLAUSIBLE_LONGITUDE }
+            val heartRate = (
+                record.whole(FitGlobal.Record.HEART_RATE)
+                    ?: record.whole(FitGlobal.Record.WRIST_HEART_RATE)
+                    ?: record.whole(FitGlobal.Record.EXTERNAL_HEART_RATE)
+                )?.toInt()?.takeIf { it in MIN_PLAUSIBLE_HEART_RATE..MAX_PLAUSIBLE_HEART_RATE }
+            val altitude = record.scaled(FitGlobal.Record.ENHANCED_ALTITUDE, ALTITUDE_SCALE)
+                ?: record.scaled(FitGlobal.Record.ALTITUDE, ALTITUDE_SCALE)
+            val speed = record.scaled(FitGlobal.Record.ENHANCED_SPEED, SPEED_SCALE)
+                ?: record.scaled(FitGlobal.Record.SPEED, SPEED_SCALE)
+            FitTrackPoint(
+                at = Instant.fromEpochSeconds(FitTime.unixSeconds(timestamp)),
+                latitude = if (latitude != null && longitude != null) latitude else null,
+                longitude = if (latitude != null && longitude != null) longitude else null,
+                altitudeMetres = altitude,
+                heartRate = heartRate,
+                cadence = record.whole(FitGlobal.Record.CADENCE)?.toInt(),
+                powerWatts = record.whole(FitGlobal.Record.POWER)?.toInt(),
+                speedMetresPerSecond = speed,
+                distanceMetres = record.scaled(FitGlobal.Record.DISTANCE, DISTANCE_SCALE),
+            )
+        }
+
+    private fun laps(file: FitFile): List<FitLap> =
+        file.messagesOf(FitGlobal.LAP).mapNotNull { lap ->
+            val startSeconds = lap.whole(FitGlobal.Lap.START_TIME)
+                ?: lap.timestampSeconds
+                ?: return@mapNotNull null
+            val start = Instant.fromEpochSeconds(FitTime.unixSeconds(startSeconds))
+            val elapsed = lap.scaled(FitGlobal.Lap.TOTAL_ELAPSED_TIME, DURATION_SCALE)
+                ?: lap.scaled(FitGlobal.Lap.TOTAL_TIMER_TIME, DURATION_SCALE)
+            FitLap(
+                start = start,
+                end = elapsed?.let { start + (it * MILLIS_PER_SECOND).roundToLong().milliseconds },
+                distanceMetres = lap.scaled(FitGlobal.Lap.TOTAL_DISTANCE, DISTANCE_SCALE),
+                durationSeconds = elapsed,
+                averageHeartRate = lap.whole(FitGlobal.Lap.AVERAGE_HEART_RATE)?.toInt(),
+                maximumHeartRate = lap.whole(FitGlobal.Lap.MAXIMUM_HEART_RATE)?.toInt(),
+            )
+        }
 
     private fun heartRatesFromRecords(file: FitFile): List<FitHeartRateSample> =
         file.messagesOf(FitGlobal.RECORD).mapNotNull { record ->

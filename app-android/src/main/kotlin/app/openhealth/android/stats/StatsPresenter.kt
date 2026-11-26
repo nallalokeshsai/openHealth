@@ -161,10 +161,13 @@ class StatsPresenter(
         date: LocalDate,
         preferences: Preferences,
     ): Pair<List<StatsCard>, StatsRecords?> {
-        if (HealthModule.TRAINING !in preferences.modules) {
+        if (HealthModule.TRAINING !in preferences.modules &&
+            HealthModule.ACTIVITIES !in preferences.modules
+        ) {
             return emptyList<StatsCard>() to null
         }
         val cards = mutableListOf<StatsCard>()
+        trainingLoadCard(date)?.let(cards::add)
         volumeCard(date)?.let(cards::add)
         consistencyCard(date)?.let(cards::add)
         muscleCard(date)?.let(cards::add)
@@ -553,6 +556,89 @@ class StatsPresenter(
             ),
             unitText = context.getString(UiR.string.unit_percent),
             decimals = 1,
+        )
+    }
+
+    private fun trainingLoadCard(date: LocalDate): StatsCard? {
+        val from = date.minus(DatePeriod(days = 120))
+        val activities = store.activities.between(from, date)
+        val sessions = store.training.sessionsBetween(from, date.plus(DatePeriod(days = 1)))
+            .filter { it.ended_at != null }
+            .map { session ->
+                app.openhealth.core.activity.TrainingLoad.StrengthLoad(
+                    date = LocalDate.parse(session.local_date),
+                    durationSeconds = (session.ended_at!! - session.started_at) / 1_000,
+                    perceivedEffort = session.perceived_effort,
+                )
+            }
+        if (activities.isEmpty() && sessions.isEmpty()) return null
+        val resting = store.observations.latest(ObservationType.RESTING_HEART_RATE)?.value?.value
+        val birth = store.profile.active()?.date_of_birth?.let {
+            runCatching { LocalDate.parse(it) }.getOrNull()
+        }
+        var age: Int? = null
+        if (birth != null) {
+            age = date.year - birth.year
+            if (date.monthNumber < birth.monthNumber ||
+                (date.monthNumber == birth.monthNumber && date.dayOfMonth < birth.dayOfMonth)
+            ) {
+                age -= 1
+            }
+        }
+        val maxHr = app.openhealth.core.activity.HeartRateZoneModel
+            .estimateMaxHeartRate(age)
+        val male = store.profile.active()?.sex_at_birth?.equals("male", ignoreCase = true) != false
+        val days = app.openhealth.core.activity.TrainingLoad.loadDays(
+            activities = activities,
+            strengthSessions = sessions,
+            restingHeartRate = resting,
+            maxHeartRate = maxHr,
+            female = !male,
+        )
+        val model = (
+            app.openhealth.core.activity.TrainingLoad.compute(date, days)
+                as? FormulaOutcome.Computed
+            )?.value ?: return null
+        if (!model.hasData) return null
+        val points = model.points.takeLast(SEASON_DAYS)
+        val fitness = numberFormat.format(model.fitness.roundToInt())
+        val fatigue = numberFormat.format(model.fatigue.roundToInt())
+        val form = numberFormat.format(model.form.roundToInt())
+        return StatsCard(
+            chart = ChartId.TRAINING_LOAD,
+            title = context.getString(UiR.string.stats_card_training_load_title),
+            description = context.getString(
+                UiR.string.stats_desc_training_load,
+                fitness,
+                fatigue,
+                form,
+            ),
+            plot = StatsPlot.Line(
+                points.map { ChartPoint(it.date, it.fitness) },
+            ),
+            table = ChartTableModel(
+                title = context.getString(UiR.string.stats_card_training_load_title),
+                columns = listOf(
+                    context.getString(UiR.string.chart_table_date),
+                    context.getString(UiR.string.stats_table_fitness),
+                    context.getString(UiR.string.stats_table_fatigue),
+                    context.getString(UiR.string.stats_table_form),
+                ),
+                rows = points.map {
+                    listOf(
+                        shortDate(it.date),
+                        numberFormat.format(it.fitness.roundToInt()),
+                        numberFormat.format(it.fatigue.roundToInt()),
+                        numberFormat.format(it.form.roundToInt()),
+                    )
+                },
+                citation = context.getString(
+                    UiR.string.chart_citation,
+                    app.openhealth.core.citation.Citations
+                        .of(ChartRegistry.of(ChartId.TRAINING_LOAD).citation).title,
+                ),
+            ),
+            footer = context.getString(UiR.string.stats_training_load_note),
         )
     }
 

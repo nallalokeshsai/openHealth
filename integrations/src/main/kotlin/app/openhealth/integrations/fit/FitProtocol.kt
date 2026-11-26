@@ -87,6 +87,7 @@ class FitFormatException(message: String) : IllegalArgumentException(message)
 object FitGlobal {
     const val FILE_ID = 0
     const val SESSION = 18
+    const val LAP = 19
     const val RECORD = 20
     const val ACTIVITY = 34
     const val MONITORING = 55
@@ -114,19 +115,35 @@ object FitGlobal {
         const val AVG_HEART_RATE = 16
         const val MAX_HEART_RATE = 17
         const val AVG_CADENCE = 18
+        const val AVG_POWER = 20
         const val SPORT_PROFILE_NAME = 110
     }
 
     object Record {
+        const val POSITION_LAT = 0
+        const val POSITION_LONG = 1
         const val ALTITUDE = 2
         const val HEART_RATE = 3
         const val CADENCE = 4
         const val DISTANCE = 5
+        const val SPEED = 6
+        const val POWER = 7
         const val TOTAL_CYCLES = 19
+        const val ENHANCED_SPEED = 73
         const val ENHANCED_ALTITUDE = 78
         const val WRIST_HEART_RATE = 136
         const val EXTERNAL_HEART_RATE = 144
         const val TIMESTAMP = 253
+    }
+
+    object Lap {
+        const val START_TIME = 2
+        const val TOTAL_ELAPSED_TIME = 7
+        const val TOTAL_TIMER_TIME = 8
+        const val TOTAL_DISTANCE = 9
+        const val AVERAGE_HEART_RATE = 15
+        const val MAXIMUM_HEART_RATE = 16
+        const val AVERAGE_CADENCE = 17
     }
 
     object Monitoring {

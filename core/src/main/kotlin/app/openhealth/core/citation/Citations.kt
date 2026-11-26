@@ -28,6 +28,9 @@ enum class CitationKey {
     WHO_PULSE_OXIMETRY_2011,
     GENEVA_BODY_TEMPERATURE_2019,
     ADA_GLYCEMIC_TARGETS_2026,
+    BANISTER_1991,
+    EDWARDS_1993,
+    ALLEN_COGGAN_2019,
     APP_RULE,
 }
 
@@ -296,6 +299,40 @@ object Citations {
                 "below 7.8 mmol/L (Table 2.2); 3.9 mmol/L as the Level 1 low threshold " +
                 "in Table 6.4 of the same standards (dc26-S006)",
             licenceNote = "Published thresholds; the standards text is not reproduced.",
+        ),
+        Citation(
+            key = CitationKey.BANISTER_1991,
+            title = "Modeling elite athletic performance",
+            authors = "Banister EW",
+            year = 1991,
+            publication = "Physiological Testing of the Elite Athlete, Human Kinetics",
+            url = "https://archive.org/details/physiologicaltes0000unse",
+            supports = "The heart-rate-ratio TRIMP integral used to weight a cardio session " +
+                "by how hard it was",
+            licenceNote = "The equation is cited and implemented from its published form; " +
+                "no book text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.EDWARDS_1993,
+            title = "The Heart Rate Monitor Book",
+            authors = "Edwards S",
+            year = 1993,
+            publication = "Polar Electro, Oy",
+            url = "https://worldcat.org/title/28936505",
+            supports = "The five heart-rate training zones as percentage bands of an " +
+                "estimated maximum heart rate",
+            licenceNote = "Zone boundaries are cited facts; no book text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.ALLEN_COGGAN_2019,
+            title = "Training and Racing with a Power Meter",
+            authors = "Allen H, Coggan A",
+            year = 2019,
+            publication = "VeloPress, 3rd edition",
+            url = "https://worldcat.org/title/1119373336",
+            supports = "Fitness, fatigue and form as exponentially weighted averages of " +
+                "daily training load (42-day and 7-day time constants)",
+            licenceNote = "The method is cited; no book text or figures are reproduced.",
         ),
     )
 

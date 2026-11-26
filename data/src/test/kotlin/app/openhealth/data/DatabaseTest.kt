@@ -20,7 +20,7 @@ class DatabaseTest {
     fun aNewDatabaseIsCreatedAtTheCurrentSchemaVersion() {
         val store = inMemoryStore()
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
-        assertEquals(8L, store.schemaVersion)
+        assertEquals(9L, store.schemaVersion)
         assertEquals(0L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(0L, store.db.trainingQueries.countWorkSets().executeAsOne())
         store.close()
@@ -68,9 +68,9 @@ class DatabaseTest {
         val store = DatabaseOpener(backup).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals("v1-to-v8", backupLabel)
-        assertEquals(8L, store.schemaVersion)
-        assertEquals(8L, userVersion(store.driver))
+        assertEquals("v1-to-v9", backupLabel)
+        assertEquals(9L, store.schemaVersion)
+        assertEquals(9L, userVersion(store.driver))
         V2_INDEXES.forEach { assertEquals(1L, indexCount(store.driver, it), "index $it") }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
@@ -203,7 +203,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(8L, store.schemaVersion)
+        assertEquals(9L, store.schemaVersion)
         val view = store.driver.executeQuery(
             null,
             "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
@@ -299,7 +299,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(8L, store.schemaVersion)
+        assertEquals(9L, store.schemaVersion)
         assertEquals(1L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(3, store.db.sourceQueries.allSources().executeAsList().size)
 
@@ -367,7 +367,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(8L, store.schemaVersion)
+        assertEquals(9L, store.schemaVersion)
         val repository = app.openhealth.data.repo.NutritionRepository(store.db)
         val food = repository.foodById("legacy-food")!!
         assertEquals(389.0, food.per100g[app.openhealth.core.nutrition.Nutrient.ENERGY])
@@ -402,7 +402,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(8L, store.schemaVersion)
+        assertEquals(9L, store.schemaVersion)
         seedSources(store)
         store.db.bodyQueries.insertPhoto(
             id = "photo-1",
@@ -471,7 +471,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(8L, store.schemaVersion)
+        assertEquals(9L, store.schemaVersion)
         val columns = store.driver.executeQuery(
             null,
             "PRAGMA table_info(exercise)",
@@ -709,6 +709,56 @@ class DatabaseTest {
         )
     }
 
+    @Test
+    fun aV8DatabaseGainsActivitiesAndTheirTimelineBranch() {
+        val directory = Files.createTempDirectory("openhealth-v8-activity")
+        val path = directory.resolve("v8.db").toString()
+        val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
+        OpenHealthDb.Schema.create(first).value
+        dropTimelineView(first)
+        first.execute(null, "DROP TABLE activity_point", 0)
+        first.execute(null, "DROP TABLE activity", 0)
+        createV6Timeline(first)
+        first.execute(null, "PRAGMA user_version = 8", 0)
+        first.close()
+
+        val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
+            jdbcFactory("jdbc:sqlite:$path"),
+        )
+        assertEquals(9L, store.schemaVersion)
+        seedSources(store)
+        store.driver.execute(
+            null,
+            """
+            INSERT INTO activity(
+                id, type, source, started_at, ended_at, duration_s, local_date, zone_id,
+                happened_at, recorded_at, distance_m, source_id, idempotency_key,
+                created_at, updated_at
+            ) VALUES (
+                'activity-1', 'RUN', 'RECORDED', 0, 60000, 60, '2026-11-24', 'Europe/Berlin',
+                0, 1000, 1000.0, 'manual', 'activity-1', 1000, 1000
+            )
+            """.trimIndent(),
+            0,
+        )
+        store.driver.execute(
+            null,
+            "INSERT INTO activity_point(activity_id, position, latitude, longitude, " +
+                "elapsed_s) VALUES ('activity-1', 0, 52.52, 13.40, 0)",
+            0,
+        )
+        assertEquals(1L, store.db.activityQueries.countActivities().executeAsOne())
+        assertTrue(
+            app.openhealth.data.repo.TimelineRepository(store.db, store.driver)
+                .page(10).any { it.kind == "activity" },
+        )
+        store.close()
+        Files.deleteIfExists(java.nio.file.Path.of(path))
+        Files.deleteIfExists(java.nio.file.Path.of("$path-shm"))
+        Files.deleteIfExists(java.nio.file.Path.of("$path-wal"))
+        Files.deleteIfExists(directory)
+    }
+
     private fun stripV5Columns(driver: app.cash.sqldelight.db.SqlDriver) {
         listOf("level", "mechanic", "force").forEach {
             driver.execute(null, "ALTER TABLE exercise DROP COLUMN $it", 0)
@@ -730,7 +780,8 @@ class DatabaseTest {
         )
 
         /** The inline foreign key clause this schema adds at v3. */
-        val REFERENCES = Regex(""" REFERENCES \w+\(\w+\)( ON DELETE (RESTRICT|SET NULL))?""")
+        val REFERENCES =
+            Regex(""" REFERENCES \w+\(\w+\)( ON DELETE (RESTRICT|SET NULL|CASCADE))?""")
 
         val V2_INDEXES = listOf(
             "observation_type_local_date",

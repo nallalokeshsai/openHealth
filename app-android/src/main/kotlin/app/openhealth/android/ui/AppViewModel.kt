@@ -107,6 +107,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -187,6 +188,15 @@ data class AppState(
     val sessionUndo: AppToast? = null,
     val recent: List<QuickAddRecent> = emptyList(),
     val train: TrainModel? = null,
+    val movement: app.openhealth.ui.screens.activity.MovementModel? = null,
+    val activities: app.openhealth.ui.screens.activity.ActivityHistoryModel? = null,
+    val activityDetail: app.openhealth.ui.screens.activity.ActivityDetailModel? = null,
+    val cardioDate: LocalDate? = null,
+    val yogaLibrary: app.openhealth.ui.screens.activity.YogaLibraryModel? = null,
+    val yogaPlayer: app.openhealth.ui.screens.activity.YogaPlayerModel? = null,
+    val yogaFinish: app.openhealth.ui.screens.activity.YogaFinishModel? = null,
+    val gps: app.openhealth.ui.screens.activity.GpsRecordingModel? = null,
+    val mapPacks: app.openhealth.ui.screens.activity.MapPacksModel? = null,
     val routine: RoutineDetailModel? = null,
     val editor: RoutineEditorModel? = null,
     val live: LiveSessionModel? = null,
@@ -227,6 +237,14 @@ data class AppState(
  * the weight-neutral policy is read from the settings exactly once per rebuild so no
  * screen can bypass it.
  */
+@Suppress(
+    "LargeClass",
+    "TooManyFunctions",
+    "CyclomaticComplexMethod",
+    "LongMethod",
+    "MagicNumber",
+    "LongParameterList",
+)
 class AppViewModel(
     private val container: AppContainer,
     detectedUnits: UnitSystem = detectUnits(),
@@ -286,6 +304,9 @@ class AppViewModel(
             zone = zone,
         )
     }
+    private val activityLog: app.openhealth.android.activity.ActivityLogPresenter
+        get() = container.activityLog
+
     private val nutritionPresenter: NutritionPresenter by lazy {
         NutritionPresenter(
             store = store,
@@ -352,7 +373,315 @@ class AppViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            app.openhealth.android.activity.GpsSessionBus.snapshot.collect { snapshot ->
+                _state.update { current ->
+                    current.copy(
+                        gps = snapshot?.let { value ->
+                            app.openhealth.ui.screens.activity.GpsRecordingModel(
+                                type =
+                                app.openhealth.core.activity.ActivityType.fromKey(value.typeKey)
+                                    ?: app.openhealth.core.activity.ActivityType.RUN,
+                                elapsedSeconds = app.openhealth.core.activity.GpsRecorder
+                                    .elapsedSeconds(value, System.currentTimeMillis()),
+                                distanceM = value.distanceM,
+                                paused = value.paused,
+                                hasFix = value.points.isNotEmpty(),
+                                recovered = app.openhealth.android.activity.GpsSessionBus
+                                    .recovered.value,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            app.openhealth.android.activity.GpsSessionBus.message.collect { message ->
+                if (!message.isNullOrBlank()) {
+                    _state.update {
+                        it.copy(toast = AppToast(UiR.string.gps_permission_denied, undo = false))
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            app.openhealth.android.activity.YogaSessionBus.snapshot.collect { snapshot ->
+                _state.update { current ->
+                    val flow = snapshot?.let {
+                        app.openhealth.core.activity.YogaLibrary.flow(it.flowId)
+                    }
+                    current.copy(
+                        yogaPlayer = if (snapshot != null && flow != null) {
+                            app.openhealth.ui.screens.activity.YogaPlayerModel(
+                                flow = flow,
+                                state = app.openhealth.core.activity.YogaPlayerState(
+                                    flowId = snapshot.flowId,
+                                    stepIndex = snapshot.stepIndex,
+                                    phase = runCatching {
+                                        app.openhealth.core.activity.YogaPhase.valueOf(
+                                            snapshot.phase,
+                                        )
+                                    }.getOrDefault(app.openhealth.core.activity.YogaPhase.HOLD),
+                                    secondsInPhase = snapshot.secondsInPhase,
+                                    elapsedSeconds = snapshot.elapsedSeconds,
+                                    paused = snapshot.paused,
+                                    totalSeconds = snapshot.totalSeconds,
+                                    stepCount = snapshot.stepCount,
+                                ),
+                                breath = app.openhealth.core.activity.BreathPattern.CALM,
+                                voiceOn = snapshot.voiceOn,
+                                startedAtEpochMillis = snapshot.startedAtMillis,
+                            )
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            app.openhealth.android.activity.YogaSessionBus.finished.collect { snapshot ->
+                if (snapshot == null) return@collect
+                val flow = app.openhealth.core.activity.YogaLibrary.flow(snapshot.flowId)
+                if (flow != null) {
+                    val load = app.openhealth.core.activity.YogaLoad.of(flow)
+                    _state.update {
+                        it.copy(
+                            yogaPlayer = null,
+                            yogaFinish = app.openhealth.ui.screens.activity.YogaFinishModel(
+                                flowId = flow.id,
+                                flowName = flow.name,
+                                minutes = (snapshot.elapsedSeconds / 60).coerceAtLeast(0),
+                                posesHeld = (snapshot.stepIndex + 1).coerceAtMost(flow.poseCount),
+                                muscleLabels = load.primary.map { muscle ->
+                                    muscle.key.replace('-', ' ')
+                                        .replaceFirstChar { char -> char.uppercase() }
+                                },
+                                startedAtEpochMillis = snapshot.startedAtMillis,
+                                endedAtEpochMillis = snapshot.startedAtMillis +
+                                    snapshot.elapsedSeconds * 1_000L,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
         refresh()
+    }
+
+    // ------------------------------------------------------------------ B11 movement
+
+    fun importActivities(uri: Uri) {
+        launchGuarded {
+            val name = uri.lastPathSegment ?: "import"
+            val bytes = container.documents.read(uri)
+            val outcome = activityLog.import(name, bytes)
+            val message = when {
+                outcome.error != null -> outcome.error
+                outcome.duplicate -> container.context.getString(
+                    UiR.string.activity_import_duplicate,
+                )
+                outcome.empty -> container.context.getString(UiR.string.activity_import_empty)
+                outcome.skipped > 0 -> container.context.getString(
+                    UiR.string.activity_import_skipped,
+                    outcome.skipped,
+                )
+                else -> container.context.getString(
+                    UiR.string.activity_import_done,
+                    outcome.imported,
+                )
+            }
+            val activitiesOn = HealthModule.ACTIVITIES in _state.value.preferences.modules
+            _state.update {
+                it.copy(
+                    activities = activityLog.historyModel(activitiesOn)
+                        .copy(message = message),
+                )
+            }
+            refresh()
+        }
+    }
+
+    fun openActivityList() {
+        val activitiesOn = HealthModule.ACTIVITIES in _state.value.preferences.modules
+        _state.update { it.copy(activities = activityLog.historyModel(activitiesOn)) }
+    }
+
+    fun closeActivityList() = Unit
+
+    fun openActivityDetail(id: String) {
+        _state.update { it.copy(activityDetail = activityLog.detail(id)) }
+    }
+
+    fun closeActivityDetail() {
+        _state.update { it.copy(activityDetail = null) }
+    }
+
+    fun deleteActivity(id: String) {
+        activityLog.delete(id)
+        _state.update { it.copy(activityDetail = null) }
+        refresh()
+    }
+
+    fun exportActivity(uri: Uri) {
+        val id = _state.value.activityDetail?.id ?: return
+        val bytes = activityLog.exportGpx(id) ?: return
+        runCatching { container.documents.write(uri, bytes) }
+    }
+
+    fun openCardio() {
+        _state.update { it.copy(cardioDate = now().toLocalDateTime(zone).date) }
+    }
+
+    fun saveCardio(entry: app.openhealth.ui.screens.activity.CardioEntry) {
+        activityLog.logCardio(entry)
+        _state.update { it.copy(cardioDate = null) }
+        refresh()
+    }
+
+    fun openGps() {
+        if (_state.value.gps == null) {
+            val snapshot = app.openhealth.android.activity.GpsSessionBus.snapshot.value
+            if (snapshot != null) {
+                _state.update {
+                    it.copy(
+                        gps = app.openhealth.ui.screens.activity.GpsRecordingModel(
+                            type =
+                            app.openhealth.core.activity.ActivityType.fromKey(snapshot.typeKey)
+                                ?: app.openhealth.core.activity.ActivityType.RUN,
+                            elapsedSeconds = app.openhealth.core.activity.GpsRecorder
+                                .elapsedSeconds(snapshot, System.currentTimeMillis()),
+                            distanceM = snapshot.distanceM,
+                            paused = snapshot.paused,
+                            hasFix = snapshot.points.isNotEmpty(),
+                            recovered = app.openhealth.android.activity.GpsSessionBus
+                                .recovered.value,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun gpsPermissionDenied() {
+        _state.update {
+            it.copy(toast = AppToast(UiR.string.gps_permission_denied, undo = false))
+        }
+    }
+
+    fun startGps(type: app.openhealth.core.activity.ActivityType) {
+        app.openhealth.android.activity.GpsRecordingService.start(container.context, type)
+    }
+
+    fun pauseGps() = app.openhealth.android.activity.GpsRecordingService.pause(container.context)
+
+    fun resumeGps() = app.openhealth.android.activity.GpsRecordingService.resume(container.context)
+
+    fun finishGps() {
+        app.openhealth.android.activity.GpsRecordingService.stop(container.context)
+        _state.update { it.copy(gps = null) }
+        refresh()
+    }
+
+    fun openYogaLibrary() {
+        _state.update { it.copy(yogaLibrary = activityLog.yogaLibrary()) }
+    }
+
+    fun toggleYogaFavourite(flowId: String, favourite: Boolean) {
+        activityLog.toggleFavourite(flowId, favourite)
+        _state.update { it.copy(yogaLibrary = activityLog.yogaLibrary()) }
+    }
+
+    fun startYoga(flowId: String) {
+        app.openhealth.android.activity.YogaSessionService.start(container.context, flowId, true)
+    }
+
+    fun pauseYoga() = app.openhealth.android.activity.YogaSessionService.pause(container.context)
+
+    fun resumeYoga() = app.openhealth.android.activity.YogaSessionService.resume(container.context)
+
+    fun skipYoga() = app.openhealth.android.activity.YogaSessionService.skip(container.context)
+
+    fun previousYoga() =
+        app.openhealth.android.activity.YogaSessionService.previous(container.context)
+
+    fun repeatYoga() = app.openhealth.android.activity.YogaSessionService.repeat(container.context)
+
+    fun finishYoga() = app.openhealth.android.activity.YogaSessionService.finish(container.context)
+
+    fun toggleYogaVoice(on: Boolean) {
+        app.openhealth.android.activity.YogaSessionService.setVoice(container.context, on)
+        _state.update { current ->
+            current.copy(yogaPlayer = current.yogaPlayer?.copy(voiceOn = on))
+        }
+    }
+
+    fun closeYogaFinish() {
+        app.openhealth.android.activity.YogaSessionBus.clearFinished()
+        _state.update { it.copy(yogaFinish = null, yogaPlayer = null) }
+        refresh()
+    }
+
+    fun openMapPacks() {
+        _state.update { it.copy(mapPacks = mapPacksModel()) }
+    }
+
+    fun deleteMapPack(name: String) {
+        container.mapPacks.delete(name)
+        _state.update { it.copy(mapPacks = mapPacksModel()) }
+    }
+
+    fun downloadMapPack(url: String, name: String) {
+        if (url.isBlank()) return
+        _state.update {
+            it.copy(
+                mapPacks = mapPacksModel().copy(downloading = true, progress = 0f, message = null),
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = container.mapPacks.download(url, name) { progress ->
+                _state.update { current ->
+                    current.copy(mapPacks = current.mapPacks?.copy(progress = progress))
+                }
+            }
+            _state.update {
+                it.copy(
+                    mapPacks = mapPacksModel().copy(
+                        message = result.exceptionOrNull()?.message,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun mapPackPath(): String? = container.mapPacks.list().firstOrNull()?.path
+
+    /** A pack is used only when its header covers the route; otherwise the grid shows. */
+    fun mapPackForRoute(route: List<app.openhealth.core.activity.ActivityPoint>): String? {
+        if (route.isEmpty()) return null
+        val latitude = route.sumOf { it.latitude } / route.size
+        val longitude = route.sumOf { it.longitude } / route.size
+        return container.mapPacks.list()
+            .firstOrNull { it.bounds?.covers(latitude, longitude) == true }
+            ?.path
+    }
+
+    private fun mapPacksModel(): app.openhealth.ui.screens.activity.MapPacksModel {
+        val packs = container.mapPacks.list().map { pack ->
+            app.openhealth.ui.screens.activity.MapPackModel(
+                name = pack.name,
+                sizeText = android.text.format.Formatter.formatShortFileSize(
+                    container.context,
+                    pack.bytes,
+                ),
+                installedText = android.text.format.DateFormat.getDateFormat(container.context)
+                    .format(java.util.Date(pack.modifiedAtMillis)),
+            )
+        }
+        return app.openhealth.ui.screens.activity.MapPacksModel(
+            packs = packs,
+            note = container.context.getString(UiR.string.map_packs_note),
+        )
     }
 
     private fun kindLabel(kind: app.openhealth.core.activity.DeviceKind): String = when (kind) {
@@ -443,7 +772,11 @@ class AppViewModel(
         // The Train root is the heaviest model; it lands in a second update so a quick
         // add's timeline or a settings change is never held behind the exercise library.
         val train = profile?.let { training.train(preferences, it) }
-        _state.update { it.copy(train = train) }
+        val yogaOn = HealthModule.YOGA in preferences.modules
+        val activitiesOn = HealthModule.ACTIVITIES in preferences.modules
+        val movement = if (complete) activityLog.movementModel(yogaOn, activitiesOn) else null
+        val activities = if (complete) activityLog.historyModel(activitiesOn) else null
+        _state.update { it.copy(train = train, movement = movement, activities = activities) }
         firstLoadRefreshReviewCount(firstLoad)
         val vitals = profile?.let { body.model(it, preferences, preferences.demo) }
         _state.update { it.copy(vitals = vitals) }
@@ -3151,12 +3484,44 @@ class AppViewModel(
         preferences: app.openhealth.android.preferences.Preferences,
         profile: Profile,
     ): app.openhealth.ui.body.BodyMapModel? {
-        if (HealthModule.TRAINING !in preferences.modules) return null
+        if (HealthModule.TRAINING !in preferences.modules &&
+            HealthModule.YOGA !in preferences.modules
+        ) {
+            return null
+        }
         val instant = now()
         val sets = store.training.loadedSets(
             (instant - RECOVERY_WINDOW).toEpochMilliseconds(),
         )
-        val states = RecoveryMap.compute(instant, sets, thresholds = recoveryThresholds())
+        val activityLoads = store.activities
+            .between(
+                (instant - RECOVERY_WINDOW).toLocalDateTime(zone).date,
+                instant.toLocalDateTime(zone).date,
+            )
+            .map { record ->
+                val primary = if (record.muscles.isNotEmpty()) {
+                    record.muscles
+                } else {
+                    record.type.primaryMuscles
+                }
+                val secondary = if (record.muscles.isNotEmpty()) {
+                    emptyList()
+                } else {
+                    record.type.secondaryMuscles
+                }
+                app.openhealth.core.body.ActivityMuscleLoad(
+                    activityId = record.id,
+                    at = record.endedAt,
+                    primary = primary,
+                    secondary = secondary,
+                )
+            }
+        val states = RecoveryMap.compute(
+            instant,
+            sets,
+            thresholds = recoveryThresholds(),
+            activityLoads = activityLoads,
+        )
         val fatAllowed = preferences.displayPolicy.shows(
             app.openhealth.core.preferences.SensitiveMetric.BODY_FAT,
         )

@@ -62,6 +62,8 @@ class AppContainer(
         ensureManualSource(local)
         ensureImportSource(local)
         ensurePhoneSource(local)
+        ensureRecordingSource(local)
+        ensureStravaSource(local)
         ensureExerciseLibrary(local)
         local.trash.purgeExpired()
         local
@@ -126,6 +128,28 @@ class AppContainer(
         }
     }
 
+    /** The PMTiles map packs (`Tech-Stack.md` §8); never downloaded without an action. */
+    val mapPacks: app.openhealth.android.activity.MapPackStore by lazy {
+        app.openhealth.android.activity.MapPackStore(appContext)
+    }
+
+    /** Cardio, GPS and yoga (`pr.md` §6.7, §6.11). */
+    val activityLog: app.openhealth.android.activity.ActivityLogPresenter by lazy {
+        app.openhealth.android.activity.ActivityLogPresenter(
+            context = appContext,
+            store = store,
+            clock = clock,
+            zone = zone,
+            ids = ids,
+            appVersion = versionName,
+            manualSource = MANUAL_SOURCE,
+            recordingSource = RECORDING_SOURCE,
+            importSource = IMPORT_SOURCE,
+            stravaSource = STRAVA_SOURCE,
+            garminSource = app.openhealth.android.activity.ActivityPresenter.GARMIN_SOURCE,
+        )
+    }
+
     /** A tracker bound to the store, for the foreground service and the cold-start catch-up. */
     fun newStepTracker(): app.openhealth.android.activity.StepTracker =
         app.openhealth.android.activity.StepTracker(
@@ -184,6 +208,42 @@ class AppContainer(
                 kind = SourceKind.MANUAL,
                 label = "Manual",
                 permissions = SourcePermission.entries.toSet(),
+            ),
+        )
+    }
+
+    /** The source a GPS recording on this phone names (`pr.md` §6.11, §6.18). */
+    private fun ensureRecordingSource(local: LocalStore) {
+        if (local.sources.byId(RECORDING_SOURCE) != null) return
+        local.sources.upsert(
+            Source(
+                id = RECORDING_SOURCE,
+                kind = SourceKind.DEVICE,
+                label = "Recorded on this phone",
+                family = "phone",
+                permissions = setOf(
+                    SourcePermission.READ_DISTANCE,
+                    SourcePermission.READ_ENERGY,
+                    SourcePermission.READ_HEART_RATE,
+                ),
+            ),
+        )
+    }
+
+    /** A Strava bulk export is its own source family and never the live API. */
+    private fun ensureStravaSource(local: LocalStore) {
+        if (local.sources.byId(STRAVA_SOURCE) != null) return
+        local.sources.upsert(
+            Source(
+                id = STRAVA_SOURCE,
+                kind = SourceKind.STRAVA,
+                label = "Strava export",
+                family = "strava",
+                permissions = setOf(
+                    SourcePermission.READ_DISTANCE,
+                    SourcePermission.READ_ENERGY,
+                    SourcePermission.READ_HEART_RATE,
+                ),
             ),
         )
     }
@@ -291,6 +351,8 @@ class AppContainer(
         val MANUAL_SOURCE = app.openhealth.core.ids.SourceId("manual")
         val IMPORT_SOURCE = app.openhealth.core.ids.SourceId("file-import")
         val LIBRARY_SOURCE = app.openhealth.core.ids.SourceId("exercise-library")
+        val RECORDING_SOURCE = app.openhealth.core.ids.SourceId("phone-activity")
+        val STRAVA_SOURCE = app.openhealth.core.ids.SourceId("strava-archive")
         private const val PRE_RESTORE = "pre-restore.ohe"
     }
 }

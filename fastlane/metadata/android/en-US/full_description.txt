@@ -1,6 +1,6 @@
 openHealth keeps one private record of your health: today's readiness, training, nutrition, vitals and the trends between them.
 
-It is local-first. Everything you log is stored on your phone in an encrypted database, and it works with no network at all. There are no ads, no analytics and no crash reporting. Nothing leaves the phone unless you start it: a barcode lookup you confirm, an export you choose to share, or a server you host yourself.
+It is local-first. Everything you log is stored on your phone in an encrypted database, and it works with no network at all. There are no ads, no analytics and no crash reporting. Nothing leaves the phone unless you start it: a barcode lookup you confirm, an optional map-pack download you request by HTTPS address, an export you choose to share, or a server you host yourself. A map pack draws routes from a local file, so a route is never sent to a tile server.
 
 Every number carries its source. Tap a value and you see which device or app reported it, when it happened, when it was recorded, and how it was measured. When two sources disagree for a day, one configured source wins the day and the other is named, never added together.
 

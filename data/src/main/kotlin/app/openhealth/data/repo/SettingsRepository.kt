@@ -73,6 +73,7 @@ object SettingKeys {
     const val MODULE_PRESET = "module.preset"
     const val APP_LOCK = "privacy.app_lock"
     const val DEMO_DATA = "demo.sample_data"
+    const val FAVOURITE_FLOWS = "activity.favourite_flows"
 
     /** Tier-3 answers with no observation or measurement type of their own. */
     const val INJURIES = "profile.injuries"
