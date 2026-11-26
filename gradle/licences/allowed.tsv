@@ -72,3 +72,10 @@ net.java.dev.jna:*	Apache-2.0	Test-only, pulled in by Kotest; dual LGPL-2.1+/Apa
 # B6 CameraX pulls these two annotations (ML Kit was removed in B6; see ADR 0011).
 jakarta.inject:jakarta.inject-api	Apache-2.0	Jakarta Inject annotations, pulled in by CameraX
 org.checkerframework:checker-qual	MIT	Checker Framework annotations, pulled in by CameraX
+com.networknt:json-schema-validator	Apache-2.0	Test-only FHIR R4 schema validation (B12); never enters an APK
+com.fasterxml.jackson.core:jackson-core	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
+com.fasterxml.jackson.core:jackson-annotations	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
+com.fasterxml.jackson.core:jackson-databind	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
+com.fasterxml.jackson.dataformat:jackson-dataformat-yaml	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
+com.fasterxml.jackson:jackson-bom	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)
+com.ethlo.time:itu	Apache-2.0	Pulled in by the test-only JSON schema validator (B12)

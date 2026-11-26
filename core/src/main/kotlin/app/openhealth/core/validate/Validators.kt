@@ -29,6 +29,7 @@ data class PlausibleRange(
     fun citationText(): String = Citations.of(citation).title
 }
 
+@Suppress("MagicNumber")
 object PlausibilityRanges {
     private const val DAY_SECONDS = 86_400.0
 
@@ -56,6 +57,7 @@ object PlausibilityRanges {
         PlausibleRange(ObservationType.SLEEP_REM, 0.0, DAY_SECONDS),
         PlausibleRange(ObservationType.SLEEP_AWAKE, 0.0, DAY_SECONDS),
         PlausibleRange(ObservationType.SLEEP_IN_BED, 0.0, DAY_SECONDS),
+        PlausibleRange(ObservationType.SLEEP_QUALITY, 1.0, 5.0),
         PlausibleRange(type = ObservationType.NUTRITION_ENERGY, min = 0.0, max = 20_000.0),
         PlausibleRange(type = ObservationType.NUTRITION_PROTEIN, min = 0.0, max = 5_000.0),
         PlausibleRange(type = ObservationType.NUTRITION_CARBS, min = 0.0, max = 5_000.0),

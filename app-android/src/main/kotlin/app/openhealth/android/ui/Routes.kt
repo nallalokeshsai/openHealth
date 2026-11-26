@@ -94,3 +94,19 @@ data class YogaPlayerRoute(val flowId: String)
 
 @Serializable
 data object MapPacksRoute
+
+// B12: sleep, the clinical record, reports and the weekly review.
+@Serializable
+data object SleepRoute
+
+@Serializable
+data object ClinicalRoute
+
+@Serializable
+data class ClinicalEditorRoute(val section: String, val id: String? = null)
+
+@Serializable
+data object ReportsRoute
+
+@Serializable
+data object WeeklyReviewRoute

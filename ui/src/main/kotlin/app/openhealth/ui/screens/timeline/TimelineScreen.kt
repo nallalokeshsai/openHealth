@@ -494,6 +494,7 @@ private fun TimelineFilter.labelRes(): Int = when (this) {
     TimelineFilter.IMPORTED -> R.string.timeline_filter_imported
 }
 
+@Suppress("CyclomaticComplexMethod")
 private fun TimelineKind.glyph(): ImageVector = when (this) {
     TimelineKind.NOTE -> OhIcons.edit
     TimelineKind.WATER -> OhObjectIcons.water
@@ -505,6 +506,10 @@ private fun TimelineKind.glyph(): ImageVector = when (this) {
     TimelineKind.FAST -> OhGlyphIcons.moon
     TimelineKind.SESSION, TimelineKind.SET -> OhObjectIcons.barbell
     TimelineKind.OBSERVATION -> OhIcons.stats
+    TimelineKind.DOSE -> OhObjectIcons.pill
+    TimelineKind.SYMPTOM -> OhModuleIcons.mood
+    TimelineKind.LAB -> OhObjectIcons.flask
+    TimelineKind.VACCINATION -> OhIcons.check
     TimelineKind.OTHER -> OhIcons.info
 }
 
@@ -519,5 +524,9 @@ private fun TimelineKind.tint() = when (this) {
     TimelineKind.FAST -> OhTheme.colors.teal
     TimelineKind.SESSION, TimelineKind.SET -> OhTheme.colors.acc
     TimelineKind.OBSERVATION -> OhTheme.colors.teal
+    TimelineKind.DOSE -> OhTheme.colors.acc
+    TimelineKind.SYMPTOM -> OhTheme.colors.orange
+    TimelineKind.LAB -> OhTheme.colors.teal
+    TimelineKind.VACCINATION -> OhTheme.colors.blue
     TimelineKind.OTHER -> OhTheme.colors.grey
 }

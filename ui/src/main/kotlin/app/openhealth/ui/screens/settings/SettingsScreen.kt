@@ -55,6 +55,7 @@ import app.openhealth.ui.components.OhSwitch
 import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.icons.OhModuleIcons
+import app.openhealth.ui.icons.OhObjectIcons
 import app.openhealth.ui.screens.common.OhPageHeader
 import app.openhealth.ui.screens.common.OhSectionTitle
 import app.openhealth.ui.theme.OhAccent
@@ -99,6 +100,10 @@ fun SettingsScreen(
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenReview: () -> Unit,
+    onOpenSleep: () -> Unit,
+    onOpenClinical: () -> Unit,
+    onOpenReports: () -> Unit,
+    onOpenWeeklyReview: () -> Unit,
     onExternalActivity: () -> Unit,
     onDeleteAllNotes: () -> Unit,
     onEmptyTrash: () -> Unit,
@@ -155,6 +160,36 @@ fun SettingsScreen(
                     icon = OhModuleIcons.integrations,
                     showDivider = true,
                     onClick = onOpenDevices,
+                )
+                if (HealthModule.SLEEP in state.modules) {
+                    GroupRow(
+                        title = stringResource(R.string.clinical_sleep_title),
+                        detail = stringResource(R.string.clinical_sleep_settings),
+                        icon = OhModuleIcons.sleep,
+                        showDivider = true,
+                        onClick = onOpenSleep,
+                    )
+                }
+                GroupRow(
+                    title = stringResource(R.string.clinical_open),
+                    detail = stringResource(R.string.clinical_settings_clinical),
+                    icon = OhObjectIcons.pill,
+                    showDivider = true,
+                    onClick = onOpenClinical,
+                )
+                GroupRow(
+                    title = stringResource(R.string.clinical_reports_title),
+                    detail = stringResource(R.string.clinical_settings_reports),
+                    icon = OhIcons.export,
+                    showDivider = true,
+                    onClick = onOpenReports,
+                )
+                GroupRow(
+                    title = stringResource(R.string.clinical_weekly_title),
+                    detail = stringResource(R.string.clinical_settings_weekly),
+                    icon = OhIcons.stats,
+                    showDivider = true,
+                    onClick = onOpenWeeklyReview,
                 )
                 GroupRow(
                     title = stringResource(R.string.settings_data),

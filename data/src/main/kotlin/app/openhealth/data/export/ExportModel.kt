@@ -344,6 +344,88 @@ object ExportTables {
             ),
         ),
         ExportTable(
+            "medication",
+            listOf(
+                text("id"), text("name"), double("dose_amount"), text("dose_unit"),
+                text("form"), text("schedule_json"), bool("active"), text("started_on"),
+                text("ended_on"), text("notes"), text("local_date"), text("zone_id"),
+                long("happened_at"), long("recorded_at"), text("source_id"),
+                text("raw_record_id"), text("idempotency_key"), text("device"),
+                text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "medication_dose",
+            listOf(
+                text("id"), text("medication_id"), long("scheduled_for"), long("taken_at"),
+                bool("skipped"), text("local_date"), text("zone_id"), long("happened_at"),
+                long("recorded_at"), text("source_id"), text("raw_record_id"),
+                text("idempotency_key"), text("device"), text("app_version"),
+                text("notes"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "symptom",
+            listOf(
+                text("id"), text("name"), text("notes"), text("local_date"),
+                text("zone_id"), long("happened_at"), long("recorded_at"),
+                text("source_id"), text("raw_record_id"), text("idempotency_key"),
+                text("device"), text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "symptom_episode",
+            listOf(
+                text("id"), text("symptom_id"), long("severity"), long("started_at"),
+                long("ended_at"), text("triggers"), text("notes"), text("local_date"),
+                text("zone_id"), long("happened_at"), long("recorded_at"),
+                text("source_id"), text("raw_record_id"), text("idempotency_key"),
+                text("device"), text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "lab_result",
+            listOf(
+                text("id"), text("loinc_code"), text("display"), double("value"),
+                text("unit"), double("reference_low"), double("reference_high"),
+                text("reference_note"), text("reference_citation"), long("collected_at"),
+                text("local_date"), text("zone_id"), long("happened_at"),
+                long("recorded_at"), text("source_id"), text("raw_record_id"),
+                text("idempotency_key"), text("lab_name"), text("notes"), text("device"),
+                text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "allergy",
+            listOf(
+                text("id"), text("substance"), text("reaction"), text("severity"),
+                bool("active"), text("noted_on"), text("notes"), text("local_date"),
+                text("zone_id"), long("happened_at"), long("recorded_at"),
+                text("source_id"), text("raw_record_id"), text("idempotency_key"),
+                text("device"), text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "condition",
+            listOf(
+                text("id"), text("name"), text("code"), text("code_system"),
+                text("onset_on"), text("resolved_on"), text("notes"), text("local_date"),
+                text("zone_id"), long("happened_at"), long("recorded_at"),
+                text("source_id"), text("raw_record_id"), text("idempotency_key"),
+                text("device"), text("app_version"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "vaccination",
+            listOf(
+                text("id"), text("name"), text("dose_label"), text("administered_on"),
+                text("notes"), text("local_date"), text("zone_id"), long("happened_at"),
+                long("recorded_at"), text("source_id"), text("raw_record_id"),
+                text("idempotency_key"), text("device"), text("app_version"),
+                long("revision"),
+            ),
+        ),
+        ExportTable(
             "settings",
             listOf(
                 text("key"),

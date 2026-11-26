@@ -261,7 +261,7 @@ class CorpusGenerator(
             type = ObservationType.SLEEP_DURATION,
             value = Measure(sleepMinutes * 60.0, UcumUnit.SECOND),
             start = dayStart.minus(6.hours),
-            end = dayStart.plus((sleepMinutes - 360).toLong().hours),
+            end = dayStart.plus((sleepMinutes - 360).toLong().minutes),
             point = SourcePoint("garmin", SourceKind.GARMIN, dayStart.plus(8.hours)),
             zone = zone,
         )

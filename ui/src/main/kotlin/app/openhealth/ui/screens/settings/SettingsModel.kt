@@ -96,6 +96,12 @@ enum class TrashKind {
     SET,
     SESSION,
     ROUTINE_EXERCISE,
+    DOSE,
+    SYMPTOM,
+    LAB,
+    ALLERGY,
+    CONDITION,
+    VACCINATION,
 }
 
 /** One row of the Trash (`pr.md` §6.29). */

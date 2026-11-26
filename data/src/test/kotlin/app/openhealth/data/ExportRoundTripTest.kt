@@ -63,6 +63,45 @@ class ExportRoundTripTest {
             payload = "{}",
             reason = "fixture",
         )
+        val clinical = app.openhealth.data.repo.ClinicalRepository(store.db)
+        val provenance = app.openhealth.core.observation.Provenance(
+            sourceId = app.openhealth.core.ids.SourceId("manual"),
+            time = app.openhealth.core.time.TimeProvenance.of(now, now, TEST_ZONE),
+            idempotencyKey = "clinical-fixture",
+        )
+        clinical.saveMedication(
+            app.openhealth.core.clinical.Medication(
+                id = "med-fixture",
+                name = "Levothyroxine",
+                doseAmount = 50.0,
+                doseUnit = UcumUnit.MICROGRAM,
+                form = app.openhealth.core.clinical.MedicationForm.TABLET,
+                schedule = app.openhealth.core.clinical.MedicationSchedule(
+                    times = listOf("08:00"),
+                ),
+                active = true,
+                startedOn = endDate,
+                endedOn = null,
+                notes = null,
+                provenance = provenance,
+            ),
+        )
+        clinical.saveLab(
+            app.openhealth.core.clinical.LabResult(
+                id = "lab-fixture",
+                analyte = app.openhealth.core.clinical.LabAnalyte.HBA1C,
+                value = 5.4,
+                unit = app.openhealth.core.clinical.LabAnalyte.HBA1C.unit,
+                referenceLow = 4.0,
+                referenceHigh = 5.6,
+                referenceNote = null,
+                referenceCitation = null,
+                collectedAt = now,
+                labName = "Labor Berlin",
+                notes = null,
+                provenance = provenance,
+            ),
+        )
         RollupEngine(
             ObservationRepository(store.db),
             RollupRepository(store.db),
@@ -88,6 +127,10 @@ class ExportRoundTripTest {
         val restored = inMemoryStore()
         val restorer = ExportService(restored.driver, restored.db, cipher, FixedClock(now))
         val report = restorer.restore(container, "correct horse battery staple".toCharArray())
+        val restoredClinical = app.openhealth.data.repo.ClinicalRepository(restored.db)
+        assertEquals("Levothyroxine", restoredClinical.medication("med-fixture")?.name)
+        assertEquals(5.4, restoredClinical.lab("lab-fixture")?.value)
+        assertEquals("Labor Berlin", restoredClinical.lab("lab-fixture")?.labName)
         assertEquals(ExportTables.all.size, report.tables)
         assertEquals(
             before.tables.filterNot { it.table == "daily_rollup" }.sumOf { it.rows.size }.toLong(),

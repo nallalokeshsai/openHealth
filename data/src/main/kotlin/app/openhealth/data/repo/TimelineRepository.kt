@@ -172,6 +172,26 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                     "COALESCE(source_id, ''), NULL, 0 FROM note",
                 "happened_at",
             ),
+            Branch(
+                "SELECT 'medication_dose', id, local_date, happened_at, recorded_at, " +
+                    "source_id, medication_id, 0 FROM medication_dose",
+                "happened_at",
+            ),
+            Branch(
+                "SELECT 'symptom_episode', id, local_date, happened_at, recorded_at, " +
+                    "source_id, symptom_id, 0 FROM symptom_episode",
+                "happened_at",
+            ),
+            Branch(
+                "SELECT 'lab_result', id, local_date, happened_at, recorded_at, " +
+                    "source_id, loinc_code, 0 FROM lab_result",
+                "happened_at",
+            ),
+            Branch(
+                "SELECT 'vaccination', id, local_date, happened_at, recorded_at, " +
+                    "source_id, name, 0 FROM vaccination",
+                "happened_at",
+            ),
         )
 
         const val COLUMN_KIND = 0

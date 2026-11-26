@@ -107,12 +107,40 @@ interface CameraSeam {
     suspend fun capture(request: CaptureRequest): CapturedImage?
 }
 
+/** The four type sizes the light report uses (`DESIGN.md` §8.7). */
+enum class PdfTextSize { TITLE, HEADING, BODY, CAPTION }
+
 /** A neutral, light PDF document; layout is data so the seam stays platform-free. */
-data class PdfText(val text: String, val bold: Boolean = false)
+data class PdfParagraph(
+    val text: String,
+    val bold: Boolean = false,
+    val size: PdfTextSize = PdfTextSize.BODY,
+)
 
-data class PdfSection(val heading: String?, val lines: List<PdfText>)
+/**
+ * A table is data, not drawing instructions: the platform renderer decides how to break
+ * it across pages, and the same table is the preview and the CSV. [weights] are relative
+ * column widths and are normalised by the renderer.
+ */
+data class PdfTable(
+    val columns: List<String>,
+    val rows: List<List<String>>,
+    val weights: List<Float>? = null,
+)
 
-data class PdfDocumentSpec(val title: String, val sections: List<PdfSection>, val footer: String)
+data class PdfSection(
+    val heading: String?,
+    val paragraphs: List<PdfParagraph> = emptyList(),
+    val table: PdfTable? = null,
+)
+
+data class PdfDocumentSpec(
+    val title: String,
+    val subtitle: String? = null,
+    val generatedAt: String,
+    val sections: List<PdfSection>,
+    val footer: String,
+)
 
 interface PdfSeam {
     fun render(spec: PdfDocumentSpec): ByteArray

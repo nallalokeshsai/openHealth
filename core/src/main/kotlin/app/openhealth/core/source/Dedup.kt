@@ -80,6 +80,8 @@ object DedupPolicies {
         ObservationType.SLEEP_IN_BED,
         -> mostDetailed
 
+        ObservationType.SLEEP_QUALITY -> keepAll
+
         ObservationType.HEART_RATE,
         ObservationType.HEART_RATE_VARIABILITY,
         -> primarySource
@@ -151,6 +153,7 @@ object DedupPolicies {
         ObservationType.RESPIRATORY_RATE,
         ObservationType.MOOD,
         ObservationType.STRESS,
+        ObservationType.SLEEP_QUALITY,
         -> RollupAggregation.MEAN
 
         ObservationType.STEPS,

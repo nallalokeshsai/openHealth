@@ -20,7 +20,7 @@ class DatabaseTest {
     fun aNewDatabaseIsCreatedAtTheCurrentSchemaVersion() {
         val store = inMemoryStore()
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
-        assertEquals(9L, store.schemaVersion)
+        assertEquals(10L, store.schemaVersion)
         assertEquals(0L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(0L, store.db.trainingQueries.countWorkSets().executeAsOne())
         store.close()
@@ -68,9 +68,9 @@ class DatabaseTest {
         val store = DatabaseOpener(backup).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals("v1-to-v9", backupLabel)
-        assertEquals(9L, store.schemaVersion)
-        assertEquals(9L, userVersion(store.driver))
+        assertEquals("v1-to-v10", backupLabel)
+        assertEquals(10L, store.schemaVersion)
+        assertEquals(10L, userVersion(store.driver))
         V2_INDEXES.forEach { assertEquals(1L, indexCount(store.driver, it), "index $it") }
         store.close()
         Files.deleteIfExists(java.nio.file.Path.of(path))
@@ -203,7 +203,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(9L, store.schemaVersion)
+        assertEquals(10L, store.schemaVersion)
         val view = store.driver.executeQuery(
             null,
             "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'timeline'",
@@ -299,7 +299,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(9L, store.schemaVersion)
+        assertEquals(10L, store.schemaVersion)
         assertEquals(1L, store.db.observationQueries.countObservations().executeAsOne())
         assertEquals(3, store.db.sourceQueries.allSources().executeAsList().size)
 
@@ -367,7 +367,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(9L, store.schemaVersion)
+        assertEquals(10L, store.schemaVersion)
         val repository = app.openhealth.data.repo.NutritionRepository(store.db)
         val food = repository.foodById("legacy-food")!!
         assertEquals(389.0, food.per100g[app.openhealth.core.nutrition.Nutrient.ENERGY])
@@ -402,7 +402,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(9L, store.schemaVersion)
+        assertEquals(10L, store.schemaVersion)
         seedSources(store)
         store.db.bodyQueries.insertPhoto(
             id = "photo-1",
@@ -471,7 +471,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(9L, store.schemaVersion)
+        assertEquals(10L, store.schemaVersion)
         val columns = store.driver.executeQuery(
             null,
             "PRAGMA table_info(exercise)",
@@ -726,7 +726,7 @@ class DatabaseTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(9L, store.schemaVersion)
+        assertEquals(10L, store.schemaVersion)
         seedSources(store)
         store.driver.execute(
             null,

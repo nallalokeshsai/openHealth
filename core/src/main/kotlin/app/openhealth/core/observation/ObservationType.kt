@@ -66,6 +66,9 @@ enum class ObservationType(
     SLEEP_AWAKE(UcumUnit.SECOND, TemporalShape.INTERVAL, ObservationCategory.SLEEP),
     SLEEP_IN_BED(UcumUnit.SECOND, TemporalShape.INTERVAL, ObservationCategory.SLEEP),
 
+    /** The person's own 1–5 rating of a night; never inferred from the stages. */
+    SLEEP_QUALITY(UcumUnit.SCORE, TemporalShape.INSTANT, ObservationCategory.SLEEP),
+
     NUTRITION_ENERGY(
         UcumUnit.KILOCALORIE,
         TemporalShape.DAILY_TOTAL,

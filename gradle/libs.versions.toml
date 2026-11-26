@@ -38,6 +38,8 @@ uiautomator = "2.3.0"
 roborazzi = "1.79.0"
 maplibre = "13.7.1"
 ktlint = "14.2.0"
+# Test-only JSON Schema validation of the FHIR R4 bundle (Apache-2.0).
+jsonSchemaValidator = "1.0.87"
 
 [libraries]
 android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
@@ -85,6 +87,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
 roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
+json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "jsonSchemaValidator" }
 androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmarkMacro" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }

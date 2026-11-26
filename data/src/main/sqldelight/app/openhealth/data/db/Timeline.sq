@@ -55,7 +55,25 @@ FROM activity
 UNION ALL
 SELECT
     'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
-FROM note;
+FROM note
+UNION ALL
+SELECT
+    'medication_dose', id, local_date, happened_at, recorded_at, source_id,
+    medication_id, 0
+FROM medication_dose
+UNION ALL
+SELECT
+    'symptom_episode', id, local_date, happened_at, recorded_at, source_id,
+    symptom_id, 0
+FROM symptom_episode
+UNION ALL
+SELECT
+    'lab_result', id, local_date, happened_at, recorded_at, source_id, loinc_code, 0
+FROM lab_result
+UNION ALL
+SELECT
+    'vaccination', id, local_date, happened_at, recorded_at, source_id, name, 0
+FROM vaccination;
 
 timelineForDay:
 SELECT * FROM timeline WHERE local_date = :localDate ORDER BY happened_at DESC, entity_id;
