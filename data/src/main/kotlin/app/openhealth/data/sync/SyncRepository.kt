@@ -16,7 +16,6 @@ import app.openhealth.data.db.OpenHealthDb
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.sync.ApplyOutcome
 import app.openhealth.sync.SyncLocalStore
-import java.util.UUID
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
@@ -41,7 +40,10 @@ class SyncRepository(
     private val registry: SyncMergePolicyRegistry = SyncMergePolicyRegistry.default(),
 ) : SyncLocalStore {
     private val codec = SyncRowCodec(driver)
-    private val hlc = HybridClock { clock.now().toEpochMilliseconds() }
+    private val hlc = HybridClock(
+        wallMillis = { clock.now().toEpochMilliseconds() },
+        seed = (device.hashCode().toLong() and HLC_SEED_MASK),
+    )
     private var rollupInvalidator: ((kotlinx.datetime.LocalDate) -> Unit)? = null
 
     /**
@@ -53,8 +55,8 @@ class SyncRepository(
         rollupInvalidator = invalidator
     }
 
-    @Volatile
-    private var applying = false
+    /** Only the thread applying a page suppresses capture; another thread's write is real. */
+    private val applying = ThreadLocal.withInitial { false }
 
     /** Sample data is generated through the real repositories; it must never sync. */
     @Volatile
@@ -75,7 +77,7 @@ class SyncRepository(
      */
     @Suppress("ReturnCount")
     fun capture(entity: String, entityId: String, localDate: String? = null) {
-        if (applying || !captureEnabled) return
+        if (applying.get() || captureEnabled.not()) return
         val table = SyncTables.of(entity) ?: return
         if (entity in SyncTables.neverSynced) return
         if (entity == "settings" &&
@@ -84,7 +86,14 @@ class SyncRepository(
             return
         }
         val keyValues = SyncRowCodec.keyValues(entityId, table.keys.size)
-        val fields = codec.read(table.table, table.keys, keyValues) ?: return
+        val stored = codec.read(table.table, table.keys, keyValues) ?: return
+        // Raw payloads stay on the device (`pr.md` §7.1); a child that kept the foreign
+        // key would fail on the receiver, so the wire copy nulls it.
+        val fields = if (stored.containsKey("raw_record_id")) {
+            stored + ("raw_record_id" to null)
+        } else {
+            stored
+        }
         val now = hlc.next()
         val clocks = fields.keys.associateWith { now.encode() }
         val record = ChangeRecord(
@@ -93,7 +102,7 @@ class SyncRepository(
             operation = ChangeOperation.UPSERT,
             fields = fields,
             fieldClocks = clocks,
-            idempotencyKey = "$device:${UUID.randomUUID()}",
+            idempotencyKey = "$device:${kotlin.uuid.Uuid.random()}",
             hlc = now.encode(),
             deviceId = device,
             schemaVersion = schemaVersion,
@@ -125,7 +134,7 @@ class SyncRepository(
     /** A delete is a tombstone in the log, never a silent resurrection (`pr.md` §7.7). */
     @Suppress("ReturnCount")
     fun captureDelete(entity: String, entityId: String, localDate: String? = null) {
-        if (applying || !captureEnabled) return
+        if (applying.get() || captureEnabled.not()) return
         val table = SyncTables.of(entity) ?: return
         if (entity in SyncTables.neverSynced) return
         if (entity == "settings" &&
@@ -138,7 +147,7 @@ class SyncRepository(
             entity = entity,
             entityId = entityId,
             operation = ChangeOperation.DELETE,
-            idempotencyKey = "$device:${UUID.randomUUID()}",
+            idempotencyKey = "$device:${kotlin.uuid.Uuid.random()}",
             hlc = now.encode(),
             deviceId = device,
             schemaVersion = schemaVersion,
@@ -174,6 +183,29 @@ class SyncRepository(
 
     fun resumeCapture() {
         captureEnabled = true
+    }
+
+    /**
+     * A record written before schema v11 has no change-log entry. The first pairing
+     * sweeps every syncable row once, so a second device receives the history that
+     * already exists instead of only future edits. The marker is per device.
+     */
+    fun backfillIfNeeded() {
+        val marker = db.settingsQueries.setting(BACKFILL_MARKER).executeAsOneOrNull()
+        if (marker?.value_ == "true") return
+        db.transaction {
+            SyncTables.all.forEach { table ->
+                codec.allKeys(table).forEach { keyValues ->
+                    capture(table.entity, SyncRowCodec.entityId(keyValues))
+                }
+            }
+            db.settingsQueries.putSetting(
+                key = BACKFILL_MARKER,
+                value = "true",
+                updatedAt = clock.now().toEpochMilliseconds(),
+                schemaVersion = schemaVersion.toLong(),
+            )
+        }
     }
 
     // ----------------------------------------------------------------- client
@@ -236,7 +268,7 @@ class SyncRepository(
     override fun applyRemote(records: List<ChangeRecord>): ApplyOutcome {
         val dates = mutableSetOf<String>()
         val outcome = db.transactionWithResult {
-            applying = true
+            applying.set(true)
             try {
                 var applied = 0
                 val conflicts = mutableListOf<SyncConflict>()
@@ -281,12 +313,13 @@ class SyncRepository(
                         }
                         ApplyKind.REFUSED -> refused += record
                     }
-                    // Keep the wire payload, unknown fields included (`pr.md` §7.9).
-                    insertApplied(record)
+                    // Keep the wire payload, unknown fields included (`pr.md` §7.9). A
+                    // refused record is not marked seen, so an update can retry it.
+                    if (appliedChange.kind != ApplyKind.REFUSED) insertApplied(record)
                 }
                 ApplyOutcome(applied, conflicts, refused)
             } finally {
-                applying = false
+                applying.set(false)
             }
         }
         dates.mapNotNull { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }
@@ -298,18 +331,45 @@ class SyncRepository(
 
     private enum class ApplyKind { APPLIED, CONFLICT, REFUSED }
 
-    @Suppress("LongMethod", "ReturnCount")
+    @Suppress("LongMethod", "ReturnCount", "CyclomaticComplexMethod")
     private fun applyOne(
         record: ChangeRecord,
         table: SyncTable,
         policy: app.openhealth.core.merge.MergePolicy<SyncSnapshot>,
     ): OneApply {
         val keyValues = SyncRowCodec.keyValues(record.entityId, table.keys.size)
+        if (keyValues.size != table.keys.size) return OneApply(ApplyKind.REFUSED)
         val localFields = codec.read(table.table, table.keys, keyValues)
+        if (record.entity == "settings" &&
+            !app.openhealth.data.repo.SyncSettingsPolicy.shouldSync(record.entityId)
+        ) {
+            return OneApply(ApplyKind.REFUSED)
+        }
+        if (record.operation == ChangeOperation.UPSERT &&
+            table.required.any { record.fields[it].isNullOrBlank() }
+        ) {
+            return OneApply(ApplyKind.REFUSED)
+        }
         val state = db.syncQueries.rowState(record.entity, record.entityId).executeAsOneOrNull()
+        val wasDeleted = state?.deleted == 1L
         val localHlc = state?.hlc ?: HybridLogicalClock.ZERO.encode()
         val localClocks = state?.field_clocks?.let(::decodeClocks) ?: emptyMap()
 
+        if (wasDeleted && record.operation == ChangeOperation.UPSERT) {
+            // A delete is a tombstone; an edit from another device never resurrects it
+            // silently (`pr.md` §7.7). The user sees both sides and chooses.
+            return OneApply(
+                ApplyKind.CONFLICT,
+                conflict(
+                    record,
+                    localFields.orEmpty(),
+                    localClocks,
+                    localHlc,
+                    "sync.conflict.deleted_locally",
+                    localDeleted = true,
+                ),
+            )
+        }
         if (record.operation == ChangeOperation.DELETE) {
             if (localFields == null) {
                 db.syncQueries.upsertRowState(
@@ -380,18 +440,23 @@ class SyncRepository(
         if (!codec.write(table.table, table.keys, value.fields)) {
             return OneApply(ApplyKind.REFUSED)
         }
+        val localWon = merged.action == MergeAction.KEEP_LOCAL
         db.syncQueries.upsertRowState(
             record.entity,
             record.entityId,
-            maxOf(localHlc, record.hlc),
-            encodeClocks(value.fieldClocks.ifEmpty { record.fieldClocks }),
+            if (localWon) localHlc else maxOf(localHlc, record.hlc),
+            if (localWon) {
+                state?.field_clocks ?: encodeClocks(emptyMap())
+            } else {
+                encodeClocks(value.fieldClocks.ifEmpty { record.fieldClocks })
+            },
             0L,
         )
         clearConflicts(record.entity, record.entityId)
         return OneApply(ApplyKind.APPLIED)
     }
 
-    @Suppress("ReturnCount")
+    @Suppress("ReturnCount", "LongMethod")
     override fun resolveConflict(id: String, keepLocal: Boolean, atMillis: Long): ChangeRecord? {
         val row = db.syncQueries.conflictById(id).executeAsOneOrNull() ?: return null
         val chosen = runCatching {
@@ -406,20 +471,29 @@ class SyncRepository(
         val revision = fields["revision"]?.toLongOrNull()
         if (revision != null) fields["revision"] = (revision + 1).toString()
         val clocks = fields.keys.associateWith { now.encode() }
-        val resolved = ChangeRecord(
+        val base = ChangeRecord(
             entity = row.entity,
             entityId = row.entity_id,
             operation = ChangeOperation.UPSERT,
             fields = fields,
             fieldClocks = clocks,
-            idempotencyKey = "$device:${UUID.randomUUID()}",
+            idempotencyKey = "$device:${kotlin.uuid.Uuid.random()}",
             hlc = now.encode(),
             deviceId = device,
             schemaVersion = schemaVersion,
             recordedAt = atMillis,
         )
+        val keyValues = SyncRowCodec.keyValues(row.entity_id, table.keys.size)
+        val localDate = fields["local_date"] ?: codec.read(table.table, table.keys, keyValues)
+            ?.get("local_date")
+        val deleting = chosen.operation == ChangeOperation.DELETE
+        val resolved = base.copy(operation = chosen.operation, localDate = localDate)
         db.transaction {
-            codec.write(table.table, table.keys, fields)
+            if (deleting) {
+                codec.delete(table.table, table.keys, keyValues)
+            } else {
+                codec.write(table.table, table.keys, fields)
+            }
             db.syncQueries.insertChange(
                 resolved.entity,
                 resolved.entityId,
@@ -438,7 +512,7 @@ class SyncRepository(
                 resolved.entityId,
                 resolved.hlc,
                 encodeClocks(clocks),
-                0L,
+                if (deleting) 1L else 0L,
             )
             db.syncQueries.deleteConflict(id)
         }
@@ -484,18 +558,20 @@ class SyncRepository(
         db.syncQueries.deleteConflictsForEntity(entity, entityId)
     }
 
+    @Suppress("LongParameterList")
     private fun conflict(
         record: ChangeRecord,
         localFields: Map<String, String?>,
         localClocks: Map<String, String>,
         localHlc: String,
         reasonKey: String? = null,
+        localDeleted: Boolean = false,
     ): SyncConflict {
         val now = clock.now().toEpochMilliseconds()
         val local = ChangeRecord(
             entity = record.entity,
             entityId = record.entityId,
-            operation = ChangeOperation.UPSERT,
+            operation = if (localDeleted) ChangeOperation.DELETE else ChangeOperation.UPSERT,
             fields = localFields,
             fieldClocks = localClocks,
             idempotencyKey = "local:$device:${record.entityId}",
@@ -559,6 +635,8 @@ class SyncRepository(
 
     private companion object {
         const val UNKNOWN_RANK = 500
+        const val HLC_SEED_MASK = 0xFFFFL
+        const val BACKFILL_MARKER = "sync.backfilled_v11"
         const val ORDER_SCALE = 1_000_000L
         val mapSerializer = MapSerializer(String.serializer(), String.serializer().nullable)
         val stringMapSerializer = MapSerializer(String.serializer(), String.serializer())

@@ -70,6 +70,7 @@ class PrivacySourceTest {
                 "HttpUrlConnectionTransport.kt",
                 "KtorSyncTransport.kt",
                 "MapPackStore.kt",
+                "SyncEngine.kt",
             ),
             network.map { it.name }.sorted(),
             "an unexpected network path exists; only the barcode lookup, the map-pack " +

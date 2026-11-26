@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  No cleartext, ever (pr.md §6.23; BUILD-ROADMAP.md §B10). The one outbound call is the
-  Open Food Facts barcode lookup over HTTPS, and that is the only transport in the app.
-  This file makes the rule explicit rather than inheriting the targetSdk default, so a
-  future change that adds an http:// URL fails review instead of silently working.
+  No cleartext, ever (pr.md §6.23; BUILD-ROADMAP.md §B10). The app opens a socket for
+  three explicit actions only, each over HTTPS: the Open Food Facts barcode lookup (B6),
+  the map-pack download (B11) and the paired sync client (B13). This file makes the rule
+  explicit rather than inheriting the targetSdk default, so a future change that adds an
+  http:// URL fails review instead of silently working.
+
+  One exception is not declared here and must not be read out of this file: the sync
+  transport allows plain http to localhost, 127.0.0.1 and the emulator host 10.0.2.2 for
+  a self-hoster who has not issued a certificate yet (docs/adr/0018-sync-server.md §6).
+  It is enforced in KtorSyncTransport.requireSecureBase, and the Ktor CIO engine does not
+  consult this policy, so this config neither permits nor blocks it. An engine change
+  would break that path; see the B13 audit entry in docs/build-log.md.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">

@@ -2183,11 +2183,9 @@
     <string name="sync_last_synced">Last synced</string>
     <string name="sync_error_label">Last error</string>
     <string name="sync_conflicts_title">Conflicts</string>
-    <string name="sync_conflicts_none">No conflicts.</string>
+    <string name="sync_conflicts_none">Conflicts appear here when two devices change the same record.</string>
     <string name="sync_conflict_local">This device</string>
     <string name="sync_conflict_remote">Other device</string>
-    <string name="sync_keep_local">Keep this device</string>
-    <string name="sync_keep_remote">Keep other device</string>
     <string name="sync_optional_note">Sync is optional. The app keeps working with no server, and turning sync off never deletes a value.</string>
     <string name="sync_conflict_reason">Both devices edited the same revision. Choose the version to keep; the other stays in the change log.</string>
     <string name="sync_entity_profile">Profile</string>
@@ -2203,5 +2201,25 @@
     <string name="sync_entity_generic">Record</string>
     <string name="sync_pair_failed">Could not pair. Check the address and the code.</string>
     <string name="sync_sync_failed">Sync did not finish. Your data is still on this device.</string>
-    <string name="sync_unpaired_note">This device is local only.</string>
+
+    <string name="sync_conflicts_none_title">Nothing to review</string>
+    <string name="sync_deleted_version">Deleted</string>
+    <string name="sync_value_not_set">Not set</string>
+    <string name="sync_keep_value">Keep %1$s</string>
+    <string name="sync_keep_this_version">Keep this version</string>
+    <string name="sync_field_name">Name</string>
+    <string name="sync_field_body">Text</string>
+    <string name="sync_field_value">Value</string>
+    <string name="sync_field_title">Title</string>
+    <string name="sync_field_notes">Notes</string>
+    <string name="sync_field_weight">Weight</string>
+    <string name="sync_field_height">Height</string>
+    <string name="sync_field_active">Active</string>
+    <string name="settings_sync_waiting">%1$d waiting</string>
+    <string name="settings_sync_offline">Offline · %1$d waiting</string>
+    <string name="settings_sync_error">Needs attention</string>
+    <plurals name="sync_conflict_count">
+        <item quantity="one">%1$d conflict</item>
+        <item quantity="other">%1$d conflicts</item>
+    </plurals>
 </resources>

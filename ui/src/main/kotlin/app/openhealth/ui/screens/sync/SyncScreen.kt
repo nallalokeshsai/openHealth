@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.openhealth.core.sync.SyncStatus
 import app.openhealth.ui.R
@@ -33,8 +34,12 @@ import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhTextField
+import app.openhealth.ui.icons.OhIcons
+import app.openhealth.ui.screens.common.OhEmptyState
 import app.openhealth.ui.screens.common.OhPageHeader
+import app.openhealth.ui.screens.common.OhSectionTitle
 import app.openhealth.ui.theme.OhTheme
+import app.openhealth.ui.theme.ohBlockDirection
 
 /**
  * Settings → Sync (`pr.md` §6.24, `DESIGN.md` §14.1 settings surface). Local-first: the
@@ -65,115 +70,31 @@ fun SyncScreen(
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             Text(
                 text = stringResource(R.string.sync_intro),
-                style = OhTheme.type.body,
+                style = OhTheme.type.body.copy(textDirection = ohBlockDirection()),
                 color = OhTheme.colors.label2,
+                textAlign = TextAlign.Start,
             )
             Spacer(Modifier.height(OhTheme.space.s5))
             if (!state.paired) {
-                OhInsetGroup {
-                    OhRow(
-                        title = stringResource(R.string.sync_server_label),
-                        subtitle = stringResource(R.string.sync_server_body),
-                        leadingIcon = app.openhealth.ui.icons.OhIcons.refresh,
-                    )
-                }
-                Spacer(Modifier.height(OhTheme.space.s3))
-                OhTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    placeholder = stringResource(R.string.sync_server_placeholder),
-                    enabled = !state.busy,
-                    contentDescription = stringResource(R.string.sync_server_label),
-                )
-                Spacer(Modifier.height(OhTheme.space.s3))
-                OhTextField(
-                    value = code,
-                    onValueChange = { code = it.uppercase() },
-                    placeholder = stringResource(R.string.sync_code_placeholder),
-                    enabled = !state.busy,
-                    contentDescription = stringResource(R.string.sync_code_label),
-                )
-                Spacer(Modifier.height(OhTheme.space.s4))
-                OhButton(
-                    text = if (state.busy) {
-                        stringResource(R.string.sync_pairing)
-                    } else {
-                        stringResource(R.string.sync_pair)
-                    },
-                    onClick = { onPair(url.trim(), code.trim()) },
-                    enabled = !state.busy && url.isNotBlank() && code.isNotBlank(),
+                UnpairedSection(
+                    url = url,
+                    code = code,
+                    busy = state.busy,
+                    error = state.pairError,
+                    onUrl = { url = it },
+                    onCode = { code = it.uppercase() },
+                    onPair = { onPair(url.trim(), code.trim()) },
                 )
             } else {
-                OhInsetGroup {
-                    OhRow(
-                        title = stringResource(R.string.sync_server_label),
-                        value = state.serverUrl,
-                        leadingIcon = app.openhealth.ui.icons.OhIcons.refresh,
-                    )
-                    OhRow(
-                        title = stringResource(R.string.sync_status_label),
-                        value = statusLabel(state.status),
-                        showDivider = true,
-                        leadingIcon = statusIcon(state.status),
-                    )
-                    OhRow(
-                        title = stringResource(R.string.sync_pending_label),
-                        value = state.pending.toString(),
-                        showDivider = true,
-                    )
-                    state.lastSyncedLabel?.let { label ->
-                        OhRow(
-                            title = stringResource(R.string.sync_last_synced),
-                            value = label,
-                            showDivider = true,
-                        )
-                    }
-                    state.error?.takeIf { it.isNotBlank() }?.let { error ->
-                        OhRow(
-                            title = stringResource(R.string.sync_error_label),
-                            value = error,
-                            showDivider = true,
-                            destructive = true,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(OhTheme.space.s4))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3),
-                ) {
-                    OhButton(
-                        text = if (state.busy) {
-                            stringResource(R.string.sync_syncing)
-                        } else {
-                            stringResource(R.string.sync_now)
-                        },
-                        onClick = onSyncNow,
-                        enabled = !state.busy,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OhButton(
-                        text = stringResource(R.string.sync_disconnect),
-                        onClick = onDisconnect,
-                        variant = OhButtonVariant.Secondary,
-                        enabled = !state.busy,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                PairedSection(state = state, onSyncNow = onSyncNow, onDisconnect = onDisconnect)
             }
 
-            Spacer(Modifier.height(OhTheme.space.s6))
-            Text(
-                text = stringResource(R.string.sync_conflicts_title),
-                style = OhTheme.type.title3,
-                color = OhTheme.colors.label,
-            )
-            Spacer(Modifier.height(OhTheme.space.s2))
+            OhSectionTitle(stringResource(R.string.sync_conflicts_title))
             if (state.conflicts.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.sync_conflicts_none),
-                    style = OhTheme.type.body,
-                    color = OhTheme.colors.label2,
+                OhEmptyState(
+                    title = stringResource(R.string.sync_conflicts_none_title),
+                    body = stringResource(R.string.sync_conflicts_none),
+                    glyph = OhIcons.check,
                 )
             } else {
                 state.conflicts.forEach { conflict ->
@@ -184,11 +105,128 @@ fun SyncScreen(
             Spacer(Modifier.height(OhTheme.space.s6))
             Text(
                 text = stringResource(R.string.sync_optional_note),
-                style = OhTheme.type.caption,
-                color = OhTheme.colors.label3,
+                style = OhTheme.type.footnote.copy(textDirection = ohBlockDirection()),
+                color = OhTheme.colors.labelDim,
+                textAlign = TextAlign.Start,
             )
             Spacer(Modifier.height(OhTheme.space.s6))
         }
+    }
+}
+
+@Composable
+private fun UnpairedSection(
+    url: String,
+    code: String,
+    busy: Boolean,
+    error: String?,
+    onUrl: (String) -> Unit,
+    onCode: (String) -> Unit,
+    onPair: () -> Unit,
+) {
+    OhInsetGroup {
+        OhRow(
+            title = stringResource(R.string.sync_server_label),
+            subtitle = stringResource(R.string.sync_server_body),
+            leadingIcon = OhIcons.refresh,
+        )
+    }
+    Spacer(Modifier.height(OhTheme.space.s3))
+    OhTextField(
+        value = url,
+        onValueChange = onUrl,
+        placeholder = stringResource(R.string.sync_server_placeholder),
+        enabled = !busy,
+        contentDescription = stringResource(R.string.sync_server_label),
+    )
+    Spacer(Modifier.height(OhTheme.space.s3))
+    OhTextField(
+        value = code,
+        onValueChange = onCode,
+        placeholder = stringResource(R.string.sync_code_placeholder),
+        enabled = !busy,
+        error = error,
+        contentDescription = stringResource(R.string.sync_code_label),
+    )
+    Spacer(Modifier.height(OhTheme.space.s4))
+    OhButton(
+        text = if (busy) {
+            stringResource(R.string.sync_pairing)
+        } else {
+            stringResource(R.string.sync_pair)
+        },
+        onClick = onPair,
+        enabled = !busy && url.isNotBlank() && code.isNotBlank(),
+    )
+}
+
+@Composable
+private fun PairedSection(state: SyncModel, onSyncNow: () -> Unit, onDisconnect: () -> Unit) {
+    OhInsetGroup {
+        OhRow(
+            title = stringResource(R.string.sync_server_label),
+            value = state.serverUrl,
+            leadingIcon = OhIcons.refresh,
+            leadingTint = OhTheme.colors.surface2,
+            leadingInk = OhTheme.colors.label2,
+        )
+        OhRow(
+            title = stringResource(R.string.sync_status_label),
+            value = statusLabel(state.status),
+            showDivider = true,
+            leadingIcon = statusIcon(state.status),
+            leadingTint = OhTheme.colors.surface2,
+            leadingInk = statusInk(state.status),
+        )
+        OhRow(
+            title = stringResource(R.string.sync_pending_label),
+            value = state.pending.toString(),
+            showDivider = true,
+        )
+        state.lastSyncedLabel?.let { label ->
+            OhRow(
+                title = stringResource(R.string.sync_last_synced),
+                value = label,
+                showDivider = true,
+            )
+        }
+    }
+    state.error?.takeIf { it.isNotBlank() }?.let { error ->
+        Spacer(Modifier.height(OhTheme.space.s3))
+        Text(
+            text = stringResource(R.string.sync_error_label),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.orangeInk,
+        )
+        Text(
+            text = error,
+            style = OhTheme.type.body.copy(textDirection = ohBlockDirection()),
+            color = OhTheme.colors.orangeInk,
+            textAlign = TextAlign.Start,
+        )
+    }
+    Spacer(Modifier.height(OhTheme.space.s4))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3),
+    ) {
+        OhButton(
+            text = if (state.busy) {
+                stringResource(R.string.sync_syncing)
+            } else {
+                stringResource(R.string.sync_now)
+            },
+            onClick = onSyncNow,
+            enabled = !state.busy,
+            modifier = Modifier.weight(1f),
+        )
+        OhButton(
+            text = stringResource(R.string.sync_disconnect),
+            onClick = onDisconnect,
+            variant = OhButtonVariant.Secondary,
+            enabled = !state.busy,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -200,32 +238,38 @@ private fun ConflictCard(
 ) {
     OhCard {
         Text(
-            text = conflict.entityLabel,
+            text = entityLabel(conflict.entity),
             style = OhTheme.type.title3,
             color = OhTheme.colors.label,
         )
         Text(
-            text = conflict.reason,
+            text = stringResource(R.string.sync_conflict_reason),
             style = OhTheme.type.caption,
             color = OhTheme.colors.label2,
-        )
-        Spacer(Modifier.height(OhTheme.space.s3))
-        ConflictSide(
-            label = stringResource(R.string.sync_conflict_local),
-            side = conflict.local,
-        )
-        Spacer(Modifier.height(OhTheme.space.s2))
-        ConflictSide(
-            label = stringResource(R.string.sync_conflict_remote),
-            side = conflict.remote,
         )
         Spacer(Modifier.height(OhTheme.space.s3))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3),
         ) {
+            ConflictSide(
+                label = stringResource(R.string.sync_conflict_local),
+                side = conflict.local,
+                modifier = Modifier.weight(1f),
+            )
+            ConflictSide(
+                label = stringResource(R.string.sync_conflict_remote),
+                side = conflict.remote,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Spacer(Modifier.height(OhTheme.space.s3))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3),
+        ) {
             OhButton(
-                text = stringResource(R.string.sync_keep_local),
+                text = keepLabel(conflict, conflict.local),
                 onClick = { onKeep(conflict.id, true) },
                 variant = OhButtonVariant.Secondary,
                 size = OhButtonSize.Small,
@@ -233,7 +277,7 @@ private fun ConflictCard(
                 modifier = Modifier.weight(1f),
             )
             OhButton(
-                text = stringResource(R.string.sync_keep_remote),
+                text = keepLabel(conflict, conflict.remote),
                 onClick = { onKeep(conflict.id, false) },
                 variant = OhButtonVariant.Secondary,
                 size = OhButtonSize.Small,
@@ -245,18 +289,39 @@ private fun ConflictCard(
 }
 
 @Composable
-private fun ConflictSide(label: String, side: SyncSideModel) {
-    Column {
+private fun ConflictSide(label: String, side: SyncSideModel, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
         Text(
-            text = "$label · ${side.device} · ${side.whenLabel}",
-            style = OhTheme.type.caption,
+            text = label,
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        Text(
+            text = side.device,
+            style = OhTheme.type.caption2,
             color = OhTheme.colors.label2,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        Text(
+            text = side.whenLabel,
+            style = OhTheme.type.caption2,
+            color = OhTheme.colors.label2,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (side.fields.isEmpty()) {
+            Text(
+                text = stringResource(R.string.sync_deleted_version),
+                style = OhTheme.type.body,
+                color = OhTheme.colors.label,
+            )
+        }
         side.fields.forEach { field ->
             Text(
-                text = "${field.label}: ${field.value}",
+                text = "${fieldLabel(field.key)}: ${field.value.ifBlank {
+                    stringResource(R.string.sync_value_not_set)
+                }}",
                 style = OhTheme.type.body,
                 color = OhTheme.colors.label,
                 maxLines = 2,
@@ -264,6 +329,46 @@ private fun ConflictSide(label: String, side: SyncSideModel) {
             )
         }
     }
+}
+
+@Composable
+private fun keepLabel(conflict: SyncConflictModel, side: SyncSideModel): String {
+    val value = conflict.headline(side).take(HEADLINE_CHARS)
+    return if (value.isBlank()) {
+        stringResource(R.string.sync_keep_this_version)
+    } else {
+        stringResource(R.string.sync_keep_value, value)
+    }
+}
+
+private const val HEADLINE_CHARS = 18
+
+@Composable
+private fun entityLabel(entity: String): String = when (entity) {
+    "profile" -> stringResource(R.string.sync_entity_profile)
+    "settings" -> stringResource(R.string.sync_entity_settings)
+    "note" -> stringResource(R.string.sync_entity_note)
+    "routine" -> stringResource(R.string.sync_entity_routine)
+    "session" -> stringResource(R.string.sync_entity_session)
+    "food" -> stringResource(R.string.sync_entity_food)
+    "entry" -> stringResource(R.string.sync_entity_entry)
+    "measurement" -> stringResource(R.string.sync_entity_measurement)
+    "vital" -> stringResource(R.string.sync_entity_vital)
+    "activity" -> stringResource(R.string.sync_entity_activity)
+    else -> stringResource(R.string.sync_entity_generic)
+}
+
+@Composable
+private fun fieldLabel(key: String): String = when (key) {
+    "name", "display_name" -> stringResource(R.string.sync_field_name)
+    "body" -> stringResource(R.string.sync_field_body)
+    "value" -> stringResource(R.string.sync_field_value)
+    "title" -> stringResource(R.string.sync_field_title)
+    "notes" -> stringResource(R.string.sync_field_notes)
+    "weight_kg" -> stringResource(R.string.sync_field_weight)
+    "height_cm" -> stringResource(R.string.sync_field_height)
+    "active" -> stringResource(R.string.sync_field_active)
+    else -> key.replace('_', ' ').replaceFirstChar { it.uppercase() }
 }
 
 @Composable
@@ -275,9 +380,16 @@ private fun statusLabel(status: SyncStatus): String = when (status) {
     SyncStatus.ERROR -> stringResource(R.string.sync_status_error)
 }
 
-@Composable
 private fun statusIcon(status: SyncStatus) = when (status) {
-    SyncStatus.SYNCED -> app.openhealth.ui.icons.OhIcons.check
-    SyncStatus.OFFLINE, SyncStatus.ERROR -> app.openhealth.ui.icons.OhIcons.warning
-    else -> app.openhealth.ui.icons.OhIcons.refresh
+    SyncStatus.SYNCED -> OhIcons.check
+    SyncStatus.OFFLINE -> OhIcons.cloudOff
+    SyncStatus.ERROR -> OhIcons.warning
+    else -> OhIcons.refresh
+}
+
+@Composable
+private fun statusInk(status: SyncStatus) = when (status) {
+    SyncStatus.SYNCED -> OhTheme.colors.acc
+    SyncStatus.OFFLINE, SyncStatus.ERROR -> OhTheme.colors.orangeInk
+    else -> OhTheme.colors.label2
 }

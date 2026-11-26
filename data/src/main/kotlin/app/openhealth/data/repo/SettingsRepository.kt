@@ -146,5 +146,14 @@ object SettingKeys {
 object SyncSettingsPolicy {
     private val localPrefixes = listOf("sync.", "demo.", "steps.", "device.", "health_connect.")
 
-    fun shouldSync(key: String): Boolean = localPrefixes.none { key.startsWith(it) }
+    /**
+     * Device-local bookkeeping whose key does not carry a local prefix. The sync book
+     * records when each source last reached **this** phone, so another device's copy
+     * would make the Devices screen state something untrue; the catalogue version marks
+     * what this install has seeded and would stop a later upgrade re-seeding.
+     */
+    private val localKeys = setOf(SettingKeys.SYNC_BOOK, SettingKeys.EXERCISE_CATALOGUE)
+
+    fun shouldSync(key: String): Boolean =
+        key !in localKeys && localPrefixes.none { key.startsWith(it) }
 }

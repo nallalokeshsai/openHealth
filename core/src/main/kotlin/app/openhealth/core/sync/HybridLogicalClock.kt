@@ -86,16 +86,27 @@ data class HybridLogicalClock(val wallMillis: Long, val counter: Long) :
     }
 }
 
-/** Mutable holder around one device's logical clock; the change log owns one of these. */
-class HybridClock(private val wallMillis: () -> Long) {
+/**
+ * Mutable holder around one device's logical clock; the change log owns one of these.
+ * [seed] gives two devices different starting counters so an edit in the same
+ * millisecond still orders; the HLC carries no node id by design (`pr.md` §7.8).
+ */
+class HybridClock(private val wallMillis: () -> Long, private val seed: Long = 0L) {
     @Volatile
-    private var current: HybridLogicalClock = HybridLogicalClock.ZERO
+    private var current: HybridLogicalClock = HybridLogicalClock(0, seed.coerceAtLeast(0))
 
     fun current(): HybridLogicalClock = current
 
     @Synchronized
     fun next(): HybridLogicalClock {
-        current = HybridLogicalClock.tick(current, wallMillis())
+        val wall = wallMillis()
+        current = if (wall <= current.wallMillis) {
+            HybridLogicalClock(current.wallMillis, current.counter + 1)
+        } else {
+            // A new millisecond starts at this device's seed, not 0, so two devices
+            // editing in the same millisecond still order.
+            HybridLogicalClock(wall, seed.coerceAtLeast(0))
+        }
         return current
     }
 

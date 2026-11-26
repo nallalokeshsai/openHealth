@@ -3266,6 +3266,14 @@ class AppViewModel(
                 )
             }
             if (model == null) {
+                _state.update {
+                    it.copy(
+                        sync = (it.sync ?: container.sync.model()).copy(
+                            pairError = container.context.getString(UiR.string.sync_pair_failed),
+                            busy = false,
+                        ),
+                    )
+                }
                 showToast(UiR.string.sync_pair_failed, undo = false)
             } else {
                 rebuild()

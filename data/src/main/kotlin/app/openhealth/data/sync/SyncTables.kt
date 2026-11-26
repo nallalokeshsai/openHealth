@@ -10,7 +10,14 @@ package app.openhealth.data.sync
  * [rank] orders an applied page: a row is written only after the rows it references, and
  * deleted before them, so foreign keys hold during a sync.
  */
-data class SyncTable(val entity: String, val table: String, val keys: List<String>, val rank: Int)
+data class SyncTable(
+    val entity: String,
+    val table: String,
+    val keys: List<String>,
+    val rank: Int,
+    /** Columns a value must carry to keep its provenance (`pr.md` §7.2). */
+    val required: List<String> = emptyList(),
+)
 
 @Suppress("MagicNumber") // ranks are an ordering scale, not values
 object SyncTables {
@@ -27,27 +34,99 @@ object SyncTables {
         SyncTable("fast_window", "fast_window", listOf("id"), 20),
         SyncTable("routine", "routine", listOf("id"), 30),
         SyncTable("programme", "programme", listOf("id"), 30),
-        SyncTable("observation", "observation", listOf("id"), 40),
-        SyncTable("measurement", "measurement", listOf("id"), 50),
-        SyncTable("vital", "vital", listOf("id"), 50),
-        SyncTable("note", "note", listOf("id"), 50),
-        SyncTable("medication", "medication", listOf("id"), 50),
+        SyncTable(
+            "observation",
+            "observation",
+            listOf("id"),
+            40,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
+        SyncTable(
+            "measurement",
+            "measurement",
+            listOf("id"),
+            50,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
+        SyncTable(
+            "vital",
+            "vital",
+            listOf("id"),
+            50,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
+        SyncTable(
+            "note",
+            "note",
+            listOf("id"),
+            50,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
+        SyncTable(
+            "medication",
+            "medication",
+            listOf("id"),
+            50,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
         SyncTable("symptom", "symptom", listOf("id"), 50),
-        SyncTable("symptom_episode", "symptom_episode", listOf("id"), 60),
-        SyncTable("lab_result", "lab_result", listOf("id"), 60),
+        SyncTable(
+            "symptom_episode",
+            "symptom_episode",
+            listOf("id"),
+            60,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
+        SyncTable(
+            "lab_result",
+            "lab_result",
+            listOf("id"),
+            60,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
         SyncTable("allergy", "allergy", listOf("id"), 60),
         SyncTable("condition", "condition", listOf("id"), 60),
         SyncTable("vaccination", "vaccination", listOf("id"), 60),
         SyncTable("routine_exercise", "routine_exercise", listOf("id"), 60),
         SyncTable("programme_routine", "programme_routine", listOf("id"), 60),
-        SyncTable("session", "session", listOf("id"), 70),
+        SyncTable(
+            "session",
+            "session",
+            listOf("id"),
+            70,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
         SyncTable("session_exercise", "session_exercise", listOf("id"), 80),
-        SyncTable("work_set", "work_set", listOf("id"), 90),
-        SyncTable("entry", "entry", listOf("id"), 90),
+        SyncTable(
+            "work_set",
+            "work_set",
+            listOf("id"),
+            90,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
+        SyncTable(
+            "entry",
+            "entry",
+            listOf("id"),
+            90,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
         SyncTable("recipe_item", "recipe_item", listOf("id"), 90),
         SyncTable("meal_template_item", "meal_template_item", listOf("id"), 90),
-        SyncTable("medication_dose", "medication_dose", listOf("id"), 90),
-        SyncTable("activity", "activity", listOf("id"), 90),
+        SyncTable(
+            "medication_dose",
+            "medication_dose",
+            listOf("id"),
+            90,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
+        SyncTable(
+            "activity",
+            "activity",
+            listOf("id"),
+            90,
+            listOf("source_id", "recorded_at", "local_date"),
+        ),
         SyncTable("activity_point", "activity_point", listOf("activity_id", "position"), 100),
     )
 

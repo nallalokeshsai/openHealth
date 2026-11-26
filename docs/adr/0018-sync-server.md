@@ -11,11 +11,17 @@
    write and its log entry commit in the same transaction, so B13 cannot describe a
    write that did not happen. Rollups, raw payloads, Trash tombstones and progress
    photos are declared never-synced: the first two are derived or device-local, and
-   media is uploaded separately (`pr.md` §7.7).
+   media is uploaded separately (`pr.md` §7.7). A synced row that references a raw
+   record carries `raw_record_id = null` on the wire, because the receiver has no raw
+   payload to point at. A change the receiver refuses is not marked applied, so an app
+   update can retry it rather than losing it silently. Demo/sample generation pauses
+   capture, so a sample corpus never reaches the server.
 2. **Hybrid logical clock, not wall time.** `HybridLogicalClock` combines physical time
    with a counter and is observed on every pulled change, so two edits in the same
    millisecond still order and a device whose clock is behind cannot claim a newer
-   revision. The encoding is fixed width and sorts correctly in the server's log.
+   revision. A new millisecond starts the counter at a device seed (a 16-bit hash of the
+   device id) rather than zero, so two devices editing in the same millisecond do not tie.
+   The encoding is fixed width and sorts correctly in the server's log.
 3. **Per-entity merge policies live in `:core`.** `SyncMergePolicyRegistry.default()`
    declares every syncable entity: append-only for observations, sets, doses and route
    points; revision-based with a real conflict for editable documents and clinical
@@ -49,14 +55,23 @@
    Local only until a server is paired.
 8. **Deployment is the owner's.** The Compose file (`server/docker-compose.yml`) starts
    PostgreSQL 16, MinIO, the server and Caddy. Nothing in this phase deployed, uploaded
-   or published it; hosting, domain and the allowed user are the owner's answers recorded
-   in the build log.
+   or published it. The three `BUILD-ROADMAP.md` B13 questions were asked and answered:
+   **local Docker Compose only**, a **placeholder domain configured by
+   `OPENHEALTH_DOMAIN`**, and **the owner as the only allowlisted user**. The pairing flow
+   is the browser page plus a one-time code. The server ships with the loopback defaults
+   (`OPENHEALTH_DOMAIN=localhost`, `OPENHEALTH_ALLOWED_USERS=owner`, password fallback
+   off); the owner sets the real domain and allowlist in `server/.env` before any
+   deployment.
 
 ## Consequences
 
 - A new syncable entity needs one row in `SyncTables`, one policy in
   `SyncMergePolicyRegistry.default()` and a capture call at its repository write. A test
-  compares the two lists.
+  compares the two lists (`SyncIntegrityTest.everySyncableTableHasAMergePolicy`).
+- A record that predates schema v11 has no change entry; the first pairing sweeps every
+  syncable row once (`SyncRepository.backfillIfNeeded`), guarded by a per-device marker.
+- A tombstoned row is never silently restored: an incoming edit surfaces a conflict and
+  the user chooses the delete or the edit.
 - The change log grows with the record; an export includes it so version history and
   conflict evidence survive a restore. Compaction of applied remote changes is a later
   maintenance task, not a correctness one.

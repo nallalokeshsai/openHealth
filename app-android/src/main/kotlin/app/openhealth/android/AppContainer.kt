@@ -81,10 +81,13 @@ class AppContainer(
     /** Pairing, sync passes and the conflict list (B13). The server is optional. */
     val sync: app.openhealth.android.sync.SyncPresenter by lazy {
         app.openhealth.android.sync.SyncPresenter(
+            context = appContext,
             store = store,
             vault = vault,
             clock = clock,
-            zone = zone,
+            // A conflict card shows values; weight-neutral mode hides the same metrics
+            // here as on every other surface (`pr.md` §6.25, `DESIGN.md` §7.6).
+            policy = { preferences.snapshot().displayPolicy },
         )
     }
     val preferences: PreferencesStore by lazy { PreferencesStore(store.settings, store.profile) }

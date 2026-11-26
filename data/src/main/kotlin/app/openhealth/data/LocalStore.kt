@@ -21,7 +21,6 @@ import app.openhealth.data.repo.TrainingRepository
 import app.openhealth.data.repo.TrashService
 import app.openhealth.data.rollup.RollupEngine
 import app.openhealth.data.sync.SyncRepository
-import java.util.UUID
 
 /**
  * The only production way to write: every repository that can change a day is wired to
@@ -63,7 +62,7 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
 
     init {
         val deviceId = settings.get(app.openhealth.data.repo.SettingKeys.SYNC_DEVICE_ID)
-            ?: UUID.randomUUID().toString().also {
+            ?: kotlin.uuid.Uuid.random().toString().also {
                 settings.put(app.openhealth.data.repo.SettingKeys.SYNC_DEVICE_ID, it)
             }
         sync = SyncRepository(

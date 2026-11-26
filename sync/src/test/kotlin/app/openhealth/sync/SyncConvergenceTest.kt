@@ -11,13 +11,14 @@ class SyncConvergenceTest {
     private val wall = 1_700_000_000_000L
 
     private fun harness(): Triple<InMemorySyncServer, InMemorySyncStore, InMemorySyncStore> {
-        // One wall clock for both devices in the test: the merge algorithm, not a clock
-        // collision, is what the property is about. Production clocks are per device.
-        val clock = HybridClock { wall }
+        // Independent clocks with different seeds, as two real devices have; an equal
+        // (wall, counter) pair would otherwise hide a last-writer-wins tie.
+        val clockA = HybridClock({ wall }, seed = 11)
+        val clockB = HybridClock({ wall }, seed = 29)
         return Triple(
             InMemorySyncServer(),
-            InMemorySyncStore("device-a", clock),
-            InMemorySyncStore("device-b", clock),
+            InMemorySyncStore("device-a", clockA),
+            InMemorySyncStore("device-b", clockB),
         )
     }
 
@@ -79,7 +80,7 @@ class SyncConvergenceTest {
     @Test
     fun aDroppedConnectionMidPushLosesNothingAndRetriesForFree() {
         val server = InMemorySyncServer()
-        val clock = HybridClock { wall }
+        val clock = HybridClock({ wall })
         val a = InMemorySyncStore("device-a", clock)
         val b = InMemorySyncStore("device-b", clock)
         repeat(5) { i ->
@@ -132,7 +133,7 @@ class SyncConvergenceTest {
     @Test
     fun twoEditsFromTheSameRevisionAreSurfacedNotSilentlyMerged() {
         val server = InMemorySyncServer()
-        val clock = HybridClock { wall }
+        val clock = HybridClock({ wall })
         val a = InMemorySyncStore("device-a", clock)
         val b = InMemorySyncStore("device-b", clock)
         a.editDocument("profile", "me", mapOf("displayName" to "Alex"))
@@ -159,7 +160,7 @@ class SyncConvergenceTest {
     @Test
     fun resolvingAConflictConvergesBothDevices() {
         val server = InMemorySyncServer()
-        val clock = HybridClock { wall }
+        val clock = HybridClock({ wall })
         val a = InMemorySyncStore("device-a", clock)
         val b = InMemorySyncStore("device-b", clock)
         a.editDocument("profile", "me", mapOf("displayName" to "Alex"))
@@ -190,10 +191,49 @@ class SyncConvergenceTest {
     }
 
     @Test
+    fun aConcurrentEditAndDeleteIsSurfacedNotSilentlyResolved() {
+        val server = InMemorySyncServer()
+        // A's clock is ahead of B's, so A's delete is the later event and must win.
+        val a = InMemorySyncStore("device-a", HybridClock({ wall }, seed = 29))
+        val b = InMemorySyncStore("device-b", HybridClock({ wall }, seed = 11))
+        a.edit("note", "note-1", mapOf("body" to "first"))
+        SyncEngine(a, server, {
+            wall
+        }, retry = RetryPolicy(attempts = 2, baseDelayMillis = 0), sleep = {})
+            .let { kotlinx.coroutines.test.runTest { it.syncOnce() } }
+        SyncEngine(b, server, {
+            wall
+        }, retry = RetryPolicy(attempts = 2, baseDelayMillis = 0), sleep = {})
+            .let { kotlinx.coroutines.test.runTest { it.syncOnce() } }
+
+        b.edit("note", "note-1", mapOf("body" to "edited offline"))
+        a.delete("note", "note-1")
+        SyncEngine(a, server, {
+            wall
+        }, retry = RetryPolicy(attempts = 2, baseDelayMillis = 0), sleep = {})
+            .let { kotlinx.coroutines.test.runTest { it.syncOnce() } }
+        val engine = SyncEngine(
+            b,
+            server,
+            { wall },
+            retry = RetryPolicy(attempts = 2, baseDelayMillis = 0),
+            sleep = {},
+        )
+        var result: SyncResult? = null
+        kotlinx.coroutines.test.runTest { result = engine.syncOnce() }
+
+        // B's clock observed A's note, so its later edit is a real edit-vs-delete
+        // conflict; both sides are kept and the user is asked, never a silent restore.
+        assertEquals(1, b.openConflictCount())
+        assertEquals("edited offline", b.row("note", "note-1")?.get("body"))
+        assertEquals(app.openhealth.core.sync.SyncStatus.SYNCED, result!!.status)
+    }
+
+    @Test
     fun aClientOlderThanTheServersWindowIsToldToUpdateAndKeepsLogging() {
         val server = InMemorySyncServer()
         server.minSchemaVersion = 99
-        val store = InMemorySyncStore("device-a", HybridClock { wall }, schema = 11)
+        val store = InMemorySyncStore("device-a", HybridClock({ wall }), schema = 11)
         val engine =
             SyncEngine(store, server, {
                 wall
@@ -202,5 +242,45 @@ class SyncConvergenceTest {
         kotlinx.coroutines.test.runTest { result = engine.syncOnce() }
         assertEquals(SyncStatus.ERROR, result!!.status)
         assertTrue(result!!.error!!.contains("update"))
+    }
+
+    @Test
+    fun aBacklogLargerThanOnePagePushesEveryChangeInOnePass() {
+        // The first pairing sweeps every row that predates schema v11, so the first push
+        // is routinely far larger than one page (`docs/adr/0018-sync-server.md`). One
+        // sync pass must drain the queue, not stop at the first full page and still
+        // report Synced with changes waiting.
+        val server = InMemorySyncServer()
+        val a = InMemorySyncStore("device-a", HybridClock({ wall }, seed = 11))
+        val b = InMemorySyncStore("device-b", HybridClock({ wall }, seed = 29))
+        repeat(5) { i -> a.edit("note", "note-$i", mapOf("body" to "backfilled $i")) }
+
+        val engine = SyncEngine(
+            store = a,
+            transport = server,
+            now = { wall },
+            pageSize = 2,
+            retry = RetryPolicy(attempts = 2, baseDelayMillis = 0),
+            sleep = {},
+        )
+        var result: SyncResult? = null
+        kotlinx.coroutines.test.runTest { result = engine.syncOnce() }
+
+        assertEquals(SyncStatus.SYNCED, result!!.status)
+        assertEquals(5, result!!.pushed, "every queued change must be pushed in one pass")
+        assertTrue(!a.hasPending(), "a backlog bigger than one page must not stay queued")
+        assertEquals(5, server.size())
+
+        // And the other device receives all five, not just the first page.
+        val engineB = SyncEngine(
+            store = b,
+            transport = server,
+            now = { wall },
+            pageSize = 2,
+            retry = RetryPolicy(attempts = 2, baseDelayMillis = 0),
+            sleep = {},
+        )
+        kotlinx.coroutines.test.runTest { engineB.syncOnce() }
+        assertEquals(a.snapshot(), b.snapshot())
     }
 }

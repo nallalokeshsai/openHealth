@@ -1,5 +1,8 @@
 package app.openhealth.android.sync
 
+import android.content.Context
+import app.openhealth.core.preferences.DisplayPolicy
+import app.openhealth.core.preferences.SensitiveMetric
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SecretVault
 import app.openhealth.core.sync.ChangeRecord
@@ -12,13 +15,11 @@ import app.openhealth.sync.KtorSyncTransport
 import app.openhealth.sync.RetryPolicy
 import app.openhealth.sync.SyncEngine
 import app.openhealth.sync.SyncResult
+import app.openhealth.ui.R as UiR
 import app.openhealth.ui.screens.sync.SyncConflictModel
 import app.openhealth.ui.screens.sync.SyncFieldModel
 import app.openhealth.ui.screens.sync.SyncModel
 import app.openhealth.ui.screens.sync.SyncSideModel
-import kotlin.time.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 /**
  * The device half of B13: pairing, the sync pass and the conflict model. It is the only
@@ -26,10 +27,12 @@ import kotlinx.datetime.toLocalDateTime
  */
 @Suppress("TooManyFunctions")
 class SyncPresenter(
+    private val context: Context,
     private val store: LocalStore,
     private val vault: SecretVault,
     private val clock: ClockSeam,
-    private val zone: TimeZone,
+    /** The one policy every surface asks before it prints a sensitive number (§6.25). */
+    private val policy: () -> DisplayPolicy = { DisplayPolicy.Standard },
 ) {
     fun serverUrl(): String? = store.settings.get(SettingKeys.SYNC_SERVER_URL)
         ?.trim()
@@ -56,17 +59,32 @@ class SyncPresenter(
 
     /** What the Settings row says in one line; local-first is never a warning. */
     fun summary(): String {
-        if (!isPaired()) return "Local only"
+        if (!isPaired()) return context.getString(UiR.string.settings_sync_local)
         val status = store.settings.get(SettingKeys.SYNC_STATUS)
             ?.let { runCatching { SyncStatus.valueOf(it) }.getOrNull() }
             ?: SyncStatus.LOCAL_ONLY
         val pending = store.sync.pendingCount()
+        val conflicts = store.sync.openConflictCount()
         return when (status) {
-            SyncStatus.SYNCED -> if (pending == 0) "Synced" else "$pending waiting"
-            SyncStatus.SYNCING -> "Syncing"
-            SyncStatus.OFFLINE -> "Offline · $pending waiting"
-            SyncStatus.ERROR -> "Needs attention"
-            SyncStatus.LOCAL_ONLY -> "Local only"
+            SyncStatus.SYNCED -> if (pending == 0) {
+                context.getString(UiR.string.settings_sync_synced)
+            } else {
+                context.getString(UiR.string.settings_sync_waiting, pending)
+            }
+            SyncStatus.SYNCING -> context.getString(UiR.string.sync_status_syncing)
+            SyncStatus.OFFLINE -> context.getString(UiR.string.settings_sync_offline, pending)
+            SyncStatus.ERROR -> context.getString(UiR.string.settings_sync_error)
+            SyncStatus.LOCAL_ONLY -> context.getString(UiR.string.settings_sync_local)
+        }.let { line ->
+            if (conflicts == 0) {
+                line
+            } else {
+                "$line · " + context.resources.getQuantityString(
+                    UiR.plurals.sync_conflict_count,
+                    conflicts,
+                    conflicts,
+                )
+            }
         }
     }
 
@@ -75,10 +93,15 @@ class SyncPresenter(
         val base = runCatching { KtorSyncTransport.requireSecureBase(serverUrl, true) }
             .getOrNull()
         val paired = base?.let { url ->
-            runCatching { KtorSyncTransport(url, token = "").pair(PairingRequest(code, "Android")) }
-                .getOrNull()
+            val client = KtorSyncTransport(url, token = "")
+            try {
+                runCatching { client.pair(PairingRequest(code, "Android")) }.getOrNull()
+            } finally {
+                client.close()
+            }
         }
         if (base != null && paired != null) {
+            closeTransport()
             vault.put(TOKEN, paired.token.toByteArray())
             store.settings.put(SettingKeys.SYNC_SERVER_URL, base)
             // A different server has its own sequence; a cursor from the old one would
@@ -87,6 +110,7 @@ class SyncPresenter(
             store.settings.put(SettingKeys.SYNC_ENABLED, "true")
             store.settings.put(SettingKeys.SYNC_STATUS, SyncStatus.LOCAL_ONLY.name)
             store.settings.put(SettingKeys.SYNC_LAST_ERROR, "")
+            store.sync.backfillIfNeeded()
         }
         return if (base != null && paired != null) model() else null
     }
@@ -97,7 +121,9 @@ class SyncPresenter(
         val result = if (url != null && token != null) {
             val engine = SyncEngine(
                 store = store.sync,
-                transport = KtorSyncTransport(url, token),
+                // One pooled client per (server, token), closed on pair or disconnect: a
+                // fresh HttpClient per sync would leak its CIO pool and its threads.
+                transport = transport(url, token),
                 now = { clock.now().toEpochMilliseconds() },
                 retry = RetryPolicy(attempts = RETRY_ATTEMPTS),
             )
@@ -109,6 +135,7 @@ class SyncPresenter(
     }
 
     fun disconnect() {
+        closeTransport()
         vault.remove(TOKEN)
         store.settings.put(SettingKeys.SYNC_ENABLED, "false")
         store.settings.put(SettingKeys.SYNC_STATUS, SyncStatus.LOCAL_ONLY.name)
@@ -126,52 +153,83 @@ class SyncPresenter(
 
     private fun token(): String? = vault.get(TOKEN)?.toString(Charsets.UTF_8)
 
-    private fun conflict(conflict: SyncConflict): SyncConflictModel = SyncConflictModel(
-        id = conflict.id,
-        entityLabel = entityLabel(conflict.entity),
-        entityId = conflict.entityId,
-        reason = "Both devices edited the same revision. Choose the version to keep.",
-        local = side(conflict.local, "This device"),
-        remote = side(conflict.remote, "Other device"),
-    )
+    private var client: KtorSyncTransport? = null
+    private var clientKey: String? = null
 
-    private fun side(change: ChangeRecord, label: String): SyncSideModel = SyncSideModel(
-        device = "$label · ${change.deviceId.take(DEVICE_PREFIX_CHARS)}",
-        whenLabel = stamp(change.clock().wallMillis),
-        fields = change.fields.entries
-            .filter { (key, _) -> key !in HIDDEN_FIELDS }
-            .take(MAX_CONFLICT_FIELDS)
-            .map { (key, value) -> SyncFieldModel(humanize(key), value.orEmpty().ifBlank { "—" }) },
-    )
+    /** The pooled client, or null when none is open. Visible to the leak regression test. */
+    internal fun pooledTransport(): KtorSyncTransport? = client
 
-    private fun stamp(millis: Long): String {
-        val local = Instant.fromEpochMilliseconds(millis).toLocalDateTime(zone)
-        return "%04d-%02d-%02d %02d:%02d".format(
-            local.year,
-            local.monthNumber,
-            local.dayOfMonth,
-            local.hour,
-            local.minute,
+    /** One client per (server, token). Visible so a test can prove it is not rebuilt. */
+    internal fun transport(url: String, token: String): KtorSyncTransport {
+        val key = "$url|$token"
+        if (client == null || clientKey != key) {
+            closeTransport()
+            client = KtorSyncTransport(url, token)
+            clientKey = key
+        }
+        return client!!
+    }
+
+    private fun closeTransport() {
+        client?.close()
+        client = null
+        clientKey = null
+    }
+
+    private fun conflict(conflict: SyncConflict): SyncConflictModel {
+        val display = policy()
+        return SyncConflictModel(
+            id = conflict.id,
+            entity = conflict.entity,
+            entityId = conflict.entityId,
+            local = side(conflict.local, display),
+            remote = side(conflict.remote, display),
         )
     }
 
-    private fun entityLabel(entity: String): String = when (entity) {
-        "profile" -> "Profile"
-        "settings" -> "Setting"
-        "note" -> "Note"
-        "routine" -> "Routine"
-        "session" -> "Workout"
-        "food" -> "Food"
-        "entry" -> "Diary entry"
-        "measurement" -> "Measurement"
-        "vital" -> "Vital"
-        "activity" -> "Activity"
-        else -> "Record"
+    private fun side(change: ChangeRecord, display: DisplayPolicy): SyncSideModel = SyncSideModel(
+        device = change.deviceId.take(DEVICE_PREFIX_CHARS),
+        whenLabel = stamp(change.clock().wallMillis),
+        fields = change.fields.entries
+            .filter { (key, _) -> key !in HIDDEN_FIELDS }
+            .filter { (key, _) ->
+                metricOf(change.entity, key, change.fields)?.let(display::shows) != false
+            }
+            .take(MAX_CONFLICT_FIELDS)
+            .map { (key, value) -> SyncFieldModel(key, value.orEmpty()) },
+    )
+
+    /**
+     * Which sensitive metric a column carries, so weight-neutral mode hides the same
+     * numbers on a conflict card as everywhere else. Null means the column is not a
+     * sensitive metric at all and is always shown.
+     */
+    private fun metricOf(
+        entity: String,
+        column: String,
+        fields: Map<String, String?>,
+    ): SensitiveMetric? = when {
+        column in WEIGHT_COLUMNS -> SensitiveMetric.WEIGHT
+        column in BODY_FAT_COLUMNS -> SensitiveMetric.BODY_FAT
+        column in ENERGY_COLUMNS -> SensitiveMetric.CALORIES
+        // A measurement row names its own metric; `value` means whatever `type` says.
+        entity == "measurement" && column == "value" -> when (fields["type"]?.lowercase()) {
+            in WEIGHT_MEASUREMENT_TYPES -> SensitiveMetric.WEIGHT
+            in BODY_FAT_MEASUREMENT_TYPES -> SensitiveMetric.BODY_FAT
+            else -> null
+        }
+        else -> null
     }
 
-    private fun humanize(key: String): String = key
-        .replace('_', ' ')
-        .replaceFirstChar { it.uppercase() }
+    private fun stamp(millis: Long): String {
+        val locale = context.resources.configuration.locales[0]
+        val formatter = java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.SHORT,
+            java.text.DateFormat.SHORT,
+            locale,
+        )
+        return formatter.format(java.util.Date(millis))
+    }
 
     private companion object {
         const val TOKEN = "sync.token"
@@ -190,5 +248,10 @@ class SyncPresenter(
             "observation_id",
             "app_version",
         )
+        val WEIGHT_COLUMNS = setOf("weight_kg", "lean_mass_kg", "goal_weight_kg")
+        val BODY_FAT_COLUMNS = setOf("body_fat_percent", "body_fat_pct", "body_fat")
+        val ENERGY_COLUMNS = setOf("energy_kcal", "kcal", "calories", "energy_in_kcal")
+        val WEIGHT_MEASUREMENT_TYPES = setOf("weight", "lean_mass", "fat_mass")
+        val BODY_FAT_MEASUREMENT_TYPES = setOf("body_fat", "body_fat_percent")
     }
 }

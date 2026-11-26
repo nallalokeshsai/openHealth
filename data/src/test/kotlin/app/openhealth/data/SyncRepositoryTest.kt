@@ -69,11 +69,51 @@ class SyncRepositoryTest {
         val store = store()
         store.settings.put(SettingKeys.SYNC_SERVER_URL, "https://health.example.com")
         store.settings.put(SettingKeys.SYNC_DEVICE_ID, "another")
+        // Bookkeeping about this phone: when each source last reached it, and which
+        // exercise catalogue this install has seeded. Neither is the person's record,
+        // and a copy from another device would state something untrue here.
+        store.settings.put(SettingKeys.SYNC_BOOK, """{"sources":[]}""")
+        store.settings.put(SettingKeys.EXERCISE_CATALOGUE, "2026-11-01")
         store.settings.put("appearance.theme", "light")
         val pending = store.sync.pendingChanges(20)
         assertEquals(1, pending.size)
         assertEquals("settings", pending.single().entity)
         assertEquals("appearance.theme", pending.single().entityId)
+    }
+
+    @Test
+    fun deviceLocalBookkeepingIsRefusedWhenItArrivesFromAnotherDevice() {
+        val a = store()
+        val b = store()
+        b.settings.put(SettingKeys.SYNC_BOOK, """{"sources":[{"sourceId":"mine"}]}""")
+        // Forge the change another device would have pushed before the policy named
+        // these keys, and prove the receiver refuses rather than applies it.
+        val forged = listOf(
+            app.openhealth.core.sync.ChangeRecord(
+                entity = "settings",
+                entityId = SettingKeys.SYNC_BOOK,
+                operation = app.openhealth.core.sync.ChangeOperation.UPSERT,
+                fields = mapOf(
+                    "key" to SettingKeys.SYNC_BOOK,
+                    "value" to """{"sources":[{"sourceId":"theirs"}]}""",
+                    "updated_at" to "99",
+                    "schema_version" to "11",
+                ),
+                idempotencyKey = "other:sync-book",
+                hlc = "0000000000000099-00000000",
+                deviceId = "other",
+                schemaVersion = 11,
+                recordedAt = 99,
+            ),
+        )
+        val outcome = b.sync.applyRemote(forged)
+        assertEquals(0, outcome.applied)
+        assertEquals(1, outcome.refused.size)
+        assertTrue(
+            b.settings.get(SettingKeys.SYNC_BOOK)!!.contains("mine"),
+            "another device's sync book must not overwrite this one",
+        )
+        assertEquals(0, a.sync.pendingCount())
     }
 
     @Test

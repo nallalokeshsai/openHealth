@@ -234,7 +234,7 @@ class InMemoryAuthStore : AuthStore {
 }
 
 @Suppress("LoopWithTooManyJumpStatements")
-class InMemoryChangeStore : ChangeStore {
+class InMemoryChangeStore(private val minSchemaVersion: Int = 1) : ChangeStore {
     private data class Entry(val accountId: String, val seq: Long, val change: ChangeRecord)
 
     private val log = mutableListOf<Entry>()
@@ -279,6 +279,7 @@ class InMemoryChangeStore : ChangeStore {
             changes = page.map { it.change },
             nextCursor = page.lastOrNull()?.seq ?: cursor,
             hasMore = mine.size > page.size,
+            minSchemaVersion = minSchemaVersion,
         )
     }
 }

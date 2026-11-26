@@ -963,6 +963,9 @@ class TrashService(
                     date,
                 )
             }
+            activity.observations.forEach { observation ->
+                sync?.capture("observation", observation.id, observation.localDate)
+            }
         }
     }
 

@@ -133,7 +133,16 @@ class SyncMergePolicyRegistry(policies: List<MergePolicy<SyncSnapshot>>) {
         /** The one list. Adding an entity here is what makes it syncable. */
         fun default(): SyncMergePolicyRegistry = SyncMergePolicyRegistry(
             buildList {
-                addAll(appendOnly("observation", "work_set", "activity_point", "medication_dose"))
+                addAll(
+                    appendOnly(
+                        "observation",
+                        "measurement",
+                        "vital",
+                        "work_set",
+                        "activity_point",
+                        "medication_dose",
+                    ),
+                )
                 addAll(
                     revision(
                         "profile",

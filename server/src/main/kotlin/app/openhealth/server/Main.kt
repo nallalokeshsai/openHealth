@@ -12,7 +12,9 @@ fun main() {
     val config = ServerConfig.fromEnvironment()
     val database = config.dbUrl?.let { PostgresDatabase(config) }
     val authStore: AuthStore = database?.let(::PostgresAuthStore) ?: InMemoryAuthStore()
-    val changeStore: ChangeStore = database?.let(::PostgresChangeStore) ?: InMemoryChangeStore()
+    val changeStore: ChangeStore = database?.let {
+        PostgresChangeStore(it, config.minSchemaVersion)
+    } ?: InMemoryChangeStore(config.minSchemaVersion)
     val auth = AuthService(config, authStore)
     Runtime.getRuntime().addShutdownHook(Thread { database?.close() })
 

@@ -335,7 +335,10 @@ class PostgresAuthStore(private val db: PostgresDatabase) : AuthStore {
 }
 
 @Suppress("LoopWithTooManyJumpStatements")
-class PostgresChangeStore(private val db: PostgresDatabase) : ChangeStore {
+class PostgresChangeStore(
+    private val db: PostgresDatabase,
+    private val minSchemaVersion: Int = 1,
+) : ChangeStore {
     override fun push(
         accountId: String,
         deviceId: String,
@@ -424,6 +427,7 @@ class PostgresChangeStore(private val db: PostgresDatabase) : ChangeStore {
             changes = visible.map { it.second },
             nextCursor = visible.lastOrNull()?.first ?: cursor,
             hasMore = hasMore,
+            minSchemaVersion = minSchemaVersion,
         )
     }
 

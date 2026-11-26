@@ -162,13 +162,6 @@ fun SettingsScreen(
                     showDivider = true,
                     onClick = onOpenDevices,
                 )
-                GroupRow(
-                    title = stringResource(R.string.settings_sync),
-                    detail = state.syncDetail,
-                    icon = OhIcons.refresh,
-                    showDivider = true,
-                    onClick = onOpenSync,
-                )
                 if (HealthModule.SLEEP in state.modules) {
                     GroupRow(
                         title = stringResource(R.string.clinical_sleep_title),
@@ -283,6 +276,7 @@ fun SettingsScreen(
         onOpenTimeline = onOpenTimeline,
         onOpenTrash = onOpenTrash,
         onOpenReview = onOpenReview,
+        onOpenSync = onOpenSync,
         onExport = {
             sheet = SettingsSheet.NONE
             onExternalActivity()
@@ -674,6 +668,7 @@ private fun DataSheet(
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenReview: () -> Unit,
+    onOpenSync: () -> Unit,
     onExport: () -> Unit,
     onRestore: () -> Unit,
     onUndoRestore: () -> Unit,
@@ -725,6 +720,15 @@ private fun DataSheet(
         }
         Spacer(Modifier.height(OhTheme.space.s5))
         OhInsetGroup {
+            // Sync leads the group, so it carries no hairline; the hairline sits between
+            // rows and never above the first (`DESIGN.md` §2.4, §5.1).
+            OhRow(
+                title = stringResource(R.string.settings_sync),
+                subtitle = state.syncDetail,
+                leadingIcon = OhIcons.refresh,
+                showChevron = true,
+                onClick = onOpenSync,
+            )
             OhRow(
                 title = stringResource(R.string.settings_export),
                 subtitle = if (state.busy) {
@@ -733,6 +737,7 @@ private fun DataSheet(
                     stringResource(R.string.settings_export_body)
                 },
                 leadingIcon = OhIcons.export,
+                showDivider = true,
                 showChevron = true,
                 enabled = !state.busy,
                 onClick = if (state.busy) null else onExport,

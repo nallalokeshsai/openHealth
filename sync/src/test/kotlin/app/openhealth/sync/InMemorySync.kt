@@ -166,6 +166,12 @@ class InMemorySyncStore(
             val key = RowKey(record.entity, record.entityId)
             val local = rows[key]
             val localHlc = local?.hlc ?: HybridLogicalClock.ZERO.encode()
+            if (local?.deleted == true && record.operation == ChangeOperation.UPSERT) {
+                val conflict = conflict(record, localHlc, "sync.conflict.deleted_locally")
+                open[conflict.id] = conflict
+                found += conflict
+                continue
+            }
             if (local == null) {
                 rows[key] = RowState(
                     record.fields.toMutableMap(),

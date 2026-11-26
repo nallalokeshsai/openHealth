@@ -50,6 +50,11 @@ class KtorSyncTransport(
         setBody(request)
     }.body()
 
+    /** Release the CIO pool when the pairing goes away. */
+    fun close() {
+        client.close()
+    }
+
     suspend fun health(): ServerHealth = client.get("$base/health").body()
 
     suspend fun pair(request: PairingRequest): PairingResponse =
@@ -83,20 +88,21 @@ class KtorSyncTransport(
         fun requireSecureBase(baseUrl: String, allowInsecureLocal: Boolean): String {
             val trimmed = baseUrl.trim().trimEnd('/')
             require(trimmed.isNotEmpty()) { "server URL is empty" }
-            val uri = runCatching { java.net.URI(trimmed) }.getOrNull()
-                ?: error("server URL is not a valid address")
-            val insecure = uri.scheme.equals("http", ignoreCase = true)
+            val scheme = trimmed.substringBefore("://", "").lowercase()
+            val insecure = scheme == "http"
+            require(insecure || scheme == "https") {
+                "server URL must start with https"
+            }
             require(!insecure || allowInsecureLocal) {
                 "the sync server must use https (plain http is only allowed for a local server)"
             }
             if (insecure) {
-                val host = uri.host.orEmpty().lowercase()
+                val host = trimmed.substringAfter("://")
+                    .substringBefore('/')
+                    .substringBefore(':')
+                    .lowercase()
                 require(host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2") {
                     "plain http is only allowed for loopback or the emulator host, not $host"
-                }
-            } else {
-                require(uri.scheme.equals("https", ignoreCase = true)) {
-                    "server URL must start with https"
                 }
             }
             return trimmed

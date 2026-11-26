@@ -29,6 +29,21 @@ class SyncRowCodec(private val driver: SqlDriver) {
         ).value
     }
 
+    /** Every key in a table, for the one-time pre-v11 backfill. */
+    fun allKeys(table: app.openhealth.data.sync.SyncTable): List<List<String>> =
+        driver.executeQuery(
+            identifier = null,
+            sql = "SELECT ${table.keys.joinToString(", ")} FROM ${table.table}",
+            mapper = { cursor ->
+                val rows = mutableListOf<List<String>>()
+                while (cursor.next().value) {
+                    rows += table.keys.indices.map { index -> cursor.getString(index).orEmpty() }
+                }
+                QueryResult.Value(rows)
+            },
+            parameters = 0,
+        ).value
+
     fun read(table: String, keys: List<String>, keyValues: List<String>): Map<String, String?>? {
         require(keys.size == keyValues.size) { "key column/value count differs" }
         val where = keys.joinToString(" AND ") { "$it = ?" }
@@ -80,15 +95,21 @@ class SyncRowCodec(private val driver: SqlDriver) {
                 }
             }
         }
-        val changed = driver.executeQuery(
-            identifier = null,
-            sql = "SELECT changes()",
-            mapper = { cursor ->
-                cursor.next()
-                QueryResult.Value(cursor.getLong(0) ?: 0L)
-            },
-            parameters = 0,
-        ).value
+        // When every column is a key there is nothing to update, and `changes()` would
+        // report the previous statement on the connection; go straight to the insert.
+        val changed = if (writable.isEmpty()) {
+            0L
+        } else {
+            driver.executeQuery(
+                identifier = null,
+                sql = "SELECT changes()",
+                mapper = { cursor ->
+                    cursor.next()
+                    QueryResult.Value(cursor.getLong(0) ?: 0L)
+                },
+                parameters = 0,
+            ).value
+        }
         if (changed > 0L) return true
         val columns = present
         val placeholders = columns.joinToString(", ") { "?" }

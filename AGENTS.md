@@ -19,11 +19,11 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 | File | Version | Owns | Authority |
 |---|---|---|---|
 | `pr.md` | 0.4 · 2026-11-22 | Features and MVP/V1/Later tags (§6); five-layer data model (§7); architecture summary (§8); product roadmap (§9); metrics (§10); non-goals (§11); regulatory, licensing and platform constraints (§12); open decisions (§13); cut list (§14.5) | **Behaviour contract.** Wins on scope, wording and what a screen does. |
-| `DESIGN.md` | 0.5 · 2026-11-26 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
+| `DESIGN.md` | 0.6 · 2026-11-26 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
 | `Tech-Stack.md` | 2.4 · 2026-11-25 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
 | `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
 | `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
-| `docs/adr/` | 0002 · 2026-11-22 | Dated closed decisions. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 pinned versions is written in B0 | **Decision record.** |
+| `docs/adr/` | 0018 · 2026-11-26 | Dated closed decisions, one per phase. 0001 Android first; 0002 the defaults that closed `pr.md` §13; 0003 pinned versions; 0004–0018 one per build phase, the last being B13 sync and server | **Decision record.** |
 | `.opencode/commands/build-phase.md`, `opencode.json` | 2026-11-23 | The `/build-phase n or next` OpenCode command that runs a phase from `prompts.md`, verifies the whole build, fixes what it finds, then pushes the phase branch, opens its pull request, drives CI green and merges it; and the permission policy (no blind `git add -A`, no force-push, no direct push to `main`, no protection bypass) | **Launcher.** Overrides `prompts.md` only on the authorised ship at the phase exit, which `prompts.md` now records too. |
 | `docs/build-log.md` | created in B0 | What each phase did, ran and left open | **Memory between sessions.** |
 | `COMPOSE-GUIDE.md` | 0.1 · 2026-11-21 | Compose snippets, a token-file sketch, one screen template, a file tree | **Patterns only.** Not authoritative on values or structure; see conflicts. |
@@ -217,37 +217,50 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B12 Sleep, clinical, reports** (2026-11-26); next is **B13**
-  when the owner asks (B13–B15 are not MVP).
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **712 JVM tests**
-  (371 `:core`, 134 `:data`, 35 `:integrations`, 162 `:ui`, 10 across the three tools) and
-  **356 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body map,
-  B5 Train, B6 Nutrition, B7 Vitals, B8 Devices, B9 Today and Stats, B10 review, the B11
-  movement surfaces and the B12 sleep/clinical/report pages are in `:ui`. Both `play` and
-  `fdroid` debug APKs build, and the signed `play`/`fdroid` release APKs and AABs build
-  from the owner's keystore.
-- B12 delivers: a Sleep page (average, debt against the person's own need, circular
-  bedtime/wake consistency, stage mix, 1–5 self-rating); a Clinical hub and one editor
-  for medicines, symptom episodes, labs, allergies, conditions and vaccinations; local
-  medicine reminders with Taken/Skipped actions and boot rescheduling; a Weekly review;
-  and a light-only doctor report with PDF, CSV, FHIR R4 (LOINC/UCUM, validated against
-  the HL7 R4 schema) and Open mHealth exports, produced offline; schema v10
-  (`9.sqm`, eight clinical tables) with timeline, export and Trash support; cited lab
-  ranges (ADA 2026, ESC/EAS 2019) or the laboratory's own printed interval (CLSI EP28).
-- B12's decisions are in `docs/adr/0017-sleep-clinical-reports.md`; `DESIGN.md` §8.9
-  records the report paper (always light, no new token, type role or component).
-- Verification: **58/58 instrumented tests on the emulator**, including the three B12
-  exits (report < 30 s offline; FHIR R4; reminder scheduling). The released APK installs
-  over the existing record on the phone; Sleep, Clinical, a saved medicine, the report
-  range switch, a saved PDF and a saved FHIR bundle were exercised by hand. Cold start
-  and warm Today budgets are unchanged from B10/B11.
-- Open issues (see `docs/build-log.md`): the app stalled once on "Opening your record"
-  under heavy device load after a notification action (recovered on relaunch, no
-  exception, not reproducible on a plain background/foreground cycle); the lab catalogue
-  is 25 analytes with no lab import; a medicine can be stopped but not deleted;
-  conditions and allergies are free text except where a code is entered; the report's
-  trend summary needs the window's rollups; plus the carried B11
-  items (map pack for the owner's region, gear/best-effort/monthly totals, FIT/TCX export,
-  custom flows, Strava memory cap, phone Macrobenchmark tracing, `:tools:benchmark`
-  outside the guards, review inbox import dry run, privacy-policy URL, force-RTL reboot).
-  Run `connectedAndroidTest` on the emulator, never the phone.
+- Last completed phase: **B13 Sync and server** (2026-11-26); next is **B14 Wear OS and
+  Connect IQ** when the owner asks (B14–B15 are not MVP).
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **750 JVM tests**
+  (371 `:core`, 150 `:data`, 7 `:sync`, 35 `:integrations`, 163 `:ui`, 14 `:server`, 10
+  across the three tools) and **360 goldens** in dark, light, 200 % text and RTL, plus
+  **61 instrumented tests** on the emulator. The five-tab shell, the B4 body map, B5 Train, B6 Nutrition, B7 Vitals, B8 Devices, B9 Today
+  and Stats, B10 review, the B11 movement surfaces, the B12 sleep/clinical/report pages
+  and the B13 Sync page are in `:ui`. Both `play` and `fdroid` debug APKs build, and the
+  signed `play`/`fdroid` release APKs and AABs build from the owner's keystore.
+- B13 delivers: a `:sync` append-only change log with idempotency keys and a hybrid
+  logical clock; per-entity merge policies in `:core` (append-only, revision with a real
+  conflict, last-writer-wins, field merge for settings, never-synced rollups/raw/media);
+  a Sync page that pairs through a one-time code and shows status, pending changes and
+  conflicts with both sides; an optional Ktor 3 + PostgreSQL 16 server with Flyway, MinIO,
+  Caddy, `docker compose up`, passkey sign-in (WebAuthn4J), a password fallback that is off
+  by default, and scoped/revocable hashed tokens. `server/` is AGPL-3.0; everything else
+  is Apache-2.0. Schema v11 adds `change_log`, `sync_row_state` and `sync_conflict`.
+  Remote applies rebuild the affected rollups; demo/sample data is never captured.
+- B13's decisions are in `docs/adr/0018-sync-server.md`; the server stack and licence
+  split are in `NOTICE.md` and `docs/adr/0003-pinned-versions.md`.
+- Verification: `SyncIntegrationTest` (two real SQLite stores through a real Ktor server;
+  offline edits, a same-revision conflict, a lost push response retried without a
+  duplicate), `SyncRepositoryTest` (capture, apply, rollup rebuild, demo exclusion,
+  conflict resolution, tombstones) and the engine property/idempotency tests. On two
+  emulators: pairing, a real HTTP sync (42 then 29 changes), disconnect/re-pair, an
+  offline edit with Offline/1 waiting and reconnect to 0, and both devices converging on
+  a shared accent. Cold start and warm Today budgets are unchanged from B10/B11.
+- A phase-wise audit on 2026-11-26 (`docs/build-log.md` "B13 audit") fixed five defects
+  a green build hid: a push that stopped after one page, a leaked HTTP client per sync
+  pass, weight shown on a conflict card in weight-neutral mode, device-local bookkeeping
+  (`activity.sync_book`, `exercise.catalogue_version`) crossing the wire, and a hairline
+  above the first row of the Settings → Data group.
+- Owner answers recorded: local Docker Compose only (no deployment), a placeholder
+  `health.example.com` configured by `OPENHEALTH_DOMAIN`, the owner as the only allowlisted
+  user, and a browser pairing page plus a one-time code.
+- Open issues (see `docs/build-log.md`): the loopback http exception is not declared in
+  `network_security_config.xml` and works only because the CIO engine bypasses the
+  platform policy; Settings → Data has no golden; the passkey flow has no live browser
+  test (needs a real HTTPS domain and an authenticator); media upload (MinIO) is provisioned but not
+  enabled; OIDC is optional and off; the server is single-instance (challenges and pairing
+  codes in memory); the owner's phone was not attached for the B13 walk, so two emulators
+  were used; plus the carried B12 items (lab import, medicine deletion, free-text
+  conditions/allergies, report trend rollups) and the carried B11 items (map pack for the
+  owner's region, gear/best-effort/monthly totals, FIT/TCX export, custom flows, Strava
+  memory cap, phone Macrobenchmark tracing, `:tools:benchmark` outside the guards, review
+  inbox import dry run, privacy-policy URL, force-RTL reboot). Run
+  `connectedAndroidTest` on the emulator, never the phone.

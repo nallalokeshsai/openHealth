@@ -370,18 +370,17 @@ class ScreenScreenshotTest {
                     conflicts = listOf(
                         SyncConflictModel(
                             id = "profile:me:key",
-                            entityLabel = "Profile",
+                            entity = "profile",
                             entityId = "me",
-                            reason = "Both devices edited the same revision.",
                             local = SyncSideModel(
                                 device = "This device · 4f2a1c9e",
                                 whenLabel = "2026-11-25 19:04",
-                                fields = listOf(SyncFieldModel("Name", "Sam")),
+                                fields = listOf(SyncFieldModel("name", "Sam")),
                             ),
                             remote = SyncSideModel(
                                 device = "Other device · 91bb0d22",
                                 whenLabel = "2026-11-26 07:40",
-                                fields = listOf(SyncFieldModel("Name", "Alex")),
+                                fields = listOf(SyncFieldModel("name", "Alex")),
                             ),
                         ),
                     ),

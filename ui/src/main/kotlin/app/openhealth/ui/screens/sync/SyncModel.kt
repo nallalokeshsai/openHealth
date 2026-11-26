@@ -2,8 +2,8 @@ package app.openhealth.ui.screens.sync
 
 import app.openhealth.core.sync.SyncStatus
 
-/** One field of one side of a conflict, with its value as text. */
-data class SyncFieldModel(val label: String, val value: String)
+/** One field of one side of a conflict; the screen owns its label. */
+data class SyncFieldModel(val key: String, val value: String)
 
 /** One side of a conflict: which device wrote it, when, and what it changed. */
 data class SyncSideModel(
@@ -15,12 +15,15 @@ data class SyncSideModel(
 /** A conflict the merge policy could not settle (`pr.md` §7.7). */
 data class SyncConflictModel(
     val id: String,
-    val entityLabel: String,
+    val entity: String,
     val entityId: String,
-    val reason: String,
     val local: SyncSideModel,
     val remote: SyncSideModel,
-)
+) {
+    /** The value a button can name, from the first differing field. */
+    fun headline(side: SyncSideModel): String =
+        side.fields.firstOrNull()?.value?.takeIf { it.isNotBlank() } ?: ""
+}
 
 /**
  * The Sync page. [paired] is false until a server URL and token exist; the server is
@@ -35,4 +38,6 @@ data class SyncModel(
     val error: String?,
     val conflicts: List<SyncConflictModel>,
     val busy: Boolean,
+    /** A pairing attempt that failed, shown under the code field. */
+    val pairError: String? = null,
 )
