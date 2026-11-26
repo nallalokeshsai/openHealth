@@ -52,6 +52,7 @@ import app.openhealth.ui.screens.devices.PriorityModel
 import app.openhealth.ui.screens.devices.PriorityRowModel
 import app.openhealth.ui.screens.devices.ProvenanceLine
 import app.openhealth.ui.screens.devices.StepsSourceModel
+import app.openhealth.ui.screens.devices.WatchLinkModel
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
@@ -100,6 +101,7 @@ class ActivityPresenter(
         healthConnect = healthConnectModel(),
         garmin = garminModel(),
         bluetooth = bluetoothModel(found),
+        watchLink = watchLinkModel(),
         priority = priorityModel(),
         note = context.getString(UiR.string.devices_note),
         message = message,
@@ -320,6 +322,25 @@ class ActivityPresenter(
                 context.getString(UiR.string.devices_bluetooth_off)
             },
         )
+    }
+
+    private fun watchLinkModel(): WatchLinkModel = WatchLinkModel(
+        enabled = store.settings.get(app.openhealth.data.repo.SettingKeys.WATCH_LINK) == "true",
+        available = bluetoothAdvertiseAvailable(),
+        note = context.getString(UiR.string.devices_watch_link_note),
+    )
+
+    private fun bluetoothAdvertiseAvailable(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return true
+        val advertise = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.BLUETOOTH_ADVERTISE,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val connect = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        return advertise && connect
     }
 
     /** One line for the Settings row, so it never says "None connected" when a source is. */

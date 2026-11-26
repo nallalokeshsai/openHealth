@@ -85,6 +85,11 @@ class SecurityPostureTest {
             "android.permission.FOREGROUND_SERVICE_LOCATION",
             "android.permission.BLUETOOTH_SCAN",
             "android.permission.BLUETOOTH_CONNECT",
+            // B14: the Connect IQ watch link advertises a local GATT service while a
+            // workout is open; the Wear Data Layer is Play-only and declares no extra
+            // permission of its own.
+            "android.permission.BLUETOOTH_ADVERTISE",
+            "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
             // Health Connect: reads only, one per data type the Devices page offers.
             "android.permission.health.READ_STEPS",
             "android.permission.health.READ_DISTANCE",

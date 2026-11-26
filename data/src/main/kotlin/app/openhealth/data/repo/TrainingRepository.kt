@@ -278,6 +278,9 @@ class TrainingRepository(private val db: OpenHealthDb) {
 
     fun sessionById(id: String): Session? = db.trainingQueries.sessionById(id).executeAsOneOrNull()
 
+    fun sessionByIdempotencyKey(key: String): Session? =
+        db.trainingQueries.sessionByIdempotencyKey(key).executeAsOneOrNull()
+
     fun openSession(): Session? = db.trainingQueries.openSession().executeAsOneOrNull()
 
     fun sessionsForDay(date: LocalDate): List<Session> =
@@ -473,6 +476,9 @@ class TrainingRepository(private val db: OpenHealthDb) {
     }
 
     fun setById(id: String): Work_set? = db.trainingQueries.workSetById(id).executeAsOneOrNull()
+
+    fun setByIdempotencyKey(key: String): Work_set? =
+        db.trainingQueries.workSetByIdempotencyKey(key).executeAsOneOrNull()
 
     /** Corrects a set's values; `recorded_at` and the original stay where they were. */
     fun updateSet(id: String, values: SetValues): Boolean {

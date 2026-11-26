@@ -94,6 +94,8 @@ class TrainingPresenter(
     private val appVersion: String,
     private val freestyleTitle: String,
     private val pastTitle: String,
+    /** Called when an open session starts or ends, so a watch link can follow it. */
+    private val watchLink: (Boolean) -> Unit = {},
 ) {
     private var catalogueCache: List<CatalogueExercise>? = null
 
@@ -484,8 +486,17 @@ class TrainingPresenter(
 
     // ------------------------------------------------------------------ a session
 
-    fun startSession(routineId: String?): String {
+    @Suppress("ReturnCount")
+    fun startSession(
+        routineId: String?,
+        sourceId: SourceId = manualSource,
+        device: String = "manual",
+        idempotencyKey: String? = null,
+    ): String {
         store.training.openSession()?.let { return it.id }
+        if (idempotencyKey != null) {
+            store.training.sessionByIdempotencyKey(idempotencyKey)?.let { return it.id }
+        }
         val instant = now()
         val date = instant.toLocalDateTime(zone).date
         val routine = routineId?.let { store.training.routineById(it) }
@@ -502,11 +513,11 @@ class TrainingPresenter(
                 routine_id = routine?.id,
                 programme_id = null,
                 notes = null,
-                source_id = manualSource.value,
-                idempotency_key = "session-${ids.newId()}",
+                source_id = sourceId.value,
+                idempotency_key = idempotencyKey ?: "session-${ids.newId()}",
                 observation_id = null,
                 raw_record_id = null,
-                device = "manual",
+                device = device,
                 app_version = appVersion,
                 revision = 1,
                 updated_at = instant.toEpochMilliseconds(),
@@ -535,6 +546,7 @@ class TrainingPresenter(
                 )
             }
         }
+        watchLink(true)
         return sessionId
     }
 
@@ -569,6 +581,7 @@ class TrainingPresenter(
                 perceived_effort = null,
             ),
         )
+        watchLink(true)
         return sessionId
     }
 
@@ -601,12 +614,19 @@ class TrainingPresenter(
     }
 
     /** Logs a completed set and starts the rest timer unless a superset partner comes next. */
-    @Suppress("LongMethod", "ReturnCount")
+    @Suppress("LongMethod", "ReturnCount", "LongParameterList")
     fun logSet(
         sessionId: String,
         logged: app.openhealth.ui.screens.train.LoggedSet,
+        sourceId: SourceId = manualSource,
+        device: String = "manual",
+        happenedAtMillis: Long? = null,
+        idempotencyKey: String? = null,
     ): List<PersonalRecordKind> {
         val exerciseId = logged.exerciseId
+        if (idempotencyKey != null && store.training.setByIdempotencyKey(idempotencyKey) != null) {
+            return emptyList()
+        }
         val session = store.training.sessionById(sessionId) ?: return emptyList()
         val entry = ensureSessionExercise(session, exerciseId) ?: return emptyList()
         val profile = store.profile.active()
@@ -618,13 +638,14 @@ class TrainingPresenter(
         val position =
             (store.training.setsForSession(sessionId).maxOfOrNull { it.position } ?: -1) + 1
         val sessionDate = LocalDate.parse(session.local_date)
-        val happened = if (sessionDate != today()) {
-            Instant.fromEpochMilliseconds(
-                session.started_at + position * PAST_SET_SPACING_MILLIS,
-            )
-        } else {
-            recorded
-        }
+        val happened = happenedAtMillis?.let { Instant.fromEpochMilliseconds(it) }
+            ?: if (sessionDate != today()) {
+                Instant.fromEpochMilliseconds(
+                    session.started_at + position * PAST_SET_SPACING_MILLIS,
+                )
+            } else {
+                recorded
+            }
         val history = store.training.setsForExercise(exerciseId)
             .filterNot { it.is_warmup }
             .map { set ->
@@ -663,11 +684,11 @@ class TrainingPresenter(
                 completed_at = happened.toEpochMilliseconds(),
                 happened_at = happened.toEpochMilliseconds(),
                 recorded_at = recorded.toEpochMilliseconds(),
-                source_id = manualSource.value,
-                idempotency_key = "set-${ids.newId()}",
+                source_id = sourceId.value,
+                idempotency_key = idempotencyKey ?: "set-${ids.newId()}",
                 observation_id = null,
                 raw_record_id = null,
-                device = "manual",
+                device = device,
                 app_version = appVersion,
                 revision = 1,
                 is_drop = logged.kind == LiveSetKind.DROP,
@@ -762,6 +783,7 @@ class TrainingPresenter(
         }
         store.training.finishSession(sessionId, end, at.toEpochMilliseconds())
         restTimer.skip()
+        watchLink(store.training.openSession() != null)
     }
 
     fun moveSession(sessionId: String, newDate: LocalDate) {

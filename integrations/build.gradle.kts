@@ -1,5 +1,6 @@
 plugins {
     id("openhealth.kotlin.library")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // Importers and exporters land in B8/B11; their Android implementations arrive with them.
@@ -14,4 +15,21 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testRuntimeOnly(libs.junit.vintage.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+// The Connect IQ table lives with the Monkey C app, so the test reads the real file and
+// the manifest it must match (`docs/adr/0019`). Declared as inputs so a table edit always
+// re-runs the check.
+val connectIqDir = rootProject.layout.projectDirectory.dir("watch/connectiq")
+tasks.withType<Test>().configureEach {
+    systemProperty(
+        "openhealth.connectiq.devices",
+        connectIqDir.file("devices.json").asFile.absolutePath,
+    )
+    systemProperty(
+        "openhealth.connectiq.manifest",
+        connectIqDir.file("manifest.xml").asFile.absolutePath,
+    )
+    inputs.file(connectIqDir.file("devices.json")).withPropertyName("connectIqDevices")
+    inputs.file(connectIqDir.file("manifest.xml")).withPropertyName("connectIqManifest")
 }

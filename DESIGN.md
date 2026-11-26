@@ -1,8 +1,11 @@
 # openHealth — Design System
 
-**Version:** 0.6
+**Version:** 0.7
 **Status:** Living document, first pass
-**Last revision:** 2026-11-26 — B13 adds Settings → Data → Sync (§14.2): local-only,
+**Last revision:** 2026-11-26 — B14 adds the Wear OS companion recipe (§14.6): one screen,
+the same tokens, one accent on Log set, 44 dp targets and the existing type roles. No new
+colour, type role, spacing value or component. Previous: 2026-11-26 — B13 adds Settings →
+Data → Sync (§14.2): local-only,
 synced, offline and conflict states from existing components and inks, with the sync
 problem in orange (§6.5) and no new colour, type role, spacing value or component.
 Previous: 2026-11-26 — B12 adds the clinical report paper (§8.9): the report is
@@ -1961,6 +1964,30 @@ A screen is not done until all of these pass:
       fat or photos.
 - [ ] RTL checked; no physical `left`/`right`.
 - [ ] The screen's reason to exist is legible in three seconds.
+
+### 14.6 Wear OS companion
+
+The watch screen (`pr.md` §6.18; `docs/adr/0019`) is a remote for an open session, not a
+second app. It uses the same `OhTheme` tokens and no new colour, type role, spacing value
+or component.
+
+- **One screen, one column.** Round-safe: 16 dp side padding and a 32 dp top reserve for
+  the system time; everything scrolls at 200 % text. Title `title3` 20, exercise `body`
+  17/600, set line `subhead` 15, weight and rest `display`/`timer` 28 tabular, labels
+  `caption2` 11.
+- **One accent.** The accent is the Log set button and the rest bar's fill. Weight and
+  reps step with text `CompactButton`s at a 44 dp target; the value is never a field.
+- **States.** No session: "Start a workout on your phone" and a plain connection line.
+  Session: exercise name, "Set 2 of 3", weight and reps steppers, Log set, rest clock with
+  +15 s and Skip, and a `caption` heart-rate line when the sensor is allowed. A queued
+  command says "N waiting for the phone"; disconnected says the sets stay on the watch.
+  An ended session returns to the empty state.
+- **Never here.** No body map, no chart, no calorie or weight goal, no clinical value, no
+  destructive action. Ending a workout is not destructive and has no confirm dialog.
+- **Connection.** "Phone connected" and "Waiting for your phone" are `caption` in
+  `label-3`; no warning triangle, no red and no "disconnected" blame.
+- **Both themes and RTL.** Dark is canonical; light is the same tokens. The screen mirrors
+  in RTL, but the clock and its figures stay left-to-right (`§11.5`).
 
 ---
 

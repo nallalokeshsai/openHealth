@@ -109,6 +109,9 @@ object SettingKeys {
     /** The one equipment profile: bars, plates and the dumbbell increment (pr.md §6.5). */
     const val TRAINING_EQUIPMENT = "training.equipment"
 
+    /** B14: the Connect IQ direct link is off until the person turns it on. */
+    const val WATCH_LINK = "watch.link_enabled"
+
     /** B8 activity sources: pairing, the step counter's runtime state and each source's
      * last sync (`pr.md` §6.6, §6.18, §7.6). These are configuration and runtime state,
      * never health values. */

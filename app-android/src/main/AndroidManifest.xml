@@ -59,6 +59,10 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- The Connect IQ direct link advertises a GATT service while a workout is open
+         (B14, ADR 0019). The F-Droid build uses it too: no Play Services is involved. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
@@ -192,5 +196,13 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Rest timer between strength-training sets" />
         </service>
+
+        <!-- The Connect IQ direct link (B14, ADR 0019): a standard GATT server while a
+             workout is open, stopped when the session ends or the switch is off. -->
+        <service
+            android:name="app.openhealth.android.wear.WatchGattService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false" />
     </application>
 </manifest>

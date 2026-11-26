@@ -33,6 +33,10 @@ live in `gradle/libs.versions.toml`; this file explains them.
 | AndroidX test | runner 1.7.0, ext:junit 1.3.0 | the same (Google Maven, 2026-11-23) | The instrumented encrypted-database test. |
 | AndroidX Benchmark (B9) | 1.5.0 | 1.5.0 stable; 1.6.0-alpha02 is the newest alpha (Google Maven metadata, 2026-11-18) | Macrobenchmark for Today's cold and warm start; test-only, never in the APK. |
 | AndroidX UI Automator (B9) | 2.3.0 | 2.3.0 stable (Google Maven) | Drives the benchmark seed activity; test-only. |
+| Compose for Wear OS (B14) | 1.7.2 | 1.7.2 stable; 1.8.0-alpha04 is the newest alpha (Google Maven metadata, 2026-11-19) | The Wear companion's components; Compose BOM 2026.11.01 still supplies its Compose foundation. |
+| Wear Health Services (B14) | 1.1.0 | 1.1.0 stable (Google Maven metadata, last updated 2026-09-23) | The optical heart-rate stream; Wear-only, never on the phone classpath. |
+| Wearable Data Layer (B14) | 20.0.1 | 20.0.1 stable (Google Maven metadata, last updated 2026-04-28) | The only Google Play Services artifact the Play build resolves (`docs/adr/0019`); F-Droid resolves none. |
+| AndroidX Fragment (B14) | 1.9.1 | 1.9.1 stable (Google Maven metadata, 2026-09-23) | The lint contract for `ActivityResultContracts`; no Fragment UI is used. |
 
 **SQLite JDBC** is not pinned in the catalogue: `app.cash.sqldelight:sqlite-driver`
 2.4.1 brings its own `org.xerial:sqlite-jdbc` for JVM tests and `tools/fixtures`. It

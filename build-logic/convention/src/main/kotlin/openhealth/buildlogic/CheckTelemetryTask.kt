@@ -25,12 +25,22 @@ abstract class CheckTelemetryTask : DefaultTask() {
     @get:Input
     abstract val deniedGroups: ListProperty<String>
 
+    /**
+     * Exact coordinates that are not telemetry and are required by a platform feature.
+     * Empty almost everywhere; only the Wear Data Layer stack names itself here
+     * (`docs/adr/0019`). A group prefix can never be allowed, only a whole coordinate.
+     */
+    @get:Input
+    abstract val allowedModules: ListProperty<String>
+
     @TaskAction
     fun check() {
         val denied = deniedGroups.get()
+        val allowed = allowedModules.get().toSet()
         val violations = modules.get().filter { coordinate ->
             val group = coordinate.substringBefore(':')
-            denied.any { prefix -> group == prefix || group.startsWith("$prefix.") }
+            coordinate !in allowed &&
+                denied.any { prefix -> group == prefix || group.startsWith("$prefix.") }
         }
         if (violations.isNotEmpty()) {
             throw GradleException(

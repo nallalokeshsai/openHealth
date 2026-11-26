@@ -262,19 +262,7 @@ class AppViewModel(
     private val store: app.openhealth.data.LocalStore get() = container.store
     private val zone: TimeZone = container.zone
     private val now: () -> Instant = { container.clock.now() }
-    private val training: TrainingPresenter by lazy {
-        TrainingPresenter(
-            store = store,
-            clock = container.clock,
-            zone = zone,
-            restTimer = container.restTimer,
-            ids = container.ids,
-            manualSource = AppContainer.MANUAL_SOURCE,
-            appVersion = container.versionName,
-            freestyleTitle = container.context.getString(R.string.train_freestyle),
-            pastTitle = container.context.getString(R.string.train_past_workout),
-        )
-    }
+    private val training: TrainingPresenter get() = container.training
     private var liveTicker: Job? = null
     private val body: BodyPresenter by lazy {
         BodyPresenter(
@@ -3314,6 +3302,42 @@ class AppViewModel(
 
     // -------------------------------------------------------------------- devices
 
+    /** Turns the Connect IQ direct link on or off (`docs/adr/0019`). */
+    fun toggleWatchLink(enabled: Boolean) {
+        store.settings.put(app.openhealth.data.repo.SettingKeys.WATCH_LINK, enabled.toString())
+        if (!enabled) {
+            app.openhealth.android.wear.WatchGattService.stop(container.context)
+            refreshDevices()
+            return
+        }
+        val granted = if (android.os.Build.VERSION.SDK_INT <
+            android.os.Build.VERSION_CODES.S
+        ) {
+            true
+        } else {
+            val advertise = androidx.core.content.ContextCompat.checkSelfPermission(
+                container.context,
+                android.Manifest.permission.BLUETOOTH_ADVERTISE,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val connect = androidx.core.content.ContextCompat.checkSelfPermission(
+                container.context,
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            advertise && connect
+        }
+        if (!granted) {
+            _state.update {
+                it.copy(
+                    pendingPermission =
+                    app.openhealth.ui.screens.devices.DevicePermissionRequest.BLUETOOTH,
+                )
+            }
+        } else if (store.training.openSession() != null) {
+            app.openhealth.android.wear.WatchGattService.start(container.context)
+        }
+        refreshDevices()
+    }
+
     fun openDevices() {
         _state.update {
             it.copy(
@@ -3469,6 +3493,11 @@ class AppViewModel(
         if (!granted) {
             showToast(R.string.toast_permission_needed, undo = false)
             return
+        }
+        if (store.settings.get(SettingKeys.WATCH_LINK) == "true" &&
+            store.training.openSession() != null
+        ) {
+            app.openhealth.android.wear.WatchGattService.start(container.context)
         }
         scanForDevices()
     }

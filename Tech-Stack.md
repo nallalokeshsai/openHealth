@@ -1,6 +1,6 @@
 # openHealth — Technology Stack
 
-**Version:** 2.4 · 2026-11-25 (B7: progress photos in the encrypted store) — **Android only for the first releases** (`pr.md` §0.1)
+**Version:** 2.5 · 2026-11-26 (B14: Wear OS companion and the Connect IQ BLE link) — **Android only for the first releases** (`pr.md` §0.1)
 **Status:** Closes `pr.md` §13 decisions 1, 2, 3 and supersedes `pr.md` §8.1–8.4.
 **Companions:** [`pr.md`](pr.md) · [`DESIGN.md`](DESIGN.md) · [`BUILD-ROADMAP.md`](BUILD-ROADMAP.md) · [`prompts.md`](prompts.md) · ADR [`docs/adr/0001-android-first.md`](docs/adr/0001-android-first.md)
 
@@ -85,8 +85,15 @@ Day one of the iOS port is "add the KMP targets and write the actuals", not "fin
 | Images | Coil 3 | Progress photos stay in app-private encrypted storage |
 | Widgets | Glance | Mirrors the Today card |
 | Watch (Phase 2) | Compose for Wear OS + Data Layer | Shares `core/` verbatim |
+| Garmin Connect IQ (V1) | Monkey C app + a standard Android BLE GATT server | No Garmin Mobile SDK, no Garmin account; `docs/adr/0019` |
 | Background | WorkManager; foreground service (`health`, `dataSync`, `location` types) for live sessions and GPS | The rest timer is an ongoing notification with actions |
 | Distribution | Play Store **and** a Play-Services-free build for F-Droid | No Firebase, no GMS-only API on a core path |
+
+**Watch rule (B14).** The Wear OS companion uses the Data Layer, which is a Google Play
+Services API; it is compiled into the `play` flavour and the Wear APK only, never into the
+F-Droid phone build. The Connect IQ link is a standard Android BLE GATT server and is in
+both flavours. The telemetry gate's one exact exemption is the four Wearable coordinates
+(`docs/adr/0019`); `checkFdroidNoPlayServices` proves the other build resolves none.
 
 ---
 

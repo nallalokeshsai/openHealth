@@ -26,6 +26,7 @@ import app.openhealth.ui.screens.devices.PairedDeviceModel
 import app.openhealth.ui.screens.devices.PriorityModel
 import app.openhealth.ui.screens.devices.PriorityRowModel
 import app.openhealth.ui.screens.devices.StepsSourceModel
+import app.openhealth.ui.screens.devices.WatchLinkModel
 import app.openhealth.ui.theme.OhTheme
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -182,6 +183,7 @@ class DevicesScreenshotTest {
             liveHeartRate = 62,
             note = "openHealth reads the standard profiles.",
         ),
+        watchLink = WatchLinkModel(enabled = false, available = true, note = "A local link."),
         priority = PriorityModel(
             rows = listOf(
                 PriorityRowModel("phone-steps", "This phone", "phone", true, false, false),
@@ -221,6 +223,7 @@ class DevicesScreenshotTest {
                 onUnpair = {},
                 onConnect = {},
                 onMovePriority = { _, _ -> },
+                onToggleWatchLink = {},
             )
         }
     }
@@ -253,6 +256,7 @@ class DevicesScreenshotTest {
                 onUnpair = {},
                 onConnect = {},
                 onMovePriority = { _, _ -> },
+                onToggleWatchLink = {},
             )
         }
     }

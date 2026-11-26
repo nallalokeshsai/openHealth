@@ -86,6 +86,7 @@ class DevicesSemanticsTest {
             liveHeartRate = null,
             note = "openHealth reads the standard profiles.",
         ),
+        watchLink = WatchLinkModel(enabled = false, available = true, note = "A local link."),
         priority = PriorityModel(
             rows = listOf(
                 PriorityRowModel("phone-steps", "This phone", "phone", true, false, false),
@@ -116,6 +117,7 @@ class DevicesSemanticsTest {
                         onUnpair = {},
                         onConnect = {},
                         onMovePriority = { id, up -> moves += id to up },
+                        onToggleWatchLink = {},
                     )
                 }
             }
