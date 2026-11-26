@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -459,21 +460,23 @@ private fun changeSentence(model: WeightCardModel, factor: Double, unit: String)
     val change = model.changeKg ?: return stringResource(R.string.vitals_weight_none)
     val days = model.changeDays
     return when {
-        change > 0 -> stringResource(
-            R.string.vitals_weight_up,
+        change > 0 -> pluralStringResource(
+            R.plurals.vitals_weight_up,
+            days,
             number(kotlin.math.abs(change) * factor, 1),
             unit,
             days,
         )
 
-        change < 0 -> stringResource(
-            R.string.vitals_weight_down,
+        change < 0 -> pluralStringResource(
+            R.plurals.vitals_weight_down,
+            days,
             number(kotlin.math.abs(change) * factor, 1),
             unit,
             days,
         )
 
-        else -> stringResource(R.string.vitals_weight_same, days)
+        else -> pluralStringResource(R.plurals.vitals_weight_same, days, days)
     }
 }
 

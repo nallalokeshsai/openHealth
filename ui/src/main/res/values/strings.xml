@@ -1312,11 +1312,23 @@
     <string name="vitals_weight_weekly_formula">The weekly rate is the least-squares slope of the daily check-ins over the last 28 days, multiplied to a week. It needs at least three distinct days across a week.</string>
     <string name="vitals_weight_goal_formula">The goal weight is the target you set in your profile. The dashed line on the chart is that target, not a recommendation.</string>
     <string name="vitals_weight_checkins">%1$d check-ins</string>
-    <string name="vitals_weight_up">Up %1$s %2$s in %3$d days</string>
-    <string name="vitals_weight_down">Down %1$s %2$s in %3$d days</string>
-    <string name="vitals_weight_same">No change in %1$d days</string>
+    <plurals name="vitals_weight_up">
+        <item quantity="one">Up %1$s %2$s in %3$d day</item>
+        <item quantity="other">Up %1$s %2$s in %3$d days</item>
+    </plurals>
+    <plurals name="vitals_weight_down">
+        <item quantity="one">Down %1$s %2$s in %3$d day</item>
+        <item quantity="other">Down %1$s %2$s in %3$d days</item>
+    </plurals>
+    <plurals name="vitals_weight_same">
+        <item quantity="one">No change in %1$d day</item>
+        <item quantity="other">No change in %1$d days</item>
+    </plurals>
     <string name="vitals_weight_day">1 day</string>
-    <string name="vitals_weight_days">%1$d days</string>
+    <plurals name="vitals_weight_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
     <string name="vitals_weight_latest_line">Latest %1$s %2$s</string>
     <string name="vitals_weight_show_table">Show the check-ins as a table</string>
     <string name="vitals_weight_chart_desc">%1$s. From %2$s to %3$s %4$s.</string>
@@ -1360,7 +1372,10 @@
     <string name="vitals_photos_compare_hint">Open a photo to compare it with the oldest one.</string>
     <string name="vitals_photos_caption">Caption</string>
     <string name="vitals_photo_compare_label">Before and after photo slider</string>
-    <string name="vitals_photo_range">%1$d days apart</string>
+    <plurals name="vitals_photo_range">
+        <item quantity="one">%1$d day apart</item>
+        <item quantity="other">%1$d days apart</item>
+    </plurals>
     <string name="vitals_photo_one_day">1 day apart</string>
     <string name="vitals_photo_private">Encrypted on this phone</string>
     <string name="vitals_measurements_title">Measurements</string>
@@ -1721,6 +1736,8 @@
     <string name="stats_unit_lb_week">lb/week</string>
     <string name="stats_unit_steps">steps</string>
     <string name="stats_unit_hours">hours</string>
+    <string name="stats_kpi_hours_minutes">%1$d h %2$d</string>
+    <string name="stats_kpi_minutes">%1$d min</string>
     <string name="stats_unit_minutes">minutes</string>
     <string name="stats_kpi_debt">Sleep debt, 14 nights</string>
     <string name="stats_kpi_consistency">Night-to-night variation</string>

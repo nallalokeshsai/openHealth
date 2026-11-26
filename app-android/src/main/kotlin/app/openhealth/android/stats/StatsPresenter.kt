@@ -322,17 +322,17 @@ class StatsPresenter(
             listOf(
                 StatsKpi(
                     value = nights.map { it.totals.asleepMinutes }.average().takeIf { !it.isNaN() }
-                        ?.let { duration(it) } ?: DASH,
+                        ?.let { kpiDuration(it) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_sleep),
                     chart = ChartId.SLEEP_DURATION,
                 ),
                 StatsKpi(
-                    value = sleepDebt(date)?.let { duration(it.debtMinutes) } ?: DASH,
+                    value = sleepDebt(date)?.let { kpiDuration(it.debtMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_debt),
                     chart = ChartId.SLEEP_DURATION,
                 ),
                 StatsKpi(
-                    value = sleepDebt(date)?.let { duration(it.consistencyMinutes) } ?: DASH,
+                    value = sleepDebt(date)?.let { kpiDuration(it.consistencyMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_consistency),
                     chart = ChartId.SLEEP_DURATION,
                 ),
@@ -1015,6 +1015,22 @@ class StatsPresenter(
             else -> ""
         }
         return "$sign${decimal(rounded, decimals)}"
+    }
+
+    /**
+     * A KPI figure is one line at 28/600 (§5.6); "7 h 18 min" ellipsises in a third of
+     * the band, so the band's form drops the word "min" (the label already says what the
+     * figure is). The full form stays in cards and tables.
+     */
+    private fun kpiDuration(minutes: Double): String {
+        val total = minutes.roundToInt()
+        val hours = total / 60
+        val remainder = total % 60
+        return if (hours > 0) {
+            context.getString(UiR.string.stats_kpi_hours_minutes, hours, remainder)
+        } else {
+            context.getString(UiR.string.stats_kpi_minutes, remainder)
+        }
     }
 
     private fun duration(minutes: Double): String {

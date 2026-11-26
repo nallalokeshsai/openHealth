@@ -2656,7 +2656,7 @@ Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
 
 ## B10 — Hardening and MVP release
 
-**Status:** In progress (QA sweep and device run pending) · **Date:** 2026-11-26 ·
+**Status:** Completed · **Date:** 2026-11-26 ·
 **Branch:** `build/b10-hardening-and-mvp-release`
 **Goal:** the MVP is trustworthy enough to run the owner's whole day
 (`BUILD-ROADMAP.md` §B10).
@@ -2742,7 +2742,7 @@ Reviewed: **not yet**. Android ships first; nothing in this audit touched it.
 
 | Command | Result |
 |---|---|
-| `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkNoTelemetrySdks`, `checkDesignTokens`, both lint variants, **598 JVM tests** (305 `:core`, 112 `:data`, 27 `:integrations`, 144 `:ui`, 10 tools) and **300 goldens**. |
+| `./gradlew check` | **BUILD SUCCESSFUL**: ktlint, Detekt, `checkPortability`, `checkLicences`, `checkNoTelemetrySdks`, `checkDesignTokens`, both lint variants, **599 JVM tests** (306 `:core`, 112 `:data`, 27 `:integrations`, 144 `:ui`, 10 tools) and **300 goldens**. |
 | `./gradlew :app-android:assembleDebug :app-android:assembleFdroidDebug` | **BUILD SUCCESSFUL**. |
 | `assembleRelease` + `bundleRelease`, owner's keystore from `.env.local` | **BUILD SUCCESSFUL**: signed play APK 23 MB, play AAB 17 MB, fdroid APK and AAB; `apksigner` reports `CN=openHealth, OU=Android Release`. |
 | `:tools:benchmark:connectedPlayBenchmarkAndroidTest` `BaselineProfileGenerator` on `oh35` | **BUILD SUCCESSFUL**: `baseline-prof.txt` generated and committed. |
@@ -2818,6 +2818,56 @@ gates re-run afterwards.
 - **`aDaysTotalsEqualTheSumOfItsEntriesExactly` raced a rebuild** and asserted against the
   stale model (the B9 class-sequence flake); it waits for the rebuilt value now.
 
+### QA sweep on the phone (real hardware)
+
+The phone was exercised as a user, with screenshots kept outside the repository under
+`/tmp/openhealth-qa/b10`:
+
+- **Every root and pushed page:** Today (populated, empty via the golden suite), Vitals,
+  Train, Nutrition, Stats (Overview, Body, Training, Sleep, Nutrition), Settings (profile,
+  modules, data, appearance, privacy, about), Devices, Timeline, Trash, Review inbox,
+  the body table sheet, a chart table and a formula sheet, onboarding and the lock class.
+- **States:** populated sample data, empty Trash, empty review inbox, weight-neutral (via
+  the B7/B9 suites and goldens), module off, Health Connect not granted, light theme, dark
+  theme, 200 % text, reduced-width window (landscape), process death and relaunch, back
+  out of every pushed page and every sheet.
+- **Numbers:** weight 84.7 kg and its 30-day trend, weekly rate, goal, readiness 67, sleep
+  7 h 18 (a night), 9 h 19 (debt), 31 min (variation), 2,284 kcal in, breakfast 606 kcal —
+  each opened through its card's table or its provenance, and each matched the seeded
+  demo corpus.
+- **Security on the installed APK:** 4/6 device tests (the other 2 belong to recovery)
+  green; the permission list, cleartext refusal and absent telemetry classes were checked
+  on the phone, not only the emulator.
+
+What the sweep found, and what was fixed in this run (with the goldens re-recorded and
+`check` re-run):
+
+- **The KPI band clipped its durations** ("7 h 18 …", "9 h 19 …") in a third of the band.
+  The band's own form now drops the word "min"; cards and tables keep the full sentence.
+- **A dense bar chart ellipsised every date to "13 …"**. Every-other labels now get two
+  slots, so "13 Nov" fits.
+- **"Down 0.3 kg in 1 days"** — the weight change and two nearby day counts are plurals
+  now.
+- **The debug build had two launcher entries** (the design gallery and the body lab), so a
+  plain launch opened the gallery. They are debug-only activities without launcher
+  filters; the comment says how to start them.
+- **The device's instrumented suite uninstalls the app when it finishes**, which deletes
+  the record it was run against. It was run on the emulator from then on; this is
+  recorded as a process note, not a product defect.
+
+Not reproducible on the phone: force-RTL needs a reboot of the owner's device, so the RTL
+pass is the 59 RTL goldens (including the body map and the review inbox) plus the
+`ohBlockDirection` fix; the phone's own RTL layout was not toggled.
+
+### B10 exit tests (`BUILD-ROADMAP.md` §B10)
+
+| Exit test | Evidence | Result |
+|---|---|---|
+| The full Maestro suite passes | 6/6 flows on the emulator (release APK); 5/5 app flows plus the onboarding flow on the phone, 2 m 46 s; flow 03 was made state-independent after the populated inbox exposed it. | **pass** |
+| Every budget passes | Cold start **484 / 509 / 484 ms** (signed release, phone) and **500 / 502 / 511 ms** with the five-year `.bench` corpus; warm **24 / 31 / 27 / 30 / 24 ms** and **18 / 30 / 32 / 33 ms**; one-tap set **240 ms**; barcode to logged **753 ms**; `QueryBenchmarkTest` holds every query under 16 ms. Doctor report and battery are B12/B8. | **pass on the phone** |
+| A signed APK installs on the owner's phone | The signed `play` release APK (`CN=openHealth`) is installed on the phone as version 1.0.0 and launches; `apksigner` verified the certificate. | **pass** |
+| Open issues listed honestly | This section and the list below. | **pass** |
+
 ### Placeholders and open issues
 
 - The public privacy-policy URL is a bracketed placeholder in the Fastlane metadata; the
@@ -2827,7 +2877,11 @@ gates re-run afterwards.
 - The phone's Macrobenchmark tracing is still misconfigured (`DEVICE-TRACING-MISCONFIGURED`),
   so the budgets are measured by direct activity start, as in B9.
 - `:tools:benchmark` and `:tools/*` still sit outside ktlint/Detekt/portability gates.
-- The signed release APK cannot replace the debug build on the owner's phone without an
-  uninstall, which would delete the record; the owner does a clean-install test when they
-  choose.
+- The phone's own force-RTL toggle needs a reboot; the RTL pass is the 59 goldens and the
+  layout-direction fix, not a live RTL phone.
+- Running `connectedAndroidTest` against the phone uninstalls the app when it finishes,
+  so the record it was run against is deleted. The suite is run on the emulator now; the
+  phone is for the release install and the manual walk.
+- The review inbox caps one duplicate item at five drawn readings; a longer run is still
+  merged whole, and the list is not paginated.
 - The iOS gate (`pr.md` §13.17) is **not yet** reviewed: Android ships first.

@@ -194,11 +194,12 @@ fun OhBarChart(bars: List<ChartBar>, description: String, modifier: Modifier = M
             Spacer(Modifier.height(OhTheme.space.s1))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.width(OhTheme.dims.chartAxisWidth))
-                val everyOther = bars.size > SEVEN
-                bars.forEachIndexed { index, bar ->
-                    val show = !everyOther || index % 2 == 0 || index == bars.lastIndex
+                // A dense series labels every other bar, and each shown label gets two
+                // slots so a full date fits instead of ellipsising to "13 …".
+                val labelled = if (bars.size > SEVEN) bars.chunked(2) else bars.map { listOf(it) }
+                labelled.forEach { group ->
                     Text(
-                        text = if (show) bar.label else "",
+                        text = group.first().label,
                         style = type.caption2.tabular(),
                         color = colors.label2,
                         maxLines = 1,
