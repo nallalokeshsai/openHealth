@@ -145,6 +145,36 @@ published by the Regenstrief Institute (`https://ucum.org/ucum`); the app uses t
 codes and conversion factors as identifiers and cites the specification. No UCUM text is
 reproduced in the product.
 
+### LOINC — laboratory and vital identifiers (attribution)
+
+Laboratory results and the vitals in the FHIR export are identified with LOINC codes
+(`pr.md` §6.9, §6.17). LOINC is published by the Regenstrief Institute
+(`https://loinc.org`); its licence permits use of the codes and requires attribution and
+that the codes are not modified. openHealth uses the numeric codes, the short display
+names and the `http://loinc.org` system URI as identifiers; it bundles no LOINC table,
+text or hierarchy, and it does not alter a code. The catalogue is in
+`core/…/clinical/LabAnalyte.kt` and `core/…/clinical/Loinc.kt`.
+
+### FHIR R4 and the HL7 JSON schema (CC0 1.0)
+
+The FHIR R4 export (`pr.md` §6.17) targets the HL7 FHIR Release 4 specification. The
+official R4 JSON schema, `https://hl7.org/fhir/R4/fhir.schema.json`, is vendored under
+`core/src/test/resources/fhir/` **for a test only** and never enters an APK. HL7 publishes
+the FHIR specification and its schemas under the Creative Commons CC0 1.0 public domain
+dedication (`https://www.hl7.org/fhir/license.html`). The file is unmodified; the test
+renames the draft-04 `id` keyword to draft-06 `$id` in memory so a draft-06 validator can
+read it.
+
+### Open mHealth — schema identifiers (no files bundled)
+
+Where Open mHealth defines a schema for a value the app records, the export names the
+public schema id (`omh:heart-rate:2.0`, `omh:blood-pressure:2.0`,
+`omh:body-weight:2.0`, `omh:physical-activity:2.0`, `omh:sleep-duration:1.0`). Open mHealth
+is a project of the Open mHealth initiative (`https://www.openmhealth.org`). openHealth
+emits data points that follow those public schemas; it bundles no schema file and
+reproduces no schema text. A value without a schema is left out of that export rather
+than forced into a near match.
+
 ### Compendium of Physical Activities (cited MET values)
 
 The MET values in `core/…/formula/MetTable.kt` are a curated selection of numeric values
@@ -160,6 +190,9 @@ Kotest, Robolectric and Roborazzi run on the JVM only and never enter the APK. T
 licences and every transitive are recorded in `gradle/licences/allowed.tsv`.
 AndroidX Benchmark 1.5.0 and UI Automator 2.3.0 (Apache-2.0) run in the benchmark and
 instrumented test APKs only (B9); they never enter a release APK.
+`com.networknt:json-schema-validator` 1.0.87 (Apache-2.0) runs on the JVM test classpath
+only, to validate the FHIR bundle against the vendored R4 schema (B12); it never enters
+an APK.
 
 
 ### USDA FoodData Central (CC0 1.0, public domain)
@@ -253,7 +286,7 @@ Recorded in `gradle/licences/allowed.tsv`; all are Apache-2.0 and used unmodifie
 
 Recorded with the phase that bundles each source: Free Exercise DB (Unlicense / public
 domain) in B4, USDA FoodData Central (CC0) in B6, cited clinical reference ranges in B7,
-and LOINC/UCUM terms in B12. A source whose licence cannot be established is not bundled.
+and LOINC, UCUM, FHIR R4 and Open mHealth terms in B12. A source whose licence cannot be established is not bundled.
 
 ### Build dependencies
 

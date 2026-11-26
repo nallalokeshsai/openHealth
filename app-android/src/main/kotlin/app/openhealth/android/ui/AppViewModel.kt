@@ -213,6 +213,14 @@ data class AppState(
     val stats: app.openhealth.ui.screens.stats.StatsModel? = null,
     val review: app.openhealth.ui.screens.review.ReviewModel? = null,
     val reviewCount: Int = 0,
+    val sleep: app.openhealth.ui.screens.clinical.SleepModel? = null,
+    val clinical: app.openhealth.ui.screens.clinical.ClinicalModel? = null,
+    val clinicalEditor: app.openhealth.ui.screens.clinical.ClinicalEditorModel? = null,
+    val clinicalEditorSection: app.openhealth.ui.screens.clinical.ClinicalSectionKind? = null,
+    val clinicalEditorId: String? = null,
+    val reports: app.openhealth.ui.screens.clinical.ReportsModel? = null,
+    val reportDays: Int = 90,
+    val weeklyReview: app.openhealth.ui.screens.clinical.WeeklyReviewModel? = null,
     val statsSegment: app.openhealth.ui.screens.stats.StatsSegment =
         app.openhealth.ui.screens.stats.StatsSegment.OVERVIEW,
     val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
@@ -2569,6 +2577,20 @@ class AppViewModel(
                         store.trash.deleteWorkSet(app.openhealth.core.ids.SetId(row.entityId))
                             ?.let(UndoAction::Deleted)
 
+                    TimelineKind.DOSE ->
+                        store.trash.deleteMedicationDose(row.entityId)
+                            ?.let(UndoAction::Deleted)
+
+                    TimelineKind.SYMPTOM ->
+                        store.trash.deleteSymptomEpisode(row.entityId)
+                            ?.let(UndoAction::Deleted)
+
+                    TimelineKind.LAB ->
+                        store.trash.deleteLabResult(row.entityId)?.let(UndoAction::Deleted)
+
+                    TimelineKind.VACCINATION ->
+                        store.trash.deleteVaccination(row.entityId)?.let(UndoAction::Deleted)
+
                     else -> null
                 }
             }
@@ -2657,6 +2679,193 @@ class AppViewModel(
                 container.preferences.setModules(preset.enabled)
             }
             rebuild()
+        }
+    }
+
+    // ------------------------------------------------------- B12 sleep and clinical
+
+    fun openSleep() {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.sleepModel()
+            }
+            _state.update { it.copy(sleep = model) }
+        }
+    }
+
+    fun openClinical() {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.clinicalModel()
+            }
+            _state.update { it.copy(clinical = model) }
+        }
+    }
+
+    fun openClinicalEditor(
+        section: app.openhealth.ui.screens.clinical.ClinicalSectionKind,
+        id: String? = null,
+    ) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.editor(section, id)
+            }
+            _state.update {
+                it.copy(
+                    clinicalEditor = model,
+                    clinicalEditorSection = section,
+                    clinicalEditorId = id,
+                )
+            }
+        }
+    }
+
+    fun closeClinicalEditor() {
+        _state.update {
+            it.copy(
+                clinicalEditor = null,
+                clinicalEditorSection = null,
+                clinicalEditorId = null,
+            )
+        }
+    }
+
+    fun saveClinical(draft: app.openhealth.ui.screens.clinical.ClinicalDraft) {
+        val section = _state.value.clinicalEditorSection ?: return
+        val id = _state.value.clinicalEditorId
+        launchGuarded {
+            val saved = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.save(section, id, draft)
+            }
+            if (saved) {
+                val model = withContext(Dispatchers.IO) {
+                    container.clinicalPresenter.clinicalModel()
+                }
+                _state.update {
+                    it.copy(
+                        clinical = model,
+                        clinicalEditor = null,
+                        clinicalEditorSection = null,
+                        clinicalEditorId = null,
+                    )
+                }
+                showToast(R.string.toast_saved, undo = false)
+            } else {
+                _state.update {
+                    it.copy(
+                        clinicalEditor = it.clinicalEditor?.copy(
+                            error = container.context.getString(
+                                R.string.clinical_editor_invalid,
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteClinical() {
+        val section = _state.value.clinicalEditorSection ?: return
+        val id = _state.value.clinicalEditorId ?: return
+        launchGuarded {
+            val tombstone = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.delete(section, id)
+            }
+            val model = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.clinicalModel()
+            }
+            _state.update {
+                it.copy(
+                    clinical = model,
+                    clinicalEditor = null,
+                    clinicalEditorSection = null,
+                    clinicalEditorId = null,
+                )
+            }
+            if (tombstone != null) {
+                undoAction = UndoAction.Deleted(tombstone)
+                toastJob?.cancel()
+                _state.update {
+                    it.copy(
+                        sessionUndo = AppToast(R.string.toast_deleted, undo = true),
+                        toast = null,
+                    )
+                }
+            } else {
+                showToast(R.string.toast_deleted, undo = false)
+            }
+        }
+    }
+
+    fun logDose(skipped: Boolean) {
+        val id = _state.value.clinicalEditorId ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                container.clinicalPresenter.logDose(id, skipped)
+            }
+            val section = _state.value.clinicalEditorSection
+            val model = withContext(Dispatchers.IO) {
+                if (section != null) container.clinicalPresenter.editor(section, id) else null
+            }
+            _state.update { it.copy(clinicalEditor = model) }
+            showToast(R.string.toast_saved, undo = false)
+        }
+    }
+
+    fun logSleepQuality(rating: Int) {
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                container.clinicalPresenter.logSleepQuality(rating)
+            }
+            openSleep()
+        }
+    }
+
+    fun openReports() {
+        launchGuarded {
+            val days = _state.value.reportDays
+            val model = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.reportsModel(days)
+            }
+            _state.update { it.copy(reports = model) }
+        }
+    }
+
+    fun selectReportRange(index: Int) {
+        val days = listOf(30, 90, 180, 365).getOrNull(index) ?: return
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.reportsModel(days)
+            }
+            _state.update { it.copy(reports = model, reportDays = days) }
+        }
+    }
+
+    fun exportReport(
+        uri: android.net.Uri,
+        format: app.openhealth.ui.screens.clinical.ReportFormat,
+    ) {
+        val days = _state.value.reportDays
+        launchGuarded {
+            val file = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.export(format, days)
+            }
+            val written = withContext(Dispatchers.IO) {
+                runCatching { container.documents.write(uri, file.bytes) }.isSuccess
+            }
+            showToast(
+                if (written) R.string.toast_saved else R.string.toast_not_saved,
+                undo = false,
+            )
+        }
+    }
+
+    fun openWeeklyReview() {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.clinicalPresenter.weeklyReview()
+            }
+            _state.update { it.copy(weeklyReview = model) }
         }
     }
 
@@ -3793,7 +4002,126 @@ class AppViewModel(
         "entry" -> entryTimelineRow(item, sources)
         "session" -> sessionTimelineRow(item, sources)
         "work_set" -> setTimelineRow(item, sources)
+        "medication_dose" -> doseTimelineRow(item, sources)
+        "symptom_episode" -> symptomTimelineRow(item, sources)
+        "lab_result" -> labTimelineRow(item, sources)
+        "vaccination" -> vaccinationTimelineRow(item, sources)
         else -> null
+    }
+
+    private fun doseTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.clinical.dose(item.entityId)?.let { dose ->
+        val source = sources[dose.provenance.sourceId.value] ?: unknownSource()
+        TimelineRowModel(
+            kind = TimelineKind.DOSE,
+            entityId = dose.id,
+            sourceId = dose.provenance.sourceId.value,
+            title = dose.medicationName,
+            detail = source,
+            valueText = if (dose.skipped) {
+                container.context.getString(UiR.string.clinical_dose_skipped)
+            } else {
+                container.context.getString(UiR.string.clinical_dose_taken)
+            },
+            provenance = RowProvenance(
+                sourceLabel = source,
+                happenedAt = dose.provenance.happenedAt,
+                recordedAt = dose.provenance.recordedAt,
+                method = null,
+                device = dose.provenance.device,
+                edited = false,
+                localDay = dose.localDate.toString(),
+                zoneId = dose.provenance.zone.id,
+                rawRecord = dose.provenance.rawRecordId != null,
+            ),
+            deletable = true,
+        )
+    }
+
+    private fun symptomTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.clinical.episode(item.entityId)?.let { episode ->
+        val source = sources[episode.provenance.sourceId.value] ?: unknownSource()
+        TimelineRowModel(
+            kind = TimelineKind.SYMPTOM,
+            entityId = episode.id,
+            sourceId = episode.provenance.sourceId.value,
+            title = episode.symptomName,
+            detail = source,
+            valueText = container.context.getString(
+                UiR.string.clinical_severity_of_ten,
+                episode.severity,
+            ),
+            provenance = RowProvenance(
+                sourceLabel = source,
+                happenedAt = episode.provenance.happenedAt,
+                recordedAt = episode.provenance.recordedAt,
+                method = null,
+                device = episode.provenance.device,
+                edited = false,
+                localDay = episode.localDate.toString(),
+                zoneId = episode.provenance.zone.id,
+                rawRecord = episode.provenance.rawRecordId != null,
+            ),
+            deletable = true,
+        )
+    }
+
+    private fun labTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.clinical.lab(item.entityId)?.let { lab ->
+        val source = sources[lab.provenance.sourceId.value] ?: unknownSource()
+        TimelineRowModel(
+            kind = TimelineKind.LAB,
+            entityId = lab.id,
+            sourceId = lab.provenance.sourceId.value,
+            title = lab.analyte.display,
+            detail = source,
+            valueText = formatDisplay(lab.value, lab.unit.ucum),
+            provenance = RowProvenance(
+                sourceLabel = source,
+                happenedAt = lab.provenance.happenedAt,
+                recordedAt = lab.provenance.recordedAt,
+                method = null,
+                device = lab.provenance.device,
+                edited = false,
+                localDay = lab.provenance.localDate.toString(),
+                zoneId = lab.provenance.zone.id,
+                rawRecord = lab.provenance.rawRecordId != null,
+            ),
+            deletable = true,
+        )
+    }
+
+    private fun vaccinationTimelineRow(
+        item: app.openhealth.data.repo.TimelineItem,
+        sources: Map<String, String>,
+    ): TimelineRowModel? = store.clinical.vaccination(item.entityId)?.let { vaccination ->
+        val source = sources[vaccination.provenance.sourceId.value] ?: unknownSource()
+        TimelineRowModel(
+            kind = TimelineKind.VACCINATION,
+            entityId = vaccination.id,
+            sourceId = vaccination.provenance.sourceId.value,
+            title = vaccination.name,
+            detail = source,
+            valueText = vaccination.doseLabel,
+            provenance = RowProvenance(
+                sourceLabel = source,
+                happenedAt = vaccination.provenance.happenedAt,
+                recordedAt = vaccination.provenance.recordedAt,
+                method = null,
+                device = vaccination.provenance.device,
+                edited = false,
+                localDay = vaccination.provenance.localDate.toString(),
+                zoneId = vaccination.provenance.zone.id,
+                rawRecord = vaccination.provenance.rawRecordId != null,
+            ),
+            deletable = true,
+        )
     }
 
     private fun noteTimelineRow(
@@ -4092,6 +4420,12 @@ class AppViewModel(
                 TrashEntity.WORK_SET.table -> TrashKind.SET
                 TrashEntity.SESSION.table -> TrashKind.SESSION
                 TrashEntity.ROUTINE_EXERCISE.table -> TrashKind.ROUTINE_EXERCISE
+                TrashEntity.MEDICATION_DOSE.table -> TrashKind.DOSE
+                TrashEntity.SYMPTOM_EPISODE.table -> TrashKind.SYMPTOM
+                TrashEntity.LAB_RESULT.table -> TrashKind.LAB
+                TrashEntity.ALLERGY.table -> TrashKind.ALLERGY
+                TrashEntity.CONDITION.table -> TrashKind.CONDITION
+                TrashEntity.VACCINATION.table -> TrashKind.VACCINATION
                 else -> TrashKind.OBSERVATION
             }
             TrashItemModel(

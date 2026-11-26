@@ -32,6 +32,9 @@ enum class CitationKey {
     EDWARDS_1993,
     ALLEN_COGGAN_2019,
     APP_RULE,
+    ESC_EAS_DYSLIPIDAEMIA_2019,
+    CLSI_EP28_2010,
+    LAB_REPORTED_RANGE,
 }
 
 /** One citable statement, with where it came from and what it is used for. */
@@ -333,6 +336,42 @@ object Citations {
             supports = "Fitness, fatigue and form as exponentially weighted averages of " +
                 "daily training load (42-day and 7-day time constants)",
             licenceNote = "The method is cited; no book text or figures are reproduced.",
+        ),
+        Citation(
+            key = CitationKey.ESC_EAS_DYSLIPIDAEMIA_2019,
+            title = "2019 ESC/EAS Guidelines for the management of dyslipidaemias",
+            authors = "Mach F, Baigent C, Catapano AL, et al.; European Society of " +
+                "Cardiology and European Atherosclerosis Society",
+            year = 2019,
+            publication = "European Heart Journal 41(1):111-188",
+            url = "https://doi.org/10.1093/eurheartj/ehz455",
+            supports = "The default lipid reference intervals used by the bundled lab " +
+                "catalogue (total cholesterol, LDL, HDL, triglycerides)",
+            licenceNote = "Published thresholds; no guideline text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.CLSI_EP28_2010,
+            title = "Defining, establishing, and verifying reference intervals in the " +
+                "clinical laboratory",
+            authors = "Clinical and Laboratory Standards Institute",
+            year = 2010,
+            publication = "CLSI EP28-A3c, 3rd edition",
+            url = "https://clsi.org/standards/products/method-evaluation/documents/ep28/",
+            supports = "Why a lab interval belongs to the reporting laboratory and must " +
+                "not be borrowed from another lab or population",
+            licenceNote = "A standard cited by name; no text is reproduced.",
+        ),
+        Citation(
+            key = CitationKey.LAB_REPORTED_RANGE,
+            title = "Reference interval printed on the person's laboratory report",
+            authors = "The reporting laboratory",
+            year = 2026,
+            publication = "Entered by the person from their own report",
+            url = "https://clsi.org/standards/products/method-evaluation/documents/ep28/",
+            supports = "A lab range that the app did not invent: the interval and the " +
+                "laboratory's name travel with the result",
+            licenceNote = "The person's own report; openHealth stores the interval, not " +
+                "the report document.",
         ),
     )
 

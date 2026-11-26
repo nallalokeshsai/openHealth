@@ -94,6 +94,24 @@ class AppContainer(
     }
     val documents = documentStore ?: AndroidDocumentStore(appContext)
 
+    /** The PDF seam (`DESIGN.md` §8.7); reports are rendered on the device, offline. */
+    val pdf: app.openhealth.core.seam.PdfSeam =
+        app.openhealth.android.reports.AndroidPdfRenderer()
+
+    /** Sleep, the clinical record, reports and the weekly review (`BUILD-ROADMAP.md` §B12). */
+    val clinicalPresenter: app.openhealth.android.clinical.ClinicalPresenter by lazy {
+        app.openhealth.android.clinical.ClinicalPresenter(
+            context = appContext,
+            store = store,
+            preferences = preferences,
+            zone = zone,
+            ids = ids,
+            clock = clock,
+            pdf = pdf,
+            appVersion = versionName,
+        )
+    }
+
     /** The health-bus seam's Android implementation; read-only (Tech-Stack.md §8). */
     val healthBus: app.openhealth.core.seam.HealthBus =
         healthBusOverride ?: app.openhealth.android.activity.AndroidHealthBus(appContext)

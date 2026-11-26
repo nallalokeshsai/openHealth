@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package app.openhealth.android.ui
 
 import android.Manifest
@@ -68,6 +70,13 @@ import app.openhealth.ui.screens.activity.MapPacksScreen
 import app.openhealth.ui.screens.activity.YogaFinishScreen
 import app.openhealth.ui.screens.activity.YogaLibraryScreen
 import app.openhealth.ui.screens.activity.YogaPlayerScreen
+import app.openhealth.ui.screens.clinical.ClinicalEditorScreen
+import app.openhealth.ui.screens.clinical.ClinicalScreen
+import app.openhealth.ui.screens.clinical.ClinicalSectionKind
+import app.openhealth.ui.screens.clinical.ReportFormat
+import app.openhealth.ui.screens.clinical.ReportsScreen
+import app.openhealth.ui.screens.clinical.SleepScreen
+import app.openhealth.ui.screens.clinical.WeeklyReviewScreen
 import app.openhealth.ui.screens.devices.DevicesScreen
 import app.openhealth.ui.screens.lock.LockScreen
 import app.openhealth.ui.screens.nutrition.BarcodeScanScreen
@@ -103,6 +112,19 @@ import app.openhealth.ui.theme.OhTheme
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+
+private fun app.openhealth.ui.screens.clinical.ClinicalKind.section(): ClinicalSectionKind? =
+    when (this) {
+        app.openhealth.ui.screens.clinical.ClinicalKind.MEDICATION ->
+            ClinicalSectionKind.MEDICATIONS
+        app.openhealth.ui.screens.clinical.ClinicalKind.EPISODE -> ClinicalSectionKind.SYMPTOMS
+        app.openhealth.ui.screens.clinical.ClinicalKind.LAB -> ClinicalSectionKind.LABS
+        app.openhealth.ui.screens.clinical.ClinicalKind.ALLERGY -> ClinicalSectionKind.ALLERGIES
+        app.openhealth.ui.screens.clinical.ClinicalKind.CONDITION -> ClinicalSectionKind.CONDITIONS
+        app.openhealth.ui.screens.clinical.ClinicalKind.VACCINATION ->
+            ClinicalSectionKind.VACCINATIONS
+        else -> null
+    }
 
 /**
  * The app tree: theme, lock, onboarding, the shell and the global layers. It is the
@@ -216,6 +238,7 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
 @Composable
 private fun AppShell(state: AppState, viewModel: AppViewModel) {
     val nav = rememberNavController()
+    val context = LocalContext.current
     val date = state.today?.today
         ?: kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
     val goTab: (Int) -> Unit = { index ->
@@ -834,12 +857,121 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
                     onOpenReview = { nav.navigate(ReviewRoute) },
+                    onOpenSleep = { nav.navigate(SleepRoute) },
+                    onOpenClinical = { nav.navigate(ClinicalRoute) },
+                    onOpenReports = { nav.navigate(ReportsRoute) },
+                    onOpenWeeklyReview = { nav.navigate(WeeklyReviewRoute) },
                     onExternalActivity = viewModel::suppressLockForExternalActivity,
                     onDeleteAllNotes = viewModel::deleteAllNotes,
                     onEmptyTrash = viewModel::emptyTrash,
                     onUndoRestore = viewModel::undoLastRestore,
                 )
             }
+        }
+        composable<SleepRoute> {
+            LaunchedEffect(Unit) {
+                if (HealthModule.SLEEP in state.preferences.modules) {
+                    viewModel.openSleep()
+                } else {
+                    nav.popBackStack()
+                }
+            }
+            SleepScreen(
+                model = state.sleep ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onRateQuality = viewModel::logSleepQuality,
+            )
+        }
+        composable<ClinicalRoute> {
+            LaunchedEffect(Unit) { viewModel.openClinical() }
+            ClinicalScreen(
+                model = state.clinical ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onAdd = { section ->
+                    viewModel.openClinicalEditor(section)
+                    nav.navigate(ClinicalEditorRoute(section.name))
+                },
+                onOpen = { row ->
+                    val section = row.kind.section()
+                    if (section != null) {
+                        viewModel.openClinicalEditor(section, row.id)
+                        nav.navigate(ClinicalEditorRoute(section.name, row.id))
+                    }
+                },
+            )
+        }
+        composable<ClinicalEditorRoute> { entry ->
+            val route = entry.toRoute<ClinicalEditorRoute>()
+            val section = runCatching { ClinicalSectionKind.valueOf(route.section) }
+                .getOrNull()
+            if (section == null) {
+                LaunchedEffect(Unit) { nav.popBackStack() }
+            } else {
+                LaunchedEffect(route.id) { viewModel.openClinicalEditor(section, route.id) }
+                val notifications = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission(),
+                ) { }
+                LaunchedEffect(route.section) {
+                    if (section == ClinicalSectionKind.MEDICATIONS &&
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    ) {
+                        val granted = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (!granted) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+                ClinicalEditorScreen(
+                    model = state.clinicalEditor ?: return@composable Loading(),
+                    onBack = {
+                        viewModel.closeClinicalEditor()
+                        nav.popBackStack()
+                    },
+                    onSave = viewModel::saveClinical,
+                    onDelete = if (state.clinicalEditorId != null) {
+                        { viewModel.deleteClinical() }
+                    } else {
+                        null
+                    },
+                    onLogDose = { skipped -> viewModel.logDose(skipped) },
+                )
+            }
+        }
+        composable<ReportsRoute> {
+            LaunchedEffect(Unit) { viewModel.openReports() }
+            val pdfSaver = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/pdf"),
+            ) { uri -> if (uri != null) viewModel.exportReport(uri, ReportFormat.PDF) }
+            val csvSaver = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("text/csv"),
+            ) { uri -> if (uri != null) viewModel.exportReport(uri, ReportFormat.CSV) }
+            val fhirSaver = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/fhir+json"),
+            ) { uri -> if (uri != null) viewModel.exportReport(uri, ReportFormat.FHIR) }
+            val omhSaver = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/json"),
+            ) { uri -> if (uri != null) viewModel.exportReport(uri, ReportFormat.MHEALTH) }
+            ReportsScreen(
+                model = state.reports ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onSelectRange = viewModel::selectReportRange,
+                onExport = { format ->
+                    when (format) {
+                        ReportFormat.PDF -> pdfSaver.launch("openHealth-report.pdf")
+                        ReportFormat.CSV -> csvSaver.launch("openHealth-report.csv")
+                        ReportFormat.FHIR -> fhirSaver.launch("openHealth-fhir.json")
+                        ReportFormat.MHEALTH -> omhSaver.launch("openHealth-omh.json")
+                    }
+                },
+            )
+        }
+        composable<WeeklyReviewRoute> {
+            LaunchedEffect(Unit) { viewModel.openWeeklyReview() }
+            WeeklyReviewScreen(
+                model = state.weeklyReview ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+            )
         }
         composable<DevicesRoute> {
             LaunchedEffect(Unit) { viewModel.openDevices() }

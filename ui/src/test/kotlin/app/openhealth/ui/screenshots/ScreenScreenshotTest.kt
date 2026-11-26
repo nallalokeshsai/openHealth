@@ -28,6 +28,26 @@ import app.openhealth.core.preferences.ProfileGoal
 import app.openhealth.core.preferences.UnitSystem
 import app.openhealth.ui.body.BodyMapModel
 import app.openhealth.ui.body.OhBodyMapTable
+import app.openhealth.ui.screens.clinical.ClinicalEditorModel
+import app.openhealth.ui.screens.clinical.ClinicalEditorScreen
+import app.openhealth.ui.screens.clinical.ClinicalFieldModel
+import app.openhealth.ui.screens.clinical.ClinicalFieldType
+import app.openhealth.ui.screens.clinical.ClinicalKind
+import app.openhealth.ui.screens.clinical.ClinicalModel
+import app.openhealth.ui.screens.clinical.ClinicalRowModel
+import app.openhealth.ui.screens.clinical.ClinicalScreen
+import app.openhealth.ui.screens.clinical.ClinicalSectionKind
+import app.openhealth.ui.screens.clinical.ClinicalSectionModel
+import app.openhealth.ui.screens.clinical.ReportRangeModel
+import app.openhealth.ui.screens.clinical.ReportsModel
+import app.openhealth.ui.screens.clinical.ReportsScreen
+import app.openhealth.ui.screens.clinical.SleepModel
+import app.openhealth.ui.screens.clinical.SleepNightRow
+import app.openhealth.ui.screens.clinical.SleepScreen
+import app.openhealth.ui.screens.clinical.SleepStageRow
+import app.openhealth.ui.screens.clinical.WeeklyReviewItemModel
+import app.openhealth.ui.screens.clinical.WeeklyReviewModel
+import app.openhealth.ui.screens.clinical.WeeklyReviewScreen
 import app.openhealth.ui.screens.common.OhScreen
 import app.openhealth.ui.screens.lock.LockMessage
 import app.openhealth.ui.screens.lock.LockScreen
@@ -181,6 +201,10 @@ class ScreenScreenshotTest {
         onOpenTimeline = {},
         onOpenTrash = {},
         onOpenReview = {},
+        onOpenSleep = {},
+        onOpenClinical = {},
+        onOpenReports = {},
+        onOpenWeeklyReview = {},
         onExternalActivity = {},
         onDeleteAllNotes = {},
         onEmptyTrash = {},
@@ -363,6 +387,197 @@ class ScreenScreenshotTest {
     fun lock() {
         shot("screen-lock") {
             LockScreen(message = LockMessage.NONE, onUnlock = {})
+        }
+    }
+
+    private val clinical = ClinicalModel(
+        sections = listOf(
+            ClinicalSectionModel(
+                kind = ClinicalSectionKind.MEDICATIONS,
+                title = "Medicines and supplements",
+                addLabel = "Add",
+                emptyBody = "",
+                rows = listOf(
+                    ClinicalRowModel(
+                        id = "med-1",
+                        kind = ClinicalKind.MEDICATION,
+                        title = "Levothyroxine",
+                        subtitle = "08:00 · 50 ug",
+                        value = "1/1 today",
+                        deletable = false,
+                    ),
+                    ClinicalRowModel(
+                        id = "med-2",
+                        kind = ClinicalKind.MEDICATION,
+                        title = "Vitamin D",
+                        subtitle = "20:00 · 25 ug",
+                        value = "0/1 today",
+                        deletable = false,
+                    ),
+                ),
+            ),
+            ClinicalSectionModel(
+                kind = ClinicalSectionKind.LABS,
+                title = "Laboratory results",
+                addLabel = "Add",
+                emptyBody = "",
+                rows = listOf(
+                    ClinicalRowModel(
+                        id = "lab-1",
+                        kind = ClinicalKind.LAB,
+                        title = "HbA1c",
+                        subtitle = "Labor Berlin · 2026-11-20",
+                        value = "5.4 %",
+                        deletable = true,
+                    ),
+                ),
+            ),
+        ),
+        countLabel = "2 medicines · 1 lab result · 0 symptom episodes",
+        note = "Everything here is what you entered or imported.",
+    )
+
+    private val sleep = SleepModel(
+        title = "Sleep",
+        averageLabel = "Average asleep",
+        averageValue = "7h 10m",
+        debtLabel = "Sleep debt",
+        debtValue = "3h 20m",
+        debtNote = "Against your own need of 8h a night.",
+        consistencyBedLabel = "Bedtime varied by",
+        consistencyBedValue = "38m",
+        consistencyWakeLabel = "Wake time varied by",
+        consistencyWakeValue = "21m",
+        consistencyNote = "Measured on the clock.",
+        nights = listOf(
+            SleepNightRow("2026-11-25", "7h 20m", "22:40", "06:10", "4"),
+            SleepNightRow("2026-11-24", "6h 55m", "23:10", "06:05", "3"),
+        ),
+        stages = listOf(
+            SleepStageRow("Deep", "1h 10m", "16 %"),
+            SleepStageRow("REM", "1h 25m", "19 %"),
+        ),
+        stagesNote = "Stages come from the most detailed source.",
+        accessible = "2 nights, average 7h 5m asleep.",
+        emptyTitle = "No nights yet",
+        emptyBody = "Sleep arrives from Health Connect.",
+        qualityLabel = "Sleep quality is your own rating.",
+        addQualityLabel = "Rate last night",
+        reminder = "A night without data is left out.",
+    )
+
+    private val reports = ReportsModel(
+        title = "Doctor report",
+        ranges = listOf(
+            ReportRangeModel(30, "30 days"),
+            ReportRangeModel(90, "90 days"),
+            ReportRangeModel(180, "180 days"),
+            ReportRangeModel(365, "1 year"),
+        ),
+        selectedRange = 1,
+        rangeNote = "The report uses the window you choose.",
+        generatedLabel = "Generated 2026-11-26 on this device",
+        previewTitle = "openHealth clinical summary",
+        previewLines = listOf(
+            "openHealth clinical summary",
+            "Alex · 2026-08-29 to 2026-11-26",
+            "Vitals",
+            "Systolic blood pressure | 122 | mmHg | 120-129 (ESH 2023)",
+        ),
+        previewTruncated = false,
+        disclaimer = "This report is a record of information the person entered.",
+        sourceNote = "Every figure names its source.",
+        exports = app.openhealth.ui.screens.clinical.ReportFormat.entries,
+        empty = false,
+        emptyBody = "There is nothing in this window yet.",
+    )
+
+    private val weekly = WeeklyReviewModel(
+        title = "Weekly review",
+        weekLabel = "2026-11-20 to 2026-11-26",
+        items = listOf(
+            WeeklyReviewItemModel(
+                title = "Sleep",
+                value = "7h 10m",
+                note = "6 nights recorded, sleep debt 2h.",
+                citation = "Joint Consensus Statement 2015",
+            ),
+            WeeklyReviewItemModel(
+                title = "Training",
+                value = "3 activities",
+                note = "2h 40m",
+            ),
+        ),
+        accessible = "2 measures. First: Sleep, 7h 10m.",
+        emptyTitle = "Nothing to review yet",
+        emptyBody = "A week with sleep or activity is described here.",
+    )
+
+    private val clinicalEditor = ClinicalEditorModel(
+        kind = ClinicalKind.LAB,
+        title = "Lab result",
+        fields = listOf(
+            ClinicalFieldModel(
+                key = "analyte",
+                label = "Test",
+                value = "HbA1c",
+                type = ClinicalFieldType.CHOICE,
+                options = listOf("HbA1c", "Fasting glucose", "TSH"),
+            ),
+            ClinicalFieldModel(key = "value", label = "Result", value = "5.4"),
+        ),
+        saveLabel = "Save",
+        deleteLabel = "Move to Trash",
+        note = "The interval belongs to the laboratory that printed it.",
+    )
+
+    @Test
+    fun clinicalHub() {
+        shot("screen-clinical") {
+            ClinicalScreen(
+                model = clinical,
+                onBack = {},
+                onAdd = {},
+                onOpen = {},
+            )
+        }
+    }
+
+    @Test
+    fun clinicalEditor() {
+        shot("screen-clinical-editor") {
+            ClinicalEditorScreen(
+                model = clinicalEditor,
+                onBack = {},
+                onSave = {},
+                onDelete = {},
+            )
+        }
+    }
+
+    @Test
+    fun sleep() {
+        shot("screen-sleep") {
+            SleepScreen(model = sleep, onBack = {}, onRateQuality = {})
+        }
+    }
+
+    @Test
+    fun reports() {
+        shot("screen-reports") {
+            ReportsScreen(
+                model = reports,
+                onBack = {},
+                onSelectRange = {},
+                onExport = {},
+            )
+        }
+    }
+
+    @Test
+    fun weeklyReview() {
+        shot("screen-weekly-review") {
+            WeeklyReviewScreen(model = weekly, onBack = {})
         }
     }
 

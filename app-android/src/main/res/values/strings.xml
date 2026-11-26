@@ -59,4 +59,12 @@
     <string name="gps_notification_text">%1$s · %2$s km</string>
     <string name="yoga_channel_name">Yoga session</string>
     <string name="yoga_channel_body">Keeps the pose timer and voice cues running with the screen off.</string>
+    <!-- B12: local medicine reminders. Nothing is pushed. -->
+    <string name="clinical_reminder_channel_name">Medicine reminders</string>
+    <string name="clinical_reminder_channel_detail">Local reminders at the times you set. Nothing is sent anywhere.</string>
+    <string name="clinical_reminder_title">Medicine reminder</string>
+    <string name="clinical_reminder_body">%1$s · %2$s %3$s</string>
+    <string name="clinical_reminder_taken">Taken</string>
+    <string name="clinical_reminder_skipped">Skipped</string>
+    <string name="clinical_editor_invalid">A required value is missing or not valid. Check the name, the number and any dates.</string>
 </resources>

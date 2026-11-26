@@ -1,0 +1,436 @@
+-- Layer 4 clinical records (pr.md §6.9, §7.4; BUILD-ROADMAP.md §B12). Medications,
+-- symptoms, labs, allergies, conditions and vaccinations. Every row keeps the same
+-- provenance as an observation: source, device, happened_at, recorded_at, local date,
+-- zone, idempotency key and raw-record reference. Nothing here is inferred or diagnosed.
+
+CREATE TABLE medication (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    dose_amount REAL NOT NULL,
+    dose_unit TEXT NOT NULL,
+    form TEXT NOT NULL,
+    schedule_json TEXT NOT NULL,
+    active INTEGER AS kotlin.Boolean NOT NULL DEFAULT 1,
+    started_on TEXT,
+    ended_on TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX medication_name ON medication(name);
+CREATE INDEX medication_active ON medication(active);
+
+CREATE TABLE medication_dose (
+    id TEXT NOT NULL PRIMARY KEY,
+    medication_id TEXT NOT NULL REFERENCES medication(id) ON DELETE RESTRICT,
+    scheduled_for INTEGER NOT NULL,
+    taken_at INTEGER,
+    skipped INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    notes TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX medication_dose_medication ON medication_dose(medication_id);
+CREATE INDEX medication_dose_local_date ON medication_dose(local_date);
+
+CREATE TABLE symptom (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX symptom_name ON symptom(name);
+
+CREATE TABLE symptom_episode (
+    id TEXT NOT NULL PRIMARY KEY,
+    symptom_id TEXT NOT NULL REFERENCES symptom(id) ON DELETE RESTRICT,
+    severity INTEGER NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    triggers TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX symptom_episode_symptom ON symptom_episode(symptom_id);
+CREATE INDEX symptom_episode_local_date ON symptom_episode(local_date);
+
+CREATE TABLE lab_result (
+    id TEXT NOT NULL PRIMARY KEY,
+    loinc_code TEXT NOT NULL,
+    display TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    reference_low REAL,
+    reference_high REAL,
+    reference_note TEXT,
+    reference_citation TEXT,
+    collected_at INTEGER NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    lab_name TEXT,
+    notes TEXT,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX lab_result_loinc ON lab_result(loinc_code);
+CREATE INDEX lab_result_local_date ON lab_result(local_date);
+
+CREATE TABLE allergy (
+    id TEXT NOT NULL PRIMARY KEY,
+    substance TEXT NOT NULL,
+    reaction TEXT,
+    severity TEXT NOT NULL,
+    active INTEGER AS kotlin.Boolean NOT NULL DEFAULT 1,
+    noted_on TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE condition (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    code TEXT,
+    code_system TEXT,
+    onset_on TEXT,
+    resolved_on TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE vaccination (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    dose_label TEXT,
+    administered_on TEXT NOT NULL,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX vaccination_local_date ON vaccination(local_date);
+
+-- ------------------------------------------------------------------ medications
+
+insertMedication:
+INSERT OR IGNORE INTO medication(
+    id, name, dose_amount, dose_unit, form, schedule_json, active, started_on, ended_on,
+    notes, local_date, zone_id, happened_at, recorded_at, source_id, raw_record_id,
+    idempotency_key, device, app_version, revision
+) VALUES (
+    :id, :name, :doseAmount, :doseUnit, :form, :scheduleJson, :active, :startedOn,
+    :endedOn, :notes, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
+    :rawRecordId, :idempotencyKey, :device, :appVersion, :revision
+);
+
+updateMedication:
+UPDATE medication SET
+    name = :name, dose_amount = :doseAmount, dose_unit = :doseUnit, form = :form,
+    schedule_json = :scheduleJson, active = :active, started_on = :startedOn,
+    ended_on = :endedOn, notes = :notes, revision = :revision
+WHERE id = :id;
+
+medicationById:
+SELECT * FROM medication WHERE id = :id;
+
+allMedications:
+SELECT * FROM medication ORDER BY active DESC, name;
+
+activeMedications:
+SELECT * FROM medication WHERE active = 1 ORDER BY name;
+
+deleteMedication:
+DELETE FROM medication WHERE id = :id;
+
+countMedications:
+SELECT count(*) FROM medication;
+
+insertDose:
+INSERT OR IGNORE INTO medication_dose(
+    id, medication_id, scheduled_for, taken_at, skipped, local_date, zone_id,
+    happened_at, recorded_at, source_id, raw_record_id, idempotency_key, device,
+    app_version, notes, revision
+) VALUES (
+    :id, :medicationId, :scheduledFor, :takenAt, :skipped, :localDate, :zoneId,
+    :happenedAt, :recordedAt, :sourceId, :rawRecordId, :idempotencyKey, :device,
+    :appVersion, :notes, :revision
+);
+
+doseById:
+SELECT * FROM medication_dose WHERE id = :id;
+
+dosesForMedication:
+SELECT * FROM medication_dose WHERE medication_id = :medicationId
+ORDER BY happened_at DESC;
+
+dosesBetween:
+SELECT * FROM medication_dose WHERE local_date >= :from AND local_date <= :to
+ORDER BY happened_at DESC;
+
+allDoses:
+SELECT * FROM medication_dose ORDER BY happened_at DESC;
+
+updateDose:
+UPDATE medication_dose SET
+    taken_at = :takenAt, skipped = :skipped, notes = :notes, revision = :revision
+WHERE id = :id;
+
+deleteDose:
+DELETE FROM medication_dose WHERE id = :id;
+
+countDoses:
+SELECT count(*) FROM medication_dose;
+
+-- -------------------------------------------------------------------- symptoms
+
+insertSymptom:
+INSERT OR IGNORE INTO symptom(
+    id, name, notes, local_date, zone_id, happened_at, recorded_at, source_id,
+    raw_record_id, idempotency_key, device, app_version, revision
+) VALUES (
+    :id, :name, :notes, :localDate, :zoneId, :happenedAt, :recordedAt, :sourceId,
+    :rawRecordId, :idempotencyKey, :device, :appVersion, :revision
+);
+
+updateSymptom:
+UPDATE symptom SET name = :name, notes = :notes, revision = :revision WHERE id = :id;
+
+symptomById:
+SELECT * FROM symptom WHERE id = :id;
+
+allSymptoms:
+SELECT * FROM symptom ORDER BY name;
+
+deleteSymptom:
+DELETE FROM symptom WHERE id = :id;
+
+insertEpisode:
+INSERT OR IGNORE INTO symptom_episode(
+    id, symptom_id, severity, started_at, ended_at, triggers, notes, local_date,
+    zone_id, happened_at, recorded_at, source_id, raw_record_id, idempotency_key,
+    device, app_version, revision
+) VALUES (
+    :id, :symptomId, :severity, :startedAt, :endedAt, :triggers, :notes, :localDate,
+    :zoneId, :happenedAt, :recordedAt, :sourceId, :rawRecordId, :idempotencyKey,
+    :device, :appVersion, :revision
+);
+
+updateEpisode:
+UPDATE symptom_episode SET
+    symptom_id = :symptomId, severity = :severity, started_at = :startedAt,
+    ended_at = :endedAt, triggers = :triggers, notes = :notes,
+    local_date = :localDate, happened_at = :happenedAt, revision = :revision
+WHERE id = :id;
+
+episodeById:
+SELECT * FROM symptom_episode WHERE id = :id;
+
+episodesBetween:
+SELECT * FROM symptom_episode WHERE local_date >= :from AND local_date <= :to
+ORDER BY started_at DESC;
+
+allEpisodes:
+SELECT * FROM symptom_episode ORDER BY started_at DESC;
+
+deleteEpisode:
+DELETE FROM symptom_episode WHERE id = :id;
+
+countEpisodes:
+SELECT count(*) FROM symptom_episode;
+
+-- ------------------------------------------------------------------------ labs
+
+insertLab:
+INSERT OR IGNORE INTO lab_result(
+    id, loinc_code, display, value, unit, reference_low, reference_high,
+    reference_note, reference_citation, collected_at, local_date, zone_id, happened_at,
+    recorded_at, source_id, raw_record_id, idempotency_key, lab_name, notes, device,
+    app_version, revision
+) VALUES (
+    :id, :loincCode, :display, :value, :unit, :referenceLow, :referenceHigh,
+    :referenceNote, :referenceCitation, :collectedAt, :localDate, :zoneId, :happenedAt,
+    :recordedAt, :sourceId, :rawRecordId, :idempotencyKey, :labName, :notes, :device,
+    :appVersion, :revision
+);
+
+updateLab:
+UPDATE lab_result SET
+    loinc_code = :loincCode, display = :display, value = :value, unit = :unit,
+    reference_low = :referenceLow, reference_high = :referenceHigh,
+    reference_note = :referenceNote, reference_citation = :referenceCitation,
+    collected_at = :collectedAt, local_date = :localDate, happened_at = :happenedAt,
+    lab_name = :labName, notes = :notes, revision = :revision
+WHERE id = :id;
+
+labById:
+SELECT * FROM lab_result WHERE id = :id;
+
+labsBetween:
+SELECT * FROM lab_result WHERE local_date >= :from AND local_date <= :to
+ORDER BY collected_at DESC;
+
+labsForAnalyte:
+SELECT * FROM lab_result WHERE loinc_code = :loincCode ORDER BY collected_at DESC;
+
+allLabs:
+SELECT * FROM lab_result ORDER BY collected_at DESC;
+
+deleteLab:
+DELETE FROM lab_result WHERE id = :id;
+
+countLabs:
+SELECT count(*) FROM lab_result;
+
+-- --------------------------------------------------------- allergies and conditions
+
+insertAllergy:
+INSERT OR IGNORE INTO allergy(
+    id, substance, reaction, severity, active, noted_on, notes, local_date, zone_id,
+    happened_at, recorded_at, source_id, raw_record_id, idempotency_key, device,
+    app_version, revision
+) VALUES (
+    :id, :substance, :reaction, :severity, :active, :notedOn, :notes, :localDate,
+    :zoneId, :happenedAt, :recordedAt, :sourceId, :rawRecordId, :idempotencyKey,
+    :device, :appVersion, :revision
+);
+
+updateAllergy:
+UPDATE allergy SET
+    substance = :substance, reaction = :reaction, severity = :severity, active = :active,
+    noted_on = :notedOn, notes = :notes, local_date = :localDate,
+    happened_at = :happenedAt, revision = :revision
+WHERE id = :id;
+
+allergyById:
+SELECT * FROM allergy WHERE id = :id;
+
+allAllergies:
+SELECT * FROM allergy ORDER BY active DESC, substance;
+
+deleteAllergy:
+DELETE FROM allergy WHERE id = :id;
+
+insertCondition:
+INSERT OR IGNORE INTO condition(
+    id, name, code, code_system, onset_on, resolved_on, notes, local_date, zone_id,
+    happened_at, recorded_at, source_id, raw_record_id, idempotency_key, device,
+    app_version, revision
+) VALUES (
+    :id, :name, :code, :codeSystem, :onsetOn, :resolvedOn, :notes, :localDate,
+    :zoneId, :happenedAt, :recordedAt, :sourceId, :rawRecordId, :idempotencyKey,
+    :device, :appVersion, :revision
+);
+
+updateCondition:
+UPDATE condition SET
+    name = :name, code = :code, code_system = :codeSystem, onset_on = :onsetOn,
+    resolved_on = :resolvedOn, notes = :notes, local_date = :localDate,
+    happened_at = :happenedAt, revision = :revision
+WHERE id = :id;
+
+conditionById:
+SELECT * FROM condition WHERE id = :id;
+
+allConditions:
+SELECT * FROM condition ORDER BY resolved_on IS NULL DESC, name;
+
+deleteCondition:
+DELETE FROM condition WHERE id = :id;
+
+insertVaccination:
+INSERT OR IGNORE INTO vaccination(
+    id, name, dose_label, administered_on, notes, local_date, zone_id, happened_at,
+    recorded_at, source_id, raw_record_id, idempotency_key, device, app_version, revision
+) VALUES (
+    :id, :name, :doseLabel, :administeredOn, :notes, :localDate, :zoneId, :happenedAt,
+    :recordedAt, :sourceId, :rawRecordId, :idempotencyKey, :device, :appVersion, :revision
+);
+
+updateVaccination:
+UPDATE vaccination SET
+    name = :name, dose_label = :doseLabel, administered_on = :administeredOn,
+    notes = :notes, local_date = :localDate, happened_at = :happenedAt,
+    revision = :revision
+WHERE id = :id;
+
+vaccinationById:
+SELECT * FROM vaccination WHERE id = :id;
+
+allVaccinations:
+SELECT * FROM vaccination ORDER BY administered_on DESC;
+
+deleteVaccination:
+DELETE FROM vaccination WHERE id = :id;
+
+countVaccinations:
+SELECT count(*) FROM vaccination;

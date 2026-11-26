@@ -42,6 +42,12 @@ enum class TrashEntity(val table: String) {
     NOTE("note"),
     OBSERVATION("observation"),
     ACTIVITY("activity"),
+    MEDICATION_DOSE("medication_dose"),
+    SYMPTOM_EPISODE("symptom_episode"),
+    LAB_RESULT("lab_result"),
+    ALLERGY("allergy"),
+    CONDITION("condition"),
+    VACCINATION("vaccination"),
 }
 
 @Serializable
@@ -354,13 +360,141 @@ data class ActivityPayload(
     val observations: List<ObservationPayload> = emptyList(),
 )
 
+@Serializable
+data class MedicationDosePayload(
+    val id: String,
+    val medicationId: String,
+    val scheduledFor: Long,
+    val takenAt: Long?,
+    val skipped: Boolean,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val notes: String?,
+    val revision: Long,
+)
+
+@Serializable
+data class SymptomEpisodePayload(
+    val id: String,
+    val symptomId: String,
+    val severity: Long,
+    val startedAt: Long,
+    val endedAt: Long?,
+    val triggers: String?,
+    val notes: String?,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+)
+
+@Serializable
+data class LabResultPayload(
+    val id: String,
+    val loincCode: String,
+    val display: String,
+    val value: Double,
+    val unit: String,
+    val referenceLow: Double?,
+    val referenceHigh: Double?,
+    val referenceNote: String?,
+    val referenceCitation: String?,
+    val collectedAt: Long,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val labName: String?,
+    val notes: String?,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+)
+
+@Serializable
+data class AllergyPayload(
+    val id: String,
+    val substance: String,
+    val reaction: String?,
+    val severity: String,
+    val active: Boolean,
+    val notedOn: String?,
+    val notes: String?,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+)
+
+@Serializable
+data class ConditionPayload(
+    val id: String,
+    val name: String,
+    val code: String?,
+    val codeSystem: String?,
+    val onsetOn: String?,
+    val resolvedOn: String?,
+    val notes: String?,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+)
+
+@Serializable
+data class VaccinationPayload(
+    val id: String,
+    val name: String,
+    val doseLabel: String?,
+    val administeredOn: String,
+    val notes: String?,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+)
+
 /**
  * Undo, Trash and recovery (`pr.md` §6.29). A delete writes a tombstone holding the row
  * it removes, then removes the row, in one transaction. Undo restores it for the rest of
  * the session; Trash keeps it for 30 days; purge is explicit and only touches rows past
  * their window. No code path here deletes anything without a tombstone.
  */
-@Suppress("LargeClass")
+@Suppress("LargeClass", "LongMethod", "CyclomaticComplexMethod")
 class TrashService(
     private val db: OpenHealthDb,
     private val clock: ClockSeam = SystemClock,
@@ -529,6 +663,82 @@ class TrashService(
         }
     }
 
+    fun deleteMedicationDose(id: String): TombstoneId? =
+        db.clinicalQueries.doseById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.MEDICATION_DOSE,
+                entityId = row.id,
+                payload = json.encodeToString(
+                    MedicationDosePayload.serializer(),
+                    row.toPayload(),
+                ),
+                invalidateOn = LocalDate.parse(row.local_date),
+            ) {
+                db.clinicalQueries.deleteDose(row.id)
+            }
+        }
+
+    fun deleteSymptomEpisode(id: String): TombstoneId? =
+        db.clinicalQueries.episodeById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.SYMPTOM_EPISODE,
+                entityId = row.id,
+                payload = json.encodeToString(
+                    SymptomEpisodePayload.serializer(),
+                    row.toPayload(),
+                ),
+                invalidateOn = LocalDate.parse(row.local_date),
+            ) {
+                db.clinicalQueries.deleteEpisode(row.id)
+            }
+        }
+
+    fun deleteLabResult(id: String): TombstoneId? =
+        db.clinicalQueries.labById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.LAB_RESULT,
+                entityId = row.id,
+                payload = json.encodeToString(LabResultPayload.serializer(), row.toPayload()),
+                invalidateOn = LocalDate.parse(row.local_date),
+            ) {
+                db.clinicalQueries.deleteLab(row.id)
+            }
+        }
+
+    fun deleteAllergy(id: String): TombstoneId? =
+        db.clinicalQueries.allergyById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.ALLERGY,
+                entityId = row.id,
+                payload = json.encodeToString(AllergyPayload.serializer(), row.toPayload()),
+            ) {
+                db.clinicalQueries.deleteAllergy(row.id)
+            }
+        }
+
+    fun deleteCondition(id: String): TombstoneId? =
+        db.clinicalQueries.conditionById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.CONDITION,
+                entityId = row.id,
+                payload = json.encodeToString(ConditionPayload.serializer(), row.toPayload()),
+            ) {
+                db.clinicalQueries.deleteCondition(row.id)
+            }
+        }
+
+    fun deleteVaccination(id: String): TombstoneId? =
+        db.clinicalQueries.vaccinationById(id).executeAsOneOrNull()?.let { row ->
+            record(
+                entity = TrashEntity.VACCINATION,
+                entityId = row.id,
+                payload = json.encodeToString(VaccinationPayload.serializer(), row.toPayload()),
+                invalidateOn = LocalDate.parse(row.local_date),
+            ) {
+                db.clinicalQueries.deleteVaccination(row.id)
+            }
+        }
+
     /** Restores one tombstoned row. Returns false when it is gone or already restored. */
     @Suppress("CyclomaticComplexMethod")
     fun undo(id: TombstoneId): Boolean {
@@ -552,6 +762,12 @@ class TrashService(
                 TrashEntity.NOTE -> restoreNote(payload)
                 TrashEntity.OBSERVATION -> restoreObservation(payload)
                 TrashEntity.ACTIVITY -> restoreActivity(payload)
+                TrashEntity.MEDICATION_DOSE -> restoreMedicationDose(payload)
+                TrashEntity.SYMPTOM_EPISODE -> restoreSymptomEpisode(payload)
+                TrashEntity.LAB_RESULT -> restoreLabResult(payload)
+                TrashEntity.ALLERGY -> restoreAllergy(payload)
+                TrashEntity.CONDITION -> restoreCondition(payload)
+                TrashEntity.VACCINATION -> restoreVaccination(payload)
             }
             // Append-only inserts ignore an id that a re-created row owns. The undo is
             // only complete when the row is really there afterwards.
@@ -645,6 +861,30 @@ class TrashService(
                 val a = json.decodeFromString(ActivityPayload.serializer(), payload)
                 a.name ?: "${a.type.lowercase()} · ${a.localDate}"
             }
+            TrashEntity.MEDICATION_DOSE.table -> {
+                val d = json.decodeFromString(MedicationDosePayload.serializer(), payload)
+                "dose · ${d.localDate}"
+            }
+            TrashEntity.SYMPTOM_EPISODE.table -> {
+                val e = json.decodeFromString(SymptomEpisodePayload.serializer(), payload)
+                "symptom episode · ${e.localDate}"
+            }
+            TrashEntity.LAB_RESULT.table -> {
+                val l = json.decodeFromString(LabResultPayload.serializer(), payload)
+                "${l.display} ${l.value} ${l.unit}"
+            }
+            TrashEntity.ALLERGY.table -> {
+                val a = json.decodeFromString(AllergyPayload.serializer(), payload)
+                "allergy · ${a.substance}"
+            }
+            TrashEntity.CONDITION.table -> {
+                val c = json.decodeFromString(ConditionPayload.serializer(), payload)
+                "condition · ${c.name}"
+            }
+            TrashEntity.VACCINATION.table -> {
+                val v = json.decodeFromString(VaccinationPayload.serializer(), payload)
+                "vaccination · ${v.name}"
+            }
             else -> row.entity_id
         }
     }.getOrElse { row.entity_id.take(TRASH_PREVIEW_FALLBACK) }
@@ -693,6 +933,15 @@ class TrashService(
         TrashEntity.OBSERVATION ->
             db.observationQueries.observationById(id).executeAsOneOrNull() != null
         TrashEntity.ACTIVITY -> db.activityQueries.activityById(id).executeAsOneOrNull() != null
+        TrashEntity.MEDICATION_DOSE ->
+            db.clinicalQueries.doseById(id).executeAsOneOrNull() != null
+        TrashEntity.SYMPTOM_EPISODE ->
+            db.clinicalQueries.episodeById(id).executeAsOneOrNull() != null
+        TrashEntity.LAB_RESULT -> db.clinicalQueries.labById(id).executeAsOneOrNull() != null
+        TrashEntity.ALLERGY -> db.clinicalQueries.allergyById(id).executeAsOneOrNull() != null
+        TrashEntity.CONDITION -> db.clinicalQueries.conditionById(id).executeAsOneOrNull() != null
+        TrashEntity.VACCINATION ->
+            db.clinicalQueries.vaccinationById(id).executeAsOneOrNull() != null
     }
 
     private fun invalidateRestoredDay(entity: TrashEntity, payload: String) {
@@ -713,7 +962,17 @@ class TrashService(
                 json.decodeFromString(PhotoPayload.serializer(), payload).localDate
             TrashEntity.ACTIVITY ->
                 json.decodeFromString(ActivityPayload.serializer(), payload).localDate
-            TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE -> null
+            TrashEntity.MEDICATION_DOSE ->
+                json.decodeFromString(MedicationDosePayload.serializer(), payload).localDate
+            TrashEntity.SYMPTOM_EPISODE ->
+                json.decodeFromString(SymptomEpisodePayload.serializer(), payload).localDate
+            TrashEntity.LAB_RESULT ->
+                json.decodeFromString(LabResultPayload.serializer(), payload).localDate
+            TrashEntity.VACCINATION ->
+                json.decodeFromString(VaccinationPayload.serializer(), payload).localDate
+            TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE, TrashEntity.ALLERGY,
+            TrashEntity.CONDITION,
+            -> null
         }
         date?.let { rollupInvalidator?.invoke(LocalDate.parse(it)) }
     }
@@ -1142,6 +1401,271 @@ class TrashService(
             revision = row.revision,
         )
     }
+
+    private fun restoreMedicationDose(payload: String) {
+        val row = json.decodeFromString(MedicationDosePayload.serializer(), payload)
+        db.clinicalQueries.insertDose(
+            id = row.id,
+            medicationId = row.medicationId,
+            scheduledFor = row.scheduledFor,
+            takenAt = row.takenAt,
+            skipped = row.skipped,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            notes = row.notes,
+            revision = row.revision,
+        )
+    }
+
+    private fun restoreSymptomEpisode(payload: String) {
+        val row = json.decodeFromString(SymptomEpisodePayload.serializer(), payload)
+        db.clinicalQueries.insertEpisode(
+            id = row.id,
+            symptomId = row.symptomId,
+            severity = row.severity,
+            startedAt = row.startedAt,
+            endedAt = row.endedAt,
+            triggers = row.triggers,
+            notes = row.notes,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+    }
+
+    private fun restoreLabResult(payload: String) {
+        val row = json.decodeFromString(LabResultPayload.serializer(), payload)
+        db.clinicalQueries.insertLab(
+            id = row.id,
+            loincCode = row.loincCode,
+            display = row.display,
+            value = row.value,
+            unit = row.unit,
+            referenceLow = row.referenceLow,
+            referenceHigh = row.referenceHigh,
+            referenceNote = row.referenceNote,
+            referenceCitation = row.referenceCitation,
+            collectedAt = row.collectedAt,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            labName = row.labName,
+            notes = row.notes,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+    }
+
+    private fun restoreAllergy(payload: String) {
+        val row = json.decodeFromString(AllergyPayload.serializer(), payload)
+        db.clinicalQueries.insertAllergy(
+            id = row.id,
+            substance = row.substance,
+            reaction = row.reaction,
+            severity = row.severity,
+            active = row.active,
+            notedOn = row.notedOn,
+            notes = row.notes,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+    }
+
+    private fun restoreCondition(payload: String) {
+        val row = json.decodeFromString(ConditionPayload.serializer(), payload)
+        db.clinicalQueries.insertCondition(
+            id = row.id,
+            name = row.name,
+            code = row.code,
+            codeSystem = row.codeSystem,
+            onsetOn = row.onsetOn,
+            resolvedOn = row.resolvedOn,
+            notes = row.notes,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+    }
+
+    private fun restoreVaccination(payload: String) {
+        val row = json.decodeFromString(VaccinationPayload.serializer(), payload)
+        db.clinicalQueries.insertVaccination(
+            id = row.id,
+            name = row.name,
+            doseLabel = row.doseLabel,
+            administeredOn = row.administeredOn,
+            notes = row.notes,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+    }
+
+    private fun app.openhealth.data.db.Medication_dose.toPayload(): MedicationDosePayload =
+        MedicationDosePayload(
+            id = id,
+            medicationId = medication_id,
+            scheduledFor = scheduled_for,
+            takenAt = taken_at,
+            skipped = skipped,
+            localDate = local_date,
+            zoneId = zone_id,
+            happenedAt = happened_at,
+            recordedAt = recorded_at,
+            sourceId = source_id,
+            rawRecordId = raw_record_id,
+            idempotencyKey = idempotency_key,
+            device = device,
+            appVersion = app_version,
+            notes = notes,
+            revision = revision,
+        )
+
+    private fun app.openhealth.data.db.Symptom_episode.toPayload(): SymptomEpisodePayload =
+        SymptomEpisodePayload(
+            id = id,
+            symptomId = symptom_id,
+            severity = severity,
+            startedAt = started_at,
+            endedAt = ended_at,
+            triggers = triggers,
+            notes = notes,
+            localDate = local_date,
+            zoneId = zone_id,
+            happenedAt = happened_at,
+            recordedAt = recorded_at,
+            sourceId = source_id,
+            rawRecordId = raw_record_id,
+            idempotencyKey = idempotency_key,
+            device = device,
+            appVersion = app_version,
+            revision = revision,
+        )
+
+    private fun app.openhealth.data.db.Lab_result.toPayload(): LabResultPayload = LabResultPayload(
+        id = id,
+        loincCode = loinc_code,
+        display = display,
+        value = value_,
+        unit = unit,
+        referenceLow = reference_low,
+        referenceHigh = reference_high,
+        referenceNote = reference_note,
+        referenceCitation = reference_citation,
+        collectedAt = collected_at,
+        localDate = local_date,
+        zoneId = zone_id,
+        happenedAt = happened_at,
+        recordedAt = recorded_at,
+        sourceId = source_id,
+        rawRecordId = raw_record_id,
+        idempotencyKey = idempotency_key,
+        labName = lab_name,
+        notes = notes,
+        device = device,
+        appVersion = app_version,
+        revision = revision,
+    )
+
+    private fun app.openhealth.data.db.Allergy.toPayload(): AllergyPayload = AllergyPayload(
+        id = id,
+        substance = substance,
+        reaction = reaction,
+        severity = severity,
+        active = active,
+        notedOn = noted_on,
+        notes = notes,
+        localDate = local_date,
+        zoneId = zone_id,
+        happenedAt = happened_at,
+        recordedAt = recorded_at,
+        sourceId = source_id,
+        rawRecordId = raw_record_id,
+        idempotencyKey = idempotency_key,
+        device = device,
+        appVersion = app_version,
+        revision = revision,
+    )
+
+    private fun app.openhealth.data.db.Condition.toPayload(): ConditionPayload = ConditionPayload(
+        id = id,
+        name = name,
+        code = code,
+        codeSystem = code_system,
+        onsetOn = onset_on,
+        resolvedOn = resolved_on,
+        notes = notes,
+        localDate = local_date,
+        zoneId = zone_id,
+        happenedAt = happened_at,
+        recordedAt = recorded_at,
+        sourceId = source_id,
+        rawRecordId = raw_record_id,
+        idempotencyKey = idempotency_key,
+        device = device,
+        appVersion = app_version,
+        revision = revision,
+    )
+
+    private fun app.openhealth.data.db.Vaccination.toPayload(): VaccinationPayload =
+        VaccinationPayload(
+            id = id,
+            name = name,
+            doseLabel = dose_label,
+            administeredOn = administered_on,
+            notes = notes,
+            localDate = local_date,
+            zoneId = zone_id,
+            happenedAt = happened_at,
+            recordedAt = recorded_at,
+            sourceId = source_id,
+            rawRecordId = raw_record_id,
+            idempotencyKey = idempotency_key,
+            device = device,
+            appVersion = app_version,
+            revision = revision,
+        )
 
     private fun Work_set.toPayload(localDate: LocalDate? = null): WorkSetPayload = WorkSetPayload(
         id, session_id, session_exercise_id, exercise_id, position, weight_kg, reps, rir,

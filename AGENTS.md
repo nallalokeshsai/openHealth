@@ -217,33 +217,37 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B11 Yoga, cardio, GPS** (2026-11-26); next is **B12 Sleep,
-  clinical, reports**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **661 JVM tests**
-  (339 `:core`, 120 `:data`, 35 `:integrations`, 157 `:ui`, 10 across the three tools) and
-  **336 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body
-  map, B5 Train, B6 Nutrition, B7 Vitals, B8 Devices, B9 Today and Stats, B10 review and
-  the B11 movement surfaces are in `:ui`. Both `play` and `fdroid` debug APKs build, and
-  the signed `play`/`fdroid` release APKs and AABs build from the owner's keystore.
-- B11 delivers: the 30-pose, 8-flow yoga library with a screen-off player and voice cues;
-  manual cardio; a `location` foreground GPS service with pause and process-death
-  recovery; GPX/TCX/FIT import and GPX export; a local Strava bulk-export importer; a
-  MapLibre + PMTiles map with one explicit, capped pack download, bounds-aware fallback
-  and OpenStreetMap attribution; activity detail with splits and heart-rate zones;
-  training load (fitness/fatigue/form) in Stats; activity and yoga loads in the recovery
-  map and energy card; schema v9 (`activity`, `activity_point`) with timeline, export and
-  Trash support.
-- B11's decisions are in `docs/adr/0016-yoga-cardio-gps.md`; `DESIGN.md` §8.8 records the
-  map as a chart surface on existing tokens (0.5).
-- Verification: the full instrumented suite is **53/53 on the emulator**, including the
-  three B11 exit tests. Released APK installs over the existing record on the phone; the
-  movement, yoga, activity and Stats/training-load surfaces were exercised by hand. Cold
-  start/warm Today budgets are unchanged from B10 (484–511 ms / 18–33 ms).
-- Open issues (see `docs/build-log.md`): a map pack that covers the route was not visually
-  verified on the owner's Berlin sample (the QA pack is Monaco; the bounds fallback and
-  route overlay were); a URL is needed for the owner's own region pack; gear tracking,
-  best-effort display, monthly totals, FIT/TCX export, custom flows/programmes and the
-  Strava memory cap remain; the phone's Macrobenchmark tracing is still misconfigured;
-  `:tools:benchmark` sits outside every guard; the review inbox lacks the §6.28 import dry
-  run; the public privacy-policy URL is a placeholder; force-RTL needs a reboot; run
-  `connectedAndroidTest` on the emulator, never the phone.
+- Last completed phase: **B12 Sleep, clinical, reports** (2026-11-26); next is **B13**
+  when the owner asks (B13–B15 are not MVP).
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **712 JVM tests**
+  (371 `:core`, 134 `:data`, 35 `:integrations`, 162 `:ui`, 10 across the three tools) and
+  **356 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body map,
+  B5 Train, B6 Nutrition, B7 Vitals, B8 Devices, B9 Today and Stats, B10 review, the B11
+  movement surfaces and the B12 sleep/clinical/report pages are in `:ui`. Both `play` and
+  `fdroid` debug APKs build, and the signed `play`/`fdroid` release APKs and AABs build
+  from the owner's keystore.
+- B12 delivers: a Sleep page (average, debt against the person's own need, circular
+  bedtime/wake consistency, stage mix, 1–5 self-rating); a Clinical hub and one editor
+  for medicines, symptom episodes, labs, allergies, conditions and vaccinations; local
+  medicine reminders with Taken/Skipped actions and boot rescheduling; a Weekly review;
+  and a light-only doctor report with PDF, CSV, FHIR R4 (LOINC/UCUM, validated against
+  the HL7 R4 schema) and Open mHealth exports, produced offline; schema v10
+  (`9.sqm`, eight clinical tables) with timeline, export and Trash support; cited lab
+  ranges (ADA 2026, ESC/EAS 2019) or the laboratory's own printed interval (CLSI EP28).
+- B12's decisions are in `docs/adr/0017-sleep-clinical-reports.md`; `DESIGN.md` §8.9
+  records the report paper (always light, no new token, type role or component).
+- Verification: **58/58 instrumented tests on the emulator**, including the three B12
+  exits (report < 30 s offline; FHIR R4; reminder scheduling). The released APK installs
+  over the existing record on the phone; Sleep, Clinical, a saved medicine, the report
+  range switch, a saved PDF and a saved FHIR bundle were exercised by hand. Cold start
+  and warm Today budgets are unchanged from B10/B11.
+- Open issues (see `docs/build-log.md`): the app stalled once on "Opening your record"
+  under heavy device load after a notification action (recovered on relaunch, no
+  exception, not reproducible on a plain background/foreground cycle); the lab catalogue
+  is 25 analytes with no lab import; a medicine can be stopped but not deleted;
+  conditions and allergies are free text except where a code is entered; the report's
+  trend summary needs the window's rollups; plus the carried B11
+  items (map pack for the owner's region, gear/best-effort/monthly totals, FIT/TCX export,
+  custom flows, Strava memory cap, phone Macrobenchmark tracing, `:tools:benchmark`
+  outside the guards, review inbox import dry run, privacy-policy URL, force-RTL reboot).
+  Run `connectedAndroidTest` on the emulator, never the phone.

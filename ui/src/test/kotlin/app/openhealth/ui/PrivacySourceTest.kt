@@ -88,6 +88,12 @@ class PrivacySourceTest {
             "http://xml.org/sax/",
             "http://www.topografix.com/",
             "http://www.garmin.com/xmlschemas/",
+            // FHIR code-system and profile identifiers: names, never requests. FHIR
+            // fixes these URIs in http and a rewrite would change their meaning.
+            "http://loinc.org",
+            "http://unitsofmeasure.org",
+            "http://hl7.org/fhir/",
+            "http://terminology.hl7.org/",
         )
         val hits = kotlinFiles().filter { file ->
             var text = file.readText().replace(namespace, "")

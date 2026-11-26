@@ -1,0 +1,257 @@
+-- Migration 9 -> 10 (2026-11-26, B12). The clinical record (pr.md §6.9): medications and
+-- logged doses, symptoms and episodes, laboratory results, allergies, conditions and
+-- vaccinations. Every row carries the same provenance columns as an observation. The
+-- timeline gains the four clinical events, so nothing the app stores is invisible
+-- (pr.md §6.27); definitions (a medicine, an allergy) are not events and stay out, just
+-- as a routine is not a timeline row.
+
+CREATE TABLE IF NOT EXISTS medication (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    dose_amount REAL NOT NULL,
+    dose_unit TEXT NOT NULL,
+    form TEXT NOT NULL,
+    schedule_json TEXT NOT NULL,
+    active INTEGER AS kotlin.Boolean NOT NULL DEFAULT 1,
+    started_on TEXT,
+    ended_on TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS medication_name ON medication(name);
+CREATE INDEX IF NOT EXISTS medication_active ON medication(active);
+
+CREATE TABLE IF NOT EXISTS medication_dose (
+    id TEXT NOT NULL PRIMARY KEY,
+    medication_id TEXT NOT NULL REFERENCES medication(id) ON DELETE RESTRICT,
+    scheduled_for INTEGER NOT NULL,
+    taken_at INTEGER,
+    skipped INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    notes TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS medication_dose_medication ON medication_dose(medication_id);
+CREATE INDEX IF NOT EXISTS medication_dose_local_date ON medication_dose(local_date);
+
+CREATE TABLE IF NOT EXISTS symptom (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS symptom_name ON symptom(name);
+
+CREATE TABLE IF NOT EXISTS symptom_episode (
+    id TEXT NOT NULL PRIMARY KEY,
+    symptom_id TEXT NOT NULL REFERENCES symptom(id) ON DELETE RESTRICT,
+    severity INTEGER NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    triggers TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS symptom_episode_symptom ON symptom_episode(symptom_id);
+CREATE INDEX IF NOT EXISTS symptom_episode_local_date ON symptom_episode(local_date);
+
+CREATE TABLE IF NOT EXISTS lab_result (
+    id TEXT NOT NULL PRIMARY KEY,
+    loinc_code TEXT NOT NULL,
+    display TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    reference_low REAL,
+    reference_high REAL,
+    reference_note TEXT,
+    reference_citation TEXT,
+    collected_at INTEGER NOT NULL,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    lab_name TEXT,
+    notes TEXT,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS lab_result_loinc ON lab_result(loinc_code);
+CREATE INDEX IF NOT EXISTS lab_result_local_date ON lab_result(local_date);
+
+CREATE TABLE IF NOT EXISTS allergy (
+    id TEXT NOT NULL PRIMARY KEY,
+    substance TEXT NOT NULL,
+    reaction TEXT,
+    severity TEXT NOT NULL,
+    active INTEGER AS kotlin.Boolean NOT NULL DEFAULT 1,
+    noted_on TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS condition (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    code TEXT,
+    code_system TEXT,
+    onset_on TEXT,
+    resolved_on TEXT,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS vaccination (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    dose_label TEXT,
+    administered_on TEXT NOT NULL,
+    notes TEXT,
+    local_date TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    happened_at INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    source_id TEXT NOT NULL REFERENCES source(id) ON DELETE RESTRICT,
+    raw_record_id TEXT REFERENCES raw_record(id) ON DELETE SET NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    device TEXT,
+    app_version TEXT,
+    revision INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS vaccination_local_date ON vaccination(local_date);
+
+DROP VIEW timeline;
+CREATE VIEW timeline AS
+SELECT
+    'observation' AS kind,
+    id AS entity_id,
+    local_date AS local_date,
+    happened_at AS happened_at,
+    recorded_at AS recorded_at,
+    source_id AS source_id,
+    type AS detail,
+    user_edited AS edited
+FROM observation
+UNION ALL
+SELECT
+    'session', id, local_date, happened_at, recorded_at, source_id, routine_id, 0
+FROM session
+UNION ALL
+SELECT
+    'work_set', work_set.id, session.local_date, work_set.happened_at,
+    work_set.recorded_at, work_set.source_id, work_set.exercise_id, 0
+FROM work_set
+JOIN session ON session.id = work_set.session_id
+UNION ALL
+SELECT
+    'entry', id, local_date, happened_at, recorded_at, source_kind, meal_id, user_edited
+FROM entry
+UNION ALL
+SELECT
+    'measurement', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM measurement
+UNION ALL
+SELECT
+    'vital', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM vital
+UNION ALL
+SELECT
+    'body_photo', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM body_photo
+UNION ALL
+SELECT
+    'meal', id, local_date, COALESCE(happened_at, created_at),
+    COALESCE(recorded_at, created_at), COALESCE(source_id, 'manual'), kind, 0
+FROM meal
+UNION ALL
+SELECT
+    'fast', id, local_date, start_at, recorded_at, 'manual', NULL, 0
+FROM fast_window
+UNION ALL
+SELECT
+    'activity', id, local_date, happened_at, recorded_at, source_id, type, 0
+FROM activity
+UNION ALL
+SELECT
+    'note', id, local_date, happened_at, recorded_at, source_id, NULL, 0
+FROM note
+UNION ALL
+SELECT
+    'medication_dose', id, local_date, happened_at, recorded_at, source_id,
+    medication_id, 0
+FROM medication_dose
+UNION ALL
+SELECT
+    'symptom_episode', id, local_date, happened_at, recorded_at, source_id,
+    symptom_id, 0
+FROM symptom_episode
+UNION ALL
+SELECT
+    'lab_result', id, local_date, happened_at, recorded_at, source_id, loinc_code, 0
+FROM lab_result
+UNION ALL
+SELECT
+    'vaccination', id, local_date, happened_at, recorded_at, source_id, name, 0
+FROM vaccination;

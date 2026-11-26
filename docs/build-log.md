@@ -3070,3 +3070,67 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
 - The phone's Macrobenchmark tracing is still misconfigured; budgets remain direct
   `am start -W` numbers. The review inbox still lacks the §6.28 import dry run.
 - The iOS gate (`pr.md` §13.17) is **not yet** reviewed: Android ships first.
+
+## B12 — Sleep, clinical, reports (2026-11-26)
+
+- **Delivered**: a Sleep page (28 nights, average, debt against the person's own need,
+  circular bedtime/wake consistency, stage mix, a 1–5 self-rating); a Clinical hub and
+  one data-driven editor for medicines, symptom episodes, lab results, allergies,
+  conditions and vaccinations; local medicine reminders; a Weekly review; and a
+  light-only doctor report with a 30/90/180/365-day window that exports PDF, CSV,
+  FHIR R4 and Open mHealth on the device, offline. Labs keep LOINC and either the
+  laboratory's own printed interval or a cited guideline default. A FHIR bundle is
+  validated against the official HL7 R4 JSON schema in a JVM test.
+- **Schema v10** (`9.sqm`): `medication`, `medication_dose`, `symptom`,
+  `symptom_episode`, `lab_result`, `allergy`, `condition`, `vaccination`; every row
+  carries the full provenance. The timeline view gains the four clinical events; the
+  export registry and Trash restore cover every new table. `SLEEP_QUALITY` is a new
+  layer-2 type (keepAll, mean rollup, plausibility 1–5).
+- **Decisions** are in `docs/adr/0017-sleep-clinical-reports.md`; the report paper is
+  `DESIGN.md` §8.9 (no new token, type role or component); LOINC, FHIR R4 (CC0),
+  Open mHealth and the test-only JSON-schema validator are recorded in `NOTICE.md`,
+  `gradle/licences/allowed.tsv` and `docs/adr/0003-pinned-versions.md`.
+- **Verification**: `./gradlew check` passes; **712 JVM tests** (371 `:core`, 134
+  `:data`, 162 `:ui`, 35 `:integrations`, 10 tools) and **356 goldens** in dark, light,
+  200 % text and RTL. `:app-android:assemblePlayDebug` and `:app-android:assembleFdroidDebug`
+  pass; the signed `play`/`fdroid` release APKs build from the owner's keystore.
+  **58/58 instrumented tests on the emulator**, including the three B12 exits: a
+  40-section report renders as a real PDF in well under 30 s; the bundle keeps LOINC
+  and UCUM; a reminder lands on its weekday and time.
+- **B12 exit tests**:
+  1. **Doctor report < 30 s offline — pass.** `ClinicalExitTest.aDoctorReportRendersAsPdfInUnderThirtySeconds`
+     renders 1,000 table rows to `%PDF` on the emulator; the on-device export produced a
+     two-page A4 PDF (62 KB) with the disclaimer in the footer and no network.
+  2. **FHIR R4 — pass.** `ClinicalTest.theFhirBundleValidatesAgainstThePublishedR4Schema`
+     validates against the vendored `fhir.schema.json`; the phone's 90-day export wrote
+     1,711 resources, all observations carrying `http://loinc.org` and
+     `http://unitsofmeasure.org`.
+  3. **Local reminders — pass, on the phone.** `ClinicalExitTest.aReminderLandsOnItsDayAndTime`
+     covers the weekday/next-time calculation. On the owner's phone a 17:55 reminder
+     posted as "Medicine reminder · Levothyroxine · 50 mg" with Taken and Skipped
+     actions; Taken logged the dose (the hub then showed 1/1 today) and the receiver put
+     the next alarm on tomorrow 17:55. No network is involved.
+- **Real-device walk**: signed release installed over the existing record. Settings →
+  Sleep, Settings → Clinical, a new medicine saved through the editor, Reports range
+  switching, a PDF saved to Downloads and the FHIR file saved and read back were
+  exercised. The walk found and fixed: demo sleep ended in hours instead of minutes
+  (a 7-hour night showed a 30-hour window), an impossible night end is now replaced by
+  the recorded span, an unscheduled medicine said "As needed" instead of "Not
+  scheduled", the vital citation printed an enum name, and Sleep/Clinical shared one
+  Settings row. The app stalled once on "Opening your record" while the phone was
+  loaded by the emulator run; a force-stop and relaunch recovered, and no exception was
+  logged.
+- **QA sweep**: `issues.md` (never staged, deleted after fixes) recorded 9 findings,
+  all fixed: the demo sleep end unit, the impossible window, the no-schedule copy, the
+  enum citation, the missing Sleep entry, report steps/weight summing sources instead
+  of using the deduplicated rollup, an invalid reminder time silently dropped, an
+  edited medicine keeping its old active flag, and the missing Open mHealth step unit.
+- **Open**: the app showed "Opening your record" for more than ten seconds twice after
+  the notification action while the phone was also under load from the emulator suite;
+  a force-stop and relaunch recovered and no exception was logged, and a normal
+  background/foreground cycle did not reproduce it. Treat it as a cold-start risk on a
+  loaded device, not a data defect. The bundled lab catalogue is 25 analytes and there
+  is no lab import; a medicine can be stopped but not deleted (doses are kept);
+  conditions/allergies are free text except where a code is entered; the report's trend
+  summary depends on rollups having been built for the window. The iOS gate
+  (`pr.md` §13.17) is **not yet** reviewed.

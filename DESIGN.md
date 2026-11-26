@@ -2,7 +2,10 @@
 
 **Version:** 0.5
 **Status:** Living document, first pass
-**Last revision:** 2026-11-26 — B11 adds the route map as a chart surface (§8.8): the
+**Last revision:** 2026-11-26 — B12 adds the clinical report paper (§8.9): the report is
+always light, its type roles and tables are the existing ones, and the sleep, clinical
+hub, editor, reports and weekly-review pages reuse existing components and recipes. No
+new colour, type role, spacing value or component. Previous: 2026-11-26 — B11 adds the route map as a chart surface (§8.8): the
 theme's existing background, surface and accent ramp, a 2.5 dp route and 4 dp end dots,
 no new colour, type role, spacing value or component. Previous: 2026-11-26 — B10 maps the three accessibility options named in §12.4
 onto existing tokens (§12.4.1): high contrast, reduce transparency and reduce motion add
@@ -1205,6 +1208,32 @@ accent, with no new token:
   the map at `caption-2`/`label-3`, never over the route.
 - **Table:** the activity detail already carries splits and heart-rate zones as text; the
   map is not the only way to read the activity.
+
+### 8.9 The clinical report paper (added 2026-11-26)
+
+A report is a document, not a screen, so it leaves the dark theme behind (`pr.md` §6.9,
+§6.16, §6.25). The preview on the reports page shows the same paper the PDF uses.
+
+- **Paper:** pure white `#FFFFFF`, ink `#111111`, secondary ink `#555555`, hairlines
+  `#BEBEBE` at 0.5 pt. These are the document's own values, not app tokens; no accent
+  appears in a report and no dark surface is ever printed.
+- **Type:** the report uses four sizes only, mapped from the existing roles: title 20 pt
+  (`title3`), heading 13 pt (`footnote` bold), body 9.5 pt (`caption`-scale) and caption
+  8 pt (`caption2`-scale). They are points, not sp: a PDF does not scale with the phone.
+- **Tables:** header bold, 0.5 pt rule under the header and under each row, relative
+  column weights normalised to the text width, a row never split across pages. A table's
+  rows are the preview's rows and the CSV's rows.
+- **Content order:** title, window, generated date, then Vitals, Medicines, Symptoms,
+  Labs, Allergies, Conditions, Vaccinations, Sleep, Activity, Trend summary, References,
+  and the source note plus disclaimer in the footer of every page.
+- **Every figure** carries its unit, its source and, where a range is shown, the citation
+  that backs the range. A missing range says "not entered"; a missing value is omitted,
+  never printed as zero.
+- **Weight-neutral:** weight, body fat and photo-derived values are absent from the paper
+  and from every export, not hidden behind a label.
+- **Sleep page:** the same surface and rows as the rest of the app; consistency is a
+  sentence with a number, not a score. Stages use the existing chart/table pairing when a
+  source reports them.
 
 ---
 

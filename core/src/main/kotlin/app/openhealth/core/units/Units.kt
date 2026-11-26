@@ -24,6 +24,16 @@ enum class Dimension {
     STEPS,
     COUNT,
     SCORE,
+
+    // Laboratory concentration dimensions (B12). They are separate so a lab value can
+    // never be converted into an unrelated vital by accident; each has one canonical unit.
+    MASS_CONCENTRATION,
+    ENZYME_ACTIVITY,
+    SUBSTANCE_CONCENTRATION,
+    HORMONE_CONCENTRATION,
+    CELL_CONCENTRATION,
+    CLEARANCE,
+    MOLE_FRACTION,
 }
 
 /**
@@ -108,6 +118,68 @@ enum class UcumUnit(
     STEP(ucum = "{steps}", dimension = Dimension.STEPS, scale = 1.0, canonical = true),
     COUNT(ucum = "{count}", dimension = Dimension.COUNT, scale = 1.0, canonical = true),
     SCORE(ucum = "{score}", dimension = Dimension.SCORE, scale = 1.0, canonical = true),
+
+    // Laboratory concentration units (B12). UCUM codes are identifiers; the app stores
+    // the value in the unit the person's report printed and converts only within a
+    // dimension, never between two different analytes.
+    GRAM_PER_LITRE(
+        ucum = "g/L",
+        dimension = Dimension.MASS_CONCENTRATION,
+        scale = 1.0,
+        canonical = true,
+    ),
+    MILLIGRAM_PER_LITRE(ucum = "mg/L", dimension = Dimension.MASS_CONCENTRATION, scale = 0.001),
+    MICROGRAM_PER_LITRE(
+        ucum = "ug/L",
+        dimension = Dimension.MASS_CONCENTRATION,
+        scale = 0.000001,
+    ),
+    UNIT_PER_LITRE(
+        ucum = "U/L",
+        dimension = Dimension.ENZYME_ACTIVITY,
+        scale = 1.0,
+        canonical = true,
+    ),
+    MICROMOLE_PER_LITRE(
+        ucum = "umol/L",
+        dimension = Dimension.SUBSTANCE_CONCENTRATION,
+        scale = 1.0,
+        canonical = true,
+    ),
+    NANOMOLE_PER_LITRE(
+        ucum = "nmol/L",
+        dimension = Dimension.SUBSTANCE_CONCENTRATION,
+        scale = 0.001,
+    ),
+    PICOMOLE_PER_LITRE(
+        ucum = "pmol/L",
+        dimension = Dimension.SUBSTANCE_CONCENTRATION,
+        scale = 0.000001,
+    ),
+    MILLI_INTERNATIONAL_UNIT_PER_LITRE(
+        ucum = "m[IU]/L",
+        dimension = Dimension.HORMONE_CONCENTRATION,
+        scale = 1.0,
+        canonical = true,
+    ),
+    BILLION_PER_LITRE(
+        ucum = "10*9/L",
+        dimension = Dimension.CELL_CONCENTRATION,
+        scale = 1.0,
+        canonical = true,
+    ),
+    MILLILITRE_PER_MINUTE_PER_SQUARE_METRE(
+        ucum = "mL/min/{1.73_m2}",
+        dimension = Dimension.CLEARANCE,
+        scale = 1.0,
+        canonical = true,
+    ),
+    MILLIMOL_PER_MOLE(
+        ucum = "mmol/mol",
+        dimension = Dimension.MOLE_FRACTION,
+        scale = 1.0,
+        canonical = true,
+    ),
     ;
 
     fun toCanonical(value: Double): Double = value * scale + offset

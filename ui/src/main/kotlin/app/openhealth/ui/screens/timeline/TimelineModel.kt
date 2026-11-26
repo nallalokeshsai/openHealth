@@ -18,6 +18,10 @@ enum class TimelineKind {
     SESSION,
     SET,
     OBSERVATION,
+    DOSE,
+    SYMPTOM,
+    LAB,
+    VACCINATION,
     OTHER,
 }
 

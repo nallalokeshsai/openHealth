@@ -89,3 +89,13 @@ that matches the Kotlin line and record it here.
 **Not added:** `androidx.biometric:biometric`. App lock uses the platform
 `BiometricPrompt` (API 28+, `minSdk` 28), so no fragment or biometric dependency
 enters the client (ADR 0007).
+
+## B12 addition (2026-11-26)
+
+| Library | Version | Verified | Why |
+|---|---|---|---|
+| `com.networknt:json-schema-validator` | 1.0.87 | resolved from Maven Central on 2026-11-26; 1.5.x dropped the draft-06 `id` keyword the FHIR R4 schema still uses, 1.0.87 reads it | JVM test scope only: validate the FHIR R4 export against the vendored HL7 schema. Apache-2.0; recorded in `gradle/licences/allowed.tsv`. It never enters an APK. |
+
+The FHIR R4 JSON schema itself is vendored at
+`core/src/test/resources/fhir/fhir.schema.json` (CC0, HL7, 3.3 MB) and is test-only.
+`android.graphics.pdf` is a platform API, so the PDF renderer adds no dependency.
