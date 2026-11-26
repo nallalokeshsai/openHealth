@@ -717,6 +717,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     viewModel.saveCardio(entry)
                     nav.popBackStack()
                 },
+                showEnergy = !state.preferences.weightNeutral,
             )
         }
         composable<GpsRecordRoute> {

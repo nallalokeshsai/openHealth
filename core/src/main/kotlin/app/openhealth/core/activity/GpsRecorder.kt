@@ -84,10 +84,12 @@ object GpsRecorder {
         if (snapshot.paused) return snapshot
         if (fix.accuracyM != null && fix.accuracyM > MAX_ACCURACY_M) return snapshot
         val lastPoint = snapshot.points.lastOrNull()
-        if (lastPoint != null) {
-            val gap = snapshot.lastFixEpochMillis?.let {
-                fix.timeEpochMillis - it
-            } ?: Long.MAX_VALUE
+        // [pause] clears the last fix time, so a snapshot that has points but no last
+        // fix is the first fix after a resume. The person may have moved while paused,
+        // so that leg is a new segment: the point is kept, its distance is not.
+        val firstAfterResume = lastPoint != null && snapshot.lastFixEpochMillis == null
+        if (lastPoint != null && !firstAfterResume) {
+            val gap = fix.timeEpochMillis - (snapshot.lastFixEpochMillis ?: 0L)
             if (gap < MIN_POINT_GAP_MS) return snapshot
             val metres = Geo.distanceMeters(
                 lastPoint.latitude,
@@ -109,9 +111,16 @@ object GpsRecorder {
             powerWatts = fix.powerWatts,
             speedMps = fix.speedMps,
         )
-        val addedDistance = lastPoint?.let {
-            Geo.distanceMeters(it.latitude, it.longitude, fix.latitude, fix.longitude)
-        } ?: 0.0
+        val addedDistance = if (lastPoint == null || firstAfterResume) {
+            0.0
+        } else {
+            Geo.distanceMeters(
+                lastPoint.latitude,
+                lastPoint.longitude,
+                fix.latitude,
+                fix.longitude,
+            )
+        }
         return snapshot.copy(
             points = snapshot.points + point,
             distanceM = snapshot.distanceM + addedDistance,
@@ -141,16 +150,16 @@ object GpsRecorder {
     }
 
     /**
-     * Closes the recording. [nowEpochMillis] is the finish time; a paused recording ends
-     * at the moment it was paused, so the pause never becomes activity time.
+     * Closes the recording. [nowEpochMillis] is the finish time; the stored activity
+     * lasts exactly the time it was recording, so a pause never becomes activity time
+     * (`docs/adr/0016` §7). The route's own elapsed axis already excludes pauses, so the
+     * end is the start plus the active seconds and the two agree. Pace, active minutes
+     * and the zone model are therefore the same number the screen counted.
      */
     fun finish(snapshot: GpsSnapshot, nowEpochMillis: Long): ActivityRecord {
-        val ended = if (snapshot.paused) {
-            snapshot.pausedSinceEpochMillis ?: nowEpochMillis
-        } else {
-            nowEpochMillis
-        }
         val started = Instant.fromEpochMilliseconds(snapshot.startedAtEpochMillis)
+        val ended = snapshot.startedAtEpochMillis +
+            elapsedSeconds(snapshot, nowEpochMillis) * 1_000L
         val type = ActivityType.fromKey(snapshot.typeKey) ?: ActivityType.OTHER
         val points = snapshot.points.map { point ->
             ActivityPoint(

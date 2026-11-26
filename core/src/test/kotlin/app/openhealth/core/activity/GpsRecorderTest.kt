@@ -120,6 +120,43 @@ class GpsRecorderTest {
     }
 
     @Test
+    fun finishAfterAResumeLeavesThePausedTimeOut() {
+        var state = snapshot()
+        state = GpsRecorder.addFix(state, fix(0, 52.5200))
+        val pausedAt = start.toEpochMilliseconds() + 30_000
+        state = GpsRecorder.pause(state, pausedAt)
+        state = GpsRecorder.resume(state, pausedAt + 120_000)
+        state = GpsRecorder.addFix(state, fix(200, 52.5210))
+        val record = GpsRecorder.finish(state, start.toEpochMilliseconds() + 200_000)
+        // 200 s on the wall clock, 120 s of it paused: the activity lasted 80 s, which
+        // is what the screen counted and what the route's elapsed axis ends at.
+        assertEquals(80, record.durationSeconds)
+        assertEquals(80, record.points.last().elapsedSeconds)
+        assertEquals(
+            80,
+            GpsRecorder.elapsedSeconds(state, start.toEpochMilliseconds() + 200_000),
+        )
+    }
+
+    @Test
+    fun movingWhilePausedAddsNoDistance() {
+        var state = snapshot()
+        state = GpsRecorder.addFix(state, fix(0, 52.5200))
+        state = GpsRecorder.addFix(state, fix(60, 52.5210))
+        val walked = state.distanceM
+        val pausedAt = start.toEpochMilliseconds() + 70_000
+        state = GpsRecorder.pause(state, pausedAt)
+        // The person is driven a kilometre away while the recording is paused.
+        state = GpsRecorder.resume(state, pausedAt + 300_000)
+        state = GpsRecorder.addFix(state, fix(400, 52.5300))
+        assertEquals(3, state.points.size, "the fix after a resume is still recorded")
+        assertEquals(walked, state.distanceM, 0.001)
+        // Distance starts counting again from the new segment.
+        state = GpsRecorder.addFix(state, fix(460, 52.5310))
+        assertTrue(state.distanceM > walked, "distance ${state.distanceM} after walked $walked")
+    }
+
+    @Test
     fun aRecordingWithoutRouteStillBuildsAValidRecord() {
         val state = snapshot()
         val record = GpsRecorder.finish(state, start.toEpochMilliseconds() + 30_000)

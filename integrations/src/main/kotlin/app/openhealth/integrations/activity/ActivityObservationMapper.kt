@@ -2,6 +2,7 @@ package app.openhealth.integrations.activity
 
 import app.openhealth.core.activity.ActivityCalculator
 import app.openhealth.core.activity.ActivityRecord
+import app.openhealth.core.activity.activityGroupKey
 import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.ObservationId
 import app.openhealth.core.ids.RawRecordId
@@ -41,7 +42,7 @@ object ActivityObservationMapper {
         context: ActivityObservationContext,
     ): List<Observation> {
         val observations = mutableListOf<Observation>()
-        val group = "activity:${activity.id}"
+        val group = activityGroupKey(activity.id)
         val metrics = ActivityCalculator.metrics(activity)
         if (metrics.distanceM > 0.0) {
             observations += observation(

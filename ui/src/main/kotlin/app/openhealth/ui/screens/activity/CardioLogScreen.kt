@@ -32,13 +32,18 @@ import app.openhealth.ui.theme.OhTheme
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 
-/** Manual cardio (`pr.md` §6.11 MVP): type, day, duration and whatever else is known. */
+/**
+ * Manual cardio (`pr.md` §6.11 MVP): type, day, duration and whatever else is known.
+ * [showEnergy] is false in weight-neutral mode, where a calorie is one of the four
+ * values the switch hides (`pr.md` §6.25, `DESIGN.md` §7.6); nothing else changes.
+ */
 @Composable
 fun CardioLogScreen(
     date: LocalDate,
     onBack: () -> Unit,
     onSave: (CardioEntry) -> Unit,
     modifier: Modifier = Modifier,
+    showEnergy: Boolean = true,
 ) {
     var type by rememberSaveable { mutableStateOf(ActivityType.RUN) }
     var dayOffset by rememberSaveable { mutableStateOf(0) }
@@ -109,14 +114,16 @@ fun CardioLogScreen(
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
-        Spacer(Modifier.height(OhTheme.space.s3))
-        OhTextField(
-            value = energy,
-            onValueChange = { energy = it.filter(Char::isDigit) },
-            placeholder = stringResource(R.string.cardio_energy),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        )
+        if (showEnergy) {
+            Spacer(Modifier.height(OhTheme.space.s3))
+            OhTextField(
+                value = energy,
+                onValueChange = { energy = it.filter(Char::isDigit) },
+                placeholder = stringResource(R.string.cardio_energy),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        }
         Spacer(Modifier.height(OhTheme.space.s3))
         OhTextField(
             value = notes,
@@ -143,7 +150,8 @@ fun CardioLogScreen(
                                 distanceKm = distance.toDoubleOrNull(),
                                 averageHeartRate = averageHeartRate.toDoubleOrNull(),
                                 maxHeartRate = maxHeartRate.toDoubleOrNull(),
-                                energyKcal = energy.toDoubleOrNull(),
+                                energyKcal = energy.toDoubleOrNull()
+                                    .takeIf { showEnergy },
                                 notes = notes.takeIf { it.isNotBlank() },
                             ),
                         )

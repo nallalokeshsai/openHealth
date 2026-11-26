@@ -105,6 +105,10 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.zxing.core)
 
+    // MapLibre Native (BSD-2-Clause) draws the activity route over a PMTiles archive.
+    // No Google Maps and no telemetry: the tiles are a local file the person downloaded.
+    implementation(libs.maplibre.android)
+
     // Health Connect: the platform bus (Tech-Stack.md §8). The client library has no
     // Play Services dependency; the Health Connect app itself is a system module on
     // Android 14+ and a Play app on 13 and lower.

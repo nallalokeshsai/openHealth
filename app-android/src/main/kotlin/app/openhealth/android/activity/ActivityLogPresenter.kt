@@ -32,6 +32,8 @@ import app.openhealth.core.ingestion.RawRecord
 import app.openhealth.core.observation.MeasurementMethod
 import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.observation.SourceKind
+import app.openhealth.core.preferences.DisplayPolicy
+import app.openhealth.core.preferences.SensitiveMetric
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.source.Source
 import app.openhealth.data.LocalStore
@@ -174,7 +176,7 @@ class ActivityLogPresenter(
 
     // ------------------------------------------------------------------ detail
 
-    fun detail(id: String): ActivityDetailModel? {
+    fun detail(id: String, policy: DisplayPolicy = DisplayPolicy.Standard): ActivityDetailModel? {
         val record = store.activities.byIdWithPoints(id) ?: return null
         val metrics = ActivityCalculator.metrics(record)
         val maxHr = record.maxHeartRate ?: estimateMaxHr()
@@ -246,7 +248,10 @@ class ActivityLogPresenter(
                 ?.let { context.getString(UiR.string.activity_split_elevation, it.roundToInt()) },
             heartRateText = metrics.averageHeartRate?.roundToInt()
                 ?.let { "$it bpm" },
-            energyText = metrics.energyKcal?.roundToInt()?.let { "$it kcal" },
+            // Calories are one of the four values weight-neutral mode hides
+            // (`pr.md` §6.25); the activity keeps every other number.
+            energyText = policy.value(SensitiveMetric.CALORIES, metrics.energyKcal)
+                ?.roundToInt()?.let { "$it kcal" },
             splits = metrics.splits.map { split ->
                 ActivitySplitRow(
                     index = split.index,

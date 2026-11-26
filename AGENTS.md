@@ -219,13 +219,13 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
 - Last completed phase: **B11 Yoga, cardio, GPS** (2026-11-26); next is **B12 Sleep,
   clinical, reports**.
-- Build: green. `./gradlew check :app-android:assembleDebug` passes; **655 JVM tests**
-  (337 `:core`, 119 `:data`, 35 `:integrations`, 154 `:ui`, 10 across the three tools) and
+- Build: green. `./gradlew check :app-android:assembleDebug` passes; **661 JVM tests**
+  (339 `:core`, 120 `:data`, 35 `:integrations`, 157 `:ui`, 10 across the three tools) and
   **336 goldens** in dark, light, 200 % text and RTL. The five-tab shell, the B4 body
   map, B5 Train, B6 Nutrition, B7 Vitals, B8 Devices, B9 Today and Stats, B10 review and
   the B11 movement surfaces are in `:ui`. Both `play` and `fdroid` debug APKs build, and
   the signed `play`/`fdroid` release APKs and AABs build from the owner's keystore.
-- B11 delivers: the 29-pose, 8-flow yoga library with a screen-off player and voice cues;
+- B11 delivers: the 30-pose, 8-flow yoga library with a screen-off player and voice cues;
   manual cardio; a `location` foreground GPS service with pause and process-death
   recovery; GPX/TCX/FIT import and GPX export; a local Strava bulk-export importer; a
   MapLibre + PMTiles map with one explicit, capped pack download, bounds-aware fallback

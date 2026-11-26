@@ -624,6 +624,13 @@ object ActivityEnergy {
         activity.copy(energyKcal = estimate(activity, weightKg))
 }
 
+/**
+ * The group key every layer-2 observation an activity emits shares (`pr.md` §7.2). It is
+ * defined once here because two modules need the same string: `:integrations` writes it
+ * and `:data` removes it when the activity goes to Trash.
+ */
+fun activityGroupKey(activityId: String): String = "activity:" + activityId
+
 /** True when two records describe the same session from two sources. */
 object ActivityDuplicates {
     private const val START_TOLERANCE_SECONDS = 120L

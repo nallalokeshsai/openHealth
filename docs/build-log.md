@@ -2936,7 +2936,7 @@ imports, maps and training load (`BUILD-ROADMAP.md` §B11).
 
 ### What this phase added
 
-- **Yoga (deliverable 1).** `core/activity/Yoga.kt` holds 29 poses (name, Sanskrit,
+- **Yoga (deliverable 1).** `core/activity/Yoga.kt` holds 30 poses (name, Sanskrit,
   muscles, difficulty, instructions, why, modification, contraindications, breath cue)
   and the eight built-in flows: Sun Salutation A and B, beginner full-body, hip opener,
   spine, post-run, desk reset, bedtime. The text and muscle lists are ours; the body map
@@ -3000,8 +3000,8 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
 
 ### What was run, and its result
 
-- `./gradlew check` green: 655 JVM tests (337 `:core`, 119 `:data`, 35 `:integrations`,
-  154 `:ui`, 10 tools) and **336 goldens** in dark, light, 200 % text and RTL (9 new
+- `./gradlew check` green: 661 JVM tests (339 `:core`, 120 `:data`, 35 `:integrations`,
+  157 `:ui`, 10 tools) and **336 goldens** in dark, light, 200 % text and RTL (9 new
   B11 screens × 4).
 - `./gradlew :app-android:assembleDebug` and `:app-android:assembleFdroidDebug` green.
 - The signed `play` release APK builds from the owner's keystore; it installs over the
@@ -3034,6 +3034,17 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   provider timestamps, FIT activity rows missing, and stale activity history.
 - **Regression**: full instrumented suite, all goldens, B8 FIT import, B9 Today/Stats,
   B10 security posture and database recovery. No earlier exit test was weakened.
+- **Headless plan audit (Claude Code) found and fixed**: a pause-then-resume GPS
+  recording stored the paused wall time as duration; the first fix after a resume added
+  the distance moved while paused; deleting an activity tombstoned the row and route but
+  left its layer-2 distance/active-minute/active-calorie observations, so a deleted run
+  kept counting; weight-neutral mode was bypassed by the cardio energy field and the
+  activity-detail energy line; two route-map debug logs printed the camera target (the
+  place the person was); and the pose count in the docs was wrong. Tests were added for
+  the GPS pause and the Trash case and `CardioWeightNeutralTest` covers the form.
+  The audit's remaining findings are recorded below: gear/best-effort/monthly/export
+  scope, non-persistent Hide the route, splits across a pause, the TRIMP sex default,
+  the restored `ACCESS_NETWORK_STATE`, and attribution shown without a pack.
 
 ### Placeholders and open issues
 

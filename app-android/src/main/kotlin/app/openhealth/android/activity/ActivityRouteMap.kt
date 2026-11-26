@@ -142,7 +142,6 @@ fun ActivityRouteMap(
     LaunchedEffect(mapView, style) {
         mapView.getMapAsync { map ->
             map.setStyle(Style.Builder().fromJson(style)) { loaded ->
-                Log.d(TAG, "style loaded; points=${points.size}")
                 runCatching {
                     addRoute(loaded, points, routeInk)
                     fitRoute(map, points)
@@ -158,12 +157,9 @@ fun ActivityRouteMap(
                     }
                     map.addOnCameraIdleListener { project() }
                     mapView.post { project() }
-                    Log.d(
-                        TAG,
-                        "route layer=${loaded.getLayer("route-line") != null} " +
-                            "zoom=${map.cameraPosition.zoom} " +
-                            "target=${map.cameraPosition.target}",
-                    )
+                    // Nothing about the route is logged: a camera target is the place
+                    // the person was (`pr.md` §6.23). Only the failure is reported, and
+                    // without coordinates.
                 }.onFailure { Log.e(TAG, "route layer failed", it) }
             }
             map.uiSettings.isAttributionEnabled = false

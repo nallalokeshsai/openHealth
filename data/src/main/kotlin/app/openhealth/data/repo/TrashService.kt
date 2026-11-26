@@ -1,5 +1,6 @@
 package app.openhealth.data.repo
 
+import app.openhealth.core.activity.activityGroupKey
 import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.MeasurementId
 import app.openhealth.core.ids.NoteId
@@ -344,6 +345,13 @@ data class ActivityPayload(
     val createdAt: Long,
     val updatedAt: Long,
     val points: List<ActivityPointPayload> = emptyList(),
+    /**
+     * The layer-2 observations the activity emitted (distance, active minutes, active
+     * calories). They travel in the same tombstone so deleting the activity stops the
+     * day's rollups counting it, and undo puts the day back exactly (`pr.md` §7.3).
+     * A tombstone written before this field existed decodes to an empty list.
+     */
+    val observations: List<ObservationPayload> = emptyList(),
 )
 
 /**
@@ -497,10 +505,18 @@ class TrashService(
         }
     }
 
-    /** Deletes an activity with its route; the tombstone carries both (`pr.md` §6.29). */
+    /**
+     * Deletes an activity with its route and the observations it emitted; the tombstone
+     * carries all three (`pr.md` §6.29). Leaving the observations behind would keep a
+     * deleted run in the day's distance, active minutes and active calories, because a
+     * rollup is rebuilt from layer 2, not from the activity row (`pr.md` §7.3).
+     */
     fun deleteActivity(id: String): TombstoneId? = activity(id)?.let { row ->
         val points = db.activityQueries.pointsForActivity(row.id).executeAsList()
-        val payload = row.toPayload(points)
+        val observations = db.observationQueries
+            .observationsForGroup(activityGroupKey(row.id))
+            .executeAsList()
+        val payload = row.toPayload(points, observations.map { it.toPayload() })
         record(
             entity = TrashEntity.ACTIVITY,
             entityId = row.id,
@@ -509,6 +525,7 @@ class TrashService(
         ) {
             db.activityQueries.deletePointsForActivity(row.id)
             db.activityQueries.deleteActivity(row.id)
+            observations.forEach { db.observationQueries.deleteObservationById(it.id) }
         }
     }
 
@@ -759,6 +776,7 @@ class TrashService(
             createdAt = row.createdAt,
             updatedAt = row.updatedAt,
         )
+        row.observations.forEach { insertObservation(it) }
         row.points.forEach { point ->
             db.activityQueries.insertPoint(
                 activityId = row.id,
@@ -820,7 +838,10 @@ class TrashService(
         revision = revision,
     )
 
-    private fun Activity.toPayload(points: List<Activity_point>): ActivityPayload = ActivityPayload(
+    private fun Activity.toPayload(
+        points: List<Activity_point>,
+        observations: List<ObservationPayload>,
+    ): ActivityPayload = ActivityPayload(
         id = id,
         type = type,
         source = source,
@@ -864,6 +885,7 @@ class TrashService(
                 speedMps = point.speed_mps,
             )
         },
+        observations = observations,
     )
 
     private fun unitLabel(unit: String): String = when (unit) {
@@ -1067,8 +1089,10 @@ class TrashService(
         )
     }
 
-    private fun restoreObservation(payload: String) {
-        val row = json.decodeFromString(ObservationPayload.serializer(), payload)
+    private fun restoreObservation(payload: String) =
+        insertObservation(json.decodeFromString(ObservationPayload.serializer(), payload))
+
+    private fun insertObservation(row: ObservationPayload) {
         db.observationQueries.insertObservation(
             id = row.id,
             type = row.type,

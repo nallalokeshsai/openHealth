@@ -16,7 +16,7 @@
    wait for a map. The route is stored locally; no tile server learns where the person ran.
    The QA sample is the OpenFreeMap Monaco archive (about 470 KB), recorded in
    `docs/build-log.md`.
-3. **Yoga content is ours.** The 29 poses and eight flows (Sun Salutation A/B, beginner
+3. **Yoga content is ours.** The 30 poses and eight flows (Sun Salutation A/B, beginner
    full-body, hip opener, spine, post-run, desk reset, bedtime) are written for openHealth.
    No scraped text, still or animation is used. The body map is the pose diagram; a pose
    names its primary and secondary muscles, and a finished session feeds the recovery map.

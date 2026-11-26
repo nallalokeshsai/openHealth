@@ -510,7 +510,10 @@ class AppViewModel(
     fun closeActivityList() = Unit
 
     fun openActivityDetail(id: String) {
-        _state.update { it.copy(activityDetail = activityLog.detail(id)) }
+        val policy = app.openhealth.core.preferences.DisplayPolicy.of(
+            _state.value.preferences.weightNeutral,
+        )
+        _state.update { it.copy(activityDetail = activityLog.detail(id, policy)) }
     }
 
     fun closeActivityDetail() {

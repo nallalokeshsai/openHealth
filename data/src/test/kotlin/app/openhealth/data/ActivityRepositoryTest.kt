@@ -99,6 +99,54 @@ class ActivityRepositoryTest {
     }
 
     @Test
+    fun deletingAnActivityAlsoRemovesTheObservationsItsRollupsCount() {
+        val store = inMemoryStore().let { LocalStore(it.driver, it.db) }
+        store.activities.record(activity(), "manual", "activity-1")
+        val group = app.openhealth.core.activity.activityGroupKey("activity-1")
+        val observations = listOf(
+            testObservation(
+                id = "activity-1-distance",
+                type = app.openhealth.core.observation.ObservationType.DISTANCE,
+                value = 5_000.0,
+                unit = app.openhealth.core.units.UcumUnit.METRE,
+                start = start,
+                end = start.plus(kotlin.time.Duration.parse("30m")),
+            ).copy(groupKey = group),
+            testObservation(
+                id = "activity-1-active",
+                type = app.openhealth.core.observation.ObservationType.ACTIVE_MINUTES,
+                value = 30.0,
+                unit = app.openhealth.core.units.UcumUnit.MINUTE,
+                start = start,
+                end = start.plus(kotlin.time.Duration.parse("30m")),
+            ).copy(groupKey = group),
+        )
+        app.openhealth.data.repo.ObservationRepository(store.db).recordAll(observations)
+        assertEquals(
+            2,
+            store.db.observationQueries.observationsForGroup(group).executeAsList().size,
+        )
+
+        val tombstone = store.trash.deleteActivity("activity-1")
+        assertNotNull(tombstone)
+        // A rollup is rebuilt from layer 2, so leaving these behind would keep a deleted
+        // run in the day's distance and active minutes (`pr.md` §7.3).
+        assertEquals(
+            emptyList(),
+            store.db.observationQueries.observationsForGroup(group).executeAsList(),
+        )
+
+        assertTrue(store.trash.undo(tombstone!!))
+        val restored = store.db.observationQueries.observationsForGroup(group).executeAsList()
+        assertEquals(2, restored.size)
+        assertEquals(
+            setOf("activity-1-distance", "activity-1-active"),
+            restored.map { it.id }.toSet(),
+        )
+        assertEquals(5_000.0, restored.single { it.id == "activity-1-distance" }.value_)
+    }
+
+    @Test
     fun theTimelineShowsTheActivity() {
         val store = inMemoryStore().let { LocalStore(it.driver, it.db) }
         store.activities.record(activity(), "manual", "activity-1")
