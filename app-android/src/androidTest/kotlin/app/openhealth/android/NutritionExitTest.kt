@@ -473,7 +473,7 @@ class NutritionExitTest {
 
     /** The tab bar is composed after `loaded`; under load the click can race it. */
     private fun openNutrition() {
-        compose.waitUntil(timeoutMillis = 10_000) {
+        compose.waitUntil(timeoutMillis = 30_000) {
             compose.onAllNodesWithContentDescription("Nutrition").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription("Nutrition").performClick()

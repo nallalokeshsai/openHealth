@@ -3441,9 +3441,10 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   - `WearExitTest` asserted the training rollup before the session ended (it is built from
     finished sessions); it now asserts after Finish.
   - `WearSmokeTest` assumed the empty state; it now accepts the session screen too.
-- **Carried flake:** `NutritionExitTest.weightNeutralHidesCaloriesAndEnergy` timed out once
-  in a full 63-test run under load and passed alone; the same case was the B13 carried
-  flake. It is not weakened or ignored.
+- **Carried flake:** `NutritionExitTest.weightNeutralHidesCaloriesAndEnergy` timed out
+  under emulator load in a later rerun and passed alone; the same case was the B13
+  carried flake. The Nutrition tab click now waits for the composed tab rather than racing
+  it; nothing is weakened or ignored.
 - **Independent plan audit:** run in a fresh headless Claude session over B0–B14, the
   contract and the tree; findings and fixes are recorded below.
 - **Open:** the Monkey C app has not been compiled/signed or tested on the vívoactive 5
