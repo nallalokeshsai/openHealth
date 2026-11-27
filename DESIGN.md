@@ -1976,8 +1976,9 @@ The watch screen (`pr.md` §6.18; `docs/adr/0019`) is a remote for an open sessi
 second app. It uses the same `OhTheme` tokens and no new colour, type role, spacing value
 or component.
 
-- **One screen, one column.** Round-safe: 16 dp side padding and a 32 dp top reserve for
-  the system time; everything scrolls at 200 % text. Exercise `body` 17/600, set line
+- **One screen, one column.** Round-safe: 16 dp side padding and a 40 dp top reserve for
+  the system time (32 + 8 from the existing token set, so the curved clock clears at
+  200 %); everything scrolls at 200 % text. Exercise `body` 17/600, set line
   `caption2` 11, the selected weight `title3` 20 tabular with the other value `caption2`,
   rest `timer` 28 tabular, labels `caption2` 11. There is no second title line: the
   exercise is the title.
@@ -1986,8 +1987,8 @@ or component.
   selected one in `label`, the other in `label-3`; tapping the values switches which one
   steps. This keeps Log set on the first screen of a 454 px watch; the rest and
   heart-rate lines follow below and scroll.
-- **States.** No session: "Start a workout on your phone" as `footnote` and, only when
-  disconnected, a plain connection line. Session: exercise name, "Set 2 of 3 · Exercise 1
+- **States.** No session: a `title3` "Workout", "Start a workout on your phone" as
+  `footnote`, and, only when disconnected, a plain connection line. Session: exercise name, "Set 2 of 3 · Exercise 1
   of 1", the selector, Log set, rest clock with +15 s and Skip, and a `caption`
   heart-rate line when the sensor is allowed. A queued command says "N waiting for the
   phone"; disconnected says the sets stay on the watch. An ended session returns to the
