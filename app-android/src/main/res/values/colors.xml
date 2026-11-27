@@ -7,4 +7,7 @@
     -->
     <color name="oh_bg">#F2F2F7</color>
     <color name="oh_splash_mark">#4A7A0E</color>
+    <!-- The home-screen widget cannot read OhTheme, so it carries the two ink values. -->
+    <color name="oh_widget_label">#000000</color>
+    <color name="oh_widget_label2">#6C6C70</color>
 </resources>

@@ -100,6 +100,7 @@ fun SettingsScreen(
     onOpenSync: () -> Unit,
     onOpenCoach: () -> Unit,
     onOpenMcp: () -> Unit,
+    onCompactRaw: () -> Unit = {},
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenReview: () -> Unit,
@@ -166,13 +167,15 @@ fun SettingsScreen(
                         onClick = onOpenCoach,
                     )
                 }
-                GroupRow(
-                    title = stringResource(R.string.settings_devices),
-                    detail = state.devicesDetail,
-                    icon = OhModuleIcons.integrations,
-                    showDivider = true,
-                    onClick = onOpenDevices,
-                )
+                if (HealthModule.INTEGRATIONS in state.modules) {
+                    GroupRow(
+                        title = stringResource(R.string.settings_devices),
+                        detail = state.devicesDetail,
+                        icon = OhModuleIcons.integrations,
+                        showDivider = true,
+                        onClick = onOpenDevices,
+                    )
+                }
                 if (HealthModule.SLEEP in state.modules) {
                     GroupRow(
                         title = stringResource(R.string.clinical_sleep_title),
@@ -289,6 +292,7 @@ fun SettingsScreen(
         onOpenReview = onOpenReview,
         onOpenSync = onOpenSync,
         onOpenMcp = onOpenMcp,
+        onCompactRaw = onCompactRaw,
         onExport = {
             sheet = SettingsSheet.NONE
             onExternalActivity()
@@ -682,6 +686,7 @@ private fun DataSheet(
     onOpenReview: () -> Unit,
     onOpenSync: () -> Unit,
     onOpenMcp: () -> Unit,
+    onCompactRaw: () -> Unit = {},
     onExport: () -> Unit,
     onRestore: () -> Unit,
     onUndoRestore: () -> Unit,
@@ -750,6 +755,19 @@ private fun DataSheet(
                 showChevron = true,
                 onClick = onOpenMcp,
             )
+            if (state.rawStorageDetail.isNotEmpty()) {
+                OhRow(
+                    title = stringResource(R.string.settings_raw_storage),
+                    subtitle = stringResource(
+                        R.string.settings_raw_storage_body,
+                        state.rawStorageDetail,
+                    ),
+                    leadingIcon = OhIcons.delete,
+                    showDivider = true,
+                    showChevron = true,
+                    onClick = onCompactRaw,
+                )
+            }
             OhRow(
                 title = stringResource(R.string.settings_export),
                 subtitle = if (state.busy) {

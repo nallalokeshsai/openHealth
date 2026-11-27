@@ -270,6 +270,7 @@ private fun TypeScale() {
             "title2" to type.title2,
             "large" to type.large,
             "display" to type.display,
+            "timer" to type.timer,
         ).forEach { (name, style) ->
             Text(text = "$name · 82.4 kg", style = style, color = colors.label)
         }

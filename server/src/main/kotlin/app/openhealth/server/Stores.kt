@@ -55,6 +55,22 @@ data class PairingCode(
     val usedAt: Long? = null,
 )
 
+/**
+ * A one-shot WebAuthn challenge. It lives in the store, not in the process, so a second
+ * server instance behind a load balancer can verify what the first one issued.
+ */
+data class StoredChallenge(
+    val id: String,
+    val challenge: ByteArray,
+    val kind: String,
+    val username: String,
+    val expiresAt: Long,
+) {
+    override fun equals(other: Any?): Boolean = other is StoredChallenge && other.id == id
+
+    override fun hashCode(): Int = id.hashCode()
+}
+
 data class StoredDevice(
     val id: String,
     val accountId: String,
@@ -96,6 +112,11 @@ interface AuthStore {
     fun createDevice(device: StoredDevice)
 
     fun tokensFor(accountId: String): List<StoredToken>
+
+    fun saveChallenge(challenge: StoredChallenge)
+
+    /** Removes and returns the challenge in one step, so it can be used once. */
+    fun takeChallenge(id: String): StoredChallenge?
 }
 
 /** The append-only relay: first copy of a key wins, pull by sequence. */
@@ -231,6 +252,21 @@ class InMemoryAuthStore : AuthStore {
     @Synchronized
     override fun tokensFor(accountId: String): List<StoredToken> =
         tokens.values.filter { it.accountId == accountId }
+
+    private val challenges = linkedMapOf<String, StoredChallenge>()
+
+    @Synchronized
+    override fun saveChallenge(challenge: StoredChallenge) {
+        challenges.values.removeAll { it.expiresAt < challenge.expiresAt - CHALLENGE_KEEP_MILLIS }
+        challenges[challenge.id] = challenge
+    }
+
+    @Synchronized
+    override fun takeChallenge(id: String): StoredChallenge? = challenges.remove(id)
+
+    private companion object {
+        const val CHALLENGE_KEEP_MILLIS = 600_000L
+    }
 }
 
 @Suppress("LoopWithTooManyJumpStatements")

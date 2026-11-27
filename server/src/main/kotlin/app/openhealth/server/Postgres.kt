@@ -296,6 +296,50 @@ class PostgresAuthStore(private val db: PostgresDatabase) : AuthStore {
         }
     }
 
+    override fun saveChallenge(challenge: StoredChallenge) {
+        db.read { connection ->
+            // Expired challenges are swept as new ones arrive; nothing else grows the table.
+            connection.prepareStatement("DELETE FROM auth_challenge WHERE expires_at < ?")
+                .use { statement ->
+                    statement.setLong(1, challenge.expiresAt - CHALLENGE_KEEP_MILLIS)
+                    statement.executeUpdate()
+                }
+            connection.prepareStatement(
+                "INSERT INTO auth_challenge(id, challenge, kind, username, expires_at) " +
+                    "VALUES (?, ?, ?, ?, ?)",
+            ).use { statement ->
+                statement.setString(1, challenge.id)
+                statement.setBytes(2, challenge.challenge)
+                statement.setString(3, challenge.kind)
+                statement.setString(4, challenge.username)
+                statement.setLong(5, challenge.expiresAt)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun takeChallenge(id: String): StoredChallenge? = db.read { connection ->
+        connection.prepareStatement(
+            "DELETE FROM auth_challenge WHERE id = ? " +
+                "RETURNING id, challenge, kind, username, expires_at",
+        ).use { statement ->
+            statement.setString(1, id)
+            statement.executeQuery().use { rows ->
+                if (rows.next()) {
+                    StoredChallenge(
+                        id = rows.getString("id"),
+                        challenge = rows.getBytes("challenge"),
+                        kind = rows.getString("kind"),
+                        username = rows.getString("username"),
+                        expiresAt = rows.getLong("expires_at"),
+                    )
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
     private fun ResultSet.toAccount() = Account(
         id = getString("id"),
         username = getString("username"),
@@ -449,3 +493,5 @@ class PostgresChangeStore(
 
 /** Used by docs/tests: a UUID string is the only id shape the schema accepts. */
 fun newUuid(): String = UUID.randomUUID().toString()
+
+private const val CHALLENGE_KEEP_MILLIS = 600_000L

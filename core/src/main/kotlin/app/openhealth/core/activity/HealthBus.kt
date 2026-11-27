@@ -165,6 +165,16 @@ data class HealthImportResult(
     val skipped: List<String> = emptyList(),
 )
 
+/** The zone a reading was taken in when the platform says so, else the device's own. */
+private fun zoneOf(reading: HealthReading, fallback: TimeZone): TimeZone =
+    reading.metadata["zoneOffsetSeconds"]?.toIntOrNull()
+        ?.let {
+            runCatching {
+                kotlinx.datetime.FixedOffsetTimeZone(kotlinx.datetime.UtcOffset(seconds = it))
+            }.getOrNull()
+        }
+        ?: fallback
+
 /**
  * Turns health-bus readings into layer-2 observations (`pr.md` §7.2). A reading keeps
  * its own start and end, so an hour of steps stays an hour of steps; `happened_at` is
@@ -202,7 +212,7 @@ object HealthBusImporter {
         val method = methodOf(reading.type)
         val provenance = Provenance(
             sourceId = context.sourceId,
-            time = TimeProvenance.of(start, context.recordedAt, context.zone),
+            time = TimeProvenance.of(start, context.recordedAt, zoneOf(reading, context.zone)),
             idempotencyKey = idempotencyKey(reading),
             device = reading.metadata["device"] ?: context.device,
             appVersion = context.appVersion,

@@ -84,7 +84,7 @@ fun YogaLibraryScreen(
                         OhBodyMap(
                             model = BodyMapModel.plan(
                                 sex = app.openhealth.core.body.BodySex.MALE,
-                                coverage = emptyMap<app.openhealth.core.body.Muscle, MusclePlan>(),
+                                coverage = yogaCoverage(flow.primaryMuscles, flow.secondaryMuscles),
                             ),
                             variant = BodyMapVariant.MINI,
                         )
@@ -128,7 +128,15 @@ fun YogaLibraryScreen(
                 style = OhTheme.type.subhead,
                 color = OhTheme.colors.label2,
             )
-            Spacer(Modifier.height(OhTheme.space.s2))
+            Spacer(Modifier.height(OhTheme.space.s3))
+            OhBodyMap(
+                model = BodyMapModel.plan(
+                    sex = app.openhealth.core.body.BodySex.MALE,
+                    coverage = yogaCoverage(pose.primaryMuscles, pose.secondaryMuscles),
+                ),
+                variant = BodyMapVariant.MINI,
+            )
+            Spacer(Modifier.height(OhTheme.space.s3))
             Text(
                 text = stringResource(R.string.yoga_why),
                 style = OhTheme.type.caption,
@@ -182,3 +190,11 @@ private fun FavouriteButton(favourite: Boolean, onClick: () -> Unit) {
         tint = if (favourite) OhTheme.colors.acc else OhTheme.colors.label2,
     )
 }
+
+/** Primary muscles at full weight and secondary at half, as the player draws them. */
+private fun yogaCoverage(
+    primary: List<app.openhealth.core.body.Muscle>,
+    secondary: List<app.openhealth.core.body.Muscle>,
+): Map<app.openhealth.core.body.Muscle, MusclePlan> =
+    secondary.associateWith { MusclePlan(it, weeklySets = 0.5, share = 0.5) } +
+        primary.associateWith { MusclePlan(it, weeklySets = 1.0, share = 1.0) }

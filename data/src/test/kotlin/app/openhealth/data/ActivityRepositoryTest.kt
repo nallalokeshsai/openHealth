@@ -64,6 +64,37 @@ class ActivityRepositoryTest {
         assertEquals(11L, store.activities.pointCount("activity-1"))
     }
 
+    /**
+     * An in-app run reaches layer 3 like a device sync does, so Today and Stats read one
+     * source-priority-resolved number and not only the layer-4 table.
+     */
+    @Test
+    fun anActivityProducesDistanceAndEnergyRollups() {
+        val store = inMemoryStore().let { LocalStore(it.driver, it.db) }
+        store.activities.record(activity(), "manual", "a1")
+        val day = LocalDate(2026, 11, 24)
+        store.engine.rebuildDay(day)
+        val distance = store.rollups.forDayAndType(
+            day,
+            app.openhealth.core.observation.ObservationType.DISTANCE,
+        )
+        assertNotNull(distance)
+        assertEquals(5_000.0, distance.value.value)
+        val energy = store.rollups.forDayAndType(
+            day,
+            app.openhealth.core.observation.ObservationType.ACTIVE_CALORIES,
+        )
+        assertEquals(350.0, energy?.value?.value)
+        // A full rebuild keeps it: activity days are part of the day list.
+        store.engine.rebuildAll()
+        assertNotNull(
+            store.rollups.forDayAndType(
+                day,
+                app.openhealth.core.observation.ObservationType.DISTANCE,
+            ),
+        )
+    }
+
     @Test
     fun theSameIdempotencyKeyIsInsertedOnce() {
         val store = inMemoryStore().let { LocalStore(it.driver, it.db) }

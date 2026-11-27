@@ -1,6 +1,7 @@
 package app.openhealth.ui.screens.train
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +48,8 @@ fun RoutineEditorScreen(
     onBack: () -> Unit,
     onSave: (RoutineDraft) -> Unit,
     onCreateCustom: (CustomExerciseDraft) -> Unit = {},
+    onUpdateCustom: (String, CustomExerciseDraft) -> Unit = { _, _ -> },
+    onDeleteCustom: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var name by rememberSaveable(model.id) { mutableStateOf(model.name) }
@@ -62,6 +65,7 @@ fun RoutineEditorScreen(
     }
     var adding by rememberSaveable { mutableStateOf(false) }
     var customOpen by rememberSaveable { mutableStateOf(false) }
+    var editingCustom by rememberSaveable { mutableStateOf<String?>(null) }
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var issue by rememberSaveable { mutableStateOf<Int?>(null) }
     val editingRow = exercises.firstOrNull { it.id == editing }
@@ -227,6 +231,7 @@ fun RoutineEditorScreen(
     ) {
         AddExercisePicker(
             library = model.library,
+            onEditCustom = { editingCustom = it.id },
             onPick = { choice ->
                 adding = false
                 exercises = exercises + EditorExerciseRow(
@@ -241,6 +246,29 @@ fun RoutineEditorScreen(
                 )
             },
         )
+    }
+
+    val customChoice = model.library.firstOrNull { it.id == editingCustom }
+    OhModalSheet(
+        visible = customChoice?.custom != null,
+        onDismiss = { editingCustom = null },
+        title = stringResource(R.string.train_editor_edit_exercise),
+    ) {
+        val id = customChoice?.id
+        val initial = customChoice?.custom
+        if (id != null && initial != null) {
+            CustomExerciseSheet(
+                initial = initial,
+                onSave = { draft ->
+                    editingCustom = null
+                    onUpdateCustom(id, draft)
+                },
+                onDelete = {
+                    editingCustom = null
+                    onDeleteCustom(id)
+                },
+            )
+        }
     }
 
     OhModalSheet(
@@ -280,11 +308,17 @@ fun RoutineEditorScreen(
 }
 
 @Composable
-private fun CustomExerciseSheet(onSave: (CustomExerciseDraft) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var instructions by rememberSaveable { mutableStateOf("") }
-    var primary by rememberSaveable { mutableStateOf(app.openhealth.core.body.Muscle.CHEST.key) }
-    var equipment by rememberSaveable { mutableStateOf("barbell") }
+private fun CustomExerciseSheet(
+    onSave: (CustomExerciseDraft) -> Unit,
+    initial: CustomExerciseDraft? = null,
+    onDelete: (() -> Unit)? = null,
+) {
+    var name by rememberSaveable { mutableStateOf(initial?.name.orEmpty()) }
+    var instructions by rememberSaveable { mutableStateOf(initial?.instructions.orEmpty()) }
+    var primary by rememberSaveable {
+        mutableStateOf(initial?.primary ?: app.openhealth.core.body.Muscle.CHEST.key)
+    }
+    var equipment by rememberSaveable { mutableStateOf(initial?.equipment ?: "barbell") }
     var invalid by rememberSaveable { mutableStateOf(false) }
     OhTextField(
         value = name,
@@ -359,10 +393,28 @@ private fun CustomExerciseSheet(onSave: (CustomExerciseDraft) -> Unit) {
         },
         modifier = Modifier.fillMaxWidth(),
     )
+    if (onDelete != null) {
+        Spacer(Modifier.height(OhTheme.space.s2))
+        OhButton(
+            text = stringResource(R.string.train_editor_delete_exercise),
+            onClick = onDelete,
+            variant = OhButtonVariant.Danger,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(R.string.train_editor_delete_exercise_note),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+    }
 }
 
 @Composable
-private fun AddExercisePicker(library: List<ExerciseChoice>, onPick: (ExerciseChoice) -> Unit) {
+private fun AddExercisePicker(
+    library: List<ExerciseChoice>,
+    onEditCustom: (ExerciseChoice) -> Unit,
+    onPick: (ExerciseChoice) -> Unit,
+) {
     var search by rememberSaveable { mutableStateOf("") }
     val results = library.filter { it.name.contains(search, ignoreCase = true) }.take(SEARCH_LIMIT)
     OhSearchField(
@@ -379,12 +431,24 @@ private fun AddExercisePicker(library: List<ExerciseChoice>, onPick: (ExerciseCh
         )
     }
     results.forEach { choice ->
-        OhRow(
-            title = choice.name,
-            subtitle = choice.muscles,
-            showChevron = true,
-            onClick = { onPick(choice) },
-        )
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                OhRow(
+                    title = choice.name,
+                    subtitle = choice.muscles,
+                    showChevron = choice.custom == null,
+                    onClick = { onPick(choice) },
+                )
+            }
+            if (choice.custom != null) {
+                OhButton(
+                    text = stringResource(R.string.train_editor_edit_exercise),
+                    onClick = { onEditCustom(choice) },
+                    variant = OhButtonVariant.Ghost,
+                    size = app.openhealth.ui.components.OhButtonSize.Small,
+                )
+            }
+        }
     }
 }
 

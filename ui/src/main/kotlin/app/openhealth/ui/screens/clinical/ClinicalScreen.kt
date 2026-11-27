@@ -43,6 +43,7 @@ fun ClinicalScreen(
     onAdd: (ClinicalSectionKind) -> Unit,
     onOpen: (ClinicalRowModel) -> Unit,
     modifier: Modifier = Modifier,
+    onImportLabs: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -68,6 +69,7 @@ fun ClinicalScreen(
                     section = section,
                     onAdd = { onAdd(section.kind) },
                     onOpen = onOpen,
+                    onImport = if (section.kind == ClinicalSectionKind.LABS) onImportLabs else null,
                 )
                 Spacer(Modifier.height(OhTheme.space.s5))
             }
@@ -85,6 +87,7 @@ private fun SectionCard(
     section: ClinicalSectionModel,
     onAdd: () -> Unit,
     onOpen: (ClinicalRowModel) -> Unit,
+    onImport: (() -> Unit)? = null,
 ) {
     OhCard {
         Row(
@@ -99,6 +102,14 @@ private fun SectionCard(
                 color = OhTheme.colors.label,
                 modifier = Modifier.weight(1f),
             )
+            if (onImport != null) {
+                OhButton(
+                    text = stringResource(R.string.clinical_import_csv),
+                    onClick = onImport,
+                    variant = OhButtonVariant.Ghost,
+                    size = OhButtonSize.Small,
+                )
+            }
             OhButton(
                 text = section.addLabel,
                 onClick = onAdd,

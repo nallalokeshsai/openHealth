@@ -1,5 +1,7 @@
 package app.openhealth.ui.screens.nutrition
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,6 +32,7 @@ fun WaterSheet(
     onDismiss: () -> Unit,
     onLog: (containerId: String, millilitres: Double) -> Unit,
     onAdd: (label: String, millilitres: Double) -> Unit,
+    onDelete: (containerId: String) -> Unit = {},
 ) {
     var label by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -54,13 +57,29 @@ fun WaterSheet(
         )
         Spacer(Modifier.height(OhTheme.space.s3))
         model.containers.forEach { container ->
-            OhRow(
-                title = container.label,
-                value = stringResource(R.string.nutrition_ml, number(container.millilitres)),
-                leadingIcon = OhIcons.add,
-                showDivider = true,
-                onClick = { onLog(container.id, container.millilitres) },
-            )
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) {
+                    OhRow(
+                        title = container.label,
+                        value = stringResource(
+                            R.string.nutrition_ml,
+                            number(container.millilitres),
+                        ),
+                        leadingIcon = OhIcons.add,
+                        showDivider = true,
+                        onClick = { onLog(container.id, container.millilitres) },
+                    )
+                }
+                // The last container stays: a sheet with nothing to tap is a dead end.
+                if (model.containers.size > 1) {
+                    OhButton(
+                        text = stringResource(R.string.nutrition_water_remove),
+                        onClick = { onDelete(container.id) },
+                        variant = OhButtonVariant.Ghost,
+                        size = OhButtonSize.Small,
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(OhTheme.space.s4))
         OhTextField(

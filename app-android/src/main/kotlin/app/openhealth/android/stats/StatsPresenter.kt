@@ -587,13 +587,15 @@ class StatsPresenter(
         }
         val maxHr = app.openhealth.core.activity.HeartRateZoneModel
             .estimateMaxHeartRate(age)
-        val male = store.profile.active()?.sex_at_birth?.equals("male", ignoreCase = true) != false
+        val sex = store.profile.active()?.sex_at_birth
+        val male = sex?.equals("male", ignoreCase = true) == true
         val days = app.openhealth.core.activity.TrainingLoad.loadDays(
             activities = activities,
             strengthSessions = sessions,
             restingHeartRate = resting,
             maxHeartRate = maxHr,
-            female = !male,
+            female = sex?.equals("female", ignoreCase = true) == true,
+            neutralSex = !male && sex?.equals("female", ignoreCase = true) != true,
         )
         val model = (
             app.openhealth.core.activity.TrainingLoad.compute(date, days)

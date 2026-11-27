@@ -222,3 +222,35 @@ class ActivityFilesTest {
         return output.toByteArray()
     }
 }
+
+class TcxWriterTest {
+    @Test
+    fun anExportedActivityReadsBackWithItsRoute() {
+        val start = kotlin.time.Instant.parse("2026-11-24T08:00:00Z")
+        val points = (0..5).map {
+            app.openhealth.core.activity.ActivityPoint(
+                latitude = 52.5 + it * 0.001,
+                longitude = 13.4,
+                elapsedSeconds = it * 60L,
+                elevationM = 34.0 + it,
+                heartRate = 140.0 + it,
+            )
+        }
+        val record = app.openhealth.core.activity.ActivityRecord(
+            id = "a1",
+            type = app.openhealth.core.activity.ActivityType.RUN,
+            source = app.openhealth.core.activity.ActivitySource.RECORDED,
+            startedAt = start,
+            endedAt = start + kotlin.time.Duration.parse("5m"),
+            localDate = kotlinx.datetime.LocalDate(2026, 11, 24),
+            zoneId = "UTC",
+            distanceM = 555.0,
+            points = points,
+        )
+        val xml = TcxWriter.write(record)
+        val back = ActivityFiles.import("run.tcx", xml.toByteArray()).single()
+        kotlin.test.assertEquals(points.size, back.points.size)
+        kotlin.test.assertEquals(52.5, back.points.first().latitude, 1e-9)
+        kotlin.test.assertEquals(app.openhealth.core.activity.ActivityType.RUN, back.type)
+    }
+}

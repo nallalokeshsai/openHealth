@@ -342,6 +342,58 @@ class TrainingRepositoryTest {
         store.close()
     }
 
+    private fun seedRoutine(store: LocalStore, id: String, name: String) {
+        store.training.upsertRoutine(
+            app.openhealth.data.db.Routine(
+                id = id,
+                name = name,
+                folder = null,
+                notes = null,
+                archived_at = null,
+                created_at = 0L,
+                updated_at = 0L,
+                source_id = "manual",
+                revision = 1L,
+                weekday = null,
+                rotation_index = null,
+                favourite = false,
+                progression = "linear",
+                target_rest_seconds = null,
+            ),
+        )
+    }
+
+    /** A programme keeps its routines week by week, and editing replaces them cleanly. */
+    @Test
+    fun aProgrammesWeeksAreReplacedNotAppended() {
+        val store = localStore()
+        seedRoutine(store, "r-push", "Push")
+        seedRoutine(store, "r-pull", "Pull")
+        store.training.upsertProgramme(
+            app.openhealth.data.db.Programme(
+                id = "p-1",
+                name = "Eight weeks",
+                weeks = 2L,
+                notes = null,
+                archived_at = null,
+                created_at = 0L,
+                updated_at = 0L,
+                source_id = null,
+                revision = 1L,
+            ),
+        )
+        store.training.replaceProgrammeRoutines(
+            "p-1",
+            listOf(listOf("r-push", "r-pull"), listOf("r-pull")),
+        ) { id("pr") }
+        assertEquals(3, store.training.programmeRoutines("p-1").size)
+        store.training.replaceProgrammeRoutines("p-1", listOf(listOf("r-push"))) { id("pr") }
+        val rows = store.training.programmeRoutines("p-1")
+        assertEquals(1, rows.size)
+        assertEquals("r-push", rows.single().routine_id)
+        assertEquals(1L, rows.single().week)
+    }
+
     @Test
     fun deletingARoutineExerciseIsUndoableWithItsTarget() {
         val store = localStore()

@@ -24,9 +24,22 @@ data class LockPrompt(val title: String, val subtitle: String, val cancel: Strin
  */
 class BiometricGate {
     fun available(context: Context): Boolean =
-        // Device credential is only exposed by the framework prompt from API 29; on 28
-        // the button would be offered and could never succeed.
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasDeviceCredential(context)
+        // Device credential is only exposed by the framework prompt from API 29. On API
+        // 28 the prompt is biometric-only with a cancel button, so the lock is offered
+        // there when a fingerprint is enrolled.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            hasDeviceCredential(context)
+        } else {
+            hasEnrolledFingerprint(context)
+        }
+
+    // A fingerprint can only be enrolled behind a secure lock screen, so the feature plus a
+    // secure keyguard means the API 28 prompt has something to authenticate against.
+    private fun hasEnrolledFingerprint(context: Context): Boolean =
+        context.packageManager.hasSystemFeature(
+            android.content.pm.PackageManager.FEATURE_FINGERPRINT,
+        ) &&
+            hasDeviceCredential(context)
 
     fun authenticate(
         activity: Activity,

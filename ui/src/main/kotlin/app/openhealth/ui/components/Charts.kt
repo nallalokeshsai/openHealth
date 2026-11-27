@@ -96,6 +96,71 @@ fun OhRing(
 }
 
 /**
+ * A ring split into the shares of its [segments] (`BUILD-ROADMAP.md` §B9 "macro ring"). The
+ * shares are drawn in order from the top with a small gap, each in its own hue; the
+ * [centre] text and the table alternative carry the numbers, so colour is never alone
+ * (`DESIGN.md` §8.4).
+ */
+@Composable
+fun OhMacroRing(
+    segments: List<Pair<Float, Color>>,
+    centre: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = OhTheme.colors
+    val ringSize = OhTheme.dims.nutritionRing
+    val strokeDp = OhTheme.dims.nutritionRingStroke
+    Box(
+        modifier = modifier
+            .size(ringSize)
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = strokeDp.toPx()
+            val inset = stroke / STROKE_HALF
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(
+                color = colors.surface3,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke),
+            )
+            val total = segments.sumOf { it.first.toDouble() }.toFloat()
+            if (total > 0f) {
+                var start = RING_START_DEGREES
+                segments.forEach { (share, ink) ->
+                    val sweep = share / total * FULL_CIRCLE
+                    val drawn = (sweep - MACRO_GAP_DEGREES).coerceAtLeast(0f)
+                    if (drawn > 0f) {
+                        drawArc(
+                            color = ink,
+                            startAngle = start + MACRO_GAP_DEGREES / STROKE_HALF,
+                            sweepAngle = drawn,
+                            useCenter = false,
+                            topLeft = Offset(inset, inset),
+                            size = arcSize,
+                            style = Stroke(width = stroke),
+                        )
+                    }
+                    start += sweep
+                }
+            }
+        }
+        Text(
+            text = centre,
+            style = OhTheme.type.title2.copy(fontWeight = OhWeight.semibold).tabular(),
+            color = colors.label,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
+    }
+}
+
+/**
  * One horizontal bar with its value (`DESIGN.md` §8.2): an 8 dp track and a rounded fill,
  * named in words so the chart survives colour blindness and grayscale (§8.4).
  */
@@ -202,4 +267,6 @@ fun OhBarRow(
 }
 
 private const val STROKE_HALF = 2f
+private const val MACRO_GAP_DEGREES = 4f
+private const val RING_START_DEGREES = -90f
 private const val FULL_CIRCLE = 360f

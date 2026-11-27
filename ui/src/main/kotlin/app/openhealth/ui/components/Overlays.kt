@@ -42,7 +42,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -84,7 +83,7 @@ fun OhSheet(
     val colors = OhTheme.colors
     val type = OhTheme.type
     val dims = OhTheme.dims
-    val screenHeight = LocalConfiguration.current.screenHeightDp
+    val screenHeight = app.openhealth.ui.theme.windowHeightDp()
     val statusTop = with(LocalDensity.current) {
         WindowInsets.statusBars.getTop(this).toDp().value
     }
@@ -373,7 +372,7 @@ fun OhToast(
     val type = OhTheme.type
     val dims = OhTheme.dims
     val maxWidth =
-        toastMaxWidth(LocalConfiguration.current.screenWidthDp, dims.toastMaxWidthFraction)
+        toastMaxWidth(app.openhealth.ui.theme.windowWidthDp(), dims.toastMaxWidthFraction)
     Row(
         modifier = modifier
             .widthIn(max = maxWidth)

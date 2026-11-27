@@ -65,6 +65,20 @@ class TrainingRepository(private val db: OpenHealthDb) {
         )
     }
 
+    /**
+     * Deletes a custom exercise nothing refers to. One that a routine or a logged set
+     * still uses stays (the history keeps its name), and the caller is told.
+     */
+    @Suppress("ReturnCount")
+    fun deleteCustomExercise(id: String): Boolean {
+        if (db.trainingQueries.exerciseUseCount(id).executeAsOne() > 0L) return false
+        val row = db.trainingQueries.exerciseById(id).executeAsOneOrNull() ?: return false
+        if (!row.is_custom) return false
+        db.trainingQueries.deleteCustomExercise(id)
+        sync?.capture("exercise", id)
+        return true
+    }
+
     fun exercises(): List<Exercise> = db.trainingQueries.allExercises().executeAsList()
 
     fun exerciseById(id: String): Exercise? =
@@ -240,6 +254,34 @@ class TrainingRepository(private val db: OpenHealthDb) {
     ) {
         db.trainingQueries.insertProgrammeRoutine(id, programmeId, routineId, week, position)
         sync?.capture("programme_routine", id)
+    }
+
+    fun programmeRoutines(programmeId: String): List<app.openhealth.data.db.Programme_routine> =
+        db.trainingQueries.programmeRoutinesFor(programmeId).executeAsList()
+
+    /** Replaces the routines of a programme in one step (week by week, in order). */
+    fun replaceProgrammeRoutines(
+        programmeId: String,
+        weeks: List<List<String>>,
+        newId: () -> String,
+    ) {
+        db.transaction {
+            db.trainingQueries.programmeRoutinesFor(programmeId).executeAsList().forEach {
+                sync?.captureDelete("programme_routine", it.id)
+            }
+            db.trainingQueries.deleteProgrammeRoutinesFor(programmeId)
+            weeks.forEachIndexed { week, routineIds ->
+                routineIds.forEachIndexed { position, routineId ->
+                    upsertProgrammeRoutine(
+                        id = newId(),
+                        programmeId = programmeId,
+                        routineId = routineId,
+                        week = week + 1L,
+                        position = position.toLong(),
+                    )
+                }
+            }
+        }
     }
 
     fun routinesInProgramme(programmeId: String): List<Routine> =

@@ -89,7 +89,6 @@ class AuthService(
 ) {
     private val manager = WebAuthnManager.createNonStrictWebAuthnManager()
     private val random = SecureRandom()
-    private val challenges = linkedMapOf<String, ChallengeEntry>()
 
     // ------------------------------------------------------------- registration
 
@@ -98,11 +97,14 @@ class AuthService(
         if (store.accountByUsername(username) != null) return null
         val challengeId = Tokens.newId()
         val challenge = ByteArray(32).also(random::nextBytes)
-        challenges[challengeId] = ChallengeEntry(
-            challenge = challenge,
-            kind = ChallengeEntry.Kind.REGISTER,
-            username = username,
-            expiresAt = now() + CHALLENGE_TTL_MILLIS,
+        store.saveChallenge(
+            StoredChallenge(
+                id = challengeId,
+                challenge = challenge,
+                kind = ChallengeEntry.Kind.REGISTER.name,
+                username = username,
+                expiresAt = now() + CHALLENGE_TTL_MILLIS,
+            ),
         )
         val userHandle = Tokens.base64Url(username.toByteArray())
         val options = buildJsonObject {
@@ -175,11 +177,14 @@ class AuthService(
         if (credentials.isEmpty()) return null
         val challengeId = Tokens.newId()
         val challenge = ByteArray(32).also(random::nextBytes)
-        challenges[challengeId] = ChallengeEntry(
-            challenge = challenge,
-            kind = ChallengeEntry.Kind.LOGIN,
-            username = username,
-            expiresAt = now() + CHALLENGE_TTL_MILLIS,
+        store.saveChallenge(
+            StoredChallenge(
+                id = challengeId,
+                challenge = challenge,
+                kind = ChallengeEntry.Kind.LOGIN.name,
+                username = username,
+                expiresAt = now() + CHALLENGE_TTL_MILLIS,
+            ),
         )
         val options = buildJsonObject {
             put("challenge", Tokens.base64Url(challenge))
@@ -369,11 +374,11 @@ class AuthService(
         kind: ChallengeEntry.Kind,
         username: String,
     ): ChallengeEntry? {
-        val entry = challenges.remove(id) ?: return null
-        if (entry.kind != kind) return null
+        val entry = store.takeChallenge(id) ?: return null
+        if (entry.kind != kind.name) return null
         if (entry.expiresAt < now()) return null
         if (!entry.username.equals(username, ignoreCase = true)) return null
-        return entry
+        return ChallengeEntry(entry.challenge, kind, entry.username, entry.expiresAt)
     }
 
     private fun serverProperty(challenge: ByteArray): ServerProperty = ServerProperty.builder()

@@ -471,3 +471,70 @@ object GpxWriter {
         .replace("\"", "&quot;")
         .replace("'", "&apos;")
 }
+
+/**
+ * Garmin Training Center XML for one recorded activity (`pr.md` §6.11): one lap, one track,
+ * with time, position, altitude, running distance and heart rate on each point. Every
+ * reader that takes a TCX takes this; `TcxReader` in this file reads it back.
+ */
+object TcxWriter {
+    private const val TCX_NS = "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+
+    fun write(activity: ActivityRecord): String {
+        val sport = when (activity.type) {
+            ActivityType.RUN -> "Running"
+            ActivityType.RIDE -> "Biking"
+            else -> "Other"
+        }
+        val builder = StringBuilder(4_096)
+        builder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        builder.append("<TrainingCenterDatabase xmlns=\"").append(TCX_NS).append("\">\n")
+        builder.append("  <Activities>\n    <Activity Sport=\"").append(sport).append("\">\n")
+        builder.append("      <Id>").append(activity.startedAt).append("</Id>\n")
+        builder.append("      <Lap StartTime=\"").append(activity.startedAt).append("\">\n")
+        builder.append("        <TotalTimeSeconds>").append(activity.durationSeconds)
+            .append("</TotalTimeSeconds>\n")
+        builder.append("        <DistanceMeters>").append(activity.distanceM)
+            .append("</DistanceMeters>\n")
+        activity.energyKcal?.let {
+            builder.append("        <Calories>").append(it.toInt()).append("</Calories>\n")
+        }
+        builder.append("        <Intensity>Active</Intensity>\n")
+        builder.append("        <TriggerMethod>Manual</TriggerMethod>\n")
+        builder.append("        <Track>\n")
+        var distance = 0.0
+        var previous: ActivityPoint? = null
+        activity.points.forEach { point ->
+            previous?.let {
+                distance += Geo.distanceMeters(
+                    it.latitude,
+                    it.longitude,
+                    point.latitude,
+                    point.longitude,
+                )
+            }
+            previous = point
+            builder.append("          <Trackpoint>\n")
+            builder.append("            <Time>")
+                .append(activity.startedAt.plus(point.elapsedSeconds.seconds))
+                .append("</Time>\n")
+            builder.append("            <Position><LatitudeDegrees>").append(point.latitude)
+                .append("</LatitudeDegrees><LongitudeDegrees>").append(point.longitude)
+                .append("</LongitudeDegrees></Position>\n")
+            point.elevationM?.let {
+                builder.append("            <AltitudeMeters>").append(it)
+                    .append("</AltitudeMeters>\n")
+            }
+            builder.append("            <DistanceMeters>").append(distance)
+                .append("</DistanceMeters>\n")
+            point.heartRate?.let {
+                builder.append("            <HeartRateBpm><Value>").append(it.toInt())
+                    .append("</Value></HeartRateBpm>\n")
+            }
+            builder.append("          </Trackpoint>\n")
+        }
+        builder.append("        </Track>\n      </Lap>\n    </Activity>\n  </Activities>\n")
+        builder.append("</TrainingCenterDatabase>\n")
+        return builder.toString()
+    }
+}

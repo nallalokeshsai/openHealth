@@ -94,6 +94,8 @@ class SecurityPostureTest {
             "android.permission.VIBRATE",
             "android.permission.ACTIVITY_RECOGNITION",
             "android.permission.RECEIVE_BOOT_COMPLETED",
+            // Medication reminders: exact local alarms, no push.
+            "android.permission.SCHEDULE_EXACT_ALARM",
             // B11: the location foreground service records a route only while running.
             "android.permission.ACCESS_FINE_LOCATION",
             "android.permission.ACCESS_COARSE_LOCATION",

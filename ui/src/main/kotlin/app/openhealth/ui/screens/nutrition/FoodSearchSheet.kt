@@ -1,5 +1,7 @@
 package app.openhealth.ui.screens.nutrition
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -15,12 +17,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.openhealth.core.nutrition.Nutrient
 import app.openhealth.ui.R
+import app.openhealth.ui.components.OhButton
+import app.openhealth.ui.components.OhButtonSize
+import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhChip
 import app.openhealth.ui.components.OhChipStrip
 import app.openhealth.ui.components.OhIconButton
 import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhSearchField
+import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.screens.common.OhEmptyState
 import app.openhealth.ui.screens.common.OhSectionTitle
@@ -38,6 +44,9 @@ fun FoodSearchSheet(
     onQuery: (String) -> Unit,
     onSelect: (FoodChoiceModel) -> Unit,
     onTemplate: (String) -> Unit,
+    onRenameTemplate: (String, String) -> Unit = { _, _ -> },
+    onDeleteTemplate: (String) -> Unit = {},
+    onSearchOnline: () -> Unit = {},
     onMeal: (MealChoiceModel) -> Unit,
     onScan: () -> Unit,
     onCreateFood: () -> Unit,
@@ -45,6 +54,8 @@ fun FoodSearchSheet(
     onQuickCalories: () -> Unit,
 ) {
     var query by remember(model.query) { mutableStateOf(model.query) }
+    var managing by remember { mutableStateOf<String?>(null) }
+    var renameText by remember(managing) { mutableStateOf("") }
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
@@ -83,16 +94,59 @@ fun FoodSearchSheet(
             if (model.templates.isNotEmpty()) {
                 OhSectionTitle(text = stringResource(R.string.nutrition_search_templates))
                 model.templates.forEach { template ->
-                    OhRow(
-                        title = template.name,
-                        subtitle = if (showKcal && template.kcal != null) {
-                            energyText(template.kcal)
-                        } else {
-                            null
-                        },
-                        leadingIcon = OhIcons.check,
-                        onClick = { onTemplate(template.id) },
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            OhRow(
+                                title = template.name,
+                                subtitle = if (showKcal && template.kcal != null) {
+                                    energyText(template.kcal)
+                                } else {
+                                    null
+                                },
+                                leadingIcon = OhIcons.check,
+                                onClick = { onTemplate(template.id) },
+                            )
+                        }
+                        OhButton(
+                            text = stringResource(R.string.nutrition_template_manage),
+                            onClick = {
+                                managing = if (managing == template.id) null else template.id
+                                renameText = template.name
+                            },
+                            variant = OhButtonVariant.Ghost,
+                            size = OhButtonSize.Small,
+                        )
+                    }
+                    if (managing == template.id) {
+                        OhTextField(
+                            value = renameText,
+                            onValueChange = { renameText = it },
+                            placeholder = stringResource(R.string.nutrition_template_name),
+                        )
+                        Spacer(Modifier.height(OhTheme.space.s2))
+                        Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s2)) {
+                            OhButton(
+                                text = stringResource(R.string.nutrition_template_rename),
+                                onClick = {
+                                    onRenameTemplate(template.id, renameText)
+                                    managing = null
+                                },
+                                variant = OhButtonVariant.Secondary,
+                                size = OhButtonSize.Small,
+                                enabled = renameText.isNotBlank(),
+                            )
+                            OhButton(
+                                text = stringResource(R.string.nutrition_template_delete),
+                                onClick = {
+                                    onDeleteTemplate(template.id)
+                                    managing = null
+                                },
+                                variant = OhButtonVariant.Danger,
+                                size = OhButtonSize.Small,
+                            )
+                        }
+                        Spacer(Modifier.height(OhTheme.space.s3))
+                    }
                 }
                 Spacer(Modifier.height(OhTheme.space.s4))
             }
@@ -127,6 +181,33 @@ fun FoodSearchSheet(
                     title = stringResource(R.string.nutrition_search_none),
                     body = stringResource(R.string.nutrition_create_food),
                     glyph = OhIcons.search,
+                )
+            }
+        }
+        if (query.isNotBlank()) {
+            Spacer(Modifier.height(OhTheme.space.s4))
+            if (model.online.isNotEmpty()) {
+                OhSectionTitle(text = stringResource(R.string.nutrition_search_online))
+                model.online.forEach { row -> FoodRow(row, showKcal, onSelect) }
+            } else {
+                OhRow(
+                    title = stringResource(R.string.nutrition_search_online_action),
+                    subtitle = when (model.onlineStatus) {
+                        OnlineSearchStatus.SEARCHING ->
+                            stringResource(R.string.nutrition_search_online_working)
+                        OnlineSearchStatus.UNAVAILABLE ->
+                            stringResource(R.string.nutrition_search_online_unavailable)
+                        OnlineSearchStatus.DONE ->
+                            stringResource(R.string.nutrition_search_online_none)
+                        OnlineSearchStatus.IDLE ->
+                            stringResource(R.string.nutrition_search_online_note)
+                    },
+                    leadingIcon = OhIcons.search,
+                    onClick = if (model.onlineStatus == OnlineSearchStatus.SEARCHING) {
+                        null
+                    } else {
+                        onSearchOnline
+                    },
                 )
             }
         }

@@ -64,6 +64,10 @@ object SettingKeys {
     const val RAW_RETENTION_DAYS = "raw.retention_days"
     const val TRASH_RETENTION_DAYS = "trash.retention_days"
     const val GOAL_MODE = "goal.mode"
+
+    /** The programme the Train tab follows, and the day its week 1 began. */
+    const val PROGRAMME_ACTIVE = "training.programme_active"
+    const val PROGRAMME_START = "training.programme_start"
     const val GOAL_RATE_KG_PER_WEEK = "goal.rate_kg_per_week"
 
     /** B9: the daily step goal the Today ring fills towards (`pr.md` §6.6). */

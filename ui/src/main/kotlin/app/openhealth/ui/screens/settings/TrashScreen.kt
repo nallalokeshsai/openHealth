@@ -128,6 +128,7 @@ private fun TrashKind.labelRes(): Int = when (this) {
     TrashKind.SESSION -> R.string.trash_kind_session
     TrashKind.ROUTINE_EXERCISE -> R.string.trash_kind_routine_exercise
     TrashKind.DOSE -> R.string.trash_kind_dose
+    TrashKind.MEDICATION -> R.string.trash_kind_medication
     TrashKind.SYMPTOM -> R.string.trash_kind_symptom
     TrashKind.LAB -> R.string.trash_kind_lab
     TrashKind.ALLERGY -> R.string.trash_kind_allergy

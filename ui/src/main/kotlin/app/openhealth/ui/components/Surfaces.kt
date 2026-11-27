@@ -27,7 +27,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -173,7 +172,7 @@ fun OhRow(
     val type = OhTheme.type
     val dims = OhTheme.dims
     val interaction = rememberInteraction()
-    val narrow = LocalConfiguration.current.screenWidthDp <= OhTheme.dims.narrowValueRow
+    val narrow = app.openhealth.ui.theme.windowWidthDp() <= OhTheme.dims.narrowValueRow
     // A value in words moves under the title; a number with a short unit stays trailing (§5.3).
     val wordsValue = value != null && narrow && value.count { it.isLetter() } > SHORT_UNIT_LETTERS
     var row = modifier

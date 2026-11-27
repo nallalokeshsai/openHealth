@@ -65,6 +65,8 @@ data class ActivityDetailModel(
     val heartRateText: String?,
     val energyText: String?,
     val splits: List<ActivitySplitRow>,
+    /** Fastest 1 km and 5 km windows, when the route is long enough (title to time). */
+    val bestEfforts: List<Pair<String, String>> = emptyList(),
     val zones: List<ActivityZoneRow>,
     val zoneNote: String,
     val table: ChartTableModel?,
@@ -85,6 +87,8 @@ data class YogaFlowRow(
     val minutes: Int,
     val poseCount: Int,
     val favourite: Boolean,
+    val primaryMuscles: List<app.openhealth.core.body.Muscle> = emptyList(),
+    val secondaryMuscles: List<app.openhealth.core.body.Muscle> = emptyList(),
 )
 
 data class YogaPoseRow(
@@ -98,6 +102,8 @@ data class YogaPoseRow(
     val contraindications: String?,
     val instructions: List<String>,
     val breathCue: String,
+    val primaryMuscles: List<app.openhealth.core.body.Muscle> = emptyList(),
+    val secondaryMuscles: List<app.openhealth.core.body.Muscle> = emptyList(),
 )
 
 data class YogaLibraryModel(

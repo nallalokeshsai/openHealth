@@ -38,6 +38,12 @@ interface SyncLocalStore {
     /** Marks a key as acknowledged at [serverSeq]; safe to call twice. */
     fun markAcknowledged(keys: Set<String>, serverSeq: Long)
 
+    /**
+     * Sets aside changes the server refused so they stop blocking the queue. The row stays
+     * in the log (sequence [QUARANTINED_SEQ]) as evidence; later changes still go out.
+     */
+    fun quarantine(keys: Set<String>) = markAcknowledged(keys, QUARANTINED_SEQ)
+
     fun applyRemote(records: List<ChangeRecord>): ApplyOutcome
 
     fun cursor(): Long
@@ -82,3 +88,6 @@ data class RetryPolicy(
         return delay
     }
 }
+
+/** The `server_seq` a refused change carries, so it is never mistaken for a synced one. */
+const val QUARANTINED_SEQ: Long = -1L

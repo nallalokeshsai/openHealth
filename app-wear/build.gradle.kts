@@ -14,6 +14,19 @@ android {
         minSdk = 30
     }
 
+    // R8 and resource shrinking for release: the watch app pulls in `:ui` for the theme
+    // and R8 removes the phone screens the four watch screens never reference.
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
+
     testOptions {
         unitTests {
             isIncludeAndroidResources = true

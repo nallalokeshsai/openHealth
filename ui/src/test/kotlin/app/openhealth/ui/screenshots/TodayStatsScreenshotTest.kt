@@ -447,6 +447,13 @@ class TodayStatsScreenshotTest {
     }
 
     @Test
+    fun statsBody() {
+        shot("screen-stats-body") {
+            StatsScreen(model = stats(StatsSegment.BODY), onSelectSegment = {})
+        }
+    }
+
+    @Test
     fun statsNutrition() {
         shot("screen-stats-nutrition") {
             StatsScreen(model = stats(StatsSegment.NUTRITION), onSelectSegment = {})

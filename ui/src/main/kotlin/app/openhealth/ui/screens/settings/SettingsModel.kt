@@ -61,6 +61,9 @@ data class SettingsState(
     val coachDetail: String,
     /** What the external-access row says: off, or the number of live tokens. */
     val mcpDetail: String,
+
+    /** What the raw-storage row says: the size of the payloads still held (`pr.md` §7.1). */
+    val rawStorageDetail: String = "",
     val preset: ModulePreset,
     /** The switch's own state; it is the control, not a display decision. */
     val weightNeutral: Boolean,
@@ -103,6 +106,7 @@ enum class TrashKind {
     SESSION,
     ROUTINE_EXERCISE,
     DOSE,
+    MEDICATION,
     SYMPTOM,
     LAB,
     ALLERGY,

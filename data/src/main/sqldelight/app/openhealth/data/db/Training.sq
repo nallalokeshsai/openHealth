@@ -284,6 +284,12 @@ INSERT OR REPLACE INTO programme_routine(
 allProgrammeRoutines:
 SELECT * FROM programme_routine ORDER BY programme_id, week, position;
 
+programmeRoutinesFor:
+SELECT * FROM programme_routine WHERE programme_id = :programmeId ORDER BY week, position;
+
+deleteProgrammeRoutinesFor:
+DELETE FROM programme_routine WHERE programme_id = :programmeId;
+
 routinesInProgramme:
 SELECT routine.* FROM programme_routine
 JOIN routine ON routine.id = programme_routine.routine_id
@@ -525,3 +531,13 @@ ORDER BY happened_at DESC LIMIT 1;
 
 allWorkSetsForSession:
 SELECT * FROM work_set WHERE session_id = :sessionId ORDER BY position;
+
+-- Where an exercise is still referenced; a custom exercise can only be deleted at zero.
+exerciseUseCount:
+SELECT
+    (SELECT count(*) FROM routine_exercise WHERE exercise_id = :id) +
+    (SELECT count(*) FROM session_exercise WHERE exercise_id = :id) +
+    (SELECT count(*) FROM work_set WHERE exercise_id = :id);
+
+deleteCustomExercise:
+DELETE FROM exercise WHERE id = :id AND is_custom = 1;

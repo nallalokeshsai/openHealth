@@ -103,6 +103,7 @@ import app.openhealth.ui.screens.today.QuickAction
 import app.openhealth.ui.screens.today.TodayScreen
 import app.openhealth.ui.screens.train.ExerciseHistoryScreen
 import app.openhealth.ui.screens.train.LiveSessionScreen
+import app.openhealth.ui.screens.train.ProgrammesScreen
 import app.openhealth.ui.screens.train.RoutineDetailScreen
 import app.openhealth.ui.screens.train.RoutineEditorScreen
 import app.openhealth.ui.screens.train.SessionSummaryScreen
@@ -168,19 +169,27 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
                         onDisableLock = viewModel::disableAppLock,
                     )
                 }
-                !state.onboardingComplete -> OnboardingScreen(
-                    step = state.onboarding.step,
-                    answers = state.onboarding.answers,
-                    issue = state.onboarding.issue,
-                    ageBlocked = state.onboarding.ageBlocked,
-                    weightLossAllowed = state.onboarding.weightLossAllowed,
-                    saving = state.onboarding.saving,
-                    onChange = viewModel::onOnboardingChange,
-                    onBack = viewModel::onOnboardingBack,
-                    onNext = viewModel::onOnboardingNext,
-                    onSkip = viewModel::onOnboardingSkip,
-                    onTryDemo = viewModel::tryDemo,
-                )
+                !state.onboardingComplete -> {
+                    BackHandler(
+                        enabled = state.onboarding.ageBlocked ||
+                            state.onboarding.step != app.openhealth.ui.screens.onboarding
+                                .OnboardingStep.Welcome,
+                        onBack = viewModel::onOnboardingBack,
+                    )
+                    OnboardingScreen(
+                        step = state.onboarding.step,
+                        answers = state.onboarding.answers,
+                        issue = state.onboarding.issue,
+                        ageBlocked = state.onboarding.ageBlocked,
+                        weightLossAllowed = state.onboarding.weightLossAllowed,
+                        saving = state.onboarding.saving,
+                        onChange = viewModel::onOnboardingChange,
+                        onBack = viewModel::onOnboardingBack,
+                        onNext = viewModel::onOnboardingNext,
+                        onSkip = viewModel::onOnboardingSkip,
+                        onTryDemo = viewModel::tryDemo,
+                    )
+                }
                 else -> AppShell(state, viewModel)
             }
             state.sessionUndo?.let { undo ->
@@ -374,6 +383,10 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         onResume = { id -> nav.navigate(LiveSessionRoute(id)) },
                         onOpenRoutine = { id -> nav.navigate(RoutineRoute(id)) },
                         onNewRoutine = { nav.navigate(RoutineEditorRoute(null)) },
+                        onOpenProgrammes = {
+                            viewModel.openProgrammes()
+                            nav.navigate(ProgrammesRoute)
+                        },
                         onOpenSession = { id -> nav.navigate(SessionSummaryRoute(id)) },
                         onOpenSettings = { nav.navigate(SettingsRoute) },
                         moduleOff = HealthModule.TRAINING !in state.preferences.modules &&
@@ -481,6 +494,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 }
             }
             val editor = state.foodEditor
+            val context = LocalContext.current
             if (editor != null) {
                 FoodEditorScreen(
                     model = editor,
@@ -499,6 +513,15 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onIngredientGrams = viewModel::setIngredientGrams,
                     onRemoveIngredient = viewModel::removeIngredient,
                     onDuplicate = viewModel::duplicateRecipe,
+                    onShare = { text ->
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                            .setType("text/plain")
+                            .putExtra(android.content.Intent.EXTRA_TEXT, text)
+                        context.startActivity(
+                            android.content.Intent.createChooser(send, null)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    },
                     onLog = { id ->
                         viewModel.openRecipePortion(id)
                         nav.popBackStack()
@@ -588,6 +611,8 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         nav.popBackStack()
                     },
                     onCreateCustom = viewModel::createCustomExercise,
+                    onUpdateCustom = viewModel::updateCustomExercise,
+                    onDeleteCustom = viewModel::deleteCustomExercise,
                 )
             }
         }
@@ -710,6 +735,9 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 val export = rememberLauncherForActivityResult(
                     ActivityResultContracts.CreateDocument("application/gpx+xml"),
                 ) { uri -> if (uri != null) viewModel.exportActivity(uri) }
+                val exportTcx = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/vnd.garmin.tcx+xml"),
+                ) { uri -> if (uri != null) viewModel.exportActivityTcx(uri) }
                 ActivityDetailScreen(
                     model = detail,
                     onBack = {
@@ -717,6 +745,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                         nav.popBackStack()
                     },
                     onExport = { export.launch("openHealth-activity.gpx") },
+                    onExportTcx = { exportTcx.launch("openHealth-activity.tcx") },
                     onDelete = { activityId ->
                         viewModel.deleteActivity(activityId)
                         nav.popBackStack()
@@ -858,6 +887,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onOpenSync = { nav.navigate(SyncRoute) },
                     onOpenCoach = { nav.navigate(CoachRoute) },
                     onOpenMcp = { nav.navigate(McpRoute) },
+                    onCompactRaw = viewModel::compactRawPayloads,
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
                     onOpenReview = { nav.navigate(ReviewRoute) },
@@ -932,8 +962,12 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
         }
         composable<ClinicalRoute> {
             LaunchedEffect(Unit) { viewModel.openClinical() }
+            val importLabs = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument(),
+            ) { uri -> if (uri != null) viewModel.importLabsCsv(uri) }
             ClinicalScreen(
                 model = state.clinical ?: return@composable Loading(),
+                onImportLabs = { importLabs.launch(arrayOf("text/*", "*/*")) },
                 onBack = { nav.popBackStack() },
                 onAdd = { section ->
                     viewModel.openClinicalEditor(section)
@@ -1038,7 +1072,13 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     app.openhealth.ui.screens.devices.DevicePermissionRequest
                         .ACTIVITY_RECOGNITION,
                     ->
-                        activityPermission.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                        if (android.os.Build.VERSION.SDK_INT <
+                            android.os.Build.VERSION_CODES.Q
+                        ) {
+                            viewModel.onActivityRecognitionResult(true)
+                        } else {
+                            activityPermission.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                        }
 
                     app.openhealth.ui.screens.devices.DevicePermissionRequest.BLUETOOTH -> {
                         val permissions = if (android.os.Build.VERSION.SDK_INT >=
@@ -1101,6 +1141,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onUnpair = viewModel::unpairDevice,
                     onConnect = viewModel::connectDevice,
                     onMovePriority = viewModel::moveSourcePriority,
+                    onSelectPriorityType = viewModel::selectPriorityType,
                     onToggleWatchLink = viewModel::toggleWatchLink,
                 )
             }
@@ -1144,6 +1185,20 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 )
             }
         }
+        composable<ProgrammesRoute> {
+            ProgrammesScreen(
+                model = state.programmes ?: return@composable Loading(),
+                onBack = {
+                    viewModel.closeProgrammes()
+                    nav.popBackStack()
+                },
+                onEdit = viewModel::editProgramme,
+                onCloseEditor = viewModel::closeProgrammeEditor,
+                onSave = viewModel::saveProgramme,
+                onActivate = viewModel::activateProgramme,
+                onArchive = viewModel::archiveProgramme,
+            )
+        }
         composable<TrashRoute> {
             TrashScreen(
                 items = state.trash,
@@ -1182,6 +1237,12 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 viewModel.closeQuickAdd()
                 viewModel.startFreestyle()
                 nav.navigate(LiveSessionRoute())
+            } else if (action == QuickAction.VITALS) {
+                viewModel.closeQuickAdd()
+                nav.navigate(TAB_ROUTES[1]) {
+                    popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                    launchSingleTop = true
+                }
             } else {
                 viewModel.openQuickAdd(action)
             }
@@ -1206,6 +1267,9 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             onQuery = viewModel::searchFoods,
             onSelect = viewModel::selectFood,
             onTemplate = viewModel::logTemplate,
+            onRenameTemplate = viewModel::renameMealTemplate,
+            onSearchOnline = viewModel::searchFoodsOnline,
+            onDeleteTemplate = viewModel::deleteMealTemplate,
             onMeal = viewModel::selectFoodMeal,
             onScan = {
                 viewModel.closeNutritionSheets()
@@ -1255,6 +1319,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             onDismiss = viewModel::closeNutritionSheets,
             onLog = viewModel::logWater,
             onAdd = viewModel::addWaterContainer,
+            onDelete = viewModel::deleteWaterContainer,
         )
     }
     state.targetsSheet?.let { targets ->

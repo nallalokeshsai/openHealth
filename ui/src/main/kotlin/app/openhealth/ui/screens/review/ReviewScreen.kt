@@ -48,6 +48,8 @@ fun ReviewScreen(
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf<ReviewRowModel?>(null) }
+    // A large import can queue hundreds of questions; they come a page at a time.
+    var visible by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(PAGE) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -78,7 +80,7 @@ fun ReviewScreen(
                 }
             } else {
                 OhInsetGroup {
-                    model.rows.forEachIndexed { index, row ->
+                    model.rows.take(visible).forEachIndexed { index, row ->
                         OhRow(
                             title = row.title,
                             subtitle = row.subtitle,
@@ -93,6 +95,17 @@ fun ReviewScreen(
                             onClick = { open = row },
                         )
                     }
+                }
+                if (model.rows.size > visible) {
+                    Spacer(Modifier.height(OhTheme.space.s5))
+                    OhButton(
+                        text = stringResource(
+                            R.string.review_show_more,
+                            model.rows.size - visible,
+                        ),
+                        onClick = { visible += PAGE },
+                        variant = OhButtonVariant.Secondary,
+                    )
                 }
             }
             Spacer(Modifier.height(OhTheme.space.s8))
@@ -163,3 +176,5 @@ private fun ReviewKind.icon() = when (this) {
     ReviewKind.OUTSIDE_RANGE -> OhIcons.info
     ReviewKind.DUPLICATE -> OhIcons.edit
 }
+
+private const val PAGE = 25

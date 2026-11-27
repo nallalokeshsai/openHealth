@@ -35,6 +35,10 @@ data class BodyCsvParseResult(val rows: List<BodyCsvRow>, val problems: List<Bod
  */
 object BodyCsv {
     const val HEADER = "date,type,value,unit,method,notes"
+    const val CUSTOM_PREFIX = "custom:"
+
+    fun isCustom(type: String): Boolean = type.startsWith(CUSTOM_PREFIX, ignoreCase = true)
+
     private const val MIN_WEIGHT_KG = 1.0
     private const val MAX_WEIGHT_KG = 500.0
     private const val MIN_CM = 1.0
@@ -79,11 +83,18 @@ object BodyCsv {
                 problems += BodyCsvProblem(lineNumber, "not a date: ${cells[0].trim()}")
                 return@forEachIndexed
             }
-            val type = cells[1].trim().lowercase()
-            if (type != WEIGHT &&
-                MeasurementSite.fromType(type) == null &&
-                CompositionMeasure.fromType(type) == null
-            ) {
+            val rawType = cells[1].trim()
+            // A custom name keeps its own case so an export re-imports to the same series.
+            val type = if (isCustom(rawType)) {
+                CUSTOM_PREFIX + rawType.substring(CUSTOM_PREFIX.length).trim()
+            } else {
+                rawType.lowercase()
+            }
+            if (isCustom(type) && type.length == CUSTOM_PREFIX.length) {
+                problems += BodyCsvProblem(lineNumber, "a custom measurement needs a name")
+                return@forEachIndexed
+            }
+            if (!isKnownType(type)) {
                 problems += BodyCsvProblem(lineNumber, "not a body metric: $type")
                 return@forEachIndexed
             }
@@ -125,14 +136,21 @@ object BodyCsv {
         return BodyCsvParseResult(rows, problems)
     }
 
+    private fun isKnownType(type: String): Boolean = type == WEIGHT ||
+        isCustom(type) ||
+        MeasurementSite.fromType(type) != null ||
+        CompositionMeasure.fromType(type) != null
+
     private fun expectedDimension(type: String) = when {
         type == WEIGHT -> app.openhealth.core.units.Dimension.MASS
+        isCustom(type) -> app.openhealth.core.units.Dimension.BODY_LENGTH
         MeasurementSite.fromType(type) != null -> app.openhealth.core.units.Dimension.BODY_LENGTH
         else -> app.openhealth.core.units.Dimension.FRACTION
     }
 
     private fun plausible(type: String, canonical: Double): Boolean = when {
         type == WEIGHT -> canonical in MIN_WEIGHT_KG..MAX_WEIGHT_KG
+        isCustom(type) -> canonical in MIN_CM..MAX_CM
         MeasurementSite.fromType(type) != null -> canonical in MIN_CM..MAX_CM
         else -> canonical in MIN_PERCENT..MAX_PERCENT
     }

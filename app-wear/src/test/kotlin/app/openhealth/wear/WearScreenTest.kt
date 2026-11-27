@@ -64,23 +64,49 @@ class WearScreenTest {
         return WatchLiveController.onSnapshot(WatchLiveState(), snapshot, now, connected = true)
     }
 
-    private fun content(state: WatchLiveState, onLog: () -> Unit = {}) {
+    private fun content(
+        state: WatchLiveState,
+        onLog: () -> Unit = {},
+        dark: Boolean = true,
+        fontScale: Float = 1f,
+    ) {
         compose.setContent {
-            OhTheme(dark = true) {
-                WearScreen(
-                    state = state,
-                    connected = true,
-                    heartRateAllowed = false,
-                    onLogSet = onLog,
-                    onFinish = {},
-                    onWeight = {},
-                    onReps = {},
-                    onExtendRest = {},
-                    onSkipRest = {},
-                    onAllowHeartRate = {},
-                )
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides
+                    androidx.compose.ui.unit.Density(density.density, fontScale),
+            ) {
+                OhTheme(dark = dark) {
+                    WearScreen(
+                        state = state,
+                        connected = true,
+                        heartRateAllowed = false,
+                        onLogSet = onLog,
+                        onFinish = {},
+                        onWeight = {},
+                        onReps = {},
+                        onExtendRest = {},
+                        onSkipRest = {},
+                        onAllowHeartRate = {},
+                    )
+                }
             }
         }
+    }
+
+    /** The light theme and 200% text keep every control the holder needs on screen. */
+    @Test
+    fun lightThemeAndDoubleTextStillShowTheSetAndTheLogAction() {
+        content(state(), dark = false, fontScale = 2f)
+        compose.onNodeWithText("Bench press").assertIsDisplayed()
+        compose.onNodeWithText("Log set").assertIsDisplayed()
+    }
+
+    @Test
+    fun lightThemeAtDefaultScaleShowsTheRestActions() {
+        val resting = WatchLiveController.logSet(state(), "c1", now).state
+        content(resting, dark = false)
+        compose.onNodeWithText("Skip").assertIsDisplayed()
     }
 
     @Test

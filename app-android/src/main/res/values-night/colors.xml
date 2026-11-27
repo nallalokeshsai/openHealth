@@ -2,4 +2,6 @@
 <resources>
     <color name="oh_bg">#000000</color>
     <color name="oh_splash_mark">#A3E635</color>
+    <color name="oh_widget_label">#FFFFFF</color>
+    <color name="oh_widget_label2">#8E8E93</color>
 </resources>

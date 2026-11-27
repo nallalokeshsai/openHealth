@@ -1335,6 +1335,23 @@ class NutritionPresenter(
         return templateId
     }
 
+    fun renameTemplate(templateId: String, name: String) {
+        val template = store.nutrition.mealTemplateById(templateId) ?: return
+        if (name.isBlank()) return
+        store.nutrition.upsertMealTemplate(
+            template.copy(
+                name = name.trim(),
+                updatedAt = clock.now().toEpochMilliseconds(),
+                revision = template.revision + 1,
+            ),
+        )
+    }
+
+    fun deleteTemplate(templateId: String) {
+        store.nutrition.replaceMealTemplateItems(templateId, emptyList())
+        store.nutrition.deleteMealTemplate(templateId)
+    }
+
     fun logTemplate(templateId: String, meal: MealChoiceModel, date: LocalDate): Int {
         val template = store.nutrition.mealTemplateById(templateId) ?: return 0
         val items = store.nutrition.mealTemplateItems(templateId)
@@ -1424,6 +1441,14 @@ class NutritionPresenter(
             is OffLookup.Unavailable -> BarcodeModel(BarcodeState.UNAVAILABLE, clean, null, true)
         }
     }
+
+    /** Result of an explicit online search: the cached foods, or "no answer". */
+    suspend fun searchOnline(query: String): List<FoodRowModel>? =
+        when (val result = off.search(query)) {
+            is app.openhealth.integrations.food.OffSearch.Results ->
+                result.products.map { FoodRowModel(cacheProduct(it)) }
+            is app.openhealth.integrations.food.OffSearch.Unavailable -> null
+        }
 
     private fun cacheProduct(product: OffProduct): FoodChoiceModel {
         val id = "off:${product.barcode}"

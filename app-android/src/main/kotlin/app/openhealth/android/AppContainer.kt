@@ -340,7 +340,7 @@ class AppContainer(
             ),
         )
     }
-    val zone: TimeZone = TimeZone.currentSystemDefault()
+    val zone: TimeZone get() = TimeZone.currentSystemDefault()
     val today: LocalDate get() = kotlin.time.Clock.System.now()
         .toLocalDateTime(zone).date
 

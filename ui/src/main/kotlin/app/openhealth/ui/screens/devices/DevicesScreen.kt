@@ -83,6 +83,7 @@ fun DevicesScreen(
     onUnpair: (String) -> Unit,
     onConnect: (String) -> Unit,
     onMovePriority: (String, Boolean) -> Unit,
+    onSelectPriorityType: (String) -> Unit = {},
     onToggleWatchLink: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -130,7 +131,7 @@ fun DevicesScreen(
             OhSectionTitle(stringResource(R.string.devices_watch_link))
             WatchLinkCard(model.watchLink, onToggleWatchLink)
             OhSectionTitle(stringResource(R.string.devices_priority))
-            PriorityCard(model.priority, onMovePriority)
+            PriorityCard(model.priority, onMovePriority, onSelectPriorityType)
             Spacer(Modifier.height(OhTheme.space.s3))
             Text(
                 text = model.note,
@@ -516,7 +517,28 @@ private fun BluetoothCard(
 }
 
 @Composable
-private fun PriorityCard(model: PriorityModel, onMove: (String, Boolean) -> Unit) {
+private fun PriorityCard(
+    model: PriorityModel,
+    onMove: (String, Boolean) -> Unit,
+    onSelectType: (String) -> Unit,
+) {
+    if (model.types.isNotEmpty()) {
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement
+                .spacedBy(OhTheme.space.s2),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement
+                .spacedBy(OhTheme.space.s2),
+        ) {
+            model.types.forEach { (key, label) ->
+                app.openhealth.ui.components.OhChip(
+                    text = label,
+                    selected = key == model.selectedType,
+                    onClick = { onSelectType(key) },
+                )
+            }
+        }
+        Spacer(Modifier.height(OhTheme.space.s3))
+    }
     if (model.rows.isEmpty()) {
         OhInsetGroup {
             OhRow(

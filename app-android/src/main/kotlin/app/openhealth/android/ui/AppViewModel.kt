@@ -215,6 +215,7 @@ data class AppState(
     val stats: app.openhealth.ui.screens.stats.StatsModel? = null,
     val review: app.openhealth.ui.screens.review.ReviewModel? = null,
     val reviewCount: Int = 0,
+    val programmes: app.openhealth.ui.screens.train.ProgrammesModel? = null,
     val sleep: app.openhealth.ui.screens.clinical.SleepModel? = null,
     val clinical: app.openhealth.ui.screens.clinical.ClinicalModel? = null,
     val clinicalEditor: app.openhealth.ui.screens.clinical.ClinicalEditorModel? = null,
@@ -541,6 +542,12 @@ class AppViewModel(
     fun exportActivity(uri: Uri) {
         val id = _state.value.activityDetail?.id ?: return
         val bytes = activityLog.exportGpx(id) ?: return
+        runCatching { container.documents.write(uri, bytes) }
+    }
+
+    fun exportActivityTcx(uri: Uri) {
+        val id = _state.value.activityDetail?.id ?: return
+        val bytes = activityLog.exportTcx(id) ?: return
         runCatching { container.documents.write(uri, bytes) }
     }
 
@@ -1197,6 +1204,73 @@ class AppViewModel(
         }
     }
 
+    fun updateCustomExercise(
+        id: String,
+        draft: app.openhealth.ui.screens.train.CustomExerciseDraft,
+    ) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.updateCustomExercise(id, draft) }
+            refreshEditorLibrary()
+        }
+    }
+
+    fun deleteCustomExercise(id: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.deleteCustomExercise(id) }
+            refreshEditorLibrary()
+        }
+    }
+
+    private suspend fun refreshEditorLibrary() {
+        val fresh = withContext(Dispatchers.IO) { training.library() }
+        _state.update { current ->
+            val editor = current.editor ?: return@update current
+            current.copy(editor = editor.copy(library = fresh))
+        }
+    }
+
+    fun openProgrammes() = reloadProgrammes(null)
+
+    fun closeProgrammes() {
+        _state.update { it.copy(programmes = null) }
+        launchGuarded { rebuild() }
+    }
+
+    fun editProgramme(id: String?) = launchGuarded {
+        val draft = withContext(Dispatchers.IO) { training.programmeDraft(id) }
+        reloadProgrammes(draft)
+    }
+
+    fun closeProgrammeEditor() = reloadProgrammes(null)
+
+    fun saveProgramme(draft: app.openhealth.ui.screens.train.ProgrammeDraft) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.saveProgramme(draft) }
+            reloadProgrammes(null)
+        }
+    }
+
+    fun activateProgramme(id: String?) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.activateProgramme(id) }
+            reloadProgrammes(null)
+        }
+    }
+
+    fun archiveProgramme(id: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { training.archiveProgramme(id) }
+            reloadProgrammes(null)
+        }
+    }
+
+    private fun reloadProgrammes(editing: app.openhealth.ui.screens.train.ProgrammeDraft?) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { training.programmesModel(editing) }
+            _state.update { it.copy(programmes = model) }
+        }
+    }
+
     fun saveEquipment(profile: app.openhealth.core.training.EquipmentProfile) {
         launchGuarded {
             withContext(Dispatchers.IO) { training.saveEquipment(profile) }
@@ -1279,6 +1353,37 @@ class AppViewModel(
             // result whose query is still the one in the field.
             _state.update {
                 if (it.foodSearch?.query == query) it.copy(foodSearch = model) else it
+            }
+        }
+    }
+
+    /** An explicit "Search Open Food Facts": the typed text is the only thing sent. */
+    fun searchFoodsOnline() {
+        val current = state.value.foodSearch ?: return
+        if (current.query.isBlank()) return
+        val query = current.query
+        _state.update {
+            it.copy(
+                foodSearch = current.copy(
+                    onlineStatus = app.openhealth.ui.screens.nutrition.OnlineSearchStatus.SEARCHING,
+                ),
+            )
+        }
+        launchGuarded {
+            val results = withContext(Dispatchers.IO) { nutritionPresenter.searchOnline(query) }
+            _state.update {
+                val search = it.foodSearch ?: return@update it
+                if (search.query != query) return@update it
+                it.copy(
+                    foodSearch = search.copy(
+                        online = results.orEmpty(),
+                        onlineStatus = if (results == null) {
+                            app.openhealth.ui.screens.nutrition.OnlineSearchStatus.UNAVAILABLE
+                        } else {
+                            app.openhealth.ui.screens.nutrition.OnlineSearchStatus.DONE
+                        },
+                    ),
+                )
             }
         }
     }
@@ -1432,6 +1537,40 @@ class AppViewModel(
             _state.update { it.copy(waterSheet = model) }
             refreshNutritionModel()
         }
+    }
+
+    fun deleteWaterContainer(id: String) {
+        val sheet = state.value.waterSheet ?: return
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.deleteContainer(id) }
+            val model = withContext(Dispatchers.IO) {
+                nutritionPresenter.waterSheet(sheet.date)
+            }
+            _state.update { it.copy(waterSheet = model) }
+            refreshNutritionModel()
+        }
+    }
+
+    fun renameMealTemplate(id: String, name: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.renameTemplate(id, name) }
+            reloadFoodSearch()
+        }
+    }
+
+    fun deleteMealTemplate(id: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { nutritionPresenter.deleteTemplate(id) }
+            reloadFoodSearch()
+        }
+    }
+
+    private suspend fun reloadFoodSearch() {
+        val current = state.value.foodSearch ?: return
+        val model = withContext(Dispatchers.IO) {
+            nutritionPresenter.search(current.query, current.meal, current.date)
+        }
+        _state.update { it.copy(foodSearch = model) }
     }
 
     fun openTargets() {
@@ -3152,7 +3291,14 @@ class AppViewModel(
 
     fun restoreTombstone(item: TrashItemModel) {
         launchGuarded {
-            withContext(Dispatchers.IO) { store.trash.undo(TombstoneId(item.id)) }
+            withContext(Dispatchers.IO) {
+                store.trash.undo(TombstoneId(item.id))
+                // A restored medicine must remind again.
+                runCatching {
+                    app.openhealth.android.clinical.MedicationReminders
+                        .rescheduleAll(container.context)
+                }
+            }
             rebuild()
         }
     }
@@ -3171,6 +3317,21 @@ class AppViewModel(
                 store.notes.all().forEach { store.trash.deleteNote(NoteId(it.id)) }
             }
             message = SettingsMessage.NOTES_DELETED
+            rebuild()
+        }
+    }
+
+    private fun rawStorageLabel(): String = runCatching {
+        val bytes = store.raw.payloadBytes()
+        if (bytes < BYTES_PER_KB) "$bytes B" else "%.1f MB".format(bytes / BYTES_PER_MB)
+    }.getOrDefault("")
+
+    /** One-tap compaction (`pr.md` §7.1): payloads go, the audit fields stay. */
+    fun compactRawPayloads() {
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                store.raw.compactExpired(container.clock.now(), kotlin.time.Duration.ZERO)
+            }
             rebuild()
         }
     }
@@ -3729,6 +3890,13 @@ class AppViewModel(
         }
     }
 
+    fun selectPriorityType(key: String) {
+        launchGuarded {
+            withContext(Dispatchers.IO) { activity.selectPriorityType(key) }
+            refreshDevices()
+        }
+    }
+
     fun moveSourcePriority(sourceId: String, up: Boolean) {
         launchGuarded {
             withContext(Dispatchers.IO) { activity.movePriority(sourceId, up) }
@@ -3767,11 +3935,14 @@ class AppViewModel(
         }
     }
 
+    // ACTIVITY_RECOGNITION became a runtime permission in API 29; the step counter needs
+    // none on API 28.
     private fun activityRecognitionGranted(): Boolean =
-        androidx.core.content.ContextCompat.checkSelfPermission(
-            container.context,
-            android.Manifest.permission.ACTIVITY_RECOGNITION,
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q ||
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                container.context,
+                android.Manifest.permission.ACTIVITY_RECOGNITION,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
     private fun kindOf(kind: app.openhealth.core.activity.DeviceKindName) =
         app.openhealth.core.activity.DeviceKindName.toKind(kind)
@@ -3929,6 +4100,34 @@ class AppViewModel(
                 if (result.isSuccess) R.string.toast_csv_saved else R.string.toast_csv_failed,
                 undo = false,
             )
+        }
+    }
+
+    fun importLabsCsv(uri: Uri) {
+        launchGuarded {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val text = container.documents.read(uri).toString(Charsets.UTF_8)
+                    container.clinicalPresenter.importLabs(text)
+                }
+            }.getOrNull()
+            when {
+                result == null || (result.imported == 0 && result.problems > 0) ->
+                    showToast(R.string.toast_csv_none, undo = false)
+                result.problems > 0 -> showToast(
+                    R.string.toast_csv_import_problems,
+                    undo = false,
+                    argument = result.imported,
+                    second = result.problems,
+                )
+                else -> showToast(
+                    R.string.toast_csv_imported,
+                    undo = false,
+                    argument = result.imported,
+                )
+            }
+            val model = withContext(Dispatchers.IO) { container.clinicalPresenter.clinicalModel() }
+            _state.update { it.copy(clinical = model) }
         }
     }
 
@@ -4186,6 +4385,7 @@ class AppViewModel(
         syncDetail = container.sync.summary(),
         coachDetail = container.coach.summary(),
         mcpDetail = container.mcp.summary(),
+        rawStorageDetail = rawStorageLabel(),
         preset = preferences.preset,
         weightNeutral = preferences.weightNeutral,
         displayPolicy = preferences.displayPolicy,
@@ -4701,6 +4901,7 @@ class AppViewModel(
                 TrashEntity.SESSION.table -> TrashKind.SESSION
                 TrashEntity.ROUTINE_EXERCISE.table -> TrashKind.ROUTINE_EXERCISE
                 TrashEntity.MEDICATION_DOSE.table -> TrashKind.DOSE
+                TrashEntity.MEDICATION.table -> TrashKind.MEDICATION
                 TrashEntity.SYMPTOM_EPISODE.table -> TrashKind.SYMPTOM
                 TrashEntity.LAB_RESULT.table -> TrashKind.LAB
                 TrashEntity.ALLERGY.table -> TrashKind.ALLERGY
@@ -4800,6 +5001,16 @@ class AppViewModel(
         id: String = container.ids.newId(),
     ) {
         val recorded = now()
+        val rawId = store.raw.recordManual(
+            rawId = container.ids.newId(),
+            sourceId = AppContainer.MANUAL_SOURCE,
+            sourceKind = app.openhealth.core.observation.SourceKind.MANUAL,
+            kind = "measurement",
+            payload = "type=$type;value=$value;unit=$unit;at=${happenedAt.toEpochMilliseconds()}",
+            happenedAt = happenedAt,
+            recordedAt = recorded,
+            appVersion = container.versionName,
+        )
         store.body.upsertMeasurement(
             Measurement(
                 id = id,
@@ -4815,7 +5026,7 @@ class AppViewModel(
                 notes = null,
                 excluded_from_trends = false,
                 observation_id = null,
-                raw_record_id = null,
+                raw_record_id = rawId,
                 idempotency_key = container.ids.newId(),
                 device = "android",
                 app_version = container.versionName,
@@ -4826,6 +5037,16 @@ class AppViewModel(
 
     private fun noteRow(id: String, body: String, at: Instant): Note {
         val recorded = now()
+        val rawId = store.raw.recordManual(
+            rawId = container.ids.newId(),
+            sourceId = AppContainer.MANUAL_SOURCE,
+            sourceKind = app.openhealth.core.observation.SourceKind.MANUAL,
+            kind = "note",
+            payload = "note;chars=${body.length};at=${at.toEpochMilliseconds()}",
+            happenedAt = at,
+            recordedAt = recorded,
+            appVersion = container.versionName,
+        )
         return Note(
             id = id,
             body = body,
@@ -4835,7 +5056,7 @@ class AppViewModel(
             recorded_at = recorded.toEpochMilliseconds(),
             edited_at = null,
             source_id = AppContainer.MANUAL_SOURCE.value,
-            raw_record_id = null,
+            raw_record_id = rawId,
             idempotency_key = container.ids.newId(),
             device = "android",
             app_version = container.versionName,
@@ -5078,3 +5299,6 @@ private const val BREAKFAST_UNTIL = 10
 private const val LUNCH_UNTIL = 15
 private const val SNACKS_UNTIL = 17
 private const val DINNER_UNTIL = 21
+
+private const val BYTES_PER_KB = 1024L
+private const val BYTES_PER_MB = 1024.0 * 1024.0

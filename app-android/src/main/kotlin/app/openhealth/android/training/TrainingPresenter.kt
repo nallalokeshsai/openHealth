@@ -72,6 +72,7 @@ import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
@@ -132,7 +133,7 @@ class TrainingPresenter(
             ),
         )
         catalogueCache = null
-        return ExerciseChoice(id, draft.name.trim(), muscleLabel(primary))
+        return ExerciseChoice(id, draft.name.trim(), muscleLabel(primary), custom = draft)
     }
 
     fun saveEquipment(profile: EquipmentProfile) {
@@ -232,6 +233,7 @@ class TrainingPresenter(
                 )
             },
             demo = preferences.demo,
+            programme = programmeSummary(),
         )
     }
 
@@ -391,7 +393,7 @@ class TrainingPresenter(
             progressionKey = routine?.progression ?: LinearProgression.key,
             notes = routine?.notes.orEmpty(),
             exercises = rows,
-            library = catalogue.values.map { ExerciseChoice(it.id, it.name, muscleNames(it)) },
+            library = libraryChoices(catalogue),
             weightUnit = unit(profile),
         )
     }
@@ -430,8 +432,10 @@ class TrainingPresenter(
                 ),
             )
             val keep = mutableSetOf<String>()
+            val previous = entriesOf(id).associateBy { it.id }
             draft.exercises.forEachIndexed { index, row ->
                 val entryId = if (row.id.startsWith("new-")) ids.newId() else row.id
+                val before = previous[entryId]
                 keep += entryId
                 val (low, high) = parseReps(row.reps)
                 store.training.upsertRoutineExercise(
@@ -446,11 +450,11 @@ class TrainingPresenter(
                         target_reps_high = high.toLong(),
                         target_weight_kg = row.weight.replace(',', '.').toDoubleOrNull()
                             ?.let { entered(it, store.profile.active()) },
-                        notes = null,
-                        target_rir = null,
+                        notes = before?.notes,
+                        target_rir = before?.target_rir,
                         rest_seconds = row.rest.toLongOrNull(),
-                        progression = null,
-                        group_index = null,
+                        progression = before?.progression,
+                        group_index = before?.group_index,
                     ),
                 )
             }
@@ -506,6 +510,17 @@ class TrainingPresenter(
         val date = instant.toLocalDateTime(zone).date
         val routine = routineId?.let { store.training.routineById(it) }
         val sessionId = ids.newId()
+        val sessionRawId = store.raw.recordManual(
+            rawId = ids.newId(),
+            sourceId = sourceId,
+            sourceKind = store.sources.byId(sourceId)?.kind
+                ?: app.openhealth.core.observation.SourceKind.MANUAL,
+            kind = "session",
+            payload = "session=$sessionId;start=${instant.toEpochMilliseconds()}",
+            happenedAt = instant,
+            recordedAt = recorded,
+            appVersion = appVersion,
+        )
         store.training.upsertSession(
             Session(
                 id = sessionId,
@@ -521,7 +536,7 @@ class TrainingPresenter(
                 source_id = sourceId.value,
                 idempotency_key = idempotencyKey ?: "session-${ids.newId()}",
                 observation_id = null,
-                raw_record_id = null,
+                raw_record_id = sessionRawId,
                 device = device,
                 app_version = appVersion,
                 revision = 1,
@@ -564,6 +579,16 @@ class TrainingPresenter(
         val instant = now()
         val start = LocalDateTime(date, instant.toLocalDateTime(zone).time).toInstant(zone)
         val sessionId = ids.newId()
+        val pastRawId = store.raw.recordManual(
+            rawId = ids.newId(),
+            sourceId = manualSource,
+            sourceKind = app.openhealth.core.observation.SourceKind.MANUAL,
+            kind = "session",
+            payload = "session=$sessionId;start=${start.toEpochMilliseconds()}",
+            happenedAt = start,
+            recordedAt = instant,
+            appVersion = appVersion,
+        )
         store.training.upsertSession(
             Session(
                 id = sessionId,
@@ -579,7 +604,7 @@ class TrainingPresenter(
                 source_id = manualSource.value,
                 idempotency_key = "session-${ids.newId()}",
                 observation_id = null,
-                raw_record_id = null,
+                raw_record_id = pastRawId,
                 device = "manual",
                 app_version = appVersion,
                 revision = 1,
@@ -639,7 +664,9 @@ class TrainingPresenter(
             return emptyList()
         }
         val session = store.training.sessionById(sessionId) ?: return emptyList()
-        if (session.ended_at != null) return emptyList()
+        // A late watch command (it carries an idempotency key) must not reopen a finished
+        // session, but the person editing a finished session on the phone may add a set.
+        if (session.ended_at != null && idempotencyKey != null) return emptyList()
         val entry = ensureSessionExercise(session, exerciseId, sessionExerciseId)
             ?: return emptyList()
         val profile = store.profile.active()
@@ -674,9 +701,21 @@ class TrainingPresenter(
             weightKg = kg,
             reps = count,
             isWarmup = logged.kind == LiveSetKind.WARMUP,
-            isBodyweight = false,
+            isBodyweight = bodyweight,
         )
         val records = PersonalRecords.detect(history, candidate)
+        val setRawId = store.raw.recordManual(
+            rawId = ids.newId(),
+            sourceId = sourceId,
+            sourceKind = store.sources.byId(sourceId)?.kind
+                ?: app.openhealth.core.observation.SourceKind.MANUAL,
+            kind = "set",
+            payload = "exercise=$exerciseId;kg=$kg;reps=$count;" +
+                "at=${happened.toEpochMilliseconds()}",
+            happenedAt = happened,
+            recordedAt = recorded,
+            appVersion = appVersionOverride,
+        )
         store.training.upsertSet(
             Work_set(
                 id = ids.newId(),
@@ -701,7 +740,7 @@ class TrainingPresenter(
                 source_id = sourceId.value,
                 idempotency_key = idempotencyKey ?: "set-${ids.newId()}",
                 observation_id = null,
-                raw_record_id = null,
+                raw_record_id = setRawId,
                 device = device,
                 app_version = appVersionOverride,
                 revision = 1,
@@ -999,7 +1038,7 @@ class TrainingPresenter(
             editing = session.ended_at != null,
             note = session.notes.orEmpty(),
             feeling = session.feeling.orEmpty(),
-            library = catalogue.values.map { ExerciseChoice(it.id, it.name, muscleNames(it)) },
+            library = libraryChoices(catalogue),
             equipment = equipment,
         )
     }
@@ -1241,6 +1280,178 @@ class TrainingPresenter(
         },
     )
 
+    // ------------------------------------------------------------------ programmes
+
+    private fun programmeStart(): LocalDate? = store.settings.get(SettingKeys.PROGRAMME_START)
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+    /** Which week of a [weeks]-week programme today is in; it repeats when the last ends. */
+    private fun programmeWeek(start: LocalDate, weeks: Int): Int =
+        (start.daysUntil(today()).coerceAtLeast(0) / DAYS_PER_WEEK) % weeks.coerceAtLeast(1) + 1
+
+    @Suppress("ReturnCount")
+    fun programmeSummary(): app.openhealth.ui.screens.train.ProgrammeSummary? {
+        val id = store.settings.get(SettingKeys.PROGRAMME_ACTIVE)?.takeIf { it.isNotBlank() }
+            ?: return null
+        val start = programmeStart() ?: return null
+        val programme = store.training.programmes().firstOrNull {
+            it.id == id && it.archived_at == null
+        } ?: return null
+        val week = programmeWeek(start, programme.weeks.toInt())
+        val names = store.training.routines().associate { it.id to it.name }
+        return app.openhealth.ui.screens.train.ProgrammeSummary(
+            name = programme.name,
+            week = week,
+            weeks = programme.weeks.toInt(),
+            routines = store.training.programmeRoutines(programme.id)
+                .filter { it.week.toInt() == week }
+                .mapNotNull { names[it.routine_id] }
+                .joinToString(", "),
+        )
+    }
+
+    fun programmesModel(
+        editing: app.openhealth.ui.screens.train.ProgrammeDraft? = null,
+    ): app.openhealth.ui.screens.train.ProgrammesModel {
+        val routines = store.training.routines().filter { it.archived_at == null }
+        val names = routines.associate { it.id to it.name }
+        val active = store.settings.get(SettingKeys.PROGRAMME_ACTIVE)
+        val start = programmeStart()
+        return app.openhealth.ui.screens.train.ProgrammesModel(
+            programmes = store.training.programmes().filter { it.archived_at == null }
+                .map { programme ->
+                    val running = programme.id == active && start != null
+                    val week = if (running && start != null) {
+                        programmeWeek(start, programme.weeks.toInt())
+                    } else {
+                        null
+                    }
+                    val byWeek = store.training.programmeRoutines(programme.id)
+                        .groupBy({ it.week.toInt() }, { it.routine_id })
+                    app.openhealth.ui.screens.train.ProgrammeRow(
+                        id = programme.id,
+                        name = programme.name,
+                        weeks = programme.weeks.toInt(),
+                        active = running,
+                        currentWeek = week,
+                        routinesText = byWeek[week ?: 1].orEmpty()
+                            .mapNotNull { names[it] }.joinToString(", "),
+                    )
+                },
+            routines = routines.map { it.id to it.name },
+            editing = editing,
+        )
+    }
+
+    fun programmeDraft(id: String?): app.openhealth.ui.screens.train.ProgrammeDraft {
+        val programme =
+            id?.let { wanted -> store.training.programmes().firstOrNull { it.id == wanted } }
+                ?: return app.openhealth.ui.screens.train.ProgrammeDraft(
+                    null,
+                    "",
+                    listOf(emptyList()),
+                )
+        val byWeek = store.training.programmeRoutines(programme.id)
+            .groupBy({ it.week.toInt() }, { it.routine_id })
+        return app.openhealth.ui.screens.train.ProgrammeDraft(
+            id = programme.id,
+            name = programme.name,
+            weeks = (1..programme.weeks.toInt()).map { byWeek[it].orEmpty() },
+        )
+    }
+
+    fun saveProgramme(draft: app.openhealth.ui.screens.train.ProgrammeDraft): Boolean {
+        if (draft.name.isBlank() || draft.weeks.size !in 1..MAX_PROGRAMME_WEEKS) return false
+        val existing = draft.id?.let { wanted ->
+            store.training.programmes().firstOrNull { it.id == wanted }
+        }
+        val at = now().toEpochMilliseconds()
+        val id = existing?.id ?: ids.newId()
+        store.db.transaction {
+            store.training.upsertProgramme(
+                app.openhealth.data.db.Programme(
+                    id = id,
+                    name = draft.name.trim(),
+                    weeks = draft.weeks.size.toLong(),
+                    notes = existing?.notes,
+                    archived_at = null,
+                    created_at = existing?.created_at ?: at,
+                    updated_at = at,
+                    source_id = manualSource.value,
+                    revision = (existing?.revision ?: 0L) + 1L,
+                ),
+            )
+            store.training.replaceProgrammeRoutines(id, draft.weeks) { ids.newId() }
+        }
+        return true
+    }
+
+    /** Archives a programme (its sessions keep their link); stops following it if active. */
+    fun archiveProgramme(id: String) {
+        val programme = store.training.programmes().firstOrNull { it.id == id } ?: return
+        val at = now().toEpochMilliseconds()
+        store.training.upsertProgramme(
+            programme.copy(archived_at = at, updated_at = at, revision = programme.revision + 1L),
+        )
+        if (store.settings.get(SettingKeys.PROGRAMME_ACTIVE) == id) activateProgramme(null)
+    }
+
+    /** Follow a programme from today (week 1), or stop following with null. */
+    fun activateProgramme(id: String?) {
+        store.settings.put(SettingKeys.PROGRAMME_ACTIVE, id.orEmpty())
+        store.settings.put(SettingKeys.PROGRAMME_START, if (id == null) "" else today().toString())
+    }
+
+    fun library(): List<ExerciseChoice> = libraryChoices(catalogue())
+
+    /** The picker's library: bundled exercises, with the person's own marked editable. */
+    private fun libraryChoices(catalogue: Map<String, CatalogueExercise>): List<ExerciseChoice> {
+        val custom = store.training.exercises().filter { it.is_custom }.associateBy { it.id }
+        return catalogue.values.map { exercise ->
+            ExerciseChoice(
+                id = exercise.id,
+                name = exercise.name,
+                muscles = muscleNames(exercise),
+                custom = custom[exercise.id]?.let {
+                    app.openhealth.ui.screens.train.CustomExerciseDraft(
+                        name = it.name,
+                        primary = it.primary_muscles.substringBefore(','),
+                        equipment = it.equipment.orEmpty(),
+                        instructions = it.instructions.orEmpty(),
+                    )
+                },
+            )
+        }
+    }
+
+    /** Edits a custom exercise in place; routines and history keep pointing at it. */
+    fun updateCustomExercise(
+        id: String,
+        draft: app.openhealth.ui.screens.train.CustomExerciseDraft,
+    ) {
+        val row = store.training.exerciseById(id)?.takeIf { it.is_custom } ?: return
+        val primary = app.openhealth.core.body.Muscle.fromKey(draft.primary)
+            ?: app.openhealth.core.body.Muscle.CHEST
+        store.training.upsertExercise(
+            row.copy(
+                name = draft.name.trim(),
+                primary_muscles = primary.key,
+                equipment = draft.equipment,
+                instructions = draft.instructions.trim().ifBlank { null },
+                updated_at = now().toEpochMilliseconds(),
+                revision = row.revision + 1,
+            ),
+        )
+        catalogueCache = null
+    }
+
+    /** Returns false when a routine or a logged set still uses the exercise. */
+    fun deleteCustomExercise(id: String): Boolean {
+        val deleted = store.training.deleteCustomExercise(id)
+        if (deleted) catalogueCache = null
+        return deleted
+    }
+
     private fun exerciseName(id: String): String = store.training.exerciseById(id)?.name ?: id
 
     private fun muscleNames(exercise: CatalogueExercise?): String =
@@ -1361,3 +1572,6 @@ class TrainingPresenter(
         const val BACKFILL_END_SPACING_MILLIS = 60_000L
     }
 }
+
+private const val DAYS_PER_WEEK = 7
+private const val MAX_PROGRAMME_WEEKS = 12

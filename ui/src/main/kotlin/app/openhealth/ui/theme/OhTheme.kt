@@ -8,7 +8,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 
 /** The whole appearance contract of `DESIGN.md`, exposed once (`Appendix B`). */
@@ -46,7 +45,7 @@ fun OhTheme(
             reduceTransparency = reduceTransparency,
         )
     }
-    val windowWidth = LocalConfiguration.current.screenWidthDp
+    val windowWidth = windowWidthDp()
     val type = remember(windowWidth) { ohType(windowWidth) }
     CompositionLocalProvider(
         LocalOhColors provides colors,

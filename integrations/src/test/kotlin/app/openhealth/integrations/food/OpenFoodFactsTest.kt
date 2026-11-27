@@ -163,3 +163,26 @@ class OpenFoodFactsClientTest {
         assertTrue(result is OffLookup.Unavailable)
     }
 }
+
+class OpenFoodFactsSearchTest {
+    @Test
+    fun aSearchPayloadKeepsOnlyProductsWithANameAndNutrition() {
+        val body = """
+            {"products": [
+              {"code": "111", "product_name": "Oat bar",
+               "nutriments": {"energy-kcal_100g": 400, "proteins_100g": 8}},
+              {"code": "222", "product_name": "No nutrition"},
+              {"code": "333", "nutriments": {"energy-kcal_100g": 100}}
+            ]}
+        """.trimIndent()
+        val products = OffParser.parseSearch(body)
+        assertEquals(1, products.size)
+        assertEquals("Oat bar", products.single().name)
+        assertEquals("111", products.single().barcode)
+    }
+
+    @Test
+    fun aGarbledSearchPayloadIsEmptyNotACrash() {
+        assertTrue(OffParser.parseSearch("not json").isEmpty())
+    }
+}

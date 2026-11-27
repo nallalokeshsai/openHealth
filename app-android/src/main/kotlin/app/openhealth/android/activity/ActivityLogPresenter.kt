@@ -252,6 +252,16 @@ class ActivityLogPresenter(
             // (`pr.md` §6.25); the activity keeps every other number.
             energyText = policy.value(SensitiveMetric.CALORIES, metrics.energyKcal)
                 ?.roundToInt()?.let { "$it kcal" },
+            bestEfforts = ActivityCalculator.bestEfforts(record.points)
+                .filter { it.achieved }
+                .map { effort ->
+                    val label = if (effort.distanceM >= 1_000.0) {
+                        "${(effort.distanceM / 1_000.0).roundToInt()} km"
+                    } else {
+                        "${effort.distanceM.roundToInt()} m"
+                    }
+                    label to formatDuration(effort.durationSeconds.roundToInt().toLong())
+                },
             splits = metrics.splits.map { split ->
                 ActivitySplitRow(
                     index = split.index,
@@ -581,6 +591,13 @@ class ActivityLogPresenter(
         return GpxWriter.write(record).toByteArray(Charsets.UTF_8)
     }
 
+    fun exportTcx(id: String): ByteArray? {
+        val record = store.activities.byIdWithPoints(id) ?: return null
+        if (record.points.isEmpty()) return null
+        return app.openhealth.integrations.activity.TcxWriter.write(record)
+            .toByteArray(Charsets.UTF_8)
+    }
+
     fun delete(id: String): Boolean = store.trash.deleteActivity(id) != null
 
     // ------------------------------------------------------------------ yoga library
@@ -598,6 +615,8 @@ class ActivityLogPresenter(
                     minutes = flow.minutes,
                     poseCount = flow.poseCount,
                     favourite = flow.id in favourites,
+                    primaryMuscles = app.openhealth.core.activity.YogaLoad.of(flow).primary,
+                    secondaryMuscles = app.openhealth.core.activity.YogaLoad.of(flow).secondary,
                 )
             },
             poses = YogaLibrary.poses.map { pose ->
@@ -612,6 +631,8 @@ class ActivityLogPresenter(
                     contraindications = pose.contraindications,
                     instructions = pose.setup,
                     breathCue = pose.breathCue,
+                    primaryMuscles = pose.primaryMuscles,
+                    secondaryMuscles = pose.secondaryMuscles,
                 )
             },
             note = context.getString(UiR.string.yoga_library_note),
@@ -666,13 +687,15 @@ class ActivityLogPresenter(
             }
         val resting = store.observations.latest(ObservationType.RESTING_HEART_RATE)
             ?.value?.value
-        val male = store.profile.active()?.sex_at_birth?.equals("male", ignoreCase = true) != false
+        val sex = store.profile.active()?.sex_at_birth
+        val male = sex?.equals("male", ignoreCase = true) == true
         val days = TrainingLoad.loadDays(
             activities = activities,
             strengthSessions = sessions,
             restingHeartRate = resting,
             maxHeartRate = estimateMaxHr(),
-            female = !male,
+            female = sex?.equals("female", ignoreCase = true) == true,
+            neutralSex = !male && sex?.equals("female", ignoreCase = true) != true,
         )
         val outcome = TrainingLoad.compute(date, days)
         return (outcome as? app.openhealth.core.formula.FormulaOutcome.Computed)?.value

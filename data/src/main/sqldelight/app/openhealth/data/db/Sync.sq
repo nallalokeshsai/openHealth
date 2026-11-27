@@ -67,11 +67,19 @@ SELECT idempotency_key FROM change_log WHERE idempotency_key = ?;
 pendingChanges:
 SELECT * FROM change_log WHERE synced_at IS NULL ORDER BY seq LIMIT ?;
 
+changeLogCount:
+SELECT COUNT(*) FROM change_log;
+
 pendingChangeCount:
 SELECT COUNT(*) FROM change_log WHERE synced_at IS NULL;
 
 markChangeAcknowledged:
 UPDATE change_log SET synced_at = ?, server_seq = ? WHERE idempotency_key = ?;
+
+-- Acknowledged changes older than the cutoff. sync_row_state keeps the clocks, so the
+-- merge never needs these rows again; quarantined changes (server_seq < 0) stay.
+compactAcknowledgedChanges:
+DELETE FROM change_log WHERE synced_at IS NOT NULL AND server_seq >= 0 AND synced_at < ?;
 
 acknowledgedServerSeq:
 SELECT MAX(server_seq) FROM change_log;

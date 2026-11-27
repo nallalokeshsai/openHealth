@@ -64,9 +64,11 @@ class RollupEngine(
         val measurementDays = db.bodyQueries.measurementDays().executeAsList().map(LocalDate::parse)
         val sessionDays = db.trainingQueries.sessionDays().executeAsList()
             .map(LocalDate::parse)
+        val activityDays = db.activityQueries.activityDays().executeAsList()
+            .map(LocalDate::parse)
         (
             observations.daysWithObservations() + entryDays + vitalDays + measurementDays +
-                sessionDays
+                sessionDays + activityDays
             )
             .distinct()
             .sumOf { rebuildDayInternal(it) }
@@ -114,6 +116,10 @@ class RollupEngine(
             written += 1
         }
         vitalRollups(date, writtenTypes).forEach {
+            rollups.upsert(it)
+            written += 1
+        }
+        activityRollups(date, writtenTypes).forEach {
             rollups.upsert(it)
             written += 1
         }
@@ -186,6 +192,45 @@ class RollupEngine(
         }
         if (totals.isEmpty()) return null
         return rollups.encodeDetail(totals)
+    }
+
+    /**
+     * An in-app recorded, imported or manual activity reaches layer 3 like a device sync
+     * does (`pr.md` §7.3, §7.6). When a device already produced the day's distance or
+     * active energy the observation rollup wins (`skip`): one source per day, never a sum
+     * of two.
+     */
+    private fun activityRollups(date: LocalDate, skip: Set<ObservationType>): List<DailyRollup> {
+        val activities = db.activityQueries.activitiesForDay(date.toString()).executeAsList()
+        if (activities.isEmpty()) return emptyList()
+        val sources = activities.map { it.source_id }.distinct()
+        val watermark = activities.maxOf { it.recorded_at }
+        fun rollup(type: ObservationType, total: Double) = DailyRollup(
+            localDate = date,
+            type = type,
+            value = Measure(total, type.canonicalUnit),
+            secondaryValue = activities.size.toDouble(),
+            sourceId = sources.singleOrNull()?.let(::SourceId),
+            contributingSources = sources.size,
+            dedupReason = if (sources.size == 1) {
+                DedupReason.ONE_SOURCE_WINS.name
+            } else {
+                DedupReason.NO_DEDUP.name
+            },
+            watermark = Instant.fromEpochMilliseconds(watermark),
+            computedAt = clock.now(),
+            detail = null,
+        )
+        return buildList {
+            val distance = activities.sumOf { it.distance_m }
+            if (ObservationType.DISTANCE !in skip && distance > 0.0) {
+                add(rollup(ObservationType.DISTANCE, distance))
+            }
+            val energy = activities.mapNotNull { it.energy_kcal }
+            if (ObservationType.ACTIVE_CALORIES !in skip && energy.isNotEmpty()) {
+                add(rollup(ObservationType.ACTIVE_CALORIES, energy.sum()))
+            }
+        }
     }
 
     /** Layer 4 vitals follow the type's aggregation, never a blind cross-device mean. */

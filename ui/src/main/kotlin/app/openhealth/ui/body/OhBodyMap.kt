@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -171,7 +170,7 @@ fun OhBodyMap(
                 }
             },
     ) {
-        val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+        val screenHeight = app.openhealth.ui.theme.windowHeightDp().dp
         val maxHeight = when (variant) {
             BodyMapVariant.FULL -> minOf(
                 screenHeight * OhTheme.dims.bodyMapMaxFraction,
@@ -256,7 +255,7 @@ private fun Placeholder(
         val available = if (shown > 1) maxWidth - pairGap else maxWidth
         val ratios = placeholderRatioSum(sex, shown)
         val maxHeight = fixed ?: minOf(
-            LocalConfiguration.current.screenHeightDp.dp * OhTheme.dims.bodyMapMaxFraction,
+            app.openhealth.ui.theme.windowHeightDp().dp * OhTheme.dims.bodyMapMaxFraction,
             OhTheme.dims.bodyMapMax,
         )
         val height = minOf(maxHeight, available / ratios)

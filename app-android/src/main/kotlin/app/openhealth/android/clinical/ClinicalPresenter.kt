@@ -143,7 +143,7 @@ class ClinicalPresenter(
                                 adherence.expected,
                             )
                         },
-                        deletable = false,
+                        deletable = true,
                     )
                 },
             ),
@@ -343,7 +343,7 @@ class ClinicalPresenter(
                 field("notes", R.string.clinical_field_notes, med?.notes),
             ),
             saveLabel = context.getString(R.string.clinical_save),
-            deleteLabel = null,
+            deleteLabel = if (med != null) context.getString(R.string.clinical_delete) else null,
             note = context.getString(R.string.clinical_medication_note),
             canLogDose = med != null,
         )
@@ -515,6 +515,18 @@ class ClinicalPresenter(
                     R.string.clinical_field_condition,
                     condition?.name,
                     required = true,
+                ),
+                field(
+                    "code",
+                    R.string.clinical_field_code,
+                    condition?.code,
+                    hint = "E11.9",
+                ),
+                field(
+                    "codeSystem",
+                    R.string.clinical_field_code_system,
+                    condition?.codeSystem,
+                    hint = "ICD-10",
                 ),
                 field("onset", R.string.clinical_field_onset, condition?.onsetOn?.toString()),
                 field(
@@ -693,6 +705,40 @@ class ClinicalPresenter(
         return true
     }
 
+    data class LabImportResult(val imported: Int, val problems: Int)
+
+    /** Imports lab results from a CSV; a row already on file for that day is skipped. */
+    fun importLabs(text: String): LabImportResult {
+        val parsed = app.openhealth.core.clinical.LabCsv.parse(text)
+        var imported = 0
+        parsed.rows.forEach { row ->
+            val duplicate = store.clinical.labsForAnalyte(row.analyte).any {
+                it.provenance.localDate == row.date && it.value == row.value
+            }
+            if (duplicate) return@forEach
+            store.clinical.saveLab(
+                LabResult(
+                    id = ids.newId(),
+                    analyte = row.analyte,
+                    value = row.value,
+                    unit = row.analyte.unit,
+                    referenceLow = null,
+                    referenceHigh = null,
+                    referenceNote = null,
+                    referenceCitation = row.analyte.defaultCitation,
+                    collectedAt = atNoon(row.date),
+                    labName = row.lab,
+                    notes = row.note,
+                    provenance = provenance(atNoon(row.date)).copy(
+                        method = MeasurementMethod.FILE_IMPORT,
+                    ),
+                ),
+            )
+            imported += 1
+        }
+        return LabImportResult(imported, parsed.problems.size)
+    }
+
     private fun saveAllergy(id: String?, draft: Map<String, String>): Boolean {
         val substance = draft["substance"].orEmpty().trim()
         if (substance.isEmpty()) return false
@@ -729,8 +775,16 @@ class ClinicalPresenter(
             Condition(
                 id = existing?.id ?: ids.newId(),
                 name = name,
-                code = existing?.code,
-                codeSystem = existing?.codeSystem,
+                code = if ("code" in draft) {
+                    draft["code"]?.trim()?.takeIf { it.isNotEmpty() }
+                } else {
+                    existing?.code
+                },
+                codeSystem = if ("codeSystem" in draft) {
+                    draft["codeSystem"]?.trim()?.takeIf { it.isNotEmpty() }
+                } else {
+                    existing?.codeSystem
+                },
                 onsetOn = draft["onset"]?.let(::parseDate) ?: existing?.onsetOn,
                 resolvedOn = draft["resolved"]?.let(::parseDate) ?: existing?.resolvedOn,
                 notes = draft["notes"]?.takeIf { it.isNotBlank() },
@@ -766,7 +820,13 @@ class ClinicalPresenter(
     /** Deletes through Trash and returns the tombstone, so the shell can offer undo. */
     fun delete(section: ClinicalSectionKind, id: String): app.openhealth.core.ids.TombstoneId? =
         when (section) {
-            ClinicalSectionKind.MEDICATIONS -> null
+            ClinicalSectionKind.MEDICATIONS -> {
+                // Cancel the alarms first: a deleted medicine must not still remind.
+                store.clinical.medication(id)?.let {
+                    MedicationReminders.cancelAll(context, listOf(it))
+                }
+                store.trash.deleteMedication(id)
+            }
             ClinicalSectionKind.SYMPTOMS -> store.trash.deleteSymptomEpisode(id)
             ClinicalSectionKind.LABS -> store.trash.deleteLabResult(id)
             ClinicalSectionKind.ALLERGIES -> store.trash.deleteAllergy(id)
@@ -1051,6 +1111,13 @@ class ClinicalPresenter(
             )
         }
         val labels = store.sources.all().associate { it.id.value to it.label }
+        // A report must not read an empty layer 3 for a day that has data: rebuild any day
+        // in the range with no rollup row (rollups are rebuildable, `pr.md` §7.3).
+        val present = store.rollups.forRange(from, to).map { it.localDate }.toSet()
+        app.openhealth.core.time.Days.range(from, to)
+            .filterNot { it in present }
+            .take(MAX_REBUILD_DAYS)
+            .forEach { store.engine.rebuildDay(it) }
         val rollups = store.rollups.forRange(from, to)
         val stepsByDay = rollups
             .filter { it.type == ObservationType.STEPS }
@@ -1299,6 +1366,7 @@ class ClinicalPresenter(
     )
 
     companion object {
+        private const val MAX_REBUILD_DAYS = 400
         private val SLEEP_TYPES = listOf(
             ObservationType.SLEEP_DURATION,
             ObservationType.SLEEP_DEEP,

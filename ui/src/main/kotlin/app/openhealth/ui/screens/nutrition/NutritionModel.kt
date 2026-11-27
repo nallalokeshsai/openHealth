@@ -151,7 +151,12 @@ data class FoodSearchModel(
     val frequents: List<FoodRowModel>,
     val templates: List<MealTemplateRowModel>,
     val indexVersion: String,
+    /** What an explicit Open Food Facts search returned; empty until the person asks. */
+    val online: List<FoodRowModel> = emptyList(),
+    val onlineStatus: OnlineSearchStatus = OnlineSearchStatus.IDLE,
 )
+
+enum class OnlineSearchStatus { IDLE, SEARCHING, DONE, UNAVAILABLE }
 
 enum class DietStatus { MATCHES, DOES_NOT_MATCH, UNKNOWN }
 
