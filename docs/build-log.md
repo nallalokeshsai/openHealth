@@ -3777,3 +3777,126 @@ was not accepted on the reviewer's word alone.
     measured **26.33 ms** against its 16 ms budget on a loaded machine and **3.04 ms** on a
     quiet rerun. The budget was not touched; the gate can go red for reasons unrelated to a
     change.
+
+## B15 audit — second independent pass (2026-11-27)
+
+- **Scope.** A second headless session that did not build B15 and did not run the first
+  audit. It re-verified each of the first pass's five fixes against the code and the
+  tests, then looked for what remained across B0–B15. Ran `./gradlew check`, both
+  assembles and the phone connected suite on `emulator-5554` twice. No commit, push or
+  outward action was made.
+
+### The first pass's fixes, re-verified
+
+Every one is real, lands where it is claimed to, and is covered by a test that fails
+against the old code. Checked individually, not accepted on the entry's word:
+
+- **MCP day summary.** `McpGateway.daySummary` omits `active_kcal` and
+  `training_volume_kg` under weight-neutral mode; `McpGatewayTest` line 312 asserts both
+  and that `training_sets` still answers.
+- **Stored coach failure keys.** `coachErrorKey` maps the stored `kind[:findings]` form
+  and the live `coach_error_*` form onto one key. All nine `CoachFailureKind` values
+  resolve to an existing string; `errorText`'s two call sites are both inside a non-null
+  branch, so the new `null -> coach_error_server` default changes nothing that renders.
+- **The 90-day raw window.** `RawRetention.DEVICE_RETENTION` is 90 days,
+  `compactPayloadsBefore` clears `payload`/`payload_ref` and keeps the hash and the audit
+  fields, and `AppContainer` calls `runStartupMaintenance()` where it previously called
+  the Trash purge alone.
+- **Allergy Active.** `ClinicalPresenter.allergyEditor` offers `clinical_yes`/
+  `clinical_no`, so comparing the draft against `clinical_yes` is the right test.
+- **The weight-neutral race.** Waiting on `preferences.weightNeutral` is the switch the
+  assertions are about; the case passed in both full suite runs.
+- **The dead state that was removed** was genuinely unreferenced, and the Health Connect
+  switch the recipe requires still renders from `model.healthConnect`.
+
+### Confirmed and fixed
+
+- **`AppContainer.close()` opened the database it was closing.** The first pass added
+  `runCatching { mcpRuntime.stop() }` to `close()`, but `mcpRuntime` was a `by lazy` over
+  `store`, so closing a container that had never opened its store built the gateway, the
+  store, the encrypted database file and the whole seeding path on the way out — then
+  closed it. `mcpRuntime` now sits behind a named `lazy` and `close()` stops it only when
+  it exists (`AppContainer.kt`). The new case
+  `closingAContainerThatNeverOpenedTheStoreOpensNoDatabase` in `CoachExitTest` fails
+  against the pre-fix code with "close() must not create the database it is closing" and
+  passes now.
+- **A photo-encryption exit test that could not pass or fail for the right reason.**
+  `VitalsExitTest.aPhotoIsEncryptedInTheStoreAndComesBackFromTrash` scanned the whole
+  SQLCipher file for the three bytes `FF D8 FF` and called their absence proof that the
+  photo was encrypted. `body_photo.bytes_b64` is a TEXT column, so a *plaintext* database
+  would hold the base64 of the JPEG and never that magic — the assertion could not detect
+  the leak it names. What it could do is match three arbitrary bytes of ciphertext, with
+  probability about one per 16 MB of file, and it did: the test failed on the third full
+  emulator suite run of this audit having passed the first two. The needle is now a
+  64-character slice of the payload actually stored, which is what an unencrypted file
+  would contain, plus the plain SQLite header. Both are what `EncryptedDatabaseTest`
+  already checks deterministically, so the exit test is now sound in the same way instead
+  of a coin flip. The budget and the intent are unchanged; only the needle is.
+
+### Left as findings, not changed
+
+- **An MCP write can never be retried safely.** `McpGateway.writeObservation` mints
+  `mcp:<token>:<random>` as the idempotency key on every call, so
+  `ObservationRepository.record`'s duplicate check can never fire for it, and the result
+  is returned without reading `RecordOutcome`. `WATER` is a `sumAll` type, so an
+  assistant that retries `openhealth_log_water` after a timeout doubles the day's water.
+  The fix is an optional client-supplied key, which changes a documented tool schema
+  (`docs/adr/0020` §7) and is the owner's call.
+- **The coach's training data has no Health Connect gate.** `CoachDaily` and `CoachVital`
+  carry `viaHealthConnect` and `CoachPrompt` fails closed on an unknown source, but
+  `CoachSessionSummary`, the routines and `CoachRecovery` carry no flag and are
+  serialised unfiltered. No path writes a `session` row from Health Connect today (the
+  bus turns an `ExerciseSessionRecord` into an observation), so this is a fail-open seam
+  rather than a live leak — but it is the one half of the dataset that does not obey
+  `pr.md` §12.3 by construction.
+- **Activities never reach layer 3.** `RollupEngine.rebuildDayInternal` builds a day from
+  observations, nutrition entries, measurements, sessions and vitals; it never reads the
+  `activity` table, and `rebuildAll()` omits activity days. `ActivityRepository.record`
+  writes no observation either, so an in-app GPS run contributes no `DISTANCE`,
+  `ACTIVE_MINUTES` or `ACTIVE_CALORIES` rollup while the same run arriving through Health
+  Connect does. Layer 3 is therefore source-dependent and `pr.md` §7.6's dedup never
+  arbitrates between the two copies. Adding activity rollups before that dedup rule is
+  decided would double-count a run recorded on the phone and synced from the watch, so
+  the rule is the owner's call first (B11).
+- **One rejected change blocks the sync push queue for good.** `SyncEngine.pushPending`
+  throws `SyncFailure` as soon as `response.rejected` is non-empty, which aborts the pass
+  and leaves the change at the head of the queue; the next pass sends the same page and
+  is rejected again. There is no quarantine and no `SyncScreen` surface for a rejected
+  change, unlike `sync_conflict` (B13).
+- **The quick-add Vitals tile is still a stub.** `QuickAddSheet` renders
+  `QuickAddMode.VITALS` as `LaterForm` reading "Vital readings are not here yet /
+  Blood pressure, glucose and temperature arrive with the vitals screens", which B7
+  shipped. `FOOD` and `SET` were wired to their real flows; `VITALS` was not. The design
+  recipe says a quick-add tile "opens its own small sheet" (`DESIGN.md` §14.2), so the
+  repair is a sheet, not a navigation, and that is design work.
+- **`pr.md` §6.26's "set < 2 s" exit test does not hold reliably.**
+  `TrainingExitTest.aSetIsLoggedInUnderTwoSecondsWithTheFieldsPrefilled` failed at
+  **12 042 ms** in one full emulator suite run, passed in the next full run, and passes
+  alone. The window it measures spans a concurrent `rebuild()` holding the database, so
+  the assertion measures contention, not the action. The budget was not touched; this is
+  the `QueryBenchmarkTest` shape again, now on a product exit test.
+- **Smaller.** `HttpUrlConnectionTransport` reads a response body with no size cap, so a
+  self-hosted endpoint can exhaust memory; `CoachPresenter.model()` loads the whole
+  conversation and calls `applier.planFor` (a full plan and catalogue read) once per
+  proposal; `SyncRepository.resolveConflict` lacks the composite-key guard `applyOne`
+  has. The first pass's own open findings were re-confirmed: no manual entry mints a
+  layer-1 raw record (eight `raw_record_id = null` call sites in `BodyPresenter`,
+  `TrainingPresenter` and `AppViewModel`), `pr.md` §6.30's deep links, tiles and intents
+  are unbuilt, and `DESIGN.md` §10.4's status set is thinner than the first pass
+  recorded: `triangle` (attention) is missing as well as `x-octagon`, `trophy` and
+  `snowflake`, leaving only `check` and `flame` of the six.
+- **An uncommitted working tree was inherited.** `.gitignore` carries an uncommitted
+  `gaps.md` line and `gaps.md`, a 252-line scratch audit, sits in the tree. Neither is
+  recorded anywhere. They were left in place rather than deleted.
+
+### Verification
+
+`./gradlew check :app-android:assembleDebug :app-wear:assembleDebug` **BUILD SUCCESSFUL**
+— **906 JVM tests** (453 `:core`, 183 `:data`, 7 `:sync`, 55 `:integrations`, 172 `:ui`,
+14 `:server`, 10 across the three tools, 12 `:app-wear`) and **376 goldens**, both counts
+checked against the test XML and the committed PNGs rather than taken from the entry
+above. The phone connected suite was run three times end to end. The third run is what
+surfaced the photo-test defect above, and the `set < 2 s` budget failed in the first; with
+both addressed the suite is **72/72** (71 as recorded, plus the new case). Each of the two
+fixes was re-run against its pre-fix code to prove the test fails. No device output,
+serial or screenshot entered the tree.

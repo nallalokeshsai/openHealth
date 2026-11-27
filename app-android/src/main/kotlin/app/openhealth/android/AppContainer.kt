@@ -141,9 +141,10 @@ class AppContainer(
     }
 
     /** B15: the loopback MCP endpoint and its screen. Both are off by default. */
-    val mcpRuntime: app.openhealth.android.mcp.McpRuntime by lazy {
+    private val mcpRuntimeLazy = lazy {
         app.openhealth.android.mcp.McpRuntime(store, mcpGateway)
     }
+    val mcpRuntime: app.openhealth.android.mcp.McpRuntime get() = mcpRuntimeLazy.value
     val mcp: app.openhealth.android.mcp.McpPresenter by lazy {
         app.openhealth.android.mcp.McpPresenter(
             context = appContext,
@@ -557,7 +558,9 @@ class AppContainer(
     ).toCharArray()
 
     fun close() {
-        runCatching { mcpRuntime.stop() }
+        // Only a runtime that exists can hold a socket, and touching the lazy would
+        // open the database this call is here to close.
+        if (mcpRuntimeLazy.isInitialized()) runCatching { mcpRuntime.stop() }
         if (storeLazy.isInitialized()) store.close()
     }
 

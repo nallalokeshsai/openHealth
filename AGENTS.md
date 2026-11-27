@@ -222,7 +222,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Build: green. `./gradlew check :app-android:assembleDebug :app-wear:assembleDebug`
   passes; **906 JVM tests** (453 `:core`, 183 `:data`, 7 `:sync`, 55 `:integrations`,
   172 `:ui`, 14 `:server`, 10 across the three tools, 12 `:app-wear`) and **376 goldens**
-  in dark, light, 200 % text and RTL, plus **71 instrumented tests** on the phone
+  in dark, light, 200 % text and RTL, plus **72 instrumented tests** on the phone
   emulator and **1** on the Wear emulator. Both `play` and `fdroid` debug APKs and the
   Wear APK build. The five-tab shell, B4 body map, B5 Train, B6 Nutrition, B7 Vitals,
   B8 Devices, B9 Today/Stats, B10 review, B11 movement, B12 sleep/clinical/report pages,
@@ -245,7 +245,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   outage keeps the note and changes nothing; MCP 401 without a token, scope refusal, an
   out-of-range value rejected, a valid write with provenance, a revoked token refused),
   the JVM parser/consent/provider/MCP/applier suites, `CoachScreen`/`McpScreen` goldens in
-  four variants, the whole **71-test** phone suite green, and a device walk of Settings →
+  four variants, the whole **72-test** phone suite green, and a device walk of Settings →
   Coach and Settings → Data → External access (toggle, consent, disclosure, no-key error,
   token reveal and revoke) with no `AndroidRuntime` error.
 - Owner answers recorded: Anthropic plus a self-hosted endpoint; the key in the Android

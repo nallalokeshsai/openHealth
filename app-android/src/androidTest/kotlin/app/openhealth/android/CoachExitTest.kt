@@ -138,6 +138,30 @@ class CoachExitTest {
             .edit().clear().commit()
     }
 
+    /**
+     * Closing a container that never opened its store must not open it. `close()` stops
+     * the MCP runtime, and reaching that runtime through its lazy would build the
+     * gateway, the gateway the store, and the store the encrypted database file, seeding
+     * sources and the exercise library on the way out. The endpoint is off by default,
+     * so there is nothing to stop in the first place.
+     */
+    @Test
+    fun closingAContainerThatNeverOpenedTheStoreOpensNoDatabase() {
+        val name = "close-without-open.db"
+        context.deleteDatabase(name)
+        val fresh = AppContainer(context, databaseName = name, vaultPreferences = TEST_VAULT)
+        try {
+            fresh.close()
+            assertFalse(
+                "close() must not create the database it is closing",
+                context.getDatabasePath(name).exists(),
+            )
+        } finally {
+            fresh.close()
+            context.deleteDatabase(name)
+        }
+    }
+
     @Test
     fun theCoachProposesAcceptsAndUndoes() = runBlocking {
         val sent = coach.send("Review my week.")
