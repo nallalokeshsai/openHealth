@@ -27,7 +27,8 @@ object ExportTables {
             listOf(
                 text("id"), text("kind"), text("label"), text("family"), text("device"),
                 text("priorities"), long("expected_cadence_seconds"), text("reliability_note"),
-                long("last_sync"), text("permissions"), long("created_at"), long("updated_at"),
+                long("last_sync"), text("permissions"), bool("via_health_connect"),
+                long("created_at"), long("updated_at"),
             ),
         ),
         ExportTable(
@@ -478,6 +479,51 @@ object ExportTables {
                 text("remote_change"),
                 text("reason"),
                 long("created_at"),
+            ),
+        ),
+        // B15. The coach's conversation and proposals are part of the person's record;
+        // the MCP token table carries only a digest, and its audit names no arguments.
+        ExportTable(
+            "coach_message",
+            listOf(
+                text("id"), text("thread_id"), text("role"), text("body"),
+                long("created_at"), text("provider"), text("model"), long("input_tokens"),
+                long("output_tokens"), text("proposal_id"), text("error_key"),
+                bool("repaired"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "coach_proposal",
+            listOf(
+                text("id"), text("message_id"), text("summary"), text("rationale"),
+                text("status"), long("created_at"), long("decided_at"), long("revision"),
+            ),
+        ),
+        ExportTable(
+            "coach_action",
+            listOf(
+                text("id"), text("proposal_id"), long("position"), text("kind"),
+                text("payload"),
+            ),
+        ),
+        ExportTable(
+            "coach_snapshot",
+            listOf(
+                text("id"), text("proposal_id"), long("created_at"), text("payload"),
+            ),
+        ),
+        ExportTable(
+            "mcp_token",
+            listOf(
+                text("id"), text("label"), text("scopes"), text("token_hash"),
+                long("created_at"), long("revoked_at"), long("last_used_at"),
+            ),
+        ),
+        ExportTable(
+            "mcp_access",
+            listOf(
+                text("id"), text("token_id"), text("tool"), text("scope"), long("at"),
+                bool("ok"), text("detail"),
             ),
         ),
     )

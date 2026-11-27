@@ -112,6 +112,16 @@ object SettingKeys {
     /** B14: the Connect IQ direct link is off until the person turns it on. */
     const val WATCH_LINK = "watch.link_enabled"
 
+    /** B15: the coach is off until the person turns it on (`pr.md` §6.15). */
+    const val COACH_ENABLED = "coach.enabled"
+    const val COACH_CONSENT = "coach.consent"
+    const val COACH_PROVIDER = "coach.provider"
+    const val COACH_DISCLOSED = "coach.disclosure_accepted"
+
+    /** B15: the local MCP endpoint. Its tokens live hashed in `mcp_token`. */
+    const val MCP_ENABLED = "mcp.enabled"
+    const val MCP_PORT = "mcp.port"
+
     /** B8 activity sources: pairing, the step counter's runtime state and each source's
      * last sync (`pr.md` §6.6, §6.18, §7.6). These are configuration and runtime state,
      * never health values. */
@@ -147,7 +157,9 @@ object SettingKeys {
 
 /** A setting is user data unless it only describes this device or its sync state. */
 object SyncSettingsPolicy {
-    private val localPrefixes = listOf("sync.", "demo.", "steps.", "device.", "health_connect.")
+    private val localPrefixes = listOf(
+        "sync.", "demo.", "steps.", "device.", "health_connect.", "coach.", "mcp.",
+    )
 
     /**
      * Device-local bookkeeping whose key does not carry a local prefix. The sync book

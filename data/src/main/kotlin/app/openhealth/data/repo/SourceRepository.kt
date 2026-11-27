@@ -55,6 +55,7 @@ class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSea
             reliabilityNote = source.reliabilityNote,
             lastSync = source.lastSync?.toEpochMilliseconds(),
             permissions = source.permissions.joinToString(",") { it.name },
+            viaHealthConnect = source.viaHealthConnect,
             createdAt = createdAt,
             updatedAt = now.toEpochMilliseconds(),
         )
@@ -106,6 +107,7 @@ class SourceRepository(private val db: OpenHealthDb, private val clock: ClockSea
             reliabilityNote = reliability_note,
             lastSync = last_sync?.let(Instant::fromEpochMilliseconds),
             permissions = permissions.toSet(),
+            viaHealthConnect = via_health_connect,
         )
     }
 }

@@ -7,6 +7,8 @@ import app.openhealth.data.db.OpenHealthDb
 import app.openhealth.data.repo.ActivityRepository
 import app.openhealth.data.repo.BodyRepository
 import app.openhealth.data.repo.ClinicalRepository
+import app.openhealth.data.repo.CoachRepository
+import app.openhealth.data.repo.McpRepository
 import app.openhealth.data.repo.DeviceRepository
 import app.openhealth.data.repo.NoteRepository
 import app.openhealth.data.repo.NutritionRepository
@@ -56,6 +58,10 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
     val notes = NoteRepository(db)
     val raw = RawRecordRepository(db)
     val timeline = TimelineRepository(db, driver)
+
+    /** B15: the coach thread and the local MCP tokens. Neither syncs. */
+    val coach = CoachRepository(db, clock)
+    val mcp = McpRepository(db, clock)
 
     /** The change log and merge state (B13); the app builds the transport around it. */
     val sync: SyncRepository

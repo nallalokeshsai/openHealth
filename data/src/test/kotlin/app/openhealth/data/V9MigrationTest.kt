@@ -24,6 +24,7 @@ class V9MigrationTest {
     private fun setupV9(path: String) {
         val driver = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(driver).value
+        driver.execute(null, "ALTER TABLE source DROP COLUMN via_health_connect", 0)
         // The tables 9.sqm introduces: a v9 record has none of them.
         listOf(
             "medication",
@@ -62,7 +63,7 @@ class V9MigrationTest {
         setupV9(path)
 
         val store = open(path)
-        assertEquals(11L, store.schemaVersion)
+        assertEquals(12L, store.schemaVersion)
         assertEquals(
             "Before the upgrade",
             store.db.noteQueries.noteById("n1").executeAsOne().body,

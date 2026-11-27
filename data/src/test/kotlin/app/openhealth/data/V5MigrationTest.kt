@@ -28,6 +28,7 @@ class V5MigrationTest {
         val path = directory.resolve("v5.db").toString()
         val first = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(first).value
+        first.execute(null, "ALTER TABLE source DROP COLUMN via_health_connect", 0)
         first.execute(null, "DROP VIEW IF EXISTS timeline", 0)
         stripNutrition(first)
         stripTraining(first)
@@ -114,7 +115,7 @@ class V5MigrationTest {
         val store = DatabaseOpener(MigrationBackup { from, to -> "backup-$from-$to" }).open(
             jdbcFactory("jdbc:sqlite:$path"),
         )
-        assertEquals(11L, store.schemaVersion)
+        assertEquals(12L, store.schemaVersion)
 
         // The training rows survive v6, v7 and v8 untouched.
         val set = store.db.trainingQueries.workSetById("w1").executeAsOne()

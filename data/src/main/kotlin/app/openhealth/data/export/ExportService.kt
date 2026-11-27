@@ -110,7 +110,16 @@ class ExportService(
         // A table added after an older export was written is restored empty, not
         // treated as corruption: the person's old backup still restores and the new
         // table starts clean. Column additions already default the same way.
-        val optional = setOf("body_photo")
+        val optional = setOf(
+            "body_photo",
+            // B15 tables, absent from every backup written before schema v12.
+            "coach_message",
+            "coach_proposal",
+            "coach_action",
+            "coach_snapshot",
+            "mcp_token",
+            "mcp_access",
+        )
         val missing = expected - byName.keys - optional
         val unknown = byName.keys - expected
         if (missing.isNotEmpty() || unknown.isNotEmpty()) {

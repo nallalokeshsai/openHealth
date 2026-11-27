@@ -65,6 +65,7 @@ class AppContainer(
         ensureRecordingSource(local)
         ensureStravaSource(local)
         ensureWatchSources(local)
+        ensureHealthConnectFlags(local)
         ensureExerciseLibrary(local)
         local.trash.purgeExpired()
         local
@@ -94,6 +95,19 @@ class AppContainer(
     val preferences: PreferencesStore by lazy { PreferencesStore(store.settings, store.profile) }
     val restTimer: app.openhealth.core.seam.RestTimerSeam by lazy {
         app.openhealth.android.training.AndroidRestTimer(appContext)
+    }
+
+    /** B15: the coach's plan diff/apply/undo and the dataset it may send. */
+    val coachPlan: app.openhealth.data.repo.CoachPlanApplier by lazy {
+        app.openhealth.data.repo.CoachPlanApplier(store.db, store.training, store.coach)
+    }
+    val coachData: app.openhealth.data.repo.CoachDataBuilder by lazy {
+        app.openhealth.data.repo.CoachDataBuilder(store, coachPlan, zone)
+    }
+
+    /** B15: the local MCP tool surface, bound to one token per request. */
+    val mcpGateway: app.openhealth.data.repo.McpGateway by lazy {
+        app.openhealth.data.repo.McpGateway(store.db, store, zone, appVersion = versionName)
     }
 
     /**
@@ -380,9 +394,23 @@ class AppContainer(
         }
     }
 
+    /**
+     * The transport flag on the two platform-bus sources (B15, `pr.md` §12.3). Schema v12
+     * adds the column with a false default, so an upgraded install gets the flag here
+     * even if Health Connect is never synced again.
+     */
+    private fun ensureHealthConnectFlags(local: LocalStore) {
+        listOf("health-connect", "garmin-hc").forEach { id ->
+            val source = local.sources.byId(app.openhealth.core.ids.SourceId(id))
+                ?: return@forEach
+            if (!source.viaHealthConnect) {
+                local.sources.upsert(source.copy(viaHealthConnect = true))
+            }
+        }
+    }
+
     /** The source a CSV or file import names, so it is never labelled as a manual entry. */
-    private fun ensureImportSource(local: LocalStore) {
-        if (local.sources.byId(IMPORT_SOURCE) != null) return
+    private fun ensureImportSource(local: LocalStore) {        if (local.sources.byId(IMPORT_SOURCE) != null) return
         local.sources.upsert(
             Source(
                 id = IMPORT_SOURCE,

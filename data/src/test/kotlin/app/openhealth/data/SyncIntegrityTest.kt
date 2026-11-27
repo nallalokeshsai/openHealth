@@ -74,7 +74,7 @@ class SyncIntegrityTest {
             happenedAt = null,
             payloadHash = "hash-1",
             idempotencyKey = "raw-1",
-            schemaVersion = 11,
+            schemaVersion = 12,
         )
         a.raw.insert(raw)
         a.body.upsertMeasurement(measurement("m-raw", 79.0).copy(raw_record_id = "raw-1"))
@@ -114,7 +114,7 @@ class SyncIntegrityTest {
             idempotencyKey = "bad-key",
             hlc = "0000000000000001-00000000",
             deviceId = "device-a",
-            schemaVersion = 11,
+            schemaVersion = 12,
             recordedAt = 1,
         )
         val outcome = b.sync.applyRemote(listOf(change))

@@ -135,5 +135,18 @@ object SyncTables {
     fun of(entity: String): SyncTable? = byEntity[entity]
 
     /** Rows this device must never push even when a repository writes them. */
-    val neverSynced: Set<String> = setOf("daily_rollup", "raw_record", "tombstone", "body_photo")
+    val neverSynced: Set<String> = setOf(
+        "daily_rollup",
+        "raw_record",
+        "tombstone",
+        "body_photo",
+        // The coach's conversation and the MCP tokens/audit belong to this device
+        // (`docs/adr/0020`); a provider key or a bearer token never crosses the wire.
+        "coach_message",
+        "coach_proposal",
+        "coach_action",
+        "coach_snapshot",
+        "mcp_token",
+        "mcp_access",
+    )
 }
