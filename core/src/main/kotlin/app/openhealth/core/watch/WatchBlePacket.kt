@@ -20,6 +20,16 @@ object WatchBlePacket {
     const val COMMAND_SIZE: Int = 16
     const val SNAPSHOT_SIZE: Int = 20
 
+    /**
+     * The GATT contract, here rather than in the Android server, because it is part of the
+     * same wire model the Connect IQ app reads (`docs/adr/0019` decision 3). The watch
+     * finds the phone by this service UUID and by nothing else: the phone's Bluetooth name
+     * is the person's and never goes on the air.
+     */
+    const val SERVICE_UUID: String = "6f1e2a10-4b7a-4f1e-9d2c-6f0e2b7a1000"
+    const val COMMAND_UUID: String = "6f1e2a10-4b7a-4f1e-9d2c-6f0e2b7a1001"
+    const val SNAPSHOT_UUID: String = "6f1e2a10-4b7a-4f1e-9d2c-6f0e2b7a1002"
+
     enum class Type(val code: Int) {
         LOG_SET(1),
         FINISH(2),
@@ -50,7 +60,7 @@ object WatchBlePacket {
         val bpm = u8(bytes, 7).takeIf { it > 0 }
         val id = u32(bytes, 8)
         val happenedSeconds = u32(bytes, 12).toLong()
-        if (weight < 0.0 || weight > 500.0) return null
+        if (!weight.isFinite() || weight < 0.0 || weight > 500.0) return null
         if (reps > 255) return null
         if (type == Type.HEART_RATE &&
             (bpm == null || bpm !in WatchProtocol.MIN_HEART_RATE..WatchProtocol.MAX_HEART_RATE)
@@ -98,7 +108,7 @@ object WatchBlePacket {
         if (u8(bytes, 0) != MAGIC || u8(bytes, 1) != VERSION) return null
         val flags = u8(bytes, 2)
         val weight = u16(bytes, 3) / 10.0
-        if (weight < 0.0 || weight > 500.0) return null
+        if (!weight.isFinite() || weight < 0.0 || weight > 500.0) return null
         return WatchBleSnapshot(
             sessionOpen = flags and 0x01 != 0,
             restRunning = flags and 0x02 != 0,

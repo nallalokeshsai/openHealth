@@ -492,12 +492,17 @@ class TrainingPresenter(
         sourceId: SourceId = manualSource,
         device: String = "manual",
         idempotencyKey: String? = null,
+        startedAtMillis: Long? = null,
     ): String {
         store.training.openSession()?.let { return it.id }
         if (idempotencyKey != null) {
             store.training.sessionByIdempotencyKey(idempotencyKey)?.let { return it.id }
         }
-        val instant = now()
+        val recorded = now()
+        val instant = startedAtMillis
+            ?.coerceAtMost(recorded.toEpochMilliseconds())
+            ?.let(Instant::fromEpochMilliseconds)
+            ?: recorded
         val date = instant.toLocalDateTime(zone).date
         val routine = routineId?.let { store.training.routineById(it) }
         val sessionId = ids.newId()
@@ -509,7 +514,7 @@ class TrainingPresenter(
                 local_date = date.toString(),
                 zone_id = zone.id,
                 happened_at = instant.toEpochMilliseconds(),
-                recorded_at = instant.toEpochMilliseconds(),
+                recorded_at = recorded.toEpochMilliseconds(),
                 routine_id = routine?.id,
                 programme_id = null,
                 notes = null,
@@ -520,34 +525,37 @@ class TrainingPresenter(
                 device = device,
                 app_version = appVersion,
                 revision = 1,
-                updated_at = instant.toEpochMilliseconds(),
+                updated_at = recorded.toEpochMilliseconds(),
                 title = routine?.name ?: freestyleTitle,
                 feeling = null,
                 perceived_effort = null,
             ),
         )
-        routine?.let { row ->
-            entriesOf(row.id).forEach { entry ->
-                store.training.upsertSessionExercise(
-                    app.openhealth.data.db.Session_exercise(
-                        id = ids.newId(),
-                        session_id = sessionId,
-                        exercise_id = entry.exercise_id,
-                        position = entry.position,
-                        notes = entry.notes,
-                        group_index = entry.group_index,
-                        target_sets = entry.target_sets,
-                        target_reps = entry.target_reps,
-                        target_reps_high = entry.target_reps_high,
-                        target_weight_kg = entry.target_weight_kg,
-                        progression = entry.progression ?: row.progression,
-                        rest_seconds = entry.rest_seconds,
-                    ),
-                )
-            }
-        }
+        routine?.let { copyRoutineEntries(it, sessionId) }
         watchLink(true)
         return sessionId
+    }
+
+    /** Copies a routine's planned entries onto a new session, keeping the plan's order. */
+    private fun copyRoutineEntries(routine: Routine, sessionId: String) {
+        entriesOf(routine.id).forEach { entry ->
+            store.training.upsertSessionExercise(
+                app.openhealth.data.db.Session_exercise(
+                    id = ids.newId(),
+                    session_id = sessionId,
+                    exercise_id = entry.exercise_id,
+                    position = entry.position,
+                    notes = entry.notes,
+                    group_index = entry.group_index,
+                    target_sets = entry.target_sets,
+                    target_reps = entry.target_reps,
+                    target_reps_high = entry.target_reps_high,
+                    target_weight_kg = entry.target_weight_kg,
+                    progression = entry.progression ?: routine.progression,
+                    rest_seconds = entry.rest_seconds,
+                ),
+            )
+        }
     }
 
     /** Starts a workout on a past day; sets are filed on that day when they are logged. */
@@ -614,7 +622,7 @@ class TrainingPresenter(
     }
 
     /** Logs a completed set and starts the rest timer unless a superset partner comes next. */
-    @Suppress("LongMethod", "ReturnCount", "LongParameterList")
+    @Suppress("LongMethod", "ReturnCount", "LongParameterList", "CyclomaticComplexMethod")
     fun logSet(
         sessionId: String,
         logged: app.openhealth.ui.screens.train.LoggedSet,
@@ -622,16 +630,22 @@ class TrainingPresenter(
         device: String = "manual",
         happenedAtMillis: Long? = null,
         idempotencyKey: String? = null,
+        weightKgOverride: Double? = null,
+        appVersionOverride: String? = appVersion,
+        sessionExerciseId: String? = null,
     ): List<PersonalRecordKind> {
         val exerciseId = logged.exerciseId
         if (idempotencyKey != null && store.training.setByIdempotencyKey(idempotencyKey) != null) {
             return emptyList()
         }
         val session = store.training.sessionById(sessionId) ?: return emptyList()
-        val entry = ensureSessionExercise(session, exerciseId) ?: return emptyList()
+        if (session.ended_at != null) return emptyList()
+        val entry = ensureSessionExercise(session, exerciseId, sessionExerciseId)
+            ?: return emptyList()
         val profile = store.profile.active()
-        val kg = logged.weight.replace(',', '.').toDoubleOrNull()
-            ?.let { entered(it, profile) } ?: 0.0
+        val parsed = logged.weight.replace(',', '.').toDoubleOrNull()
+            ?.let { entered(it, profile) }
+        val kg = weightKgOverride ?: parsed ?: return emptyList()
         val count = logged.reps.toIntOrNull() ?: return emptyList()
         val bodyweight = store.training.exerciseById(exerciseId)?.equipment == "bodyweight"
         val recorded = now()
@@ -689,7 +703,7 @@ class TrainingPresenter(
                 observation_id = null,
                 raw_record_id = null,
                 device = device,
-                app_version = appVersion,
+                app_version = appVersionOverride,
                 revision = 1,
                 is_drop = logged.kind == LiveSetKind.DROP,
                 is_assisted = false,
@@ -769,18 +783,23 @@ class TrainingPresenter(
         store.db.trainingQueries.updateSessionExerciseGroup(group, next.id)
     }
 
-    fun finishSession(sessionId: String) {
+    fun finishSession(sessionId: String, endedAtMillis: Long? = null) {
         val session = store.training.sessionById(sessionId)
         val at = now()
-        val end = if (session != null && LocalDate.parse(session.local_date) != today()) {
-            // A backfilled workout happened then: its end is after its last set, not
-            // whenever the person finished typing.
-            val lastSet = store.training.setsForSession(sessionId)
-                .maxOfOrNull { it.completed_at } ?: session.started_at
-            lastSet + BACKFILL_END_SPACING_MILLIS
-        } else {
-            at.toEpochMilliseconds()
-        }
+        val proposed = endedAtMillis?.coerceAtMost(at.toEpochMilliseconds())
+            ?: if (session != null && LocalDate.parse(session.local_date) != today()) {
+                // A backfilled workout happened then: its end is after its last set, not
+                // whenever the person finished typing.
+                val lastSet = store.training.setsForSession(sessionId)
+                    .maxOfOrNull { it.completed_at } ?: session.started_at
+                lastSet + BACKFILL_END_SPACING_MILLIS
+            } else {
+                at.toEpochMilliseconds()
+            }
+        // A workout never ends before it started. A wrist whose clock runs slow sends an
+        // earlier `happened_at` than the phone's start, and a negative duration would
+        // then reach the session rollup and the report (`docs/adr/0019`).
+        val end = session?.let { maxOf(proposed, it.started_at) } ?: proposed
         store.training.finishSession(sessionId, end, at.toEpochMilliseconds())
         restTimer.skip()
         watchLink(store.training.openSession() != null)
@@ -1122,12 +1141,17 @@ class TrainingPresenter(
 
     // ------------------------------------------------------------------ helpers
 
+    @Suppress("ReturnCount")
     private fun ensureSessionExercise(
         session: Session,
         exerciseId: String,
+        sessionExerciseId: String? = null,
     ): app.openhealth.data.db.Session_exercise? {
-        val existing = store.training.sessionExercises(session.id)
-            .firstOrNull { it.exercise_id == exerciseId }
+        val entries = store.training.sessionExercises(session.id)
+        if (sessionExerciseId != null) {
+            entries.firstOrNull { it.id == sessionExerciseId }?.let { return it }
+        }
+        val existing = entries.firstOrNull { it.exercise_id == exerciseId }
         if (existing != null) return existing
         addExercise(session.id, exerciseId)
         return store.training.sessionExercises(session.id)

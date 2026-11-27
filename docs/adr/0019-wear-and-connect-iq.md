@@ -1,6 +1,6 @@
 # 0019 — Wear OS companion and Connect IQ app
 
-**Date:** 2026-11-26 · **Phase:** B14 · **Status:** accepted
+**Date:** 2026-11-27 · **Phase:** B14 · **Status:** accepted
 
 ## Decisions
 
@@ -22,7 +22,10 @@
    `play-services-basement` and `play-services-tasks`), and only on the two modules that
    need it. Analytics, ads, crash-reporting, Firebase and Data Transport remain denied.
    The Data Layer carries commands over the paired Bluetooth/Wi-Fi link; it is not an
-   analytics path and the app sets its own data, not a Google account profile.
+   analytics path and the app sets its own data, not a Google account profile. The four
+   artifacts carry the Android Software Development Kit License (not Apache-2.0); the
+   owner's Play-only Data Layer decision covers those terms, recorded in `NOTICE.md` and
+   `gradle/licences/allowed.tsv`.
 
 3. **One wire model in `:core`, two encodings.** `WatchProtocol` serialises a versioned
    envelope with a snapshot request, a command or a snapshot for the Wear Data Layer. A

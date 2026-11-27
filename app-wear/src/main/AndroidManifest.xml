@@ -20,9 +20,12 @@
             android:name="com.google.android.wearable"
             android:required="false" />
 
+        <!-- The watch renders the phone's open session and owns no record (ADR 0019),
+             so it is not standalone: it ships with the phone app rather than being
+             offered on its own to a watch that has nothing to talk to. -->
         <meta-data
             android:name="com.google.android.wearable.standalone"
-            android:value="true" />
+            android:value="false" />
 
         <activity
             android:name=".WearMainActivity"

@@ -68,6 +68,9 @@ class WearExitTest {
         )
         assertEquals(WatchApply.APPLIED, container.watchCommands.apply(start, WatchKind.WEAR))
         val session = assertNotNull(container.store.training.openSession())
+        assertEquals(now - 10_000, session.started_at)
+        assertEquals(now - 10_000, session.happened_at)
+        assertTrue(session.recorded_at >= session.happened_at)
         container.store.training.upsertSessionExercise(
             Session_exercise(
                 id = "watch-entry",
@@ -153,6 +156,161 @@ class WearExitTest {
         assertTrue(rollup.value.value > 0.0)
     }
 
+    /**
+     * A wrist whose clock runs slow sends a finish that is earlier than the phone's start.
+     * The day still has to read as a workout, not as a negative one (`docs/adr/0019`).
+     */
+    @Test
+    fun aWatchClockBehindThePhoneCannotEndASessionBeforeItStarted() {
+        val now = container.clock.now().toEpochMilliseconds()
+        val start = WatchCommand(
+            id = "watch-start-skew",
+            type = WatchCommandType.START_SESSION,
+            happenedAtMillis = now - 1_000,
+        )
+        assertEquals(WatchApply.APPLIED, container.watchCommands.apply(start, WatchKind.WEAR))
+        val session = assertNotNull(container.store.training.openSession())
+
+        val finish = WatchCommand(
+            id = "watch-finish-skew",
+            type = WatchCommandType.FINISH_SESSION,
+            happenedAtMillis = now - 600_000,
+            sessionId = session.id,
+        )
+        assertEquals(WatchApply.APPLIED, container.watchCommands.apply(finish, WatchKind.WEAR))
+        val finished = assertNotNull(container.store.training.sessionById(session.id))
+        val endedAt = assertNotNull(finished.ended_at)
+        assertTrue(
+            endedAt >= finished.started_at,
+            "a session may not end before it started",
+        )
+    }
+
+    @Test
+    fun anImperialProfileStoresTheWatchKilogramsUnchanged() {
+        container.close()
+        context.deleteDatabase(TEST_DATABASE)
+        context.getSharedPreferences(TEST_VAULT, Context.MODE_PRIVATE).edit().clear().commit()
+        container = AppContainer(
+            context,
+            databaseName = TEST_DATABASE,
+            vaultPreferences = TEST_VAULT,
+        )
+        container.watchApplied.clear()
+        seedProfile(units = "imperial")
+        val now = container.clock.now().toEpochMilliseconds()
+        val exercise = container.store.training.exercises()
+            .first { it.primary_muscles.contains("quadriceps") }
+        assertEquals(
+            WatchApply.APPLIED,
+            container.watchCommands.apply(
+                WatchCommand(
+                    id = "imperial-start",
+                    type = WatchCommandType.START_SESSION,
+                    happenedAtMillis = now - 5_000,
+                ),
+                WatchKind.WEAR,
+            ),
+        )
+        val session = assertNotNull(container.store.training.openSession())
+        container.store.training.upsertSessionExercise(
+            Session_exercise(
+                id = "imperial-entry",
+                session_id = session.id,
+                exercise_id = exercise.id,
+                position = 0,
+                notes = null,
+                group_index = null,
+                target_sets = 3,
+                target_reps = 5,
+                target_reps_high = null,
+                target_weight_kg = 100.0,
+                progression = "linear",
+                rest_seconds = 120,
+            ),
+        )
+        assertEquals(
+            WatchApply.APPLIED,
+            container.watchCommands.apply(
+                WatchCommand(
+                    id = "imperial-set",
+                    type = WatchCommandType.LOG_SET,
+                    happenedAtMillis = now,
+                    sessionId = session.id,
+                    exerciseId = exercise.id,
+                    weightKg = 100.0,
+                    reps = 5,
+                ),
+                WatchKind.WEAR,
+            ),
+        )
+        val set = container.store.training.setsForSession(session.id).single()
+        assertEquals(100.0, set.weight_kg, 1e-6)
+    }
+
+    @Test
+    fun aSetForAFinishedSessionIsRejectedRatherThanFiledIntoTheNextOne() {
+        val now = container.clock.now().toEpochMilliseconds()
+        val exercise = container.store.training.exercises()
+            .first { it.primary_muscles.contains("quadriceps") }
+        fun start(id: String): String {
+            container.watchCommands.apply(
+                WatchCommand(
+                    id = id,
+                    type = WatchCommandType.START_SESSION,
+                    happenedAtMillis = now,
+                ),
+                WatchKind.WEAR,
+            )
+            return assertNotNull(container.store.training.openSession()).id
+        }
+        fun addExercise(sessionId: String, entry: String) {
+            container.store.training.upsertSessionExercise(
+                Session_exercise(
+                    id = entry,
+                    session_id = sessionId,
+                    exercise_id = exercise.id,
+                    position = 0,
+                    notes = null,
+                    group_index = null,
+                    target_sets = 3,
+                    target_reps = 8,
+                    target_reps_high = null,
+                    target_weight_kg = 80.0,
+                    progression = "linear",
+                    rest_seconds = 90,
+                ),
+            )
+        }
+        val first = start("stale-start-1")
+        addExercise(first, "stale-entry-1")
+        container.watchCommands.apply(
+            WatchCommand(
+                id = "stale-finish-1",
+                type = WatchCommandType.FINISH_SESSION,
+                happenedAtMillis = now,
+                sessionId = first,
+            ),
+            WatchKind.WEAR,
+        )
+        val second = start("stale-start-2")
+        addExercise(second, "stale-entry-2")
+        val outcome = container.watchCommands.apply(
+            WatchCommand(
+                id = "stale-set-1",
+                type = WatchCommandType.LOG_SET,
+                happenedAtMillis = now,
+                sessionId = first,
+                exerciseId = exercise.id,
+                weightKg = 80.0,
+                reps = 5,
+            ),
+            WatchKind.WEAR,
+        )
+        assertEquals(WatchApply.REJECTED, outcome)
+        assertEquals(0L, container.store.training.countSetsForSession(second))
+    }
+
     @Test
     fun aMalformedOrFutureCommandNeverWritesAValue() {
         val now = container.clock.now().toEpochMilliseconds()
@@ -170,7 +328,7 @@ class WearExitTest {
         assertEquals(0, container.store.observations.count())
     }
 
-    private fun seedProfile() {
+    private fun seedProfile(units: String = "metric") {
         val now = container.clock.now().toEpochMilliseconds()
         runBlocking {
             container.store.profile.upsert(
@@ -182,7 +340,7 @@ class WearExitTest {
                     gender = null,
                     height_cm = 170.0,
                     weight_kg = 80.0,
-                    units = "metric",
+                    units = units,
                     zone_id = container.zone.id,
                     language = "en",
                     goal = "just_track",

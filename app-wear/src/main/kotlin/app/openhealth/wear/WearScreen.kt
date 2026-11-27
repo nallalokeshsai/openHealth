@@ -2,6 +2,7 @@ package app.openhealth.wear
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,31 +17,37 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.CompactButton
-import androidx.wear.compose.material3.OutlinedButton
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.TimeText
+import androidx.wear.compose.material3.TimeTextDefaults
+import androidx.wear.compose.material3.timeTextCurvedText
 import app.openhealth.core.training.clockText
 import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
 import app.openhealth.core.watch.WatchExercise
 import app.openhealth.core.watch.WatchLiveState
-import app.openhealth.core.watch.WatchRoutine
 import app.openhealth.ui.theme.OhTheme
+import app.openhealth.ui.theme.OhWeight
 import app.openhealth.ui.theme.tabular
 
 /**
@@ -52,7 +59,6 @@ fun WearScreen(
     state: WatchLiveState,
     connected: Boolean,
     heartRateAllowed: Boolean,
-    onStart: (String?) -> Unit,
     onLogSet: () -> Unit,
     onFinish: () -> Unit,
     onWeight: (Int) -> Unit,
@@ -61,16 +67,28 @@ fun WearScreen(
     onSkipRest: () -> Unit,
     onAllowHeartRate: () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize().background(OhTheme.colors.bg)) {
+    // Wear Material 3 paints its own palette unless it is told not to (`DESIGN.md` §12.4,
+    // Appendix B). The curved time is a CurvedScope, not a composable, so its style is
+    // built here and captured.
+    val background = OhTheme.colors.bg
+    val timeStyle = TimeTextDefaults.timeTextStyle(
+        background = background,
+        color = OhTheme.colors.label2,
+    )
+    Box(Modifier.fillMaxSize().background(background)) {
         AppScaffold(
-            timeText = { TimeText() },
+            timeText = {
+                TimeText(backgroundColor = background) { time ->
+                    timeTextCurvedText(time, timeStyle)
+                }
+            },
             containerColor = OhTheme.colors.bg,
             contentColor = OhTheme.colors.label,
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = OhTheme.space.s8)
+                    .padding(top = OhTheme.space.s8 + OhTheme.space.s3)
                     .padding(horizontal = OhTheme.space.s6)
                     .padding(bottom = OhTheme.space.s8)
                     .verticalScroll(rememberScrollState()),
@@ -93,18 +111,18 @@ fun WearScreen(
                 } else {
                     Text(
                         text = stringResource(R.string.wear_workout),
-                        style = OhTheme.type.title3,
+                        style = OhTheme.type.title3.copy(fontWeight = OhWeight.semibold),
                         color = OhTheme.colors.label,
                     )
                     if (!connected) {
                         Text(
                             text = stringResource(R.string.wear_waiting_phone),
-                            style = OhTheme.type.caption,
-                            color = OhTheme.colors.label3,
+                            style = OhTheme.type.caption2,
+                            color = OhTheme.colors.label2,
                             textAlign = TextAlign.Center,
                         )
                     }
-                    StartContent(state = state, onStart = onStart)
+                    StartContent()
                 }
             }
         }
@@ -112,54 +130,13 @@ fun WearScreen(
 }
 
 @Composable
-private fun StartContent(state: WatchLiveState, onStart: (String?) -> Unit) {
-    val routines = state.snapshot?.routines.orEmpty()
-    if (routines.isEmpty()) {
-        Text(
-            text = stringResource(R.string.wear_start_on_phone),
-            style = OhTheme.type.footnote,
-            color = OhTheme.colors.label2,
-            textAlign = TextAlign.Center,
-        )
-        return
-    }
-    routines.forEach { routine ->
-        RoutineButton(routine = routine, onClick = { onStart(routine.id) })
-    }
-    OutlinedButton(
-        onClick = { onStart(null) },
-        modifier = Modifier.fillMaxWidth().heightIn(min = OhTheme.dims.touchTarget),
-    ) {
-        Text(
-            text = stringResource(R.string.wear_start_freestyle),
-            style = OhTheme.type.footnote,
-        )
-    }
-}
-
-@Composable
-private fun RoutineButton(routine: WatchRoutine, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = OhTheme.dims.touchTarget),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = OhTheme.colors.acc,
-            contentColor = OhTheme.colors.onAcc,
-        ),
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = routine.name,
-                style = OhTheme.type.footnote,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = stringResource(R.string.wear_sets, routine.exerciseCount),
-                style = OhTheme.type.caption2,
-            )
-        }
-    }
+private fun StartContent() {
+    Text(
+        text = stringResource(R.string.wear_start_on_phone),
+        style = OhTheme.type.footnote,
+        color = OhTheme.colors.label2,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable
@@ -209,7 +186,7 @@ private fun SessionContent(
             } else {
                 stringResource(R.string.wear_offline)
             },
-            style = OhTheme.type.caption,
+            style = OhTheme.type.caption2,
             color = OhTheme.colors.labelDim,
             textAlign = TextAlign.Center,
         )
@@ -223,7 +200,7 @@ private fun SessionContent(
             contentColor = OhTheme.colors.label,
         ),
     ) {
-        Text(text = stringResource(R.string.wear_finish), style = OhTheme.type.caption)
+        Text(text = stringResource(R.string.wear_finish), style = OhTheme.type.caption2)
     }
 }
 
@@ -238,7 +215,7 @@ private fun ExerciseContent(
     val session = state.session ?: return
     Text(
         text = exercise.name,
-        style = OhTheme.type.body.copy(fontWeight = FontWeight.SemiBold),
+        style = OhTheme.type.body.copy(fontWeight = OhWeight.semibold),
         color = OhTheme.colors.label,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
@@ -247,11 +224,9 @@ private fun ExerciseContent(
     val done = exercise.sets.count { !it.isWarmup }
     Text(
         text = stringResource(
-            R.string.wear_set_of,
+            R.string.wear_set_progress,
             (done + 1).coerceAtMost(exercise.targetSets.coerceAtLeast(1)),
             exercise.targetSets.coerceAtLeast(1),
-        ) + " · " + stringResource(
-            R.string.wear_exercise_of,
             session.currentExerciseIndex + 1,
             session.exercises.size,
         ),
@@ -265,6 +240,9 @@ private fun ExerciseContent(
     )
     val moreLabel = stringResource(
         if (selected == 0) R.string.wear_more_weight else R.string.wear_more_reps,
+    )
+    val selectorLabel = stringResource(
+        if (selected == 0) R.string.wear_weight_selected else R.string.wear_reps_selected,
     )
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -285,17 +263,31 @@ private fun ExerciseContent(
         }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.clickable { selected = (selected + 1) % 2 },
+            modifier = Modifier
+                .heightIn(min = OhTheme.dims.touchTarget)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = selectorLabel
+                    stateDescription = if (selected == 0) "Weight" else "Reps"
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { selected = (selected + 1) % 2 },
         ) {
             Text(
                 text = weightText(state),
-                style = OhTheme.type.title3.tabular(),
-                color = if (selected == 0) OhTheme.colors.label else OhTheme.colors.label3,
+                style = OhTheme.type.title3.tabular().copy(
+                    fontWeight = if (selected == 0) OhWeight.semibold else OhWeight.regular,
+                ),
+                color = if (selected == 0) OhTheme.colors.label else OhTheme.colors.label2,
             )
             Text(
                 text = stringResource(R.string.wear_reps_value, state.reps),
-                style = OhTheme.type.caption2.tabular(),
-                color = if (selected == 1) OhTheme.colors.label else OhTheme.colors.label3,
+                style = OhTheme.type.caption2.tabular().copy(
+                    fontWeight = if (selected == 1) OhWeight.semibold else OhWeight.regular,
+                ),
+                color = if (selected == 1) OhTheme.colors.label else OhTheme.colors.label2,
             )
         }
         CompactButton(
@@ -320,7 +312,10 @@ private fun ExerciseContent(
             contentColor = OhTheme.colors.onAcc,
         ),
     ) {
-        Text(text = stringResource(R.string.wear_log_set), style = OhTheme.type.body)
+        Text(
+            text = stringResource(R.string.wear_log_set),
+            style = OhTheme.type.body.copy(fontWeight = OhWeight.semibold),
+        )
     }
 }
 
@@ -330,13 +325,14 @@ private fun RestContent(state: WatchLiveState, onExtend: () -> Unit, onSkip: () 
     if (remaining <= 0) return
     Text(
         text = stringResource(R.string.wear_rest),
-        style = OhTheme.type.caption,
-        color = OhTheme.colors.label3,
+        style = OhTheme.type.caption2,
+        color = OhTheme.colors.label2,
     )
     Text(
         text = clockText(remaining.toLong()),
         style = OhTheme.type.timer.tabular(),
         color = OhTheme.colors.label,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
     )
     Box(
         modifier = Modifier
@@ -360,7 +356,7 @@ private fun RestContent(state: WatchLiveState, onExtend: () -> Unit, onSkip: () 
                 contentColor = OhTheme.colors.label,
             ),
         ) {
-            Text(text = stringResource(R.string.wear_extend), style = OhTheme.type.caption)
+            Text(text = stringResource(R.string.wear_extend), style = OhTheme.type.caption2)
         }
         CompactButton(
             onClick = onSkip,
@@ -370,7 +366,7 @@ private fun RestContent(state: WatchLiveState, onExtend: () -> Unit, onSkip: () 
                 contentColor = OhTheme.colors.label,
             ),
         ) {
-            Text(text = stringResource(R.string.wear_skip), style = OhTheme.type.caption)
+            Text(text = stringResource(R.string.wear_skip), style = OhTheme.type.caption2)
         }
     }
 }
@@ -381,7 +377,7 @@ private fun HeartRateContent(state: WatchLiveState, allowed: Boolean, onAllow: (
         state.heartRateBpm?.let { bpm ->
             Text(
                 text = stringResource(R.string.wear_heart_rate, bpm),
-                style = OhTheme.type.subhead.tabular(),
+                style = OhTheme.type.caption.tabular(),
                 color = OhTheme.colors.label2,
             )
         }
@@ -396,7 +392,7 @@ private fun HeartRateContent(state: WatchLiveState, allowed: Boolean, onAllow: (
         ) {
             Text(
                 text = stringResource(R.string.wear_allow_heart_rate),
-                style = OhTheme.type.caption,
+                style = OhTheme.type.caption2,
             )
         }
     }

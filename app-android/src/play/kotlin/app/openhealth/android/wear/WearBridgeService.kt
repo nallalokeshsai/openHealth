@@ -26,8 +26,8 @@ class WearBridgeService : WearableListenerService() {
                 val text = runCatching { String(event.data, Charsets.UTF_8) }.getOrNull()
                     ?: return
                 val command = WatchProtocol.decodeCommand(text) ?: return
-                container.watchCommands.apply(command, WatchKind.WEAR)
-                publishSnapshot(container)
+                val outcome = container.watchCommands.apply(command, WatchKind.WEAR)
+                if (outcome != WatchApply.REJECTED) publishSnapshot(container)
             }
 
             WatchProtocol.REQUEST_PATH -> publishSnapshot(container)
@@ -37,7 +37,11 @@ class WearBridgeService : WearableListenerService() {
     private fun publishSnapshot(container: app.openhealth.android.AppContainer) {
         val snapshot = runCatching { container.watchSnapshots.build() }.getOrNull() ?: return
         val bytes = WatchProtocol.encode(WatchProtocol.snapshot(snapshot)).toByteArray()
-        val request = PutDataRequest.create(WatchProtocol.SNAPSHOT_PATH).setData(bytes)
+        // Urgent: the snapshot carries a running rest timer, and the default
+        // non-urgent item can sit in the Data Layer's batching window for minutes.
+        val request = PutDataRequest.create(WatchProtocol.SNAPSHOT_PATH)
+            .setData(bytes)
+            .setUrgent()
         Wearable.getDataClient(this)
             .putDataItem(request)
             .addOnFailureListener { /* the watch retries its request; nothing is lost */ }

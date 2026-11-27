@@ -401,7 +401,8 @@ private fun WatchLinkCard(model: WatchLinkModel, onToggle: (Boolean) -> Unit) {
                 OhSwitch(
                     checked = model.enabled,
                     onCheckedChange = onToggle,
-                    contentDescription = stringResource(R.string.devices_watch_link_row),
+                    enabled = model.available,
+                    contentDescription = stringResource(R.string.devices_watch_link_toggle),
                 )
             },
         )

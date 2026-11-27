@@ -5,7 +5,6 @@ import app.openhealth.core.seam.RestTimerSeam
 import app.openhealth.core.watch.WatchExercise
 import app.openhealth.core.watch.WatchLiveController
 import app.openhealth.core.watch.WatchRest
-import app.openhealth.core.watch.WatchRoutine
 import app.openhealth.core.watch.WatchSessionSummary
 import app.openhealth.core.watch.WatchSet
 import app.openhealth.core.watch.WatchSnapshot
@@ -41,7 +40,7 @@ class WatchSnapshotBuilder(
         return WatchSnapshot(
             generatedAtMillis = generated,
             session = open?.let { session -> summary(session.id) },
-            routines = if (open == null) routines() else emptyList(),
+            routines = emptyList(),
             rest = restModel,
             appliedCommandIds = applied.recent(),
             weightUnit = weightUnit(),
@@ -55,9 +54,10 @@ class WatchSnapshotBuilder(
         val entries = store.training.sessionExercises(sessionId).sortedBy { it.position }
         val exercises = entries.mapNotNull { entry ->
             val exercise = store.training.exerciseById(entry.exercise_id) ?: return@mapNotNull null
-            val own = sets.filter { it.exercise_id == entry.exercise_id }
+            val own = sets.filter { it.session_exercise_id == entry.id }
             WatchExercise(
                 id = exercise.id,
+                entryId = entry.id,
                 name = exercise.name,
                 targetSets = (entry.target_sets ?: DEFAULT_SETS).toInt(),
                 targetReps = (entry.target_reps ?: DEFAULT_REPS).toInt(),
@@ -90,29 +90,17 @@ class WatchSnapshotBuilder(
             startedAtMillis = session.started_at,
             exercises = exercises,
             currentExerciseIndex = current,
-            completedSetCount = exercises.sumOf { it.sets.size },
+            completedSetCount = exercises.sumOf { exercise ->
+                exercise.sets.count { set -> !set.isWarmup }
+            },
             sourceId = session.source_id,
         )
     }
-
-    /** The routines a wrist may start when no session is open; the plan stays on the phone. */
-    private fun routines(): List<WatchRoutine> = store.training.routines()
-        .filter { it.archived_at == null }
-        .sortedByDescending { if (it.favourite) 1 else 0 }
-        .take(MAX_ROUTINES)
-        .map { routine ->
-            WatchRoutine(
-                id = routine.id,
-                name = routine.name,
-                exerciseCount = store.training.routineEntries(routine.id).size,
-            )
-        }
 
     companion object {
         const val MAX_ROUTINES: Int = 5
         const val DEFAULT_SETS: Long = 3
         const val DEFAULT_REPS: Long = 8
         const val DEFAULT_REST_SECONDS: Long = 90
-        const val POUND_KG: Double = 0.45359237
     }
 }

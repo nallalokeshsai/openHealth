@@ -21,7 +21,13 @@ module OpenHealth {
         var writing = false;
 
         function load() {
-            nextCommandId = (Time.now().value() % 1000000).toNumber() + 1;
+            // Command ids are the phone's idempotency key and its acknowledgement
+            // watermark, so they must only ever go up. Re-seeding from the clock alone
+            // walks backwards whenever a run queued more commands than the seconds since
+            // it started, and the phone then drops those sets as duplicates.
+            var seed = (Time.now().value() % 1000000).toNumber() + 1;
+            var saved = Application.Storage.getValue("nextCommandId");
+            nextCommandId = (saved != null && saved > seed) ? saved : seed;
             var last = Application.Storage.getValue("snapshot");
             if (last != null) {
                 applyValues(last);
@@ -127,8 +133,9 @@ module OpenHealth {
                 return false;
             }
             queue(1, 0, 0);
-            restEndsAt = System.getTimer() + 90 * 1000;
-            restTotal = 90;
+            var rest = restTotal > 0 ? restTotal : 90;
+            restEndsAt = System.getTimer() + rest * 1000;
+            restTotal = rest;
             saveSnapshot();
             return true;
         }
@@ -156,6 +163,7 @@ module OpenHealth {
         function queue(type, warmup, bpm) {
             var id = nextCommandId;
             nextCommandId = nextCommandId + 1;
+            Application.Storage.setValue("nextCommandId", nextCommandId);
             var packet = ByteCodec.encodeCommand(
                 type,
                 id,

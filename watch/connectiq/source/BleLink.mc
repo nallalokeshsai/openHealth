@@ -39,17 +39,36 @@ class BleLink extends BLE.BleDelegate {
         BLE.setDelegate(null);
     }
 
+    /**
+     * The phone is matched by its service UUID, never by its Bluetooth name: the name
+     * belongs to the person and AndroidWatchGattServer deliberately keeps it off the air.
+     */
     function onScanResults(results) {
         var result = results.next();
         while (result != null) {
-            var name = result.getDeviceName();
-            if (name != null && name.equals("openHealth")) {
+            if (advertisesOurService(result)) {
                 BLE.setScanState(BLE.SCAN_STATE_OFF);
                 BLE.pairDevice(result);
                 return;
             }
             result = results.next();
         }
+    }
+
+    function advertisesOurService(result) {
+        var wanted = BLE.stringToUuid(SERVICE_UUID);
+        var uuids = result.getServiceUuids();
+        if (uuids == null) {
+            return false;
+        }
+        var uuid = uuids.next();
+        while (uuid != null) {
+            if (uuid.equals(wanted)) {
+                return true;
+            }
+            uuid = uuids.next();
+        }
+        return false;
     }
 
     function onConnectedStateChanged(device, state) {
@@ -75,6 +94,8 @@ class BleLink extends BLE.BleDelegate {
             command = null;
             snapshot = null;
             OpenHealth.Model.connected = false;
+            // A drop is the case the queue exists for: go back to scanning.
+            BLE.setScanState(BLE.SCAN_STATE_SCANNING);
             WatchUi.requestUpdate();
         }
     }
@@ -101,6 +122,11 @@ class BleLink extends BLE.BleDelegate {
             return;
         }
         OpenHealth.Model.writing = true;
-        command.requestWrite(packet, { :writeType => BLE.WRITE_TYPE_WITH_RESPONSE });
+        try {
+            command.requestWrite(packet, { :writeType => BLE.WRITE_TYPE_WITH_RESPONSE });
+        } catch (e) {
+            // Never wedge the queue on a rejected write.
+            OpenHealth.Model.wrote();
+        }
     }
 }

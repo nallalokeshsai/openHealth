@@ -161,3 +161,10 @@ val checkFdroidNoPlayServices = tasks.register("checkFdroidNoPlayServices") {
     }
 }
 tasks.named("check") { dependsOn(checkFdroidNoPlayServices) }
+
+/**
+ * `check` runs Android Lint on the default variant only, which is `fdroidDebug`. B14 put
+ * the Wear Data Layer bridge in `src/play`, so without this the one source set that
+ * touches Play Services would never be linted.
+ */
+tasks.named("check") { dependsOn("lintPlayDebug") }

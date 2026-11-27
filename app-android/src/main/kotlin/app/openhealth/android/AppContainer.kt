@@ -143,7 +143,6 @@ class AppContainer(
             clock = clock,
             zone = zone,
             ids = ids,
-            appVersion = versionName,
             applied = watchApplied,
             wearSource = WATCH_SOURCE,
             garminSource = CONNECT_IQ_SOURCE,
@@ -357,7 +356,10 @@ class AppContainer(
                     label = "Wear OS watch",
                     family = "watch",
                     device = "wear",
-                    permissions = setOf(SourcePermission.READ_HEART_RATE),
+                    permissions = setOf(
+                        SourcePermission.READ_HEART_RATE,
+                        SourcePermission.WRITE_EXERCISE,
+                    ),
                 ),
             )
         }
@@ -369,7 +371,10 @@ class AppContainer(
                     label = "Garmin Connect IQ",
                     family = "garmin",
                     device = "connect-iq",
-                    permissions = setOf(SourcePermission.READ_HEART_RATE),
+                    permissions = setOf(
+                        SourcePermission.READ_HEART_RATE,
+                        SourcePermission.WRITE_EXERCISE,
+                    ),
                 ),
             )
         }

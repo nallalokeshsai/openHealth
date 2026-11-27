@@ -56,7 +56,6 @@ class WatchCommandHandler(
     private val clock: ClockSeam,
     private val zone: TimeZone,
     private val ids: IdGenerator,
-    private val appVersion: String,
     private val applied: WatchAppliedStore,
     private val wearSource: SourceId,
     private val garminSource: SourceId,
@@ -71,22 +70,28 @@ class WatchCommandHandler(
         )
         val source = if (kind == WatchKind.WEAR) wearSource else garminSource
         val outcome = when (command.type) {
-            WatchCommandType.START_SESSION -> start(command, source, kind)
+            WatchCommandType.START_SESSION -> start(command, source, kind, happened)
             WatchCommandType.LOG_SET -> logSet(command, source, kind, happened)
-            WatchCommandType.FINISH_SESSION -> finish(command)
+            WatchCommandType.FINISH_SESSION -> finish(command, happened)
             WatchCommandType.HEART_RATE -> heartRate(command, source, kind, happened, now)
         }
         if (outcome == WatchApply.APPLIED) applied.record(command.id)
         return outcome
     }
 
-    private fun start(command: WatchCommand, source: SourceId, kind: WatchKind): WatchApply {
+    private fun start(
+        command: WatchCommand,
+        source: SourceId,
+        kind: WatchKind,
+        happened: Instant,
+    ): WatchApply {
         val routineId = command.routineId?.takeIf { store.training.routineById(it) != null }
         training.startSession(
             routineId = routineId,
             sourceId = source,
             device = kind.device,
             idempotencyKey = "watch-session-${command.id}",
+            startedAtMillis = happened.toEpochMilliseconds(),
         )
         return WatchApply.APPLIED
     }
@@ -98,10 +103,20 @@ class WatchCommandHandler(
         kind: WatchKind,
         happened: Instant,
     ): WatchApply {
-        val session = command.sessionId?.let { store.training.sessionById(it) }
-            ?: store.training.openSession()
-            ?: return WatchApply.REJECTED
+        val requested = command.sessionId
+        val session = if (requested != null) {
+            store.training.sessionById(requested) ?: return WatchApply.REJECTED
+        } else {
+            store.training.openSession() ?: return WatchApply.REJECTED
+        }
+        if (session.ended_at != null) return WatchApply.REJECTED
         if (store.training.exerciseById(command.exerciseId.orEmpty()) == null) {
+            return WatchApply.REJECTED
+        }
+        if (store.training.sessionExercises(session.id).none {
+                it.exercise_id == command.exerciseId
+            }
+        ) {
             return WatchApply.REJECTED
         }
         training.logSet(
@@ -118,15 +133,22 @@ class WatchCommandHandler(
             device = kind.device,
             happenedAtMillis = happened.toEpochMilliseconds(),
             idempotencyKey = "watch-set-${command.id}",
+            weightKgOverride = command.weightKg,
+            appVersionOverride = null,
+            sessionExerciseId = command.sessionExerciseId,
         )
         return WatchApply.APPLIED
     }
 
-    private fun finish(command: WatchCommand): WatchApply {
-        val session = command.sessionId?.let { store.training.sessionById(it) }
-            ?: store.training.openSession()
-            ?: return WatchApply.REJECTED
-        training.finishSession(session.id)
+    @Suppress("ReturnCount")
+    private fun finish(command: WatchCommand, happened: Instant): WatchApply {
+        val requested = command.sessionId
+        val session = if (requested != null) {
+            store.training.sessionById(requested) ?: return WatchApply.REJECTED
+        } else {
+            store.training.openSession() ?: return WatchApply.REJECTED
+        }
+        training.finishSession(session.id, endedAtMillis = happened.toEpochMilliseconds())
         return WatchApply.APPLIED
     }
 
@@ -149,7 +171,7 @@ class WatchCommandHandler(
                     time = TimeProvenance.of(happened, now, zone),
                     idempotencyKey = "watch-hr-${command.id}",
                     device = kind.device,
-                    appVersion = appVersion,
+                    appVersion = null,
                     method = MeasurementMethod.WATCH_OPTICAL,
                 ),
             ),

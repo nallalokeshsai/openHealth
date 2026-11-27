@@ -13,6 +13,8 @@ import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DeltaDataType
 import app.openhealth.core.watch.WatchProtocol
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -23,6 +25,7 @@ import kotlinx.coroutines.launch
 class WearHeartRate(private val context: Context, private val scope: CoroutineScope) {
     private var client: MeasureClient? = null
     private var callback: MeasureCallback? = null
+    private var job: Job? = null
 
     fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) ==
@@ -31,10 +34,11 @@ class WearHeartRate(private val context: Context, private val scope: CoroutineSc
     fun start(onBpm: (Int) -> Unit) {
         if (!hasPermission()) return
         stop()
-        scope.launch {
+        job = scope.launch {
             val measure = runCatching {
                 HealthServices.getClient(context).measureClient
             }.getOrNull() ?: return@launch
+            if (!isActive) return@launch
             val listener = object : MeasureCallback {
                 override fun onAvailabilityChanged(
                     dataType: DeltaDataType<*, *>,
@@ -42,13 +46,7 @@ class WearHeartRate(private val context: Context, private val scope: CoroutineSc
                 ) = Unit
 
                 override fun onDataReceived(data: DataPointContainer) {
-                    val bpm = data.sampleDataPoints
-                        .filter { it.dataType == DataType.HEART_RATE_BPM }
-                        .mapNotNull { point -> (point.value as? Float)?.toInt() }
-                        .lastOrNull { bpmValue ->
-                            bpmValue in WatchProtocol.MIN_HEART_RATE..WatchProtocol.MAX_HEART_RATE
-                        }
-                    if (bpm != null) onBpm(bpm)
+                    bpmOf(data)?.let(onBpm)
                 }
             }
             client = measure
@@ -60,10 +58,30 @@ class WearHeartRate(private val context: Context, private val scope: CoroutineSc
     }
 
     fun stop() {
+        job?.cancel()
+        job = null
         val measure = client ?: return
         val listener = callback ?: return
         runCatching { measure.unregisterMeasureCallbackAsync(DataType.HEART_RATE_BPM, listener) }
         client = null
         callback = null
+    }
+
+    companion object {
+        /**
+         * The newest plausible sample in a batch, or null.
+         *
+         * `DataType.HEART_RATE_BPM` is a `DeltaDataType<Double, SampleDataPoint<Double>>`,
+         * so the typed accessor is used rather than a cast: reading the point as a `Float`
+         * silently matched nothing and the wrist never showed a reading. Health Services
+         * reports 0 bpm while the sensor has no contact, which the plausibility window
+         * drops along with any other out-of-range figure (`WatchProtocol`).
+         */
+        fun bpmOf(data: DataPointContainer): Int? = data
+            .getData(DataType.HEART_RATE_BPM)
+            .map { point -> point.value.toInt() }
+            .lastOrNull { bpm ->
+                bpm in WatchProtocol.MIN_HEART_RATE..WatchProtocol.MAX_HEART_RATE
+            }
     }
 }

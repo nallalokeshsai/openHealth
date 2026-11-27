@@ -3357,3 +3357,163 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   live browser test, MinIO is provisioned but not enabled, OIDC is off, the server is a
   single instance, and the change log has no compaction UI.
 - The iOS gate (`pr.md` §13.17) is reviewed again and the answer is still **not yet**.
+
+## B14 — Wear OS and Connect IQ (2026-11-27)
+
+- **Status:** Completed. One phase only. Branch `build/b14-wear-connectiq`.
+- **Questions asked and answered (one batched dialog):** test on the **Wear OS emulator
+  and the owner's vívoactive 5**; **no Connect IQ developer setup** (SDK, signing key and
+  Garmin Connect Mobile absent); **use emulators for the device walk** and record the gap;
+  allow the **Wear Data Layer in the Play build only**, with a narrow telemetry-gate
+  exception and an ADR; use **direct BLE** for the Garmin link rather than Garmin's
+  proprietary Mobile SDK.
+- **Delivered:** `:app-wear`, a Compose for Wear OS application (same `applicationId`,
+  `minSdk` 30) that shares `:core` and renders one workout screen: exercise, set line,
+  a combined weight/reps selector, Log set, rest timer with +15 s/Skip, live optical
+  heart rate and a connection/queue line. It keeps the last snapshot and an unsent command
+  queue in its own private prefs, so a dropped link or process kill loses nothing.
+  `WatchProtocol`, `WatchLiveController` and `WatchBlePacket` are pure `:core` types with
+  JVM tests. The phone gets a Play-only Wear `WearableListenerService` and a standard
+  Android BLE GATT server plus foreground service (both flavours), a Settings → Devices
+  **Watch link** switch, a `wear` source and a `garmin-connect-iq` source with distinct
+  provenance, and an idempotent command handler that uses the normal training path.
+  `WearExitTest` proves a queued set is filed once with the wrist's `happened_at` and the
+  phone's `recorded_at`, that the day's training rollup is rebuilt after the session ends,
+  that a replayed Data Layer message writes one set, and that a malformed command writes
+  nothing. The watch draws first at normal text on a 454 px round screen.
+- **Connect IQ:** `watch/connectiq/` holds a Monkey C app (manifest, jungle, ByteCodec,
+  BleLink, Model, SessionView, SessionDelegate, Heart, 16/20-byte packet model), a
+  per-device compatibility table and a `build.sh` that refuses to run without the SDK and
+  developer key. `:integrations` validates the table against `manifest.xml`: the
+  vívoactive 5 is the reference, every manifest target has BLE, optical heart rate and API
+  3.1+, and an unverified id stays out with a `candidate` status. **The Monkey C app is not
+  compiled, signed or walked**: the Garmin SDK licence was not accepted by an agent and no
+  developer key exists on this machine. This is an open issue, not a passing test.
+- **Decisions:** `docs/adr/0019-wear-and-connect-iq.md` (Wear module and Data Layer,
+  Play-only exception, one wire model with JSON and fixed-packet encodings, wrist
+  provenance, direct BLE and no Garmin Mobile SDK). `docs/adr/0003-pinned-versions.md`
+  records Compose for Wear 1.7.2, Health Services 1.1.0, play-services-wearable 20.0.1 and
+  Fragment 1.9.1. The telemetry gate keeps denying every GMS artifact except the four
+  exact Wearable coordinates on `:app-android` and `:app-wear`;
+  `checkFdroidNoPlayServices` proves the F-Droid runtime resolves none of them.
+- **Verification:** `./gradlew check` **BUILD SUCCESSFUL** with **804 JVM tests** (394
+  `:core`, 150 `:data`, 7 `:sync`, 54 `:integrations`, 163 `:ui`, 14 `:server`, 10 tools,
+  12 `:app-wear`) and **360 goldens** in dark, light, 200 % text and RTL. `checkFdroidNoPlayServices`,
+  `checkNoTelemetrySdks` and `checkLicences` pass on both app modules. `:app-android:assembleDebug`
+  (both flavours) and `:app-wear:assembleDebug` pass. `:app-android:connectedPlayDebugAndroidTest`
+  on the phone emulator: **66/66 on a clean run**; the whole B14 `WearExitTest` is 5/5.
+  `:app-wear:connectedDebugAndroidTest` on the Wear emulator: **1/1**. The GATT service
+  was started by a real session on the phone emulator (`dumpsys activity services` showed
+  `isForeground=true`, id 1002, server registered and the service advertised) and stopped
+  when the session finished. The Wear screen was walked in dark, light and 200 % text with
+  a real snapshot injected into its private store; the 200 % layout scrolls and the
+  normal-text layout keeps Log set on the first screen.
+- **B14 exit tests (BUILD-ROADMAP has no explicit Exit line; the deliverables plus the
+  standing gate are the test):**
+  1. **Wear companion builds and runs — pass.** `:app-wear:assembleDebug`; `WearSmokeTest`
+     1/1 on the Wear emulator; screenshots in dark/light/200 %.
+  2. **A watch set round-trips with provenance and never duplicates — pass.**
+     `WearExitTest` 5/5: start, queued set with `happened_at` earlier than `recorded_at`,
+     one row on replay, `wear` source, rebuilt `TRAINING_SETS` rollup after finish,
+     `garmin-connect-iq` heart-rate provenance, and a malformed command writes nothing.
+  3. **One source wins / rollups rebuild — pass.** The set goes through
+     `TrainingPresenter`/`TrainingRepository`; the day is rebuilt, not patched.
+  4. **F-Droid has no Play Services — pass.** `checkFdroidNoPlayServices` and the F-Droid
+     `checkNoTelemetrySdks` are green; the Wear bridge is in `src/play` only.
+  5. **Connect IQ table is buildable — pass for the table and manifest; the app is
+     unverified.** `ConnectIqCompatibilityTest` 6/6.
+  6. **Build gates — pass.** `check`, both phone debug APKs and the Wear APK.
+- **QA sweep (emulators; Issues fixed in the same run):**
+  - The first 454 px session screen pushed **Log set** below the fold and used two tall
+    stepper rows. The layout now has no duplicate session title, one combined weight/reps
+    selector (44 dp −/+ and two stacked values) and Log set on the first screen; 200 %
+    text scrolls.
+  - The selector's `CompactButton`s inherited Wear Material 3's **purple**, breaking the
+    one-accent rule. They now use `surface-2`/`label`; the accent is only Log set and the
+    rest bar.
+  - Settings showed **"Connect IQ watch" twice** (section and row); the row is now "Watch
+    link".
+  - `ActivityExitTest.aStepCounterRebootDoesNotLoseTheDaysCount` anchored its samples to
+    the wall clock and failed at local midnight. It now anchors to yesterday and is
+    deterministic.
+  - `SecurityPostureTest` did not know the two B14 permissions; its expected list now
+    names `BLUETOOTH_ADVERTISE` and `FOREGROUND_SERVICE_CONNECTED_DEVICE`.
+  - `WearExitTest` asserted the training rollup before the session ended (it is built from
+    finished sessions); it now asserts after Finish.
+  - `WearSmokeTest` assumed the empty state; it now accepts the session screen too.
+- **Carried flake:** `NutritionExitTest.weightNeutralHidesCaloriesAndEnergy` timed out once
+  in a full 63-test run under load and passed alone; the same case was the B13 carried
+  flake. It is not weakened or ignored.
+- **Independent plan audit:** run in a fresh headless Claude session over B0–B14, the
+  contract and the tree; findings and fixes are recorded below.
+- **Open:** the Monkey C app has not been compiled/signed or tested on the vívoactive 5
+  (no SDK/developer key); the Wear Data Layer was not paired between the two emulators, so
+  its transport is compiled and its protocol/UI tests are in-process; the GATT link is
+  unauthenticated while it advertises (a nearby central could write a command) and only
+  runs with a session open; the Wear APK is not embedded in the Play phone APK; the optical
+  heart rate has no sensor on the emulator; the owner's phone was not attached. The B13,
+  B12 and B11 open items are unchanged. The iOS gate (`pr.md` §13.17) is reviewed again
+  and the answer is still **not yet**.
+
+## B14 audit — independent phase-wise pass (2026-11-27)
+
+- **Scope.** A headless Claude session that did not build B14 compared the tree against
+  `BUILD-ROADMAP.md` B0–B14, `prompts.md`, the contract documents, `docs/build-log.md` and
+  the B14 ADR, and ran `check`, assembles and the connected suites. Three fresh reviewer
+  subagents separately read only the diff and the relevant contract text: correctness and
+  tests, invariants and licences, and `DESIGN.md` conformance. No commits, pushes or
+  external actions were made by the auditors.
+- **Confirmed and fixed:**
+  - **Optical heart rate was dead.** `DataType.HEART_RATE_BPM` is a
+    `DeltaDataType<Double, SampleDataPoint<Double>>`; the old cast to `Float` always
+    returned null. `WearHeartRate.bpmOf` now uses the typed accessor and drops 0 bpm; a
+    five-case `WearHeartRateTest` fails against the old code.
+  - **An imperial profile double-converted a watch set.** The handler passed a kilogram
+    string to `TrainingPresenter.logSet`, which treated it as a display value and converted
+    it again (100 kg became 45.36 kg). `logSet` now takes a typed `weightKgOverride`; an
+    imperial `WearExitTest` asserts the stored kilograms.
+  - **A stale session redirected a set.** A command naming an ended session fell back to
+    whatever session was open and could add an exercise to it. The handler now rejects a
+    named session that is gone, an ended session, and an exercise not already in that
+    session; the stale-session test proves no row lands in the next workout.
+  - **Two entries of one exercise were merged.** `WatchSnapshotBuilder` grouped sets by
+    exercise id; the session-exercise row is now carried as `entryId` and
+    `sessionExerciseId`, so the second occurrence keeps its own sets and log target.
+  - **A poll overwrote the draft and a skipped phone rest stayed alive.** A snapshot now
+    reseeds weight/reps only when the exercise changes, and a snapshot without rest clears
+    the watch's local rest.
+  - **A background Wear start could crash the phone.** A `WearableListenerService` started
+    a foreground GATT service unguarded; the start is caught and recovers when the app is
+    next visible. The remote session path is covered by the catch, not hidden.
+  - **The Connect IQ link could not work as written.** The watch matched a Bluetooth name
+    the phone never advertised (and should not), the manifest named a missing
+    `drawables.xml`, `Rez.Strings` ids were drawn as numbers, and command ids could be
+    reissued after a relaunch (silently dropping sets as duplicates). The watch now matches
+    the service UUID, the drawable and resource loaders exist, the counter persists, and
+    `ConnectIqSourceConsistencyTest` (13 cases) pins UUIDs, packet offsets/size, codes,
+    manifest resources, jungle paths and `build.sh` to the Kotlin model.
+  - **A slow wrist clock could end a session before it started.** `finishSession` clamps
+    the wrist time to the session start; a `WearExitTest` covers it.
+  - **`src/play` was not linted.** `check` ran only `lintFdroidDebug`; it now also depends on
+    `lintPlayDebug`, the flavour that carries the Data Layer.
+  - **The Play Services licence record was wrong.** The four GMS POMs carry the **Android
+    Software Development Kit License**, not Apache-2.0. `NOTICE.md`,
+    `gradle/licences/allowed.tsv` and the version comment now say so, and the owner's
+    Play-only Data Layer decision is cited.
+  - **Watch design.** Routine start was removed from the wrist (the phone owns the plan,
+    and five accent buttons broke the one-accent rule); the primary Log set is on the first
+    screen; labels moved from `label-3` to `label-2` where they carry information; the
+    selector has a 44 dp target, a role, a name and a weight change, not colour alone; the
+    time reserve is 40 dp of existing tokens; the Devices switch disables with a reason and
+    no longer repeats its title; the sixth Devices group is in `DESIGN.md` §14.2; the
+    Connect IQ reduced variant is recorded in §14.6; and the Garmin accent is the real
+    `#FFD60A`, not `COLOR_YELLOW`.
+  - **Build-log claims.** Counts corrected to 804 JVM tests and 66 instrumented tests; the
+    B14 exit evidence names the 5 `WearExitTest` cases.
+- **Left open:** a watch value still has no raw ingestion record (the manual path has the
+  same pre-existing gap, so this is a data-layer consistency decision for the owner); the
+  GATT link is unauthenticated while it advertises (it stops advertising after a central
+  connects, and only runs with a session open); the Connect IQ queue is head-of-line (one
+  permanently rejected command stalls later ones), the one-byte bpm field clamps 256–260,
+  and the Monkey C app remains uncompiled/unwalked. The full 66-test phone suite is green
+  on a clean run; the `NutritionExitTest` weight-neutral case remains the carried flake.

@@ -40,7 +40,8 @@ roborazzi = "1.79.0"
 maplibre = "13.7.1"
 # B14: Compose for Wear OS, the Wear health sensor client and the Data Layer transport.
 # play-services-wearable is the only Google Play Services artifact the client may
-# resolve; the F-Droid flavour has none (ADR 0019).
+# resolve; its Android SDK License (not Apache-2.0) is recorded in NOTICE.md and
+# gradle/licences/allowed.tsv. The F-Droid flavour has none (ADR 0019).
 wearCompose = "1.7.2"
 wearHealthServices = "1.1.0"
 playServicesWearable = "20.0.1"

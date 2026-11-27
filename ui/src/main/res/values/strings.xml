@@ -434,6 +434,7 @@
     <string name="devices_bluetooth_off">Bluetooth is off. Turn it on in Android settings to pair a strap, a scale or a cuff.</string>
     <string name="devices_watch_link">Connect IQ watch</string>
     <string name="devices_watch_link_row">Watch link</string>
+    <string name="devices_watch_link_toggle">Turn the watch link on or off</string>
     <string name="devices_watch_link_note">Log sets and heart rate on your Garmin watch over a local Bluetooth link. It runs only while a workout is open.</string>
     <string name="devices_watch_link_permission">Allow nearby devices in Settings to connect your watch. The Garmin app also works without it and keeps its sets on the watch.</string>
     <string name="devices_scan_stop">Stop scanning</string>

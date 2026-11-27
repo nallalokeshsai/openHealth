@@ -20,7 +20,7 @@ object WatchProtocol {
     const val SNAPSHOT_PATH: String = "/openhealth/watch/snapshot"
     const val REQUEST_PATH: String = "/openhealth/watch/request"
 
-    const val MAX_APPLIED_COMMAND_IDS: Int = 50
+    const val MAX_APPLIED_COMMAND_IDS: Int = 200
 
     val json: Json = Json {
         ignoreUnknownKeys = true
@@ -110,8 +110,17 @@ object WatchProtocol {
             session.exercises.forEach { exercise ->
                 if (exercise.id.isBlank() || exercise.name.isBlank()) return "exercise"
                 if (exercise.targetSets < 0 || exercise.targetReps < 0) return "exercise-target"
-                if (exercise.sets.any { it.weightKg < 0.0 || it.reps < 0 }) return "set"
+                if (exercise.sets.any {
+                        !it.weightKg.isFinite() || it.weightKg < 0.0 || it.reps < 0
+                    }
+                ) {
+                    return "set"
+                }
             }
+        }
+        snapshot.session?.exercises?.forEach { exercise ->
+            val target = exercise.targetWeightKg
+            if (target != null && (!target.isFinite() || target < 0.0)) return "exercise-target"
         }
         if (snapshot.routines.any { it.id.isBlank() || it.name.isBlank() }) return "routine"
         snapshot.rest?.let { rest ->
@@ -165,6 +174,8 @@ data class WatchCommand(
     val sessionId: String? = null,
     val routineId: String? = null,
     val exerciseId: String? = null,
+    /** The session_exercise row, so two entries of one exercise stay distinct. */
+    val sessionExerciseId: String? = null,
     val weightKg: Double? = null,
     val reps: Int? = null,
     val rir: Double? = null,
@@ -204,6 +215,8 @@ data class WatchSessionSummary(
 @Serializable
 data class WatchExercise(
     val id: String,
+    /** The session_exercise row; a routine may prescribe the same exercise twice. */
+    val entryId: String = "",
     val name: String,
     val targetSets: Int,
     val targetReps: Int,

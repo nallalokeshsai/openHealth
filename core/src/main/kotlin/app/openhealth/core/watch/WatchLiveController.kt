@@ -127,6 +127,7 @@ object WatchLiveController {
             happenedAtMillis = nowMillis,
             sessionId = session.id,
             exerciseId = exercise.id,
+            sessionExerciseId = exercise.entryId.ifBlank { null },
             weightKg = state.weightKg,
             reps = state.reps,
             locale = locale,

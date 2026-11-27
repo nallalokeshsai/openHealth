@@ -41,7 +41,9 @@ class WatchGattService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        val container = (application as? OpenHealthApp)?.container
+        val container = runCatching {
+            (application as? OpenHealthApp)?.container
+        }.getOrNull()
         if (container == null) {
             stopSelf()
             return START_NOT_STICKY
@@ -87,6 +89,7 @@ class WatchGattService : Service() {
                     happenedAtMillis = packet.happenedAtMillis,
                     sessionId = session.id,
                     exerciseId = exercise.id,
+                    sessionExerciseId = exercise.entryId.ifBlank { null },
                     weightKg = packet.weightKg,
                     reps = packet.reps,
                     isWarmup = packet.isWarmup,
@@ -205,10 +208,12 @@ class WatchGattService : Service() {
         private const val NOTIFICATION_ID = 1002
 
         fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, WatchGattService::class.java),
-            )
+            runCatching {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, WatchGattService::class.java),
+                )
+            }
         }
 
         fun stop(context: Context) {
@@ -222,7 +227,11 @@ class WatchGattService : Service() {
                 app.container.store.settings.get(SettingKeys.WATCH_LINK) == "true"
             }.getOrDefault(false)
             if (open && enabled) {
-                start(context)
+                // A WearableListenerService can start a session while the phone is in
+                // the background; Android 12+ may refuse the foreground start. The link
+                // comes back when the app is next visible (`recoverIfNeeded`), and the
+                // watch keeps its queue, so a refused start is not a crash.
+                runCatching { start(context) }
             } else if (!open) {
                 stop(context)
             }

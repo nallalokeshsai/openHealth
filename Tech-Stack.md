@@ -1,6 +1,6 @@
 # openHealth — Technology Stack
 
-**Version:** 2.5 · 2026-11-26 (B14: Wear OS companion and the Connect IQ BLE link) — **Android only for the first releases** (`pr.md` §0.1)
+**Version:** 2.5 · 2026-11-27 (B14: Wear OS companion and the Connect IQ BLE link) — **Android only for the first releases** (`pr.md` §0.1)
 **Status:** Closes `pr.md` §13 decisions 1, 2, 3 and supersedes `pr.md` §8.1–8.4.
 **Companions:** [`pr.md`](pr.md) · [`DESIGN.md`](DESIGN.md) · [`BUILD-ROADMAP.md`](BUILD-ROADMAP.md) · [`prompts.md`](prompts.md) · ADR [`docs/adr/0001-android-first.md`](docs/adr/0001-android-first.md)
 

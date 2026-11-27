@@ -6,7 +6,7 @@ module OpenHealth {
         const SNAPSHOT_SIZE = 20;
 
         function encodeCommand(type, id, weightKg, reps, bpm, happenedSeconds, warmup) {
-            var out = new [COMMAND_SIZE];
+            var out = new [COMMAND_SIZE] as Lang.ByteArray;
             out[0] = MAGIC;
             out[1] = VERSION;
             out[2] = type;

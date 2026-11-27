@@ -44,6 +44,10 @@ class WearStateHolder(
         scope.launch {
             link.connected.collect { connected ->
                 _state.update { WatchLiveController.onConnection(it, connected) }
+                if (connected) {
+                    link.requestSnapshot()
+                    store.pending().forEach(link::send)
+                }
             }
         }
         scope.launch {
@@ -93,18 +97,6 @@ class WearStateHolder(
         result.command?.let(::send)
         _state.value = result.state.copy(pendingCount = store.pendingCount())
         if (result.vibrate) vibrate()
-    }
-
-    fun start(routineId: String?) {
-        val result = WatchLiveController.startSession(
-            state = _state.value,
-            commandId = UUID.randomUUID().toString(),
-            nowMillis = now(),
-            routineId = routineId,
-            locale = locale(),
-        )
-        result.command?.let(::send)
-        _state.value = result.state.copy(pendingCount = store.pendingCount())
     }
 
     fun finish() {

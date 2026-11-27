@@ -106,9 +106,14 @@ class AndroidWatchGattServer(
             .setConnectable(true)
             .setTimeout(0)
             .build()
+        // The phone's Bluetooth name is the person's ("Sam's Pixel"), so it never goes on
+        // the air: the watch matches the 128-bit service UUID instead (`BleLink.mc`). It
+        // also would not fit — a 128-bit UUID plus the flags leaves 10 bytes of the 31-byte
+        // advertisement, and a longer name fails the whole advertisement silently.
         val data = AdvertiseData.Builder()
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .setIncludeDeviceName(true)
+            .setIncludeDeviceName(false)
+            .setIncludeTxPowerLevel(false)
             .build()
         runCatching { advertiser?.startAdvertising(settings, data, advertiseCallback) }
     }
@@ -121,9 +126,13 @@ class AndroidWatchGattServer(
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 connected += device
+                // One watch at a time; stop advertising so a nearby central cannot
+                // discover the session while it is live.
+                runCatching { advertiser?.stopAdvertising(advertiseCallback) }
                 publish()
             } else {
                 connected -= device
+                if (connected.isEmpty()) advertise()
             }
         }
 
@@ -154,7 +163,6 @@ class AndroidWatchGattServer(
                 val command = app.openhealth.core.watch.WatchBlePacket.decodeCommand(value)
                 if (command != null) {
                     onCommand(command)
-                    publish()
                     respond(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, null)
                     return
                 }
@@ -207,9 +215,10 @@ class AndroidWatchGattServer(
     }
 
     companion object {
-        val SERVICE_UUID: UUID = UUID.fromString("6f1e2a10-4b7a-4f1e-9d2c-6f0e2b7a1000")
-        val COMMAND_UUID: UUID = UUID.fromString("6f1e2a10-4b7a-4f1e-9d2c-6f0e2b7a1001")
-        val SNAPSHOT_UUID: UUID = UUID.fromString("6f1e2a10-4b7a-4f1e-9d2c-6f0e2b7a1002")
+        // One source for the three UUIDs, shared with the Connect IQ app (`WatchBlePacket`).
+        val SERVICE_UUID: UUID = UUID.fromString(WatchBlePacket.SERVICE_UUID)
+        val COMMAND_UUID: UUID = UUID.fromString(WatchBlePacket.COMMAND_UUID)
+        val SNAPSHOT_UUID: UUID = UUID.fromString(WatchBlePacket.SNAPSHOT_UUID)
         val CLIENT_CONFIG_UUID: UUID =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }

@@ -47,7 +47,6 @@ class WearMainActivity : ComponentActivity() {
                     state = state,
                     connected = state.connected,
                     heartRateAllowed = heartRateAllowed,
-                    onStart = holder::start,
                     onLogSet = holder::logSet,
                     onFinish = holder::finish,
                     onWeight = holder::adjustWeight,

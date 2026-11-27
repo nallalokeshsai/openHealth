@@ -21,7 +21,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The watch screens render from a snapshot and ask the holder for one action at a time
- * (`DESIGN.md` §14.3). The test drives the stateless composable, so it never needs a
+ * (`DESIGN.md` §14.6). The test drives the stateless composable, so it never needs a
  * paired phone or the Wear Data Layer.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -35,10 +35,7 @@ class WearScreenTest {
 
     private fun state(withSession: Boolean = true): WatchLiveState {
         if (!withSession) {
-            val empty = WatchSnapshot(
-                generatedAtMillis = now,
-                routines = listOf(app.openhealth.core.watch.WatchRoutine("r1", "Push day", 5)),
-            )
+            val empty = WatchSnapshot(generatedAtMillis = now)
             return WatchLiveController.onSnapshot(WatchLiveState(), empty, now, connected = true)
         }
         val snapshot = WatchSnapshot(
@@ -61,25 +58,19 @@ class WearScreenTest {
                 currentExerciseIndex = 0,
                 completedSetCount = 1,
             ),
-            routines = listOf(app.openhealth.core.watch.WatchRoutine("r1", "Push day", 5)),
             weightUnit = "kg",
             weightIncrementKg = 2.5,
         )
         return WatchLiveController.onSnapshot(WatchLiveState(), snapshot, now, connected = true)
     }
 
-    private fun content(
-        state: WatchLiveState,
-        onLog: () -> Unit = {},
-        onStart: (String?) -> Unit = {},
-    ) {
+    private fun content(state: WatchLiveState, onLog: () -> Unit = {}) {
         compose.setContent {
             OhTheme(dark = true) {
                 WearScreen(
                     state = state,
                     connected = true,
                     heartRateAllowed = false,
-                    onStart = onStart,
                     onLogSet = onLog,
                     onFinish = {},
                     onWeight = {},
@@ -107,15 +98,6 @@ class WearScreenTest {
         content(state(), onLog = { logged += 1 })
         compose.onNodeWithText("Log set").performClick()
         assertEquals(1, logged)
-    }
-
-    @Test
-    fun aRoutineCanBeStartedFromTheWatchWhenNoSessionIsOpen() {
-        var routine: String? = "not-called"
-        content(state(withSession = false), onStart = { routine = it })
-        compose.onNodeWithText("Push day").assertIsDisplayed()
-        compose.onNodeWithText("Push day").performClick()
-        assertEquals("r1", routine)
     }
 
     @Test

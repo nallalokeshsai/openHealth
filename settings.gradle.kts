@@ -17,7 +17,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "openhealth"
 
-// TECH-STACK.md §13, §16. Deferred modules (app-wear, server, tools) are added by their phase.
+// TECH-STACK.md §13, §16. Modules are added by their phase; app-wear landed in B14.
 include(":core")
 include(":data")
 include(":sync")

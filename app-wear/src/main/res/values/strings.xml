@@ -1,33 +1,24 @@
 <resources>
     <string name="app_name">openHealth</string>
     <string name="wear_workout">Workout</string>
-    <string name="wear_start">Start</string>
-    <string name="wear_start_freestyle">Start freestyle</string>
     <string name="wear_start_on_phone">Start a workout on your phone</string>
     <string name="wear_waiting_phone">Waiting for your phone</string>
-    <string name="wear_phone_connected">Phone connected</string>
     <string name="wear_waiting_sets">%1$d waiting for the phone</string>
-    <string name="wear_exercise_of">Exercise %1$d of %2$d</string>
-    <string name="wear_set_of">Set %1$d of %2$d</string>
-    <string name="wear_weight">Weight</string>
-    <string name="wear_reps">Reps</string>
+    <string name="wear_set_progress">Set %1$d of %2$d · exercise %3$d of %4$d</string>
     <string name="wear_log_set">Log set</string>
     <string name="wear_rest">Rest</string>
     <string name="wear_extend">+15 s</string>
     <string name="wear_skip">Skip</string>
     <string name="wear_finish">Finish workout</string>
-    <string name="wear_heart_rate_off">Heart rate off</string>
     <string name="wear_allow_heart_rate">Show heart rate</string>
     <string name="wear_heart_rate">%1$d bpm</string>
     <string name="wear_no_exercises">Add an exercise on your phone</string>
-    <string name="wear_add_exercise">Add an exercise on your phone, then log the next set here.</string>
-    <string name="wear_less">Less</string>
-    <string name="wear_more">More</string>
     <string name="wear_less_weight">Less weight</string>
     <string name="wear_more_weight">More weight</string>
     <string name="wear_less_reps">Fewer reps</string>
     <string name="wear_more_reps">More reps</string>
-    <string name="wear_reps_value">%1$d reps</string>
-    <string name="wear_sets">%1$d sets</string>
+    <string name="wear_weight_selected">Weight selected</string>
+    <string name="wear_reps_selected">Reps selected</string>
+    <string name="wear_reps_value">Reps %1$d</string>
     <string name="wear_offline">Your sets are kept on the watch until the phone is back.</string>
 </resources>

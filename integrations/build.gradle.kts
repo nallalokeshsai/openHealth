@@ -30,6 +30,13 @@ tasks.withType<Test>().configureEach {
         "openhealth.connectiq.manifest",
         connectIqDir.file("manifest.xml").asFile.absolutePath,
     )
+    // The Monkey C sources, the jungle, the resources and build.sh are read by
+    // `ConnectIqSourceConsistencyTest`, which is the only gate the Garmin half has while
+    // the SDK is not installed (`docs/adr/0019`).
+    systemProperty("openhealth.connectiq.dir", connectIqDir.asFile.absolutePath)
     inputs.file(connectIqDir.file("devices.json")).withPropertyName("connectIqDevices")
     inputs.file(connectIqDir.file("manifest.xml")).withPropertyName("connectIqManifest")
+    inputs.file(connectIqDir.file("build.sh")).withPropertyName("connectIqBuildScript")
+    inputs.dir(connectIqDir.dir("source")).withPropertyName("connectIqSource")
+    inputs.dir(connectIqDir.dir("resources")).withPropertyName("connectIqResources")
 }
