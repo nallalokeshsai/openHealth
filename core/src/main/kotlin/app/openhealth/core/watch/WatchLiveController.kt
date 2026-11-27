@@ -21,6 +21,11 @@ data class WatchLiveState(
     val heartRateBpm: Int? = null,
     val connected: Boolean = false,
     val nowMillis: Long = 0L,
+    /**
+     * The exercise the weight/reps draft was seeded from, so a ten-second poll cannot
+     * overwrite what the person just dialled in (`WatchLiveController.onSnapshot`).
+     */
+    val draftExerciseKey: String? = null,
 ) {
     val session: WatchSessionSummary? get() = snapshot?.session
     val currentExercise: WatchExercise?
@@ -61,38 +66,66 @@ object WatchLiveController {
     const val DEFAULT_REST_SECONDS: Int = RestTimer.DEFAULT_SECONDS
     const val MILLIS_PER_SECOND: Long = 1_000L
 
+    /**
+     * Folds the phone's snapshot into the wrist's state.
+     *
+     * Two things the phone sends are *not* applied blindly. The weight/reps draft is
+     * seeded only when the current exercise changes: the snapshot is polled every ten
+     * seconds, so reseeding every time silently threw away the figure the person had
+     * just dialled in and logged the previous set's weight instead. And the phone's rest
+     * is authoritative — a rest it no longer has clears the wrist's — except while a set
+     * the wrist logged is still unapplied ([pendingSets]), because that snapshot was
+     * built before the phone knew about the set and its rest.
+     */
     fun onSnapshot(
         state: WatchLiveState,
         snapshot: WatchSnapshot,
         nowMillis: Long,
         connected: Boolean = true,
+        pendingSets: Boolean = false,
     ): WatchLiveState {
         val exercise = snapshot.session?.exercises
             ?.getOrNull(snapshot.session.currentExerciseIndex)
-        val last = exercise?.sets?.lastOrNull()
-        val weight = last?.weightKg
-            ?: exercise?.targetWeightKg
-            ?: state.weightKg
-        val reps = last?.reps
-            ?: exercise?.targetReps
-            ?: state.reps
-        val rest = snapshot.rest
-        val restEndsAt = if (rest != null && !rest.paused && rest.remainingSeconds > 0) {
-            nowMillis + rest.remainingSeconds * WatchLiveController.MILLIS_PER_SECOND
-        } else if (rest == null) {
-            state.restEndsAtMillis?.takeIf { it > nowMillis }
-        } else {
-            null
-        }
+        val key = exercise?.let { it.entryId.ifBlank { it.id } }
+        val draft = draftFor(state, exercise, reseed = key != state.draftExerciseKey)
+        val restEndsAt = restDeadline(state, snapshot.rest, nowMillis, pendingSets)
         return state.copy(
             snapshot = snapshot,
-            weightKg = weight.coerceIn(MIN_WEIGHT_KG, MAX_WEIGHT_KG),
-            reps = reps.coerceIn(0, MAX_REPS),
+            weightKg = draft.first.coerceIn(MIN_WEIGHT_KG, MAX_WEIGHT_KG),
+            reps = draft.second.coerceIn(0, MAX_REPS),
+            draftExerciseKey = key,
             restEndsAtMillis = restEndsAt,
-            restTotalSeconds = rest?.totalSeconds ?: state.restTotalSeconds,
+            restTotalSeconds = when {
+                restEndsAt == null -> 0
+                else -> snapshot.rest?.totalSeconds ?: state.restTotalSeconds
+            },
             nowMillis = nowMillis,
             connected = connected,
         )
+    }
+
+    /** The weight and reps to show: the exercise's own figures, or the wrist's draft. */
+    private fun draftFor(
+        state: WatchLiveState,
+        exercise: WatchExercise?,
+        reseed: Boolean,
+    ): Pair<Double, Int> {
+        if (!reseed) return state.weightKg to state.reps
+        val last = exercise?.sets?.lastOrNull()
+        return (last?.weightKg ?: exercise?.targetWeightKg ?: state.weightKg) to
+            (last?.reps ?: exercise?.targetReps ?: state.reps)
+    }
+
+    private fun restDeadline(
+        state: WatchLiveState,
+        rest: WatchRest?,
+        nowMillis: Long,
+        pendingSets: Boolean,
+    ): Long? = when {
+        rest != null && !rest.paused && rest.remainingSeconds > 0 ->
+            nowMillis + rest.remainingSeconds * MILLIS_PER_SECOND
+        rest == null && pendingSets -> state.restEndsAtMillis?.takeIf { it > nowMillis }
+        else -> null
     }
 
     fun onConnection(state: WatchLiveState, connected: Boolean): WatchLiveState =

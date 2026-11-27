@@ -3396,8 +3396,8 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   Fragment 1.9.1. The telemetry gate keeps denying every GMS artifact except the four
   exact Wearable coordinates on `:app-android` and `:app-wear`;
   `checkFdroidNoPlayServices` proves the F-Droid runtime resolves none of them.
-- **Verification:** `./gradlew check` **BUILD SUCCESSFUL** with **804 JVM tests** (394
-  `:core`, 150 `:data`, 7 `:sync`, 54 `:integrations`, 163 `:ui`, 14 `:server`, 10 tools,
+- **Verification:** `./gradlew check` **BUILD SUCCESSFUL** with **808 JVM tests** (397
+  `:core`, 150 `:data`, 7 `:sync`, 55 `:integrations`, 163 `:ui`, 14 `:server`, 10 tools,
   12 `:app-wear`) and **360 goldens** in dark, light, 200 % text and RTL. `checkFdroidNoPlayServices`,
   `checkNoTelemetrySdks` and `checkLicences` pass on both app modules. `:app-android:assembleDebug`
   (both flavours) and `:app-wear:assembleDebug` pass. `:app-android:connectedPlayDebugAndroidTest`
@@ -3508,8 +3508,19 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
     no longer repeats its title; the sixth Devices group is in `DESIGN.md` §14.2; the
     Connect IQ reduced variant is recorded in §14.6; and the Garmin accent is the real
     `#FFD60A`, not `COLOR_YELLOW`.
-  - **Build-log claims.** Counts corrected to 804 JVM tests and 66 instrumented tests; the
+  - **Build-log claims.** Counts corrected to 808 JVM tests and 66 instrumented tests; the
     B14 exit evidence names the 5 `WearExitTest` cases.
+- **Round 2 (same day).** A second fresh headless Claude session re-read the diff and
+  ran the gates and both connected suites. It found that two round-1 claims had not
+  actually reached `WatchLiveController` (the draft was still reseeded on every 10 s poll,
+  and a phone rest the phone no longer had still kept running) and fixed both with
+  `pendingSets`/`draftExerciseKey` and tests; it made the GATT connection set synchronised
+  (a publish could throw `ConcurrentModificationException`), cleared the Connect IQ
+  `writing` flag on a dropped write, moved two screen-reader strings to resources,
+  restored `label-3` where §14.6 specifies it, and corrected the last Apache-2.0 comment
+  on the Play Services stack. `./gradlew check`, both assembles, 66/66 phone tests and 1/1
+  Wear test passed after those fixes. The counts above are the round-2 tree: **808 JVM
+  tests** and 360 goldens.
 - **Left open:** a watch value still has no raw ingestion record (the manual path has the
   same pre-existing gap, so this is a data-layer consistency decision for the owner); the
   GATT link is unauthenticated while it advertises (it stops advertising after a central

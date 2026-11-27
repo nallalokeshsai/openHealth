@@ -54,6 +54,86 @@ class WatchLiveControllerTest {
     }
 
     @Test
+    fun aPollDoesNotOverwriteTheDraftThePersonJustDialledIn() {
+        // The wrist polls the phone every ten seconds. Reseeding on every snapshot threw
+        // away the figure on the screen, so Log set wrote the previous set's weight.
+        val seeded = WatchLiveController.onSnapshot(
+            WatchLiveState(),
+            snapshot(sets = listOf(WatchSet(80.0, 8, now - 60_000))),
+            now,
+        )
+        val dialled = WatchLiveController.adjustReps(
+            WatchLiveController.adjustWeight(seeded, 1),
+            2,
+        )
+        assertEquals(82.5, dialled.weightKg)
+        assertEquals(10, dialled.reps)
+
+        val polled = WatchLiveController.onSnapshot(
+            dialled,
+            snapshot(sets = listOf(WatchSet(80.0, 8, now - 60_000))),
+            now + 10_000,
+        )
+        assertEquals(82.5, polled.weightKg)
+        assertEquals(10, polled.reps)
+        assertEquals(82.5, WatchLiveController.logSet(polled, "cmd-1", now).command?.weightKg)
+    }
+
+    @Test
+    fun movingToTheNextExerciseSeedsTheDraftAgain() {
+        val first = snapshot(sets = listOf(WatchSet(80.0, 8, now - 60_000)))
+        val dialled = WatchLiveController.adjustWeight(
+            WatchLiveController.onSnapshot(WatchLiveState(), first, now),
+            1,
+        )
+        val session = assertNotNull(first.session)
+        val second = first.copy(
+            session = session.copy(
+                exercises = session.exercises + WatchExercise(
+                    id = "e2",
+                    name = "Row",
+                    targetSets = 3,
+                    targetReps = 10,
+                    targetWeightKg = 60.0,
+                ),
+                currentExerciseIndex = 1,
+            ),
+        )
+        val moved = WatchLiveController.onSnapshot(dialled, second, now + 10_000)
+        assertEquals(60.0, moved.weightKg)
+        assertEquals(10, moved.reps)
+    }
+
+    @Test
+    fun aPhoneThatHasNoRestLeftClearsTheWristsRestOnceTheSetIsApplied() {
+        val resting = WatchLiveController.logSet(
+            WatchLiveController.onSnapshot(WatchLiveState(), snapshot(), now),
+            "cmd-1",
+            now,
+        ).state
+        assertEquals(120, resting.restRemainingSeconds(now))
+
+        // The set is still queued, so a snapshot built before the phone saw it must not
+        // pull the rest out from under the wrist.
+        val racing = WatchLiveController.onSnapshot(
+            resting,
+            snapshot(sets = listOf(WatchSet(80.0, 8, now))),
+            now + 1_000,
+            pendingSets = true,
+        )
+        assertEquals(119, racing.restRemainingSeconds(now + 1_000))
+
+        // Applied and the phone's rest skipped there: the wrist follows the phone.
+        val cleared = WatchLiveController.onSnapshot(
+            racing,
+            snapshot(sets = listOf(WatchSet(80.0, 8, now))),
+            now + 2_000,
+        )
+        assertNull(cleared.restEndsAtMillis)
+        assertEquals(0, cleared.restTotalSeconds)
+    }
+
+    @Test
     fun theWeightStepperUsesTheProfilesStepAndNeverGoesNegative() {
         var state = WatchLiveController.onSnapshot(WatchLiveState(), snapshot(), now)
         state = WatchLiveController.adjustWeight(state, 1)

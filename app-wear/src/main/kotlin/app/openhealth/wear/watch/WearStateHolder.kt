@@ -120,9 +120,17 @@ class WearStateHolder(
     private fun onSnapshot(snapshot: WatchSnapshot) {
         store.saveSnapshot(snapshot)
         store.acknowledge(snapshot.appliedCommandIds)
+        // A set the phone has not applied yet means this snapshot was built before it
+        // knew about the set, so its "no rest" is older than the wrist's own rest.
+        val pendingSets = store.pending().any { it.type == WatchCommandType.LOG_SET }
         _state.update { current ->
-            WatchLiveController.onSnapshot(current, snapshot, now(), connected = true)
-                .copy(pendingCount = store.pendingCount())
+            WatchLiveController.onSnapshot(
+                state = current,
+                snapshot = snapshot,
+                nowMillis = now(),
+                connected = true,
+                pendingSets = pendingSets,
+            ).copy(pendingCount = store.pendingCount())
         }
         // Anything the phone has not acknowledged is offered again; the phone's
         // idempotency key makes a re-offer free.
@@ -159,10 +167,11 @@ class WearStateHolder(
             pendingCount = store.pendingCount(),
         )
         return WatchLiveController.onSnapshot(
-            WatchLiveState(),
-            snapshot,
-            now(),
+            state = WatchLiveState(),
+            snapshot = snapshot,
+            nowMillis = now(),
             connected = false,
+            pendingSets = store.pending().any { it.type == WatchCommandType.LOG_SET },
         ).copy(pendingCount = store.pendingCount())
     }
 

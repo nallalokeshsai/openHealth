@@ -118,7 +118,7 @@ fun WearScreen(
                         Text(
                             text = stringResource(R.string.wear_waiting_phone),
                             style = OhTheme.type.caption2,
-                            color = OhTheme.colors.label2,
+                            color = OhTheme.colors.label3,
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -244,6 +244,9 @@ private fun ExerciseContent(
     val selectorLabel = stringResource(
         if (selected == 0) R.string.wear_weight_selected else R.string.wear_reps_selected,
     )
+    val selectorState = stringResource(
+        if (selected == 0) R.string.wear_weight else R.string.wear_reps,
+    )
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
@@ -268,7 +271,7 @@ private fun ExerciseContent(
                 .semantics {
                     role = Role.Button
                     contentDescription = selectorLabel
-                    stateDescription = if (selected == 0) "Weight" else "Reps"
+                    stateDescription = selectorState
                 }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -280,14 +283,14 @@ private fun ExerciseContent(
                 style = OhTheme.type.title3.tabular().copy(
                     fontWeight = if (selected == 0) OhWeight.semibold else OhWeight.regular,
                 ),
-                color = if (selected == 0) OhTheme.colors.label else OhTheme.colors.label2,
+                color = if (selected == 0) OhTheme.colors.label else OhTheme.colors.label3,
             )
             Text(
                 text = stringResource(R.string.wear_reps_value, state.reps),
                 style = OhTheme.type.caption2.tabular().copy(
                     fontWeight = if (selected == 1) OhWeight.semibold else OhWeight.regular,
                 ),
-                color = if (selected == 1) OhTheme.colors.label else OhTheme.colors.label2,
+                color = if (selected == 1) OhTheme.colors.label else OhTheme.colors.label3,
             )
         }
         CompactButton(

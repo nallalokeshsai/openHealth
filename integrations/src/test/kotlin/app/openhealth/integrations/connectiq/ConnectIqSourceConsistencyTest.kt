@@ -159,6 +159,31 @@ class ConnectIqSourceConsistencyTest {
         )
     }
 
+    /**
+     * `nextPacket()` returns nothing while a write is in flight, and only
+     * `onCharacteristicWrite` clears that flag. A link that drops mid-write never
+     * delivers it, so the disconnected branch has to clear the flag itself or the queue
+     * stays wedged until the app is relaunched and the person's sets sit on the wrist.
+     */
+    @Test
+    fun aDroppedLinkDoesNotWedgeTheQueueOnAnUnfinishedWrite() {
+        val link = source("BleLink.mc")
+        val disconnect = assertNotNull(
+            Regex("""CONNECTION_STATE_CONNECTED[\s\S]*?\} else \{([\s\S]*?)\n        \}""")
+                .find(link),
+            "BleLink.onConnectedStateChanged must have a disconnected branch",
+        ).groupValues[1]
+        assertTrue(
+            "Model.wrote()" in disconnect,
+            "the disconnected branch must clear the in-flight write flag",
+        )
+        val model = source("Model.mc")
+        assertTrue(
+            "writing" in model && "function wrote()" in model,
+            "Model must keep the write flag it clears",
+        )
+    }
+
     @Test
     fun everyResourceTheManifestNamesIsDeclared() {
         val manifest = File(dir, "manifest.xml").readText()

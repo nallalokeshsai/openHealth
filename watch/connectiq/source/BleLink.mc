@@ -94,6 +94,10 @@ class BleLink extends BLE.BleDelegate {
             command = null;
             snapshot = null;
             OpenHealth.Model.connected = false;
+            // A write that was in flight when the link dropped never gets its
+            // onCharacteristicWrite, and nextPacket() returns null while the flag is
+            // set, so the queue would stay wedged until the app was relaunched.
+            OpenHealth.Model.wrote();
             // A drop is the case the queue exists for: go back to scanning.
             BLE.setScanState(BLE.SCAN_STATE_SCANNING);
             WatchUi.requestUpdate();

@@ -17,6 +17,8 @@
     <string name="wear_more_weight">More weight</string>
     <string name="wear_less_reps">Fewer reps</string>
     <string name="wear_more_reps">More reps</string>
+    <string name="wear_weight">Weight</string>
+    <string name="wear_reps">Reps</string>
     <string name="wear_weight_selected">Weight selected</string>
     <string name="wear_reps_selected">Reps selected</string>
     <string name="wear_reps_value">Reps %1$d</string>

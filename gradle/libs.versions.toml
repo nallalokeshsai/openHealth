@@ -71,7 +71,8 @@ androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 androidx-health-connect = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }
 # B14 watch stack: Compose for Wear OS (Apache-2.0), Health Services (Apache-2.0) and
-# the Wear OS Data Layer (Apache-2.0, Play-only; ADR 0019).
+# the Wear OS Data Layer (Android Software Development Kit License, not Apache-2.0;
+# Play-only, recorded in NOTICE.md and gradle/licences/allowed.tsv; ADR 0019).
 androidx-wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wearCompose" }
 androidx-wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wearCompose" }
 androidx-health-services-client = { module = "androidx.health:health-services-client", version.ref = "wearHealthServices" }

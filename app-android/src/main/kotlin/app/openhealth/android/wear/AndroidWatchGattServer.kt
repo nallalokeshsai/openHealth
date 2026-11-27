@@ -40,7 +40,12 @@ class AndroidWatchGattServer(
     private var server: BluetoothGattServer? = null
     private var advertiser = manager?.adapter?.bluetoothLeAdvertiser
     private var snapshotCharacteristic: BluetoothGattCharacteristic? = null
-    private val connected = linkedSetOf<BluetoothDevice>()
+
+    // Mutated on the GATT binder thread and read from whichever thread asks for a
+    // publish, so it is synchronised and iterated over a copy; a plain LinkedHashSet
+    // threw ConcurrentModificationException when a watch connected mid-publish.
+    private val connected: MutableSet<BluetoothDevice> =
+        java.util.Collections.synchronizedSet(linkedSetOf())
 
     @Suppress("ReturnCount")
     fun start(): Boolean {
@@ -79,14 +84,12 @@ class AndroidWatchGattServer(
     }
 
     fun publish() {
-        val gatt = server ?: return
-        val characteristic = snapshotCharacteristic ?: return
-        val bytes = snapshot()
-        connected.forEach { device ->
-            characteristic.value = bytes
-            if (hasConnectPermission()) {
-                runCatching { gatt.notifyCharacteristicChanged(device, characteristic, false) }
-            }
+        val gatt = server
+        val characteristic = snapshotCharacteristic
+        if (gatt == null || characteristic == null || !hasConnectPermission()) return
+        characteristic.value = snapshot()
+        synchronized(connected) { connected.toList() }.forEach { device ->
+            runCatching { gatt.notifyCharacteristicChanged(device, characteristic, false) }
         }
     }
 

@@ -220,7 +220,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B14 Wear OS and Connect IQ** (2026-11-27); next is **B15 AI
   Coach and MCP** when the owner asks (B14–B15 are not MVP).
 - Build: green. `./gradlew check :app-android:assembleDebug :app-wear:assembleDebug`
-  passes; **804 JVM tests** (394 `:core`, 150 `:data`, 7 `:sync`, 54 `:integrations`,
+  passes; **808 JVM tests** (397 `:core`, 150 `:data`, 7 `:sync`, 55 `:integrations`,
   163 `:ui`, 14 `:server`, 10 across the three tools, 12 `:app-wear`) and **360 goldens**
   in dark, light, 200 % text and RTL, plus **66 instrumented tests** on the phone
   emulator and **1** on the Wear emulator. Both `play` and `fdroid` debug APKs and the
