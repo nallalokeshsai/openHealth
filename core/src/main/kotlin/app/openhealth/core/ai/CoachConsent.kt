@@ -52,10 +52,7 @@ data class CoachConsent(
  * (`DESIGN.md` §14 Coach). The copy is selected by the UI; the core decides which rows
  * apply.
  */
-data class CoachDisclosureRow(
-    val category: CoachCategory,
-    val included: Boolean,
-)
+data class CoachDisclosureRow(val category: CoachCategory, val included: Boolean)
 
 object CoachDisclosure {
     /** One row per category, in the order the settings surface lists them. */

@@ -25,8 +25,12 @@ class V11MigrationTest {
         OpenHealthDb.Schema.create(driver).value
         driver.execute(null, "ALTER TABLE source DROP COLUMN via_health_connect", 0)
         listOf(
-            "coach_snapshot", "coach_action", "coach_proposal", "coach_message",
-            "mcp_access", "mcp_token",
+            "coach_snapshot",
+            "coach_action",
+            "coach_proposal",
+            "coach_message",
+            "mcp_access",
+            "mcp_token",
         ).forEach { driver.execute(null, "DROP TABLE IF EXISTS $it", 0) }
         driver.execute(
             null,
@@ -55,8 +59,12 @@ class V11MigrationTest {
         assertEquals(12L, store.schemaVersion)
         assertEquals("Before the coach", store.db.noteQueries.noteById("n1").executeAsOne().body)
         listOf(
-            "coach_message", "coach_proposal", "coach_action", "coach_snapshot",
-            "mcp_token", "mcp_access",
+            "coach_message",
+            "coach_proposal",
+            "coach_action",
+            "coach_snapshot",
+            "mcp_token",
+            "mcp_access",
         ).forEach { table ->
             assertTrue(tableExists(store.driver, table), "$table was not created")
         }
@@ -95,5 +103,8 @@ class V11MigrationTest {
             QueryResult.Value((cursor.getLong(0) ?: 0L) > 0L)
         },
         parameters = 2,
-    ) { bindString(0, table); bindString(1, column) }.value
+    ) {
+        bindString(0, table)
+        bindString(1, column)
+    }.value
 }

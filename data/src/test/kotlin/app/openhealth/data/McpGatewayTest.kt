@@ -50,8 +50,12 @@ class McpGatewayTest {
         return Triple(store, mcp, issued.toProtocol())
     }
 
-    private fun McpGateway.call(tool: McpTool, token: McpToken, args: JsonObject = buildJsonObject {}):
-        McpToolResult = host(token).call(tool, args)
+    private fun McpGateway.call(
+        tool: McpTool,
+        token: McpToken,
+        args: JsonObject = buildJsonObject {
+        },
+    ): McpToolResult = host(token).call(tool, args)
 
     private fun json(text: String): JsonObject =
         Json.parseToJsonElement(text).let { it as JsonObject }
@@ -72,7 +76,13 @@ class McpGatewayTest {
         assertNotNull(observation.provenance.rawRecordId)
         assertEquals(LocalDate(2026, 11, 27), observation.localDate)
         assertEquals(now, observation.provenance.recordedAt)
-        assertEquals(81.5, store.rollups.forDayAndType(LocalDate(2026, 11, 27), ObservationType.WEIGHT)!!.value.value)
+        assertEquals(
+            81.5,
+            store.rollups.forDayAndType(
+                LocalDate(2026, 11, 27),
+                ObservationType.WEIGHT,
+            )!!.value.value,
+        )
         assertEquals(1, mcp.access().size)
         store.close()
     }
@@ -84,7 +94,10 @@ class McpGatewayTest {
         val result = gateway.call(
             McpTool.LOG_WEIGHT,
             token,
-            buildJsonObject { put("weight_kg", 80.0); put("date", "2026-11-20") },
+            buildJsonObject {
+                put("weight_kg", 80.0)
+                put("date", "2026-11-20")
+            },
         )
         assertTrue(result is McpToolResult.Ok)
         val observation = assertNotNull(store.observations.latest(ObservationType.WEIGHT))
@@ -137,9 +150,12 @@ class McpGatewayTest {
         assertTrue(result is McpToolResult.Ok)
         val note = store.notes.latest(1L).single()
         assertEquals("Felt strong today.", note.body)
-        assertEquals(SourceKind.MCP, store.sources.byId(
-            app.openhealth.core.ids.SourceId(note.source_id!!),
-        )!!.kind)
+        assertEquals(
+            SourceKind.MCP,
+            store.sources.byId(
+                app.openhealth.core.ids.SourceId(note.source_id!!),
+            )!!.kind,
+        )
         assertNotNull(note.raw_record_id)
         store.close()
     }
@@ -191,8 +207,11 @@ class McpGatewayTest {
             it as kotlinx.serialization.json.JsonArray
         }
         assertEquals(1, routines.size)
-        assertEquals("Legs", json(routines.single().toString()).getValue("name")
-            .let { it as kotlinx.serialization.json.JsonPrimitive }.content)
+        assertEquals(
+            "Legs",
+            json(routines.single().toString()).getValue("name")
+                .let { it as kotlinx.serialization.json.JsonPrimitive }.content,
+        )
 
         val day = gateway.call(McpTool.GET_DAY_SUMMARY, token) as McpToolResult.Ok
         assertTrue(day.json.contains("2026-11-27"))

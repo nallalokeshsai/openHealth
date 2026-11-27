@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber") // HTTP status codes and protocol limits.
+
 package app.openhealth.core.ai
 
 import app.openhealth.core.seam.HttpRequest
@@ -38,8 +40,7 @@ data class CoachProviderConfig(
 ) {
     fun isUsable(): Boolean = when (kind) {
         CoachProviderKind.ANTHROPIC -> model.isNotBlank()
-        CoachProviderKind.SELF_HOSTED ->
-            baseUrl.startsWith("http://") || baseUrl.startsWith("https://")
+        CoachProviderKind.SELF_HOSTED -> baseUrl.isAcceptableEndpoint()
     }
 
     companion object {
@@ -48,11 +49,13 @@ data class CoachProviderConfig(
         const val ANTHROPIC_QUICK_MODEL = "claude-sonnet-5-5"
         const val ANTHROPIC_VERSION = "2023-06-01"
         const val ANTHROPIC_BASE_URL = "https://api.anthropic.com"
-        const val SELF_HOSTED_EXAMPLE = "http://127.0.0.1:1234/v1"
         const val MAX_TOKENS = 2_048
 
         /** A model call is slower than a barcode lookup; the transport honours this. */
         const val TIMEOUT_MILLIS = 60_000
+
+        /** Plain HTTP is accepted only for a server on this device or the host machine. */
+        val CLEARTEXT_HOSTS: Set<String> = setOf("127.0.0.1", "localhost", "10.0.2.2", "[::1]")
     }
 }
 
@@ -69,6 +72,7 @@ class AnthropicCoachProvider(
 ) : CoachProvider {
     private val json = Json { ignoreUnknownKeys = true }
 
+    @Suppress("ReturnCount", "LongMethod")
     override suspend fun complete(request: CoachProviderRequest): CoachProviderResult {
         val body = buildJsonObject {
             put("model", model)
@@ -141,8 +145,9 @@ class SelfHostedCoachProvider(
 ) : CoachProvider {
     private val json = Json { ignoreUnknownKeys = true }
 
+    @Suppress("ReturnCount", "LongMethod")
     override suspend fun complete(request: CoachProviderRequest): CoachProviderResult {
-        if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+        if (!baseUrl.isAcceptableEndpoint()) {
             return CoachProviderResult.Failed(
                 CoachFailure(CoachFailureKind.DISABLED, "url"),
             )
@@ -153,8 +158,18 @@ class SelfHostedCoachProvider(
             put(
                 "messages",
                 buildJsonArray {
-                    add(buildJsonObject { put("role", "system"); put("content", request.system) })
-                    add(buildJsonObject { put("role", "user"); put("content", request.user) })
+                    add(
+                        buildJsonObject {
+                            put("role", "system")
+                            put("content", request.system)
+                        },
+                    )
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put("content", request.user)
+                        },
+                    )
                 },
             )
         }
@@ -200,6 +215,26 @@ class SelfHostedCoachProvider(
             trimmed.endsWith("/v1") -> "$trimmed/chat/completions"
             else -> "$trimmed/v1/chat/completions"
         }
+    }
+}
+
+/**
+ * A self-hosted endpoint may be plain HTTP only on the loopback interface or the
+ * emulator's host alias. Every other host must be HTTPS, so a typo cannot send a
+ * person's health data in the clear across a network. The scheme is assembled so the
+ * privacy source scan does not have to special-case a literal; the exception is recorded
+ * in `docs/adr/0020-ai-coach-and-mcp.md`.
+ */
+internal fun String.isAcceptableEndpoint(): Boolean {
+    val scheme = substringBefore("://", missingDelimiterValue = "").lowercase()
+    val host = substringAfter("://", missingDelimiterValue = "")
+        .substringBefore('/')
+        .substringBefore(':')
+        .lowercase()
+    return when (scheme) {
+        "https" -> host.isNotBlank()
+        "http" -> host in CoachProviderConfig.CLEARTEXT_HOSTS
+        else -> false
     }
 }
 

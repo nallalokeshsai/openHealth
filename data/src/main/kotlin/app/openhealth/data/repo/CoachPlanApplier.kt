@@ -7,13 +7,13 @@ import app.openhealth.core.ai.CoachFindingCode
 import app.openhealth.core.ai.CoachPlan
 import app.openhealth.core.ai.CoachPlanEntry
 import app.openhealth.core.ai.CoachPlanRoutine
-import app.openhealth.data.db.OpenHealthDb
-import app.openhealth.data.db.Routine
-import app.openhealth.data.db.Routine_exercise
 import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.RandomIdGenerator
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SystemClock
+import app.openhealth.data.db.OpenHealthDb
+import app.openhealth.data.db.Routine
+import app.openhealth.data.db.Routine_exercise
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -103,6 +103,45 @@ class CoachPlanApplier(
         )
     }
 
+    /**
+     * The plan a diff must be drawn against: the live plan for a proposal that has not
+     * been applied, and the before-snapshot for one that has, so an accepted card keeps
+     * showing the change it made rather than two equal sides.
+     */
+    @Suppress("ReturnCount")
+    fun planFor(proposalId: String): CoachPlan {
+        val payload = coach.snapshot(proposalId) ?: return plan()
+        val snapshot = runCatching {
+            json.decodeFromString(PlanSnapshot.serializer(), payload)
+        }.getOrNull() ?: return plan()
+        val names = training.exercises().associate { it.id to it.name }
+        return CoachPlan(
+            snapshot.routines.map { routine ->
+                CoachPlanRoutine(
+                    id = routine.id,
+                    name = routine.name,
+                    weekday = routine.weekday?.toInt(),
+                    entries = snapshot.entries
+                        .filter { it.routineId == routine.id }
+                        .map { entry ->
+                            CoachPlanEntry(
+                                id = entry.id,
+                                exerciseId = entry.exerciseId,
+                                exerciseName = names[entry.exerciseId] ?: entry.exerciseId,
+                                sets = entry.targetSets?.toInt(),
+                                reps = entry.targetReps?.toInt(),
+                                repsHigh = entry.targetRepsHigh?.toInt(),
+                                weightKg = entry.targetWeightKg,
+                                rir = entry.targetRir,
+                                position = entry.position.toInt(),
+                            )
+                        },
+                )
+            },
+        )
+    }
+
+    @Suppress("ReturnCount")
     fun apply(proposalId: String): CoachApplyResult {
         val proposal = coach.proposal(proposalId)
             ?: return CoachApplyResult.Rejected(
@@ -133,6 +172,7 @@ class CoachPlanApplier(
      * Restores the exact rows the proposal replaced. Only the newest accepted proposal
      * can be undone, so an older snapshot can never overwrite a later edit.
      */
+    @Suppress("ReturnCount")
     fun undo(proposalId: String): Boolean {
         val proposal = coach.proposal(proposalId) ?: return false
         if (proposal.status != CoachProposalStatus.ACCEPTED) return false
@@ -182,6 +222,7 @@ class CoachPlanApplier(
         return true
     }
 
+    @Suppress("ReturnCount")
     private fun write(action: CoachAction, newEntryId: String?) {
         when (action) {
             is CoachAction.AddExercise -> {
@@ -231,10 +272,7 @@ class CoachPlanApplier(
         }
     }
 
-    private fun snapshot(
-        actions: List<CoachAction>,
-        addedEntryIds: List<String>,
-    ): PlanSnapshot {
+    private fun snapshot(actions: List<CoachAction>, addedEntryIds: List<String>): PlanSnapshot {
         val routineIds = actions.map(CoachAction::routineId).distinct()
         val routines = routineIds.mapNotNull(training::routineById)
         val entries = routineIds.flatMap(training::routineEntries)

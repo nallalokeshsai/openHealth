@@ -572,7 +572,8 @@ class ShellExitTest {
         assertTrue(
             reached,
             "timed out waiting for $what; step=${viewModel.state.value.onboarding.step}, " +
-                "issue=${viewModel.state.value.onboarding.issue}",
+                "issue=${viewModel.state.value.onboarding.issue}, " +
+                "fatal=${viewModel.state.value.fatal}",
         )
     }
 

@@ -14,6 +14,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import app.openhealth.core.ai.CoachCategory
+import app.openhealth.core.ai.CoachProviderKind
 import app.openhealth.core.body.AdiposeInputs
 import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
@@ -48,9 +50,20 @@ import app.openhealth.ui.screens.clinical.SleepStageRow
 import app.openhealth.ui.screens.clinical.WeeklyReviewItemModel
 import app.openhealth.ui.screens.clinical.WeeklyReviewModel
 import app.openhealth.ui.screens.clinical.WeeklyReviewScreen
+import app.openhealth.ui.screens.coach.CoachDiffRowModel
+import app.openhealth.ui.screens.coach.CoachMessageModel
+import app.openhealth.ui.screens.coach.CoachModel
+import app.openhealth.ui.screens.coach.CoachProposalModel
+import app.openhealth.ui.screens.coach.CoachProposalStatusUi
+import app.openhealth.ui.screens.coach.CoachRoleUi
+import app.openhealth.ui.screens.coach.CoachScreen
 import app.openhealth.ui.screens.common.OhScreen
 import app.openhealth.ui.screens.lock.LockMessage
 import app.openhealth.ui.screens.lock.LockScreen
+import app.openhealth.ui.screens.mcp.McpAuditModel
+import app.openhealth.ui.screens.mcp.McpModel
+import app.openhealth.ui.screens.mcp.McpScreen
+import app.openhealth.ui.screens.mcp.McpTokenModel
 import app.openhealth.ui.screens.onboarding.OnboardingAnswers
 import app.openhealth.ui.screens.onboarding.OnboardingScreen
 import app.openhealth.ui.screens.onboarding.OnboardingStep
@@ -159,6 +172,8 @@ class ScreenScreenshotTest {
         profileName = "Sam",
         devicesDetail = "None connected",
         syncDetail = "Local only",
+        coachDetail = "Off",
+        mcpDetail = "Off",
         profileSubtitle = "Just track · metric",
         profileBirthDate = "1990-04-12",
         profileGoal = ProfileGoal.JUST_TRACK,
@@ -187,6 +202,79 @@ class ScreenScreenshotTest {
         message = null,
     )
 
+    private val coach = CoachModel(
+        enabled = true,
+        configured = true,
+        providerKind = CoachProviderKind.ANTHROPIC,
+        model = "claude-opus-5-5",
+        baseUrl = "",
+        keyPresent = true,
+        categories = setOf(CoachCategory.TRAINING, CoachCategory.RECOVERY),
+        healthConnect = false,
+        healthConnectAvailable = true,
+        disclosureAccepted = true,
+        messages = listOf(
+            CoachMessageModel(
+                id = "m1",
+                role = CoachRoleUi.PERSON,
+                body = "Review my week.",
+            ),
+            CoachMessageModel(
+                id = "m2",
+                role = CoachRoleUi.COACH,
+                body = "You completed every set last week. One change would keep the load moving.",
+                proposals = listOf(
+                    CoachProposalModel(
+                        id = "p1",
+                        summary = "Add a fourth bench set",
+                        rationale = "All planned sets were completed at the same load.",
+                        rows = listOf(
+                            CoachDiffRowModel(
+                                label = "Bench press",
+                                before = "3 × 8 · 80 kg · RIR 2",
+                                after = "4 × 8 · 80 kg · RIR 2",
+                            ),
+                        ),
+                        status = CoachProposalStatusUi.PROPOSED,
+                        undoable = false,
+                    ),
+                ),
+            ),
+        ),
+        busy = false,
+        error = null,
+        status = "Ready",
+    )
+
+    private val mcp = McpModel(
+        enabled = true,
+        endpoint = "http://127.0.0.1:8765/mcp",
+        running = true,
+        tokens = listOf(
+            McpTokenModel(
+                id = "t1",
+                label = "Laptop",
+                scopes = listOf(
+                    app.openhealth.core.ai.McpScope.READ_TRAINING,
+                    app.openhealth.core.ai.McpScope.WRITE_NOTES,
+                ),
+                createdLabel = "2026-11-27 09:10",
+                lastUsedLabel = "2026-11-27 09:12",
+                revoked = false,
+            ),
+        ),
+        audit = listOf(
+            McpAuditModel(
+                id = "a1",
+                tool = "openhealth_get_training_plan",
+                atLabel = "2026-11-27 09:12",
+                ok = true,
+            ),
+        ),
+        newToken = null,
+        error = null,
+    )
+
     @Composable
     private fun noopSettings() = SettingsScreen(
         state = settings,
@@ -205,6 +293,8 @@ class ScreenScreenshotTest {
         onRestore = { _, _ -> },
         onOpenDevices = {},
         onOpenSync = {},
+        onOpenCoach = {},
+        onOpenMcp = {},
         onOpenTimeline = {},
         onOpenTrash = {},
         onOpenReview = {},
@@ -347,6 +437,40 @@ class ScreenScreenshotTest {
                 onNext = {},
                 onSkip = {},
                 onTryDemo = {},
+            )
+        }
+    }
+
+    @Test
+    fun coach() {
+        shot("screen-coach") {
+            CoachScreen(
+                model = coach,
+                onBack = {},
+                onToggle = {},
+                onCategory = { _, _ -> },
+                onHealthConnect = {},
+                onProvider = { _, _, _ -> },
+                onSaveKey = {},
+                onClearKey = {},
+                onAcceptDisclosure = {},
+                onSend = {},
+                onAccept = {},
+                onDiscard = {},
+                onUndo = {},
+            )
+        }
+    }
+
+    @Test
+    fun mcp() {
+        shot("screen-mcp") {
+            McpScreen(
+                model = mcp,
+                onBack = {},
+                onToggle = {},
+                onCreate = { _, _ -> },
+                onRevoke = {},
             )
         }
     }

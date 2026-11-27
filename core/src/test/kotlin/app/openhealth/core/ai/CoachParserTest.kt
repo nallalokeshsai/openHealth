@@ -67,8 +67,10 @@ class CoachParserTest {
     fun aFencedAnswerIsReadButAProsePrefixIsNot() {
         val fenced = "```json\n" + validAnswer() + "\n```"
         assertTrue(CoachParser.parse(fenced, plan) is CoachOutputResult.Valid)
-        assertTrue(CoachParser.parse("Here is the plan: ${validAnswer()}", plan)
-            is CoachOutputResult.Invalid)
+        assertTrue(
+            CoachParser.parse("Here is the plan: ${validAnswer()}", plan)
+                is CoachOutputResult.Invalid,
+        )
     }
 
     @Test

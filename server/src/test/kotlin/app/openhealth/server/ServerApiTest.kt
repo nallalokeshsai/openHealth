@@ -92,7 +92,7 @@ class ServerApiTest {
         val fixture = fixture()
         val health = jsonClient().get("/health").body<ServerHealth>()
         assertEquals("openhealth-sync", health.service)
-        assertEquals(11, health.schemaVersion)
+        assertEquals(12, health.schemaVersion)
         assertEquals(fixture.account.id, fixture.auth.validate(fixture.token, SCOPE_SYNC_READ)?.id)
     }
 

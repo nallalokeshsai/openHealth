@@ -3529,3 +3529,107 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   permanently rejected command stalls later ones), the one-byte bpm field clamps 256–260,
   and the Monkey C app remains uncompiled/unwalked. The full 66-test phone suite is green
   on a clean run; the `NutritionExitTest` weight-neutral case remains the carried flake.
+
+## B15 — AI Coach and MCP (2026-11-27)
+
+- **Status:** Completed. One phase only. Branch `build/b15-ai-coach-mcp`.
+- **Questions asked and answered (one batched dialog):** provider =
+  **Anthropic plus a self-hosted OpenAI-compatible endpoint**; key handling =
+  **Android Keystore through the `SecretVault` seam**; MCP surface = **on-device loopback,
+  off by default, scoped bearer tokens**; device = **the attached phone and Wear emulators**
+  (the owner's phone was not attached; the B14 precedent is recorded as the gap).
+- **Delivered:** a provider-agnostic `:core` adapter (`AnthropicCoachProvider` and
+  `SelfHostedCoachProvider`), per-category consent with a separate Health Connect switch,
+  a structured-output parser that validates against the live plan with the same bounds as
+  the editor, one repair round then a visible stored failure, a safety filter for
+  diagnosis/prescription/dosing, diff-card proposals that are applied only on approval and
+  restored by a snapshot-backed Undo, and a local MCP JSON-RPC server with seven scoped
+  tools, SHA-256 token digests, revocation and an argument-free audit.
+- **Schema v12** (`11.sqm`): the `source.via_health_connect` column and `coach_message`,
+  `coach_proposal`, `coach_action`, `coach_snapshot`, `mcp_token`, `mcp_access`. Coach and
+  MCP tables never sync; the encrypted export carries them (the token table only holds a
+  digest) and a pre-v12 export restores with them empty. Server `maxSchemaVersion` is 12.
+- **Decisions** are in `docs/adr/0020-ai-coach-and-mcp.md`. `DESIGN.md` 0.7.1 records the
+  coach and external-access recipes; no new colour, type role, spacing value, radius or
+  component. `pr.md` §6.15's MVP and the MCP V1 item are covered; weekly adaptation,
+  "ask my data", cost estimates, local models and a server-side MCP endpoint are not.
+- **Exit tests** (`BUILD-ROADMAP.md` §B15, `pr.md` §6.15 acceptance, `Tech-Stack.md` §9):
+  | Test | Evidence |
+  |---|---|
+  | Off by default; the app works fully without the coach | `CoachConsentTest.theDefaultSendsNothing`; the coach key is absent, `HealthModule.COACH` is on but the coach switch is off; no socket is opened until MCP is enabled. |
+  | Per-category consent, Health Connect excluded unless separately opted in | `CoachPromptTest.onlyConsentedCategoriesAreSerialised`, `healthConnectRowsAreExcludedUnlessSeparatelyOptedIn`, `aHealthConnectVitalIsExcludedWhileAManualOneIsSent`; `CoachDataSourceTest.aHealthConnectWeightIsExcludedUntilTheSecondSwitch` proves the `garmin-hc` producer. |
+  | Every answer parsed and validated; one repair round; fail visibly | `CoachParserTest` (12 cases), `CoachExchangeTest.anInvalidAnswerGetsExactlyOneRepairRound`, `twoInvalidAnswersFailVisiblyWithTheFindings`, `aRepairThatIsStillUnsafeFailsAsSafetyNotAsFormat`. |
+  | Proposal is a diff, never applied without approval, and undoable | `CoachRepositoryTest.approvingAppliesTheChangeAndUndoRestoresTheExactRow`, `undoRemovesOnlyTheEntryTheProposalAdded`, `onlyTheNewestAcceptedProposalCanBeUndone`; `CoachExitTest.theCoachProposesAcceptsAndUndoes` on the emulator. |
+  | A provider outage is graceful and non-blocking | `CoachProviderTest.aTransportFailureIsOfflineNotACrash`; `CoachExitTest.anOutageLeavesTheNoteAndAppliesNothing` keeps the note and applies nothing. |
+  | The key is never stored in the database, the change log, an export or a log | `SecretVault` only; `CoachProviderTest.anUnauthorizedAnswerIsTypedAndDoesNotEchoTheKey`; the model has `keyPresent`, never the key. |
+  | Scoped MCP tokens, revocation, same validation as the UI | `McpProtocolTest` (9 cases), `McpGatewayTest.anOutOfRangeValueIsRejectedAndNothingIsWritten`, `aWeightWriteCarriesProvenanceAndRebuildsTheDay`, `aBackfilledWeightKeepsItsOwnHappenedAtAndTheRecordingTime`; `CoachExitTest.theMcpEndpointNeedsATokenScopesAndAValidValue` (401 without a token, scope refusal, 900 kg refused, 80 kg written, revoked token refused). |
+  | Weight-neutral mode hides weight, calories and body fat from a request | `CoachPromptTest.weightNeutralModeDropsWeightCaloriesAndBodyFat`. |
+- **What was run, and its result:** `./gradlew check :app-android:assembleDebug` **BUILD
+  SUCCESSFUL** (881 JVM tests and 368 goldens; `:server:test` now accepts schema 12);
+  `CoachExitTest` **3/3** on the phone emulator; the whole instrumented suite is recorded
+  in the QA section below.
+- **Regression over earlier phases:** `./gradlew check` covers every JVM and golden exit;
+  the data migration tests now replay v11→v12 and the server schema window is 12, so the
+  B13 sync round-trip still passes. The instrumented suite (B2–B14) is rerun on the
+  emulator below.
+- **Placeholders and open issues:** the provider is never called against a live key in this
+  phase (no key is stored in the repository or the test device); the self-hosted path is
+  proved with a recording transport, not a real model host; the MCP endpoint is local only
+  and its server-side counterpart is not built; the coach's weekly adaptation, ask-my-data
+  citations, cost estimate and local model are V1+ and not started. The owner's phone was
+  not attached; the device walk uses the same emulator pair as B14.
+- **iOS gate (`pr.md` §13.17):** not yet.
+
+### QA sweep on the emulators (section 4.2)
+
+- **The whole instrumented suite:** `am instrument` on the phone emulator, **69/69
+  pass** (B2–B14 plus the three B15 `CoachExitTest` cases). The first run had two
+  failures; both were traced, not waved away.
+- **A real state race, found and fixed.** `ShellExitTest.waterGlassesAddUp…` timed out at
+  the shell with `fatal=false`: an initial `rebuild()` that began before the test seeded
+  its profile could finish after the later `refresh()` and overwrite `onboardingComplete`
+  with the older read. B15's extra rebuild work (MCP start, two new summaries) widened a
+  race that already existed. `AppViewModel.rebuild()` is now serialised by a `Mutex`, so a
+  read that started earlier cannot land after a newer one. The test passes, and the whole
+  suite passed twice after the fix. This is the one product change the sweep made.
+- **`NutritionExitTest`:** its local-search timeout did not reproduce on a rerun and the
+  full 69-test run passed; recorded as the carried flake from B14, not closed.
+- **Coach walk on the phone emulator:** onboarding → Today → Settings → Coach; the coach
+  was turned on, Training was consented, the "what leaves the phone" list was accepted,
+  and Send without a key produced "Add a provider key first." with no message stored and
+  no plan change. Back navigation to Settings worked.
+- **External access walk:** Settings → Data → External access; enabling it bound
+  `127.0.0.1:8765`, a token was created with the default scopes, the one-time value was
+  displayed in `ohm_…` form, and Revoke changed the row to Revoked. The audit showed
+  "No calls yet"; no `AndroidRuntime` error appeared at any point.
+- **No screenshot or device output entered the tree.**
+
+### Invariant audit (`AGENTS.md`)
+
+- **Provenance on every value:** the MCP writes create a `raw_record` and a full
+  `Provenance` (source `mcp:<token>`, device, method, `happened_at`, `recorded_at`, local
+  date, zone, idempotency key, raw ref); `McpGatewayTest` asserts the row and the raw ref.
+- **`happened_at` ≠ `recorded_at`:** a backdated MCP weight keeps the chosen day as
+  `happened_at` and the send time as `recorded_at` (`aBackfilledWeightKeepsItsOwnHappenedAt…`).
+- **Five layers, rebuildable rollups:** an MCP write goes through `ObservationRepository`,
+  which invalidates and rebuilds the day; the coach writes only layer-4 plan rows and never
+  a rollup. `McpGatewayTest.aWeightWriteCarriesProvenanceAndRebuildsTheDay` proves the day.
+- **One source wins a day:** MCP is a source kind with priority 80; a manual weight still
+  wins the day. No summing, no largest-value rule.
+- **Local-first:** the coach is off by default; MCP is a local socket; no core action waits
+  on a network. `pr.md` §6.15's "the app works fully without the coach" holds.
+- **Not a medical device:** the parser rejects diagnosis/prescription/dosing wording and
+  the system prompt forbids it; the screen copy is neutral and the wording test scans it.
+- **No telemetry:** the only outbound call is the explicit Send through the existing
+  `HttpTransport` seam, after the disclosure; no analytics, no crash SDK, no background
+  call. The MCP listener is loopback and token-gated, named in `PrivacySourceTest`.
+- **Portability:** `checkPortability` passes; `:core` and `:data` contain no `android.*`.
+- **Licence split:** unchanged; no new dependency.
+- **Tombstone undo, modules hide:** the coach's Undo is a snapshot-backed reversal of an
+  approved proposal (no user history deleted); turning the Coach module off hides the two
+  settings rows and the screen and keeps the conversation.
+- **Weight-neutral mode:** the request builder drops weight, body fat and calories, proved
+  by `CoachPromptTest.weightNeutralModeDropsWeightCaloriesAndBodyFat`.
+- **Charts and reports:** no chart or report was added.
+- **Closed tokens and cut list:** `DESIGN.md` 0.7.1 adds copy and placeholder recipes only;
+  no token, component or cut-list item moved.

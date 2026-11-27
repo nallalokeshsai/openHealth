@@ -8,8 +8,8 @@ import app.openhealth.data.repo.ActivityRepository
 import app.openhealth.data.repo.BodyRepository
 import app.openhealth.data.repo.ClinicalRepository
 import app.openhealth.data.repo.CoachRepository
-import app.openhealth.data.repo.McpRepository
 import app.openhealth.data.repo.DeviceRepository
+import app.openhealth.data.repo.McpRepository
 import app.openhealth.data.repo.NoteRepository
 import app.openhealth.data.repo.NutritionRepository
 import app.openhealth.data.repo.ObservationRepository

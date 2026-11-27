@@ -1,17 +1,14 @@
 package app.openhealth.core.ai
 
+import app.openhealth.core.observation.ObservationType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import app.openhealth.core.observation.ObservationType
-import app.openhealth.core.seam.HttpRequest
-import app.openhealth.core.seam.HttpResponse
-import app.openhealth.core.seam.HttpTransport
 
 /** The person's own answers the coach may see when PROFILE consent is on. */
 data class CoachProfile(
@@ -33,17 +30,9 @@ data class CoachSessionSummary(
 )
 
 /** One daily number from an observation layer, with the provenance flag that gates it. */
-data class CoachDaily(
-    val date: String,
-    val value: Double,
-    val viaHealthConnect: Boolean,
-)
+data class CoachDaily(val date: String, val value: Double, val viaHealthConnect: Boolean)
 
-data class CoachRecovery(
-    val muscle: String,
-    val state: String,
-    val hoursSince: Double,
-)
+data class CoachRecovery(val muscle: String, val state: String, val hoursSince: Double)
 
 data class CoachVital(
     val type: ObservationType,
@@ -90,131 +79,151 @@ object CoachPrompt {
         note: String,
     ): CoachProviderRequest {
         require(note.isNotBlank()) { "a coach request needs a note" }
-        val clipped = note.trim().take(MAX_NOTE_LENGTH)
         val data = buildJsonObject {
             put("schema", SCHEMA_VERSION)
             put("weight_neutral", weightNeutral)
             putJsonArray("categories") {
                 CoachCategory.entries.filter { consent.allows(it) }.forEach { add(it.key) }
             }
-            dataset.profile?.takeIf { consent.allows(CoachCategory.PROFILE) }?.let {
-                putJsonObject("profile") {
-                    put("sex", it.sex)
-                    put("birth_year", it.birthYear)
-                    put("height_cm", it.heightCm)
-                    put("units", it.units)
-                    put("goal_mode", it.goalMode)
-                    put("training_goal", it.trainingGoal)
-                }
-            }
-            if (consent.allows(CoachCategory.TRAINING)) {
-                putJsonObject("training") {
-                    putJsonArray("routines") {
-                        dataset.plan.routines.forEach { routine ->
-                            add(
-                                buildJsonObject {
-                                    put("id", routine.id)
-                                    put("name", routine.name)
-                                    put("weekday", routine.weekday)
-                                    putJsonArray("entries") {
-                                        routine.entries.forEach { entry ->
-                                            add(
-                                                buildJsonObject {
-                                                    put("id", entry.id)
-                                                    put("exercise_id", entry.exerciseId)
-                                                    put("exercise_name", entry.exerciseName)
-                                                    put("sets", entry.sets)
-                                                    put("reps", entry.reps)
-                                                    put("reps_high", entry.repsHigh)
-                                                    put("weight_kg", entry.weightKg)
-                                                    put("rir", entry.rir)
-                                                },
-                                            )
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
-                    putJsonArray("recent_sessions") {
-                        dataset.sessions.take(MAX_SESSIONS).forEach { session ->
-                            add(
-                                buildJsonObject {
-                                    put("date", session.date)
-                                    put("routine", session.routineName)
-                                    put("sets", session.sets)
-                                    put("volume_kg", session.volumeKg)
-                                    put("effort", session.effort)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            if (consent.allows(CoachCategory.RECOVERY)) {
-                putJsonArray("recovery") {
-                    dataset.recovery.forEach { state ->
-                        add(
-                            buildJsonObject {
-                                put("muscle", state.muscle)
-                                put("state", state.state)
-                                put("hours_since", state.hoursSince)
-                            },
-                        )
-                    }
-                }
-            }
+            if (consent.allows(CoachCategory.PROFILE)) profile(dataset.profile)
+            if (consent.allows(CoachCategory.TRAINING)) training(dataset)
+            if (consent.allows(CoachCategory.RECOVERY)) recovery(dataset.recovery)
             if (consent.allows(CoachCategory.NUTRITION) && !weightNeutral) {
-                putJsonArray("nutrition") {
-                    dataset.nutrition
-                        .filter { consent.allows(CoachCategory.NUTRITION, it.viaHealthConnect) }
-                        .take(MAX_DAYS)
-                        .forEach { day ->
-                            add(
-                                buildJsonObject {
-                                    put("date", day.date)
-                                    put("energy_kcal", day.value)
-                                },
-                            )
-                        }
-                }
+                nutrition(dataset.nutrition, consent)
             }
-            if (consent.allows(CoachCategory.SLEEP)) {
-                putJsonArray("sleep") {
-                    dataset.sleep
-                        .filter { consent.allows(CoachCategory.SLEEP, it.viaHealthConnect) }
-                        .take(MAX_DAYS)
-                        .forEach { day ->
-                            add(buildJsonObject { put("date", day.date); put("hours", day.value) })
-                        }
-                }
-            }
+            if (consent.allows(CoachCategory.SLEEP)) sleep(dataset.sleep, consent)
             if (consent.allows(CoachCategory.VITALS)) {
-                putJsonArray("vitals") {
-                    dataset.vitals
-                        .filter { consent.allows(CoachCategory.VITALS, it.viaHealthConnect) }
-                        .filterNot {
-                            weightNeutral && it.type in WEIGHT_NEUTRAL_HIDDEN
-                        }
-                        .take(MAX_VITALS)
-                        .forEach { vital ->
-                            add(
-                                buildJsonObject {
-                                    put("type", vital.type.name)
-                                    put("value", vital.value)
-                                    put("unit", vital.unit)
-                                    put("at", vital.at)
-                                },
-                            )
-                        }
-                }
+                vitals(dataset.vitals, consent, weightNeutral)
             }
-            put("note", clipped)
+            put("note", note.trim().take(MAX_NOTE_LENGTH))
         }
         return CoachProviderRequest(
             system = SYSTEM_PROMPT,
             user = json.encodeToString(JsonObject.serializer(), data),
         )
+    }
+
+    private fun JsonObjectBuilder.profile(profile: CoachProfile?) {
+        if (profile == null) return
+        putJsonObject("profile") {
+            put("sex", profile.sex)
+            put("birth_year", profile.birthYear)
+            put("height_cm", profile.heightCm)
+            put("units", profile.units)
+            put("goal_mode", profile.goalMode)
+            put("training_goal", profile.trainingGoal)
+        }
+    }
+
+    private fun JsonObjectBuilder.training(dataset: CoachDataset) {
+        putJsonObject("training") {
+            putJsonArray("routines") {
+                dataset.plan.routines.forEach { routine ->
+                    add(
+                        buildJsonObject {
+                            put("id", routine.id)
+                            put("name", routine.name)
+                            put("weekday", routine.weekday)
+                            putJsonArray("entries") {
+                                routine.entries.forEach { entry ->
+                                    add(
+                                        buildJsonObject {
+                                            put("id", entry.id)
+                                            put("exercise_id", entry.exerciseId)
+                                            put("exercise_name", entry.exerciseName)
+                                            put("sets", entry.sets)
+                                            put("reps", entry.reps)
+                                            put("reps_high", entry.repsHigh)
+                                            put("weight_kg", entry.weightKg)
+                                            put("rir", entry.rir)
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+            putJsonArray("recent_sessions") {
+                dataset.sessions.take(MAX_SESSIONS).forEach { session ->
+                    add(
+                        buildJsonObject {
+                            put("date", session.date)
+                            put("routine", session.routineName)
+                            put("sets", session.sets)
+                            put("volume_kg", session.volumeKg)
+                            put("effort", session.effort)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    private fun JsonObjectBuilder.recovery(recovery: List<CoachRecovery>) {
+        putJsonArray("recovery") {
+            recovery.forEach { state ->
+                add(
+                    buildJsonObject {
+                        put("muscle", state.muscle)
+                        put("state", state.state)
+                        put("hours_since", state.hoursSince)
+                    },
+                )
+            }
+        }
+    }
+
+    private fun JsonObjectBuilder.nutrition(days: List<CoachDaily>, consent: CoachConsent) {
+        putJsonArray("nutrition") {
+            days.filter { consent.allows(CoachCategory.NUTRITION, it.viaHealthConnect) }
+                .take(MAX_DAYS)
+                .forEach { day ->
+                    add(
+                        buildJsonObject {
+                            put("date", day.date)
+                            put("energy_kcal", day.value)
+                        },
+                    )
+                }
+        }
+    }
+
+    private fun JsonObjectBuilder.sleep(days: List<CoachDaily>, consent: CoachConsent) {
+        putJsonArray("sleep") {
+            days.filter { consent.allows(CoachCategory.SLEEP, it.viaHealthConnect) }
+                .take(MAX_DAYS)
+                .forEach { day ->
+                    add(
+                        buildJsonObject {
+                            put("date", day.date)
+                            put("hours", day.value)
+                        },
+                    )
+                }
+        }
+    }
+
+    private fun JsonObjectBuilder.vitals(
+        readings: List<CoachVital>,
+        consent: CoachConsent,
+        weightNeutral: Boolean,
+    ) {
+        putJsonArray("vitals") {
+            readings.filter { consent.allows(CoachCategory.VITALS, it.viaHealthConnect) }
+                .filterNot { weightNeutral && it.type in WEIGHT_NEUTRAL_HIDDEN }
+                .take(MAX_VITALS)
+                .forEach { vital ->
+                    add(
+                        buildJsonObject {
+                            put("type", vital.type.name)
+                            put("value", vital.value)
+                            put("unit", vital.unit)
+                            put("at", vital.at)
+                        },
+                    )
+                }
+        }
     }
 
     /** Weight-neutral mode hides these even when the person consents to VITALS. */

@@ -73,10 +73,13 @@ class AppContainer(
     val store: LocalStore get() = storeLazy.value
     val foodIndex: app.openhealth.core.nutrition.BundledFoodIndex =
         foodIndexOverride ?: app.openhealth.android.nutrition.AssetFoodIndex(appContext)
+
+    /** The one outbound transport: the explicit barcode lookup and the coach's provider. */
+    private val httpTransport: app.openhealth.core.seam.HttpTransport by lazy {
+        app.openhealth.android.nutrition.HttpUrlConnectionTransport()
+    }
     val offClient: app.openhealth.integrations.food.OpenFoodFactsClient =
-        offClientOverride ?: app.openhealth.integrations.food.OpenFoodFactsClient(
-            app.openhealth.android.nutrition.HttpUrlConnectionTransport(),
-        )
+        offClientOverride ?: app.openhealth.integrations.food.OpenFoodFactsClient(httpTransport)
     val clock: ClockSeam = SystemClock
     val ids: IdGenerator = RandomIdGenerator()
 
@@ -108,6 +111,34 @@ class AppContainer(
     /** B15: the local MCP tool surface, bound to one token per request. */
     val mcpGateway: app.openhealth.data.repo.McpGateway by lazy {
         app.openhealth.data.repo.McpGateway(store.db, store, zone, appVersion = versionName)
+    }
+
+    /** B15: the coach screen's holder. The provider key lives in [vault], never in state. */
+    val coach: app.openhealth.android.coach.CoachPresenter by lazy {
+        app.openhealth.android.coach.CoachPresenter(
+            context = appContext,
+            store = store,
+            vault = vault,
+            preferences = preferences,
+            data = coachData,
+            applier = coachPlan,
+            coach = store.coach,
+            transport = httpTransport,
+            policy = { preferences.snapshot().displayPolicy },
+        )
+    }
+
+    /** B15: the loopback MCP endpoint and its screen. Both are off by default. */
+    val mcpRuntime: app.openhealth.android.mcp.McpRuntime by lazy {
+        app.openhealth.android.mcp.McpRuntime(store, mcpGateway)
+    }
+    val mcp: app.openhealth.android.mcp.McpPresenter by lazy {
+        app.openhealth.android.mcp.McpPresenter(
+            context = appContext,
+            mcp = store.mcp,
+            preferences = preferences,
+            runtime = mcpRuntime,
+        )
     }
 
     /**
@@ -410,7 +441,12 @@ class AppContainer(
     }
 
     /** The source a CSV or file import names, so it is never labelled as a manual entry. */
-    private fun ensureImportSource(local: LocalStore) {        if (local.sources.byId(IMPORT_SOURCE) != null) return
+    private fun ensureImportSource(local: LocalStore) {
+        if (local.sources.byId(IMPORT_SOURCE) !=
+            null
+        ) {
+            return
+        }
         local.sources.upsert(
             Source(
                 id = IMPORT_SOURCE,

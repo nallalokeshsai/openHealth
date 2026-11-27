@@ -112,10 +112,7 @@ sealed interface CoachAction {
         val rir: Double? = null,
     ) : CoachAction
 
-    data class MoveDay(
-        override val routineId: String,
-        val weekday: Int,
-    ) : CoachAction
+    data class MoveDay(override val routineId: String, val weekday: Int) : CoachAction
 }
 
 enum class CoachFindingCode {
@@ -178,78 +175,88 @@ object CoachActionValidator {
         return findings
     }
 
-    private fun validateOne(
-        action: CoachAction,
-        plan: CoachPlan,
-        index: Int,
-    ): List<CoachFinding> {
+    private fun validateOne(action: CoachAction, plan: CoachPlan, index: Int): List<CoachFinding> {
         val routine = plan.routine(action.routineId)
             ?: return listOf(CoachFinding(CoachFindingCode.UNKNOWN_ROUTINE, index))
         return when (action) {
-            is CoachAction.AddExercise -> {
-                val findings = mutableListOf<CoachFinding>()
-                if (action.exerciseId !in plan.exercises) {
-                    findings += CoachFinding(CoachFindingCode.UNKNOWN_EXERCISE, index)
-                }
-                if (action.sets !in MIN_SETS..MAX_SETS) {
-                    findings += CoachFinding(CoachFindingCode.BAD_SETS, index)
-                }
-                if (action.reps !in MIN_REPS..MAX_REPS) {
-                    findings += CoachFinding(CoachFindingCode.BAD_REPS, index)
-                }
-                if (action.weightKg != null && action.weightKg !in MIN_WEIGHT_KG..MAX_WEIGHT_KG) {
-                    findings += CoachFinding(CoachFindingCode.BAD_WEIGHT, index)
-                }
-                if (action.rir != null && action.rir !in MIN_RIR..MAX_RIR) {
-                    findings += CoachFinding(CoachFindingCode.BAD_RIR, index)
-                }
-                findings
+            is CoachAction.AddExercise -> validateAdd(action, plan, index)
+            is CoachAction.UpdateTarget -> validateUpdate(action, plan, index)
+            is CoachAction.MoveDay -> validateMove(action, routine, index)
+        }
+    }
+
+    private fun validateAdd(
+        action: CoachAction.AddExercise,
+        plan: CoachPlan,
+        index: Int,
+    ): List<CoachFinding> = buildList {
+        if (action.exerciseId !in plan.exercises) {
+            add(CoachFinding(CoachFindingCode.UNKNOWN_EXERCISE, index))
+        }
+        if (action.sets !in MIN_SETS..MAX_SETS) add(CoachFinding(CoachFindingCode.BAD_SETS, index))
+        if (action.reps !in MIN_REPS..MAX_REPS) add(CoachFinding(CoachFindingCode.BAD_REPS, index))
+        if (action.weightKg != null && action.weightKg !in MIN_WEIGHT_KG..MAX_WEIGHT_KG) {
+            add(CoachFinding(CoachFindingCode.BAD_WEIGHT, index))
+        }
+        if (action.rir != null && action.rir !in MIN_RIR..MAX_RIR) {
+            add(CoachFinding(CoachFindingCode.BAD_RIR, index))
+        }
+    }
+
+    private fun validateUpdate(
+        action: CoachAction.UpdateTarget,
+        plan: CoachPlan,
+        index: Int,
+    ): List<CoachFinding> {
+        val entry = plan.entry(action.routineId, action.entryId)
+            ?: return listOf(CoachFinding(CoachFindingCode.UNKNOWN_ENTRY, index))
+        val findings = fieldFindings(action, index).toMutableList()
+        if (hasNoField(action)) findings += CoachFinding(CoachFindingCode.NO_CHANGE, index)
+        if (findings.isEmpty() && unchanged(action, entry)) {
+            findings += CoachFinding(CoachFindingCode.NO_CHANGE, index)
+        }
+        return findings
+    }
+
+    private fun hasNoField(action: CoachAction.UpdateTarget): Boolean = action.sets == null &&
+        action.reps == null &&
+        action.weightKg == null &&
+        action.rir == null
+
+    private fun fieldFindings(action: CoachAction.UpdateTarget, index: Int): List<CoachFinding> =
+        buildList {
+            if (action.sets != null && action.sets !in MIN_SETS..MAX_SETS) {
+                add(CoachFinding(CoachFindingCode.BAD_SETS, index))
             }
-
-            is CoachAction.UpdateTarget -> {
-                val entry = plan.entry(action.routineId, action.entryId)
-                    ?: return listOf(CoachFinding(CoachFindingCode.UNKNOWN_ENTRY, index))
-                val findings = mutableListOf<CoachFinding>()
-                if (action.sets == null && action.reps == null &&
-                    action.weightKg == null && action.rir == null
-                ) {
-                    findings += CoachFinding(CoachFindingCode.NO_CHANGE, index)
-                }
-                if (action.sets != null && action.sets !in MIN_SETS..MAX_SETS) {
-                    findings += CoachFinding(CoachFindingCode.BAD_SETS, index)
-                }
-                if (action.reps != null && action.reps !in MIN_REPS..MAX_REPS) {
-                    findings += CoachFinding(CoachFindingCode.BAD_REPS, index)
-                }
-                if (action.weightKg != null &&
-                    action.weightKg !in MIN_WEIGHT_KG..MAX_WEIGHT_KG
-                ) {
-                    findings += CoachFinding(CoachFindingCode.BAD_WEIGHT, index)
-                }
-                if (action.rir != null && action.rir !in MIN_RIR..MAX_RIR) {
-                    findings += CoachFinding(CoachFindingCode.BAD_RIR, index)
-                }
-                if (findings.isEmpty() &&
-                    (action.sets == null || action.sets == entry.sets) &&
-                    (action.reps == null || action.reps == entry.reps) &&
-                    (action.weightKg == null || action.weightKg == entry.weightKg) &&
-                    (action.rir == null || action.rir == entry.rir)
-                ) {
-                    findings += CoachFinding(CoachFindingCode.NO_CHANGE, index)
-                }
-                findings
+            if (action.reps != null && action.reps !in MIN_REPS..MAX_REPS) {
+                add(CoachFinding(CoachFindingCode.BAD_REPS, index))
             }
-
-            is CoachAction.MoveDay -> when {
-                action.weekday !in MIN_WEEKDAY..MAX_WEEKDAY ->
-                    listOf(CoachFinding(CoachFindingCode.BAD_WEEKDAY, index))
-
-                routine.weekday == action.weekday ->
-                    listOf(CoachFinding(CoachFindingCode.NO_CHANGE, index))
-
-                else -> emptyList()
+            if (action.weightKg != null && action.weightKg !in MIN_WEIGHT_KG..MAX_WEIGHT_KG) {
+                add(CoachFinding(CoachFindingCode.BAD_WEIGHT, index))
+            }
+            if (action.rir != null && action.rir !in MIN_RIR..MAX_RIR) {
+                add(CoachFinding(CoachFindingCode.BAD_RIR, index))
             }
         }
+
+    private fun unchanged(action: CoachAction.UpdateTarget, entry: CoachPlanEntry): Boolean =
+        (action.sets == null || action.sets == entry.sets) &&
+            (action.reps == null || action.reps == entry.reps) &&
+            (action.weightKg == null || action.weightKg == entry.weightKg) &&
+            (action.rir == null || action.rir == entry.rir)
+
+    private fun validateMove(
+        action: CoachAction.MoveDay,
+        routine: CoachPlanRoutine,
+        index: Int,
+    ): List<CoachFinding> = when {
+        action.weekday !in MIN_WEEKDAY..MAX_WEEKDAY ->
+            listOf(CoachFinding(CoachFindingCode.BAD_WEEKDAY, index))
+
+        routine.weekday == action.weekday ->
+            listOf(CoachFinding(CoachFindingCode.NO_CHANGE, index))
+
+        else -> emptyList()
     }
 }
 
@@ -271,19 +278,10 @@ sealed interface CoachDiffRow {
         val after: CoachTarget,
     ) : CoachDiffRow
 
-    data class Day(
-        val routineName: String,
-        val before: Int?,
-        val after: Int,
-    ) : CoachDiffRow
+    data class Day(val routineName: String, val before: Int?, val after: Int) : CoachDiffRow
 }
 
-data class CoachTarget(
-    val sets: Int?,
-    val reps: Int?,
-    val weightKg: Double?,
-    val rir: Double?,
-)
+data class CoachTarget(val sets: Int?, val reps: Int?, val weightKg: Double?, val rir: Double?)
 
 object CoachDiff {
     /**
@@ -349,7 +347,4 @@ data class CoachProposalDraft(
     val actions: List<CoachAction>,
 )
 
-data class CoachAnswer(
-    val note: String,
-    val proposals: List<CoachProposalDraft>,
-)
+data class CoachAnswer(val note: String, val proposals: List<CoachProposalDraft>)

@@ -3,8 +3,8 @@ package app.openhealth.data.repo
 import app.openhealth.core.ai.CoachAction
 import app.openhealth.core.ai.CoachActionCodec
 import app.openhealth.core.ai.CoachAnswer
-import app.openhealth.core.ai.CoachFinding
 import app.openhealth.core.ai.CoachFailure
+import app.openhealth.core.ai.CoachFinding
 import app.openhealth.core.ai.CoachProposalDraft
 import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.RandomIdGenerator
@@ -30,6 +30,29 @@ enum class CoachProposalStatus(val key: String) {
     }
 }
 
+/** Provider metadata for one coach turn. */
+data class CoachTurnMeta(
+    val provider: String,
+    val model: String,
+    val inputTokens: Int? = null,
+    val outputTokens: Int? = null,
+    val repaired: Boolean = false,
+)
+
+/** The columns one message is stored with; private to this repository. */
+private data class MessageDraft(
+    val threadId: String,
+    val role: CoachRole,
+    val body: String,
+    val provider: String?,
+    val model: String?,
+    val inputTokens: Int?,
+    val outputTokens: Int?,
+    val proposalId: String?,
+    val errorKey: String?,
+    val repaired: Boolean,
+)
+
 data class CoachMessage(
     val id: String,
     val threadId: String,
@@ -45,11 +68,7 @@ data class CoachMessage(
     val repaired: Boolean,
 )
 
-data class CoachStoredAction(
-    val id: String,
-    val position: Long,
-    val raw: String,
-) {
+data class CoachStoredAction(val id: String, val position: Long, val raw: String) {
     val action: CoachAction? get() = CoachActionCodec.decode(raw)
 }
 
@@ -83,8 +102,8 @@ class CoachRepository(
         sync = recorder
     }
 
-    fun appendPerson(text: String, threadId: String = THREAD): String =
-        appendMessage(
+    fun appendPerson(text: String, threadId: String = THREAD): String = appendMessage(
+        MessageDraft(
             threadId = threadId,
             role = CoachRole.PERSON,
             body = text,
@@ -95,7 +114,8 @@ class CoachRepository(
             proposalId = null,
             errorKey = null,
             repaired = false,
-        )
+        ),
+    )
 
     /**
      * Stores one coach answer and every proposal it carried. Returns the message id and
@@ -103,24 +123,22 @@ class CoachRepository(
      */
     fun appendCoach(
         answer: CoachAnswer,
-        provider: String,
-        model: String,
-        inputTokens: Int? = null,
-        outputTokens: Int? = null,
-        repaired: Boolean = false,
+        meta: CoachTurnMeta,
         threadId: String = THREAD,
     ): Pair<String, List<String>> {
         val messageId = appendMessage(
-            threadId = threadId,
-            role = CoachRole.COACH,
-            body = answer.note,
-            provider = provider,
-            model = model,
-            inputTokens = inputTokens,
-            outputTokens = outputTokens,
-            proposalId = null,
-            errorKey = null,
-            repaired = repaired,
+            MessageDraft(
+                threadId = threadId,
+                role = CoachRole.COACH,
+                body = answer.note,
+                provider = meta.provider,
+                model = meta.model,
+                inputTokens = meta.inputTokens,
+                outputTokens = meta.outputTokens,
+                proposalId = null,
+                errorKey = null,
+                repaired = meta.repaired,
+            ),
         )
         val proposalIds = answer.proposals.map { draft ->
             val proposalId = ids.newId()
@@ -141,20 +159,21 @@ class CoachRepository(
     /** A visible failure is a row too, so the conversation shows what went wrong. */
     fun appendError(
         failure: CoachFailure,
-        provider: String,
-        model: String,
+        meta: CoachTurnMeta,
         threadId: String = THREAD,
     ): String = appendMessage(
-        threadId = threadId,
-        role = CoachRole.ERROR,
-        body = failure.errorKey(),
-        provider = provider,
-        model = model,
-        inputTokens = null,
-        outputTokens = null,
-        proposalId = null,
-        errorKey = failure.errorKey(),
-        repaired = false,
+        MessageDraft(
+            threadId = threadId,
+            role = CoachRole.ERROR,
+            body = failure.errorKey(),
+            provider = meta.provider,
+            model = meta.model,
+            inputTokens = null,
+            outputTokens = null,
+            proposalId = null,
+            errorKey = failure.errorKey(),
+            repaired = false,
+        ),
     )
 
     fun messages(threadId: String = THREAD): List<CoachMessage> =
@@ -170,6 +189,7 @@ class CoachRepository(
             row.toDomain(db.coachQueries.actionsForProposal(id).executeAsList())
         }
 
+    @Suppress("ReturnCount")
     fun decide(id: String, status: CoachProposalStatus): Boolean {
         val proposal = proposal(id) ?: return false
         if (proposal.status != CoachProposalStatus.PROPOSED &&
@@ -222,32 +242,21 @@ class CoachRepository(
         }
     }
 
-    private fun appendMessage(
-        threadId: String,
-        role: CoachRole,
-        body: String,
-        provider: String?,
-        model: String?,
-        inputTokens: Int?,
-        outputTokens: Int?,
-        proposalId: String?,
-        errorKey: String?,
-        repaired: Boolean,
-    ): String {
+    private fun appendMessage(draft: MessageDraft): String {
         val id = ids.newId()
         db.coachQueries.insertMessage(
             id = id,
-            threadId = threadId,
-            role = role.name,
-            body = body,
+            threadId = draft.threadId,
+            role = draft.role.name,
+            body = draft.body,
             createdAt = clock.now().toEpochMilliseconds(),
-            provider = provider,
-            model = model,
-            inputTokens = inputTokens?.toLong(),
-            outputTokens = outputTokens?.toLong(),
-            proposalId = proposalId,
-            errorKey = errorKey,
-            repaired = repaired,
+            provider = draft.provider,
+            model = draft.model,
+            inputTokens = draft.inputTokens?.toLong(),
+            outputTokens = draft.outputTokens?.toLong(),
+            proposalId = draft.proposalId,
+            errorKey = draft.errorKey,
+            repaired = draft.repaired,
         )
         return id
     }
@@ -298,6 +307,10 @@ private fun CoachFailure.errorKey(): String = buildString {
     append(kind.name.lowercase())
     if (findings.isNotEmpty()) {
         append(':')
-        append(findings.map(CoachFinding::code).distinct().joinToString(",") { it.name.lowercase() })
+        append(
+            findings.map(CoachFinding::code).distinct().joinToString(",") {
+                it.name.lowercase()
+            },
+        )
     }
 }

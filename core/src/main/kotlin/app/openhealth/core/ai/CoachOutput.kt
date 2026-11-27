@@ -1,15 +1,14 @@
+@file:Suppress("MagicNumber") // parser limits, named in the constants below.
+
 package app.openhealth.core.ai
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /** The result of reading one provider answer. */
@@ -28,9 +27,9 @@ object CoachParser {
 
     private val ROOT_FIELDS = setOf("note", "proposals")
     private val PROPOSAL_FIELDS = setOf("summary", "rationale", "actions")
-    private val MAX_NOTE = 600
-    private val MAX_SUMMARY = 200
-    private val MAX_RATIONALE = 800
+    private const val MAX_NOTE = 600
+    private const val MAX_SUMMARY = 200
+    private const val MAX_RATIONALE = 800
 
     fun parse(text: String, plan: CoachPlan): CoachOutputResult {
         val body = stripFence(text.trim())
@@ -40,9 +39,12 @@ object CoachParser {
                 text,
             )
         return runCatching { read(root, plan) }
-            .getOrElse { CoachOutputResult.Invalid(listOf(CoachFinding(CoachFindingCode.NOT_JSON)), text) }
+            .getOrElse {
+                CoachOutputResult.Invalid(listOf(CoachFinding(CoachFindingCode.NOT_JSON)), text)
+            }
     }
 
+    @Suppress("ReturnCount")
     private fun read(root: JsonObject, plan: CoachPlan): CoachOutputResult {
         val findings = mutableListOf<CoachFinding>()
         val unknown = root.keys - ROOT_FIELDS
@@ -68,12 +70,20 @@ object CoachParser {
         // fails, and the one repair round gets a precise finding.
         val texts = buildList {
             add(note)
-            proposals.forEach { add(it.summary); add(it.rationale) }
+            proposals.forEach {
+                add(it.summary)
+                add(it.rationale)
+            }
         }
         if (texts.any(CoachSafety::isUnsafe)) {
             findings += CoachFinding(CoachFindingCode.UNSAFE_CLAIM)
         }
-        if (findings.isNotEmpty()) return CoachOutputResult.Invalid(findings.distinct(), root.toString())
+        if (findings.isNotEmpty()) {
+            return CoachOutputResult.Invalid(
+                findings.distinct(),
+                root.toString(),
+            )
+        }
         return CoachOutputResult.Valid(CoachAnswer(note.trim(), proposals))
     }
 
@@ -231,6 +241,7 @@ sealed interface CoachExchangeResult {
  * provider failure is never repaired; only invalid output is.
  */
 class CoachExchange(private val provider: CoachProvider) {
+    @Suppress("ReturnCount")
     suspend fun run(request: CoachProviderRequest, plan: CoachPlan): CoachExchangeResult {
         val first = provider.complete(request)
         val firstText = when (first) {
@@ -249,7 +260,9 @@ class CoachExchange(private val provider: CoachProvider) {
                 val repair = CoachPrompt.repair(request, parsed.raw, parsed.findings)
                 val second = provider.complete(repair)
                 val secondText = when (second) {
-                    is CoachProviderResult.Failed -> return CoachExchangeResult.Failed(second.failure)
+                    is CoachProviderResult.Failed -> return CoachExchangeResult.Failed(
+                        second.failure,
+                    )
                     is CoachProviderResult.Text -> second
                 }
                 return when (val retry = CoachParser.parse(secondText.text, plan)) {
@@ -263,8 +276,9 @@ class CoachExchange(private val provider: CoachProvider) {
                     is CoachOutputResult.Invalid -> CoachExchangeResult.Failed(
                         CoachFailure(
                             kind = if (retry.findings.any {
-                                it.code == CoachFindingCode.UNSAFE_CLAIM
-                            }) {
+                                    it.code == CoachFindingCode.UNSAFE_CLAIM
+                                }
+                            ) {
                                 CoachFailureKind.SAFETY
                             } else {
                                 CoachFailureKind.INVALID_OUTPUT

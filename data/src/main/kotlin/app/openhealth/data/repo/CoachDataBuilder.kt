@@ -66,7 +66,7 @@ class CoachDataBuilder(
         val profile = store.profile.active() ?: return null
         return CoachProfile(
             sex = profile.sex_at_birth,
-            birthYear = profile.date_of_birth?.take(4)?.toIntOrNull(),
+            birthYear = profile.date_of_birth?.take(YEAR_CHARS)?.toIntOrNull(),
             heightCm = profile.height_cm,
             units = profile.units,
             goalMode = profile.goal,
@@ -74,19 +74,20 @@ class CoachDataBuilder(
         )
     }
 
-    private fun sessions(): List<CoachSessionSummary> = store.training.finishedSessions(MAX_SESSIONS.toLong())
-        .map { session ->
-            val sets = store.training.setsForSession(session.id)
-            CoachSessionSummary(
-                date = session.local_date,
-                routineName = session.title
-                    ?: session.routine_id?.let { store.training.routineById(it)?.name },
-                sets = sets.size,
-                volumeKg = sets.filterNot { it.is_warmup }
-                    .sumOf { it.weight_kg * it.reps },
-                effort = session.perceived_effort,
-            )
-        }
+    private fun sessions(): List<CoachSessionSummary> =
+        store.training.finishedSessions(MAX_SESSIONS.toLong())
+            .map { session ->
+                val sets = store.training.setsForSession(session.id)
+                CoachSessionSummary(
+                    date = session.local_date,
+                    routineName = session.title
+                        ?: session.routine_id?.let { store.training.routineById(it)?.name },
+                    sets = sets.size,
+                    volumeKg = sets.filterNot { it.is_warmup }
+                        .sumOf { it.weight_kg * it.reps },
+                    effort = session.perceived_effort,
+                )
+            }
 
     private fun daily(
         type: ObservationType,
@@ -137,6 +138,7 @@ class CoachDataBuilder(
         const val MAX_SESSIONS = 20
         const val MAX_DAYS = 14
         const val SECONDS_PER_HOUR = 3_600.0
+        const val YEAR_CHARS = 4
         val HISTORY = 7.days
 
         val VITAL_TYPES = listOf(

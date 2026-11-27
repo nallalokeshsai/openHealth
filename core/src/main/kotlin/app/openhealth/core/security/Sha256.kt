@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber") // FIPS 180-4 constants.
+
 package app.openhealth.core.security
 
 /**
@@ -21,14 +23,19 @@ object Sha256 {
     )
 
     private val INITIAL = intArrayOf(
-        0x6a09e667, -0x4498517b, 0x3c6ef372, -0x5ab00ac6, 0x510e527f, -0x64fa9774,
-        0x1f83d9ab, 0x5be0cd19,
+        0x6a09e667,
+        -0x4498517b,
+        0x3c6ef372,
+        -0x5ab00ac6,
+        0x510e527f,
+        -0x64fa9774,
+        0x1f83d9ab,
+        0x5be0cd19,
     )
 
     private const val BLOCK = 64
     private const val WORD_BYTES = 4
     private const val WORD_BITS = 32
-    private const val MASK = 0xFF
     private const val ROUNDS = 64
     private const val BYTE_MASK = 0xFF
 

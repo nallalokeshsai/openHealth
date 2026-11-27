@@ -9,10 +9,10 @@ import app.openhealth.core.ai.CoachFindingCode
 import app.openhealth.core.ai.CoachProposalDraft
 import app.openhealth.core.ids.SeededIdGenerator
 import app.openhealth.core.seam.FixedClock
+import app.openhealth.data.LocalStore
+import app.openhealth.data.repo.CoachApplyResult
 import app.openhealth.data.repo.CoachPlanApplier
 import app.openhealth.data.repo.CoachProposalStatus
-import app.openhealth.data.repo.CoachApplyResult
-import app.openhealth.data.LocalStore
 import app.openhealth.data.repo.CoachRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -104,8 +104,10 @@ class CoachRepositoryTest {
         coach.appendPerson("Review my week.")
         val (messageId, proposalIds) = coach.appendCoach(
             answer(listOf(CoachAction.UpdateTarget("push", "entry", sets = 4))),
-            provider = "anthropic",
-            model = "claude-sonnet-5-5",
+            meta = app.openhealth.data.repo.CoachTurnMeta(
+                provider = "anthropic",
+                model = "claude-sonnet-5-5",
+            ),
         )
         val messages = coach.messages()
         assertEquals(2, messages.size)
@@ -127,8 +129,7 @@ class CoachRepositoryTest {
                 CoachFailureKind.INVALID_OUTPUT,
                 findings = listOf(CoachFinding(CoachFindingCode.BAD_SETS)),
             ),
-            provider = "anthropic",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "anthropic", model = "m"),
         )
         val message = coach.messages().single()
         assertEquals(id, message.id)
@@ -144,8 +145,7 @@ class CoachRepositoryTest {
         val applier = CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(4))
         val (_, ids) = coach.appendCoach(
             answer(listOf(CoachAction.UpdateTarget("push", "entry", sets = 4, reps = 10))),
-            provider = "anthropic",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "anthropic", model = "m"),
         )
         val proposalId = ids.single()
         val applied = applier.apply(proposalId)
@@ -180,8 +180,7 @@ class CoachRepositoryTest {
                     ),
                 ),
             ),
-            provider = "anthropic",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "anthropic", model = "m"),
         )
         applier.apply(ids.single())
         assertEquals(2, store.training.routineEntries("push").size)
@@ -205,8 +204,7 @@ class CoachRepositoryTest {
         val applier = CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(8))
         val (_, ids) = coach.appendCoach(
             answer(listOf(CoachAction.UpdateTarget("push", "missing", sets = 4))),
-            provider = "anthropic",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "anthropic", model = "m"),
         )
         val result = applier.apply(ids.single())
         assertTrue(result is CoachApplyResult.Rejected)
@@ -219,16 +217,15 @@ class CoachRepositoryTest {
     fun onlyTheNewestAcceptedProposalCanBeUndone() {
         val store = store()
         val coach = CoachRepository(store.db, clock, SeededIdGenerator(9))
-        val applier = CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(10))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(10))
         val first = coach.appendCoach(
             answer(listOf(CoachAction.UpdateTarget("push", "entry", sets = 4))),
-            provider = "p",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
         ).second.single()
         val second = coach.appendCoach(
             answer(listOf(CoachAction.UpdateTarget("push", "entry", reps = 10))),
-            provider = "p",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
         ).second.single()
         assertTrue(applier.apply(first) is CoachApplyResult.Applied)
         assertTrue(applier.apply(second) is CoachApplyResult.Applied)
@@ -241,11 +238,11 @@ class CoachRepositoryTest {
     fun aDiscardedProposalNeverApplies() {
         val store = store()
         val coach = CoachRepository(store.db, clock, SeededIdGenerator(11))
-        val applier = CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(12))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(12))
         val proposalId = coach.appendCoach(
             answer(listOf(CoachAction.UpdateTarget("push", "entry", sets = 5))),
-            provider = "p",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
         ).second.single()
         assertTrue(coach.decide(proposalId, CoachProposalStatus.DISCARDED))
         assertTrue(applier.apply(proposalId) is CoachApplyResult.Rejected)
@@ -259,8 +256,7 @@ class CoachRepositoryTest {
         val coach = CoachRepository(store.db, clock, SeededIdGenerator(13))
         val proposalId = coach.appendCoach(
             answer(listOf(CoachAction.MoveDay("push", 3))),
-            provider = "p",
-            model = "m",
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
         ).second.single()
         val snapshotId = coach.saveSnapshot(proposalId, """{"routines":[],"entries":[]}""")
         assertNotNull(snapshotId)

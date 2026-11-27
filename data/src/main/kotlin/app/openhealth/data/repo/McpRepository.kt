@@ -76,6 +76,7 @@ class McpRepository(
     fun byHash(tokenHash: String): McpTokenRecord? =
         db.mcpQueries.tokenByHash(tokenHash).executeAsOneOrNull()?.toRecord()
 
+    @Suppress("ReturnCount")
     fun revoke(id: String): Boolean {
         val token = tokens().firstOrNull { it.id == id } ?: return false
         if (token.revoked) return false

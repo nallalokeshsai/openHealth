@@ -57,6 +57,10 @@ data class SettingsState(
     val devicesDetail: String,
     /** What the Sync row says: local only, synced, or waiting (`pr.md` §6.24). */
     val syncDetail: String,
+    /** What the Coach row says: off, ready, or the number of consented categories. */
+    val coachDetail: String,
+    /** What the external-access row says: off, or the number of live tokens. */
+    val mcpDetail: String,
     val preset: ModulePreset,
     /** The switch's own state; it is the control, not a display decision. */
     val weightNeutral: Boolean,

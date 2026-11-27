@@ -113,7 +113,6 @@ object SettingKeys {
     const val WATCH_LINK = "watch.link_enabled"
 
     /** B15: the coach is off until the person turns it on (`pr.md` §6.15). */
-    const val COACH_ENABLED = "coach.enabled"
     const val COACH_CONSENT = "coach.consent"
     const val COACH_PROVIDER = "coach.provider"
     const val COACH_DISCLOSED = "coach.disclosure_accepted"
@@ -158,7 +157,13 @@ object SettingKeys {
 /** A setting is user data unless it only describes this device or its sync state. */
 object SyncSettingsPolicy {
     private val localPrefixes = listOf(
-        "sync.", "demo.", "steps.", "device.", "health_connect.", "coach.", "mcp.",
+        "sync.",
+        "demo.",
+        "steps.",
+        "device.",
+        "health_connect.",
+        "coach.",
+        "mcp.",
     )
 
     /**

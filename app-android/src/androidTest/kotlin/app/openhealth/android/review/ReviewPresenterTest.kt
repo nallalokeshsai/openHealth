@@ -168,6 +168,11 @@ class ReviewPresenterTest {
         appLock = false,
         demo = false,
         highContrast = false,
+        coachConsent = app.openhealth.core.ai.CoachConsent.Off,
+        coachProvider = app.openhealth.core.ai.CoachProviderConfig(),
+        coachDisclosed = false,
+        mcpEnabled = false,
+        mcpPort = 8_765,
         reduceTransparency = false,
         reducedMotion = false,
     )

@@ -110,6 +110,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -223,6 +225,10 @@ data class AppState(
     val weeklyReview: app.openhealth.ui.screens.clinical.WeeklyReviewModel? = null,
     val sync: app.openhealth.ui.screens.sync.SyncModel? = null,
     val syncBusy: Boolean = false,
+    val coach: app.openhealth.ui.screens.coach.CoachModel? = null,
+    val coachBusy: Boolean = false,
+    val mcp: app.openhealth.ui.screens.mcp.McpModel? = null,
+    val mcpBusy: Boolean = false,
     val statsSegment: app.openhealth.ui.screens.stats.StatsSegment =
         app.openhealth.ui.screens.stats.StatsSegment.OVERVIEW,
     val foundDevices: List<app.openhealth.ui.screens.devices.FoundDeviceModel> = emptyList(),
@@ -332,6 +338,11 @@ class AppViewModel(
                 highContrast = false,
                 reduceTransparency = false,
                 reducedMotion = false,
+                coachConsent = app.openhealth.core.ai.CoachConsent.Off,
+                coachProvider = app.openhealth.core.ai.CoachProviderConfig(),
+                coachDisclosed = false,
+                mcpEnabled = false,
+                mcpPort = 8_765,
             ),
             onboarding = OnboardingUi(answers = OnboardingAnswers(units = detectedUnits)),
             quickAdd = newQuickAdd(container),
@@ -347,6 +358,9 @@ class AppViewModel(
     private var suppressNextLock = false
     private var repeating = false
     private var toastJob: Job? = null
+
+    /** Serialises rebuilds so an older read can never overwrite a newer write. */
+    private val rebuildMutex = Mutex()
 
     init {
         // The BLE manager opens the encrypted store; construct it off the main thread so
@@ -732,82 +746,88 @@ class AppViewModel(
     }
 
     @Suppress("LongMethod")
-    private suspend fun rebuild() = withContext(Dispatchers.IO) {
-        reconnectAndReconcile()
-        val preferences = container.preferences.snapshot()
-        val profile = store.profile.active()
-        val complete = preferences.onboardingComplete && profile != null
-        val today = profile?.let { loaded ->
-            todayPresenter.model(preferences, loaded)
-                .copy(bodyMap = buildBodyMap(preferences, loaded))
-        }
-        val settings = buildSettings(preferences, profile)
-        val devices = activity.model(
-            stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
-                preferences.modules,
-            found = _state.value.foundDevices,
-        )
-        val timeline = buildTimeline(preferences)
-        val trash = buildTrash(preferences)
-        val recent = buildRecent(preferences)
-        val firstLoad = !_state.value.loaded
-        _state.update { previous ->
-            val lockOnFirstLoad = !previous.loaded &&
-                complete &&
-                preferences.appLock &&
-                app.openhealth.android.security.BiometricGate().available(container.context)
-            previous.copy(
-                loaded = true,
-                onboardingComplete = complete,
-                preferences = preferences,
-                profile = profile,
-                today = today,
-                settings = settings,
-                devices = devices,
-                timeline = timeline,
-                trash = trash,
-                recent = recent,
-                locked = previous.locked || lockOnFirstLoad,
+    private suspend fun rebuild() = rebuildMutex.withLock {
+        withContext(Dispatchers.IO) {
+            runCatching { container.mcp.startIfEnabled() }
+            reconnectAndReconcile()
+            val preferences = container.preferences.snapshot()
+            val profile = store.profile.active()
+            val complete = preferences.onboardingComplete && profile != null
+            val today = profile?.let { loaded ->
+                todayPresenter.model(preferences, loaded)
+                    .copy(bodyMap = buildBodyMap(preferences, loaded))
+            }
+            val settings = buildSettings(preferences, profile)
+            val devices = activity.model(
+                stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
+                    preferences.modules,
+                found = _state.value.foundDevices,
             )
+            val timeline = buildTimeline(preferences)
+            val trash = buildTrash(preferences)
+            val recent = buildRecent(preferences)
+            val firstLoad = !_state.value.loaded
+            _state.update { previous ->
+                val lockOnFirstLoad = !previous.loaded &&
+                    complete &&
+                    preferences.appLock &&
+                    app.openhealth.android.security.BiometricGate().available(container.context)
+                previous.copy(
+                    loaded = true,
+                    onboardingComplete = complete,
+                    preferences = preferences,
+                    profile = profile,
+                    today = today,
+                    settings = settings,
+                    devices = devices,
+                    timeline = timeline,
+                    trash = trash,
+                    recent = recent,
+                    locked = previous.locked || lockOnFirstLoad,
+                )
+            }
+            // The Train root is the heaviest model; it lands in a second update so a quick
+            // add's timeline or a settings change is never held behind the exercise library.
+            val train = profile?.let { training.train(preferences, it) }
+            val yogaOn = HealthModule.YOGA in preferences.modules
+            val activitiesOn = HealthModule.ACTIVITIES in preferences.modules
+            val movement = if (complete) activityLog.movementModel(yogaOn, activitiesOn) else null
+            val activities = if (complete) activityLog.historyModel(activitiesOn) else null
+            _state.update { it.copy(train = train, movement = movement, activities = activities) }
+            firstLoadRefreshReviewCount(firstLoad)
+            val vitals = profile?.let { body.model(it, preferences, preferences.demo) }
+            _state.update { it.copy(vitals = vitals) }
+            refreshStats(preferences, profile)
+            val openVital = _state.value.vitalType
+            if (openVital != null) {
+                val detail = body.detail(
+                    openVital,
+                    _state.value.vitalFilter,
+                    profile?.units == "imperial",
+                )
+                _state.update { it.copy(vitalDetail = detail) }
+            }
+            val stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
+                preferences.modules
+            if (!stepsModuleOn) {
+                // A module is hidden, never deleted: the data stays, the service stops.
+                app.openhealth.android.activity.StepTrackingService.ensureStopped(container.context)
+            } else if (store.devices.stepTrackingEnabled() &&
+                container.activity.phoneSensorPresent
+            ) {
+                // The counter keeps counting while nothing runs; starting the service makes
+                // the next sensor event persist the interval (`pr.md` §6.6).
+                app.openhealth.android.activity.StepTrackingService.ensureRunning(container.context)
+            }
+            // The diary is the third update: its own reads (seven days of entries, the
+            // water rollup, the food index) never delay the shell or the Train root.
+            val date =
+                _state.value.nutritionDate ?: container.clock.now().toLocalDateTime(zone).date
+            val nutritionModel = withContext(Dispatchers.IO) {
+                nutritionPresenter.root(date, preferences)
+            }
+            _state.update { it.copy(nutrition = nutritionModel, nutritionDate = date) }
         }
-        // The Train root is the heaviest model; it lands in a second update so a quick
-        // add's timeline or a settings change is never held behind the exercise library.
-        val train = profile?.let { training.train(preferences, it) }
-        val yogaOn = HealthModule.YOGA in preferences.modules
-        val activitiesOn = HealthModule.ACTIVITIES in preferences.modules
-        val movement = if (complete) activityLog.movementModel(yogaOn, activitiesOn) else null
-        val activities = if (complete) activityLog.historyModel(activitiesOn) else null
-        _state.update { it.copy(train = train, movement = movement, activities = activities) }
-        firstLoadRefreshReviewCount(firstLoad)
-        val vitals = profile?.let { body.model(it, preferences, preferences.demo) }
-        _state.update { it.copy(vitals = vitals) }
-        refreshStats(preferences, profile)
-        val openVital = _state.value.vitalType
-        if (openVital != null) {
-            val detail = body.detail(
-                openVital,
-                _state.value.vitalFilter,
-                profile?.units == "imperial",
-            )
-            _state.update { it.copy(vitalDetail = detail) }
-        }
-        val stepsModuleOn = app.openhealth.core.preferences.HealthModule.STEPS in
-            preferences.modules
-        if (!stepsModuleOn) {
-            // A module is hidden, never deleted: the data stays, the service stops.
-            app.openhealth.android.activity.StepTrackingService.ensureStopped(container.context)
-        } else if (store.devices.stepTrackingEnabled() && container.activity.phoneSensorPresent) {
-            // The counter keeps counting while nothing runs; starting the service makes
-            // the next sensor event persist the interval (`pr.md` §6.6).
-            app.openhealth.android.activity.StepTrackingService.ensureRunning(container.context)
-        }
-        // The diary is the third update: its own reads (seven days of entries, the
-        // water rollup, the food index) never delay the shell or the Train root.
-        val date = _state.value.nutritionDate ?: container.clock.now().toLocalDateTime(zone).date
-        val nutritionModel = withContext(Dispatchers.IO) {
-            nutritionPresenter.root(date, preferences)
-        }
-        _state.update { it.copy(nutrition = nutritionModel, nutritionDate = date) }
     }
 
     private suspend fun refreshStats(
@@ -3236,6 +3256,178 @@ class AppViewModel(
         }
     }
 
+    // ----------------------------------------------------------------------- coach
+
+    fun openCoach() {
+        if (_state.value.coach != null) return
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { container.coach.model() }
+            _state.update { it.copy(coach = model) }
+        }
+    }
+
+    fun setCoachEnabled(enabled: Boolean) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.coach.setEnabled(enabled)
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = model) }
+            rebuild()
+        }
+    }
+
+    fun setCoachCategory(category: app.openhealth.core.ai.CoachCategory, enabled: Boolean) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.coach.setCategory(category, enabled)
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = model) }
+        }
+    }
+
+    fun setCoachHealthConnect(enabled: Boolean) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.coach.setHealthConnect(enabled)
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = model) }
+        }
+    }
+
+    fun saveCoachProvider(
+        kind: app.openhealth.core.ai.CoachProviderKind,
+        model: String,
+        baseUrl: String,
+    ) {
+        launchGuarded {
+            val updated = withContext(Dispatchers.IO) {
+                container.coach.setProvider(
+                    app.openhealth.core.ai.CoachProviderConfig(
+                        kind = kind,
+                        model = model.ifBlank {
+                            app.openhealth.core.ai.CoachProviderConfig.ANTHROPIC_DEEP_MODEL
+                        },
+                        baseUrl = baseUrl,
+                    ),
+                )
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = updated) }
+        }
+    }
+
+    fun saveCoachKey(key: String) {
+        launchGuarded {
+            val updated = withContext(Dispatchers.IO) {
+                container.coach.saveKey(key)
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = updated) }
+        }
+    }
+
+    fun clearCoachKey() {
+        launchGuarded {
+            val updated = withContext(Dispatchers.IO) {
+                container.coach.clearKey()
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = updated) }
+        }
+    }
+
+    fun acceptCoachDisclosure() {
+        launchGuarded {
+            val updated = withContext(Dispatchers.IO) {
+                container.coach.setDisclosed()
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = updated) }
+        }
+    }
+
+    fun sendCoach(note: String) {
+        if (note.isBlank() || _state.value.coachBusy) return
+        _state.update {
+            it.copy(coachBusy = true, coach = it.coach?.copy(busy = true, error = null))
+        }
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { container.coach.send(note) }
+            _state.update { it.copy(coachBusy = false, coach = model) }
+            rebuild()
+        }
+    }
+
+    fun acceptCoachProposal(id: String) {
+        launchGuarded {
+            val error = withContext(Dispatchers.IO) { container.coach.accept(id) }
+            val model = withContext(Dispatchers.IO) { container.coach.model(error = error) }
+            _state.update { it.copy(coach = model) }
+            rebuild()
+        }
+    }
+
+    fun discardCoachProposal(id: String) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.coach.discard(id)
+                container.coach.model()
+            }
+            _state.update { it.copy(coach = model) }
+        }
+    }
+
+    fun undoCoachProposal(id: String) {
+        launchGuarded {
+            val error = withContext(Dispatchers.IO) { container.coach.undo(id) }
+            val model = withContext(Dispatchers.IO) { container.coach.model(error = error) }
+            _state.update { it.copy(coach = model) }
+            rebuild()
+        }
+    }
+
+    // ----------------------------------------------------------------------- mcp
+
+    fun openMcp() {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) { container.mcp.model() }
+            _state.update { it.copy(mcp = model) }
+        }
+    }
+
+    fun setMcpEnabled(enabled: Boolean) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                val error = container.mcp.setEnabled(enabled)
+                container.mcp.model(error = error)
+            }
+            _state.update { it.copy(mcp = model) }
+        }
+    }
+
+    fun createMcpToken(label: String, scopes: Set<app.openhealth.core.ai.McpScope>) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                val (token, error) = container.mcp.create(label, scopes)
+                container.mcp.model(newToken = token, error = error)
+            }
+            _state.update { it.copy(mcp = model) }
+        }
+    }
+
+    fun revokeMcpToken(id: String) {
+        launchGuarded {
+            val model = withContext(Dispatchers.IO) {
+                container.mcp.revoke(id)
+                container.mcp.model()
+            }
+            _state.update { it.copy(mcp = model) }
+        }
+    }
+
     // ----------------------------------------------------------------------- sync
 
     fun openSync() {
@@ -4002,6 +4194,8 @@ class AppViewModel(
         modules = preferences.modules,
         devicesDetail = activity.summary(),
         syncDetail = container.sync.summary(),
+        coachDetail = container.coach.summary(),
+        mcpDetail = container.mcp.summary(),
         preset = preferences.preset,
         weightNeutral = preferences.weightNeutral,
         displayPolicy = preferences.displayPolicy,

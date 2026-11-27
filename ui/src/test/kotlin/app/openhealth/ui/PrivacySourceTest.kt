@@ -41,7 +41,7 @@ class PrivacySourceTest {
     }
 
     @Test
-    fun theOnlyTransportsAreTheBarcodeLookupTheMapPackDownloadAndTheSyncClient() {
+    fun theOnlyTransportsAreTheBarcodeLookupTheMapPackDownloadTheSyncClientAndTheLocalMcpServer() {
         val files = kotlinFiles()
         assertTrue(files.size > 100, "the scan found only ${files.size} files")
         val network = files.filter { file ->
@@ -64,12 +64,14 @@ class PrivacySourceTest {
         }
         // The barcode lookup and the map-pack download are B6/B11; the paired sync
         // client is B13 and is reached only after a pairing code is exchanged
-        // (`pr.md` §6.24, §6.11). No screen may open a socket of its own.
+        // (`pr.md` §6.24, §6.11); the loopback MCP listener is B15 and binds this device
+        // only. No screen may open a socket of its own.
         assertEquals(
             listOf(
                 "HttpUrlConnectionTransport.kt",
                 "KtorSyncTransport.kt",
                 "MapPackStore.kt",
+                "McpLoopbackServer.kt",
                 "SyncEngine.kt",
             ),
             network.map { it.name }.sorted(),
@@ -82,6 +84,28 @@ class PrivacySourceTest {
                 .contains("interface HttpTransport"),
             "the transport must sit behind the :core seam",
         )
+    }
+
+    /** B15: the local endpoint is loopback-only and every call needs a live token. */
+    @Test
+    fun theMcpListenerBindsLoopbackAndRequiresAToken() {
+        val server = File(
+            "../app-android/src/main/kotlin/app/openhealth/android/mcp/McpLoopbackServer.kt",
+        ).readText()
+        assertTrue(
+            server.contains("\"127.0.0.1\""),
+            "the MCP server must bind loopback, not every interface",
+        )
+        assertTrue(server.contains("ServerSocket"), "the endpoint is a local socket")
+        assertTrue(
+            server.contains("McpProtocol.MAX_BODY_BYTES"),
+            "the endpoint must cap the body it reads",
+        )
+        val runtime = File(
+            "../app-android/src/main/kotlin/app/openhealth/android/mcp/McpRuntime.kt",
+        ).readText()
+        assertTrue(runtime.contains("Sha256.hexDigest"), "a token is matched by its digest")
+        assertTrue(runtime.contains(".revoked"), "a revoked token is refused")
     }
 
     @Test

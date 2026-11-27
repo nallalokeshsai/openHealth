@@ -14,11 +14,10 @@ import app.openhealth.core.source.SourcePermission
 import app.openhealth.core.time.TimeProvenance
 import app.openhealth.core.units.Measure
 import app.openhealth.core.units.UcumUnit
+import app.openhealth.data.LocalStore
 import app.openhealth.data.repo.CoachDataBuilder
 import app.openhealth.data.repo.CoachPlanApplier
-import app.openhealth.data.LocalStore
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant

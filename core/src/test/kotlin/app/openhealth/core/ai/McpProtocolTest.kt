@@ -41,8 +41,11 @@ class McpProtocolTest {
         assertEquals(200, status)
         val result = body!!.getValue("result").jsonObject
         assertEquals(McpProtocol.VERSION, result.getValue("protocolVersion").jsonPrimitive.content)
-        assertEquals("openhealth", result.getValue("serverInfo").jsonObject
-            .getValue("name").jsonPrimitive.content)
+        assertEquals(
+            "openhealth",
+            result.getValue("serverInfo").jsonObject
+                .getValue("name").jsonPrimitive.content,
+        )
         assertEquals(1, body.getValue("id").jsonPrimitive.content.toInt())
     }
 
@@ -79,8 +82,10 @@ class McpProtocolTest {
         val result = json.parseToJsonElement(response.body!!).jsonObject
             .getValue("result").jsonObject
         assertEquals(false, result.getValue("isError").jsonPrimitive.content.toBoolean())
-        assertTrue(result.getValue("content").jsonArray.single().jsonObject
-            .getValue("text").jsonPrimitive.content.contains("get_training_plan"))
+        assertTrue(
+            result.getValue("content").jsonArray.single().jsonObject
+                .getValue("text").jsonPrimitive.content.contains("get_training_plan"),
+        )
     }
 
     @Test

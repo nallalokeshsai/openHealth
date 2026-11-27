@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber", "TooManyFunctions") // JSON-RPC error codes are protocol constants.
+
 package app.openhealth.core.ai
 
 import kotlinx.serialization.json.Json
@@ -37,11 +39,7 @@ data class McpToken(
 }
 
 /** The seven tools of the documented surface. Names are prefixed for a shared client. */
-enum class McpTool(
-    val wireName: String,
-    val scope: McpScope,
-    val description: String,
-) {
+enum class McpTool(val wireName: String, val scope: McpScope, val description: String) {
     GET_PROFILE(
         "openhealth_get_profile",
         McpScope.READ_PROFILE,
@@ -126,6 +124,7 @@ object McpProtocol {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    @Suppress("ReturnCount", "CyclomaticComplexMethod")
     fun handle(body: String, token: McpToken, host: McpToolHost): McpHttpResponse {
         if (token.revoked) return McpHttpResponse(401)
         val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull()
@@ -191,6 +190,7 @@ object McpProtocol {
         )
     }
 
+    @Suppress("LongMethod")
     private fun inputSchema(tool: McpTool): JsonObject = when (tool) {
         McpTool.LIST_RECENT_SESSIONS -> schema(
             buildJsonObject {
@@ -258,21 +258,20 @@ object McpProtocol {
         McpTool.GET_PROFILE, McpTool.GET_TRAINING_PLAN -> schema(buildJsonObject {})
     }
 
-    private fun schema(
-        properties: JsonObject,
-        required: List<String> = emptyList(),
-    ): JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", properties)
-        put("additionalProperties", false)
-        if (required.isNotEmpty()) {
-            put(
-                "required",
-                buildJsonArray { required.forEach { add(JsonPrimitive(it)) } },
-            )
+    private fun schema(properties: JsonObject, required: List<String> = emptyList()): JsonObject =
+        buildJsonObject {
+            put("type", "object")
+            put("properties", properties)
+            put("additionalProperties", false)
+            if (required.isNotEmpty()) {
+                put(
+                    "required",
+                    buildJsonArray { required.forEach { add(JsonPrimitive(it)) } },
+                )
+            }
         }
-    }
 
+    @Suppress("ReturnCount")
     private fun callTool(
         id: JsonElement,
         params: JsonObject,

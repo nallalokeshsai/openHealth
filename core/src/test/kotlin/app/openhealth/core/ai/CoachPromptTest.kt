@@ -47,10 +47,8 @@ class CoachPromptTest {
         ),
     )
 
-    private fun build(
-        consent: CoachConsent,
-        weightNeutral: Boolean = false,
-    ): String = CoachPrompt.build(dataset, consent, weightNeutral, "Review my week.").user
+    private fun build(consent: CoachConsent, weightNeutral: Boolean = false): String =
+        CoachPrompt.build(dataset, consent, weightNeutral, "Review my week.").user
 
     private fun array(body: String, key: String): JsonArray =
         json.parseToJsonElement(body).jsonObject.getValue(key) as JsonArray
