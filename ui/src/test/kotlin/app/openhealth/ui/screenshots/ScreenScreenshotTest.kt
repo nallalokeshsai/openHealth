@@ -246,6 +246,51 @@ class ScreenScreenshotTest {
         status = "Ready",
     )
 
+    private val coachDisclosure = coach.copy(
+        disclosureAccepted = false,
+        messages = emptyList(),
+    )
+
+    private val coachStatuses = coach.copy(
+        messages = listOf(
+            CoachMessageModel(
+                id = "m3",
+                role = CoachRoleUi.COACH,
+                body = "Two changes were considered.",
+                proposals = listOf(
+                    CoachProposalModel(
+                        id = "p2",
+                        summary = "Move Push to Wednesday",
+                        rationale = "Two sessions sat back to back.",
+                        rows = listOf(
+                            CoachDiffRowModel(
+                                label = "Push",
+                                before = "Mon",
+                                after = "Wed",
+                            ),
+                        ),
+                        status = CoachProposalStatusUi.ACCEPTED,
+                        undoable = true,
+                    ),
+                    CoachProposalModel(
+                        id = "p3",
+                        summary = "Add a fourth bench set",
+                        rationale = "Kept for next week.",
+                        rows = listOf(
+                            CoachDiffRowModel(
+                                label = "Bench press",
+                                before = "3 × 8 · 80 kg",
+                                after = "4 × 8 · 80 kg",
+                            ),
+                        ),
+                        status = CoachProposalStatusUi.DISCARDED,
+                        undoable = false,
+                    ),
+                ),
+            ),
+        ),
+    )
+
     private val mcp = McpModel(
         enabled = true,
         endpoint = "http://127.0.0.1:8765/mcp",
@@ -450,8 +495,49 @@ class ScreenScreenshotTest {
                 onToggle = {},
                 onCategory = { _, _ -> },
                 onHealthConnect = {},
-                onProvider = { _, _, _ -> },
-                onSaveKey = {},
+                onProvider = { _, _, _, _ -> },
+
+                onClearKey = {},
+                onAcceptDisclosure = {},
+                onSend = {},
+                onAccept = {},
+                onDiscard = {},
+                onUndo = {},
+            )
+        }
+    }
+
+    @Test
+    fun coachDisclosure() {
+        shot("screen-coach-disclosure") {
+            CoachScreen(
+                model = coachDisclosure,
+                onBack = {},
+                onToggle = {},
+                onCategory = { _, _ -> },
+                onHealthConnect = {},
+                onProvider = { _, _, _, _ -> },
+                onClearKey = {},
+                onAcceptDisclosure = {},
+                onSend = {},
+                onAccept = {},
+                onDiscard = {},
+                onUndo = {},
+            )
+        }
+    }
+
+    @Test
+    fun coachStatuses() {
+        shot("screen-coach-statuses") {
+            CoachScreen(
+                model = coachStatuses,
+                onBack = {},
+                onToggle = {},
+                onCategory = { _, _ -> },
+                onHealthConnect = {},
+                onProvider = { _, _, _, _ -> },
+
                 onClearKey = {},
                 onAcceptDisclosure = {},
                 onSend = {},

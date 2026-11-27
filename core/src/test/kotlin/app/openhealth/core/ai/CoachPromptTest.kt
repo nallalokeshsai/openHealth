@@ -102,12 +102,18 @@ class CoachPromptTest {
         val body = build(
             CoachConsent(
                 enabled = true,
-                categories = setOf(CoachCategory.NUTRITION, CoachCategory.VITALS),
+                categories = setOf(
+                    CoachCategory.NUTRITION,
+                    CoachCategory.VITALS,
+                    CoachCategory.TRAINING,
+                ),
             ),
             weightNeutral = true,
         )
         assertFalse(body.contains("WEIGHT"))
         assertFalse(body.contains("energy_kcal"))
+        assertFalse(body.contains("weight_kg"))
+        assertFalse(body.contains("volume_kg"))
         assertTrue(body.contains("\"weight_neutral\":true"))
     }
 

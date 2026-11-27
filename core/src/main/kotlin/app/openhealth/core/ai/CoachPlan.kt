@@ -25,7 +25,11 @@ data class CoachPlanRoutine(
     val entries: List<CoachPlanEntry>,
 )
 
-data class CoachPlan(val routines: List<CoachPlanRoutine>) {
+data class CoachPlan(
+    val routines: List<CoachPlanRoutine>,
+    /** The exercise catalogue, so a proposal may add an exercise not yet in a routine. */
+    val catalogue: Map<String, String> = emptyMap(),
+) {
     fun routine(id: String): CoachPlanRoutine? = routines.firstOrNull { it.id == id }
 
     fun entry(routineId: String, entryId: String): CoachPlanEntry? =
@@ -33,9 +37,10 @@ data class CoachPlan(val routines: List<CoachPlanRoutine>) {
 
     /** Every exercise id a proposal may name, with the catalogue name for display. */
     val exercises: Map<String, String>
-        get() = routines.flatMap { it.entries }
+        get() = catalogue + routines.flatMap { it.entries }
             .associate { it.exerciseId to it.exerciseName }
 
+    @Suppress("CyclomaticComplexMethod")
     fun with(action: CoachAction): CoachPlan = when (action) {
         is CoachAction.AddExercise -> {
             val routine = routine(action.routineId) ?: return this
@@ -69,9 +74,15 @@ data class CoachPlan(val routines: List<CoachPlanRoutine>) {
                             if (entry.id != action.entryId) {
                                 entry
                             } else {
+                                val reps = action.reps
                                 entry.copy(
                                     sets = action.sets ?: entry.sets,
-                                    reps = action.reps ?: entry.reps,
+                                    reps = reps ?: entry.reps,
+                                    repsHigh = if (reps != null) {
+                                        maxOf(reps, entry.repsHigh ?: reps)
+                                    } else {
+                                        entry.repsHigh
+                                    },
                                     weightKg = action.weightKg ?: entry.weightKg,
                                     rir = action.rir ?: entry.rir,
                                 )

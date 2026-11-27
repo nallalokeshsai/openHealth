@@ -125,7 +125,7 @@ class CoachRepository(
         answer: CoachAnswer,
         meta: CoachTurnMeta,
         threadId: String = THREAD,
-    ): Pair<String, List<String>> {
+    ): Pair<String, List<String>> = db.transactionWithResult {
         val messageId = appendMessage(
             MessageDraft(
                 threadId = threadId,
@@ -153,7 +153,7 @@ class CoachRepository(
             appendActions(proposalId, draft)
             proposalId
         }
-        return messageId to proposalIds
+        messageId to proposalIds
     }
 
     /** A visible failure is a row too, so the conversation shows what went wrong. */
@@ -183,6 +183,9 @@ class CoachRepository(
         db.coachQueries.recentProposals(limit).executeAsList().map { row ->
             row.toDomain(db.coachQueries.actionsForProposal(row.id).executeAsList())
         }
+
+    fun latestAcceptedId(): String? =
+        db.coachQueries.latestAcceptedProposal().executeAsOneOrNull()?.id
 
     fun proposal(id: String): CoachProposal? =
         db.coachQueries.proposalById(id).executeAsOneOrNull()?.let { row ->

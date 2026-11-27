@@ -110,7 +110,17 @@ class AppContainer(
 
     /** B15: the local MCP tool surface, bound to one token per request. */
     val mcpGateway: app.openhealth.data.repo.McpGateway by lazy {
-        app.openhealth.data.repo.McpGateway(store.db, store, zone, appVersion = versionName)
+        app.openhealth.data.repo.McpGateway(
+            db = store.db,
+            store = store,
+            zone = zone,
+            appVersion = versionName,
+            weightNeutral = {
+                !preferences.snapshot().displayPolicy.shows(
+                    app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+                )
+            },
+        )
     }
 
     /** B15: the coach screen's holder. The provider key lives in [vault], never in state. */

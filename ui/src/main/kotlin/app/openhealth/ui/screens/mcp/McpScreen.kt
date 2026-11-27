@@ -23,8 +23,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import app.openhealth.core.ai.McpScope
 import app.openhealth.ui.R
@@ -34,6 +37,7 @@ import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhCardHeader
 import app.openhealth.ui.components.OhChip
 import app.openhealth.ui.components.OhChipStrip
+import app.openhealth.ui.components.OhDialog
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhSwitch
@@ -44,7 +48,7 @@ import app.openhealth.ui.screens.common.OhPageHeader
 import app.openhealth.ui.screens.common.OhSectionTitle
 import app.openhealth.ui.theme.OhTheme
 import app.openhealth.ui.theme.ltrFigures
-import app.openhealth.ui.theme.ohBlockDirection
+import app.openhealth.ui.theme.tabular
 
 /**
  * The external-access screen (B15). The endpoint is loopback; a token is shown once and
@@ -68,6 +72,7 @@ fun McpScreen(
             ),
         )
     }
+    var revoke by remember { mutableStateOf<McpTokenModel?>(null) }
 
     Column(
         modifier = modifier
@@ -86,7 +91,7 @@ fun McpScreen(
         ) {
             Text(
                 stringResource(R.string.mcp_intro),
-                style = OhTheme.type.body.copy(textDirection = ohBlockDirection()),
+                style = OhTheme.type.body,
                 color = OhTheme.colors.label2,
                 textAlign = TextAlign.Start,
             )
@@ -119,7 +124,7 @@ fun McpScreen(
                     SelectionContainer {
                         Text(
                             model.endpoint,
-                            style = OhTheme.type.body.ltrFigures(),
+                            style = OhTheme.type.body.tabular().ltrFigures(),
                             color = OhTheme.colors.label,
                         )
                     }
@@ -189,27 +194,43 @@ fun McpScreen(
                         SelectionContainer {
                             Text(
                                 token,
-                                style = OhTheme.type.body.ltrFigures(),
+                                style = OhTheme.type.body.tabular().ltrFigures(),
                                 color = OhTheme.colors.accInk,
                             )
                         }
                         Spacer(Modifier.height(OhTheme.space.s2))
                         Text(
                             stringResource(R.string.mcp_new_token_body),
-                            style = OhTheme.type.footnote.copy(
-                                textDirection = ohBlockDirection(),
-                            ),
+                            style = OhTheme.type.footnote,
                             color = OhTheme.colors.label2,
                             textAlign = TextAlign.Start,
                         )
                     }
                 }
-                TokenList(model = model, onRevoke = onRevoke)
-                AuditList(model = model)
-                Spacer(Modifier.height(OhTheme.space.s8))
+                Spacer(Modifier.height(OhTheme.space.s4))
             }
+            TokenList(
+                model = model,
+                onRevoke = { id -> revoke = model.tokens.firstOrNull { it.id == id } },
+            )
+            AuditList(model = model)
+            Spacer(Modifier.height(OhTheme.space.s8))
         }
     }
+    OhDialog(
+        visible = revoke != null,
+        onDismiss = { revoke = null },
+        title = stringResource(R.string.mcp_revoke_title),
+        message = stringResource(R.string.mcp_revoke_body, revoke?.label.orEmpty()),
+        primaryLabel = stringResource(R.string.mcp_revoke),
+        destructive = true,
+        onPrimary = {
+            revoke?.let { onRevoke(it.id) }
+            revoke = null
+        },
+        cancelLabel = stringResource(R.string.mcp_cancel),
+        onCancel = { revoke = null },
+    )
 }
 
 @Composable
@@ -218,7 +239,7 @@ private fun TokenList(model: McpModel, onRevoke: (String) -> Unit) {
     if (model.tokens.isEmpty()) {
         OhEmptyState(
             title = stringResource(R.string.mcp_no_tokens),
-            body = stringResource(R.string.mcp_new_token_body),
+            body = stringResource(R.string.mcp_no_tokens_body),
             glyph = OhModuleIcons.coach,
         )
         return
@@ -227,9 +248,10 @@ private fun TokenList(model: McpModel, onRevoke: (String) -> Unit) {
         OhCard {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3),
+                verticalAlignment = Alignment.Top,
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         token.label,
                         style = OhTheme.type.subhead,
@@ -238,20 +260,20 @@ private fun TokenList(model: McpModel, onRevoke: (String) -> Unit) {
                     val scopeLine = token.scopes.map { scopeLabel(it) }.joinToString(" · ")
                     Text(
                         scopeLine,
-                        style = OhTheme.type.caption,
+                        style = OhTheme.type.footnote,
                         color = OhTheme.colors.label2,
                     )
                     Text(
                         stringResource(R.string.mcp_created, token.createdLabel),
-                        style = OhTheme.type.caption,
-                        color = OhTheme.colors.label3,
+                        style = OhTheme.type.footnote,
+                        color = OhTheme.colors.labelDim,
                     )
                     Text(
                         token.lastUsedLabel?.let {
                             stringResource(R.string.mcp_last_used, it)
                         } ?: stringResource(R.string.mcp_never_used),
-                        style = OhTheme.type.caption,
-                        color = OhTheme.colors.label3,
+                        style = OhTheme.type.footnote,
+                        color = OhTheme.colors.labelDim,
                     )
                 }
                 if (token.revoked) {
@@ -261,10 +283,12 @@ private fun TokenList(model: McpModel, onRevoke: (String) -> Unit) {
                         color = OhTheme.colors.label2,
                     )
                 } else {
+                    val revokeLabel = stringResource(R.string.mcp_revoke_named, token.label)
                     OhButton(
                         text = stringResource(R.string.mcp_revoke),
                         onClick = { onRevoke(token.id) },
-                        variant = OhButtonVariant.Quiet,
+                        variant = OhButtonVariant.Danger,
+                        modifier = Modifier.semantics { contentDescription = revokeLabel },
                     )
                 }
             }
@@ -277,7 +301,7 @@ private fun AuditList(model: McpModel) {
     OhSectionTitle(stringResource(R.string.mcp_audit))
     if (model.audit.isEmpty()) {
         OhEmptyState(
-            title = stringResource(R.string.mcp_no_audit),
+            title = stringResource(R.string.mcp_no_audit_title),
             body = stringResource(R.string.mcp_no_audit),
             glyph = OhModuleIcons.coach,
         )
@@ -287,7 +311,7 @@ private fun AuditList(model: McpModel) {
         model.audit.forEachIndexed { index, entry ->
             OhRow(
                 title = entry.tool,
-                subtitle = entry.atLabel,
+                subtitle = stringResource(R.string.mcp_call_at, entry.atLabel),
                 value = if (entry.ok) {
                     stringResource(R.string.mcp_call_ok)
                 } else {

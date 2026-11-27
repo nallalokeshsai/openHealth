@@ -31,6 +31,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -192,6 +193,17 @@ class CoachExitTest {
             scopes = setOf(McpScope.READ_TRAINING, McpScope.WRITE_BODY),
             tokenHash = Sha256.hexDigest(plain),
         )
+        // The screen's minter stores only a digest; the plain value is shown once.
+        val (minted, mintError) = container.mcp.create(
+            "Minted on this device",
+            setOf(McpScope.READ_DAY),
+        )
+        assertNull(mintError)
+        assertNotNull(minted)
+        val mintedRecord = store.mcp.tokens().first { it.label == "Minted on this device" }
+        assertEquals(mintedRecord.id, store.mcp.byHash(Sha256.hexDigest(minted!!))!!.id)
+        assertNull(store.mcp.byHash(minted))
+
         runtime = McpRuntime(store, container.mcpGateway)
         assertTrue(runtime!!.start(PORT))
 

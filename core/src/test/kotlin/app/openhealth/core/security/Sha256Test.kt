@@ -32,6 +32,17 @@ class Sha256Test {
     }
 
     @Test
+    fun thePaddingBoundaryAt55And119BytesMatchesTheJvm() {
+        listOf(55, 56, 119, 120).forEach { size ->
+            val input = ByteArray(size) { (it % 0x20 + 0x41).toByte() }
+            val expected = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(input)
+                .joinToString("") { "%02x".format(it) }
+            assertEquals(expected, Sha256.hex(Sha256.digest(input)), "length $size")
+        }
+    }
+
+    @Test
     fun aDifferentInputGivesADifferentDigest() {
         val first = Sha256.hexDigest("openhealth-token-a")
         val second = Sha256.hexDigest("openhealth-token-b")

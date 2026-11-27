@@ -25,6 +25,9 @@ data class HttpRequest(
 
 data class HttpResponse(val status: Int, val body: String)
 
+/** A transport timeout, distinct from a host that could not be reached. */
+class HttpTimeoutException(cause: Throwable? = null) : Exception(cause)
+
 interface HttpTransport {
     /** Performs a GET. A transport failure throws; a protocol answer is returned. */
     suspend fun get(request: HttpRequest): HttpResponse

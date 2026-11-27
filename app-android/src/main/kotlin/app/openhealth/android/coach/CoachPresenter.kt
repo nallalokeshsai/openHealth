@@ -103,8 +103,9 @@ class CoachPresenter(
         return when {
             !consent.enabled -> context.getString(UiR.string.settings_coach_off)
             !consent.sendsAnything -> context.getString(UiR.string.settings_coach_none)
-            else -> context.getString(
-                UiR.string.settings_coach_on,
+            else -> context.resources.getQuantityString(
+                UiR.plurals.settings_coach_categories,
+                consent.categories.size,
                 consent.categories.size,
             )
         }
@@ -129,8 +130,13 @@ class CoachPresenter(
         preferences.setCoachConsent(preferences.coachConsent().copy(healthConnect = enabled))
     }
 
-    fun setProvider(config: CoachProviderConfig) {
-        preferences.setCoachProvider(config)
+    fun saveProvider(kind: CoachProviderKind, model: String, baseUrl: String, key: String?) {
+        preferences.setCoachProvider(
+            CoachProviderConfig(kind = kind, model = model, baseUrl = baseUrl),
+        )
+        if (!key.isNullOrBlank()) {
+            vault.put(keyName(kind), key.trim().toByteArray())
+        }
     }
 
     fun setDisclosed() {
@@ -218,7 +224,9 @@ class CoachPresenter(
     }
 
     /** Returns a stable error key, or null when the plan was restored. */
+    @Suppress("ReturnCount")
     fun undo(id: String): String? {
+        if (!isUndoable(id)) return ERROR_UNDO
         val undone = applier.undo(id)
         if (!undone) return ERROR_UNDO
         acceptedThisSession -= id

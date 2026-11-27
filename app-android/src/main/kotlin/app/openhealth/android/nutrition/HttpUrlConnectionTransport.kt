@@ -2,8 +2,11 @@ package app.openhealth.android.nutrition
 
 import app.openhealth.core.seam.HttpRequest
 import app.openhealth.core.seam.HttpResponse
+import app.openhealth.core.seam.HttpTimeoutException
 import app.openhealth.core.seam.HttpTransport
+import java.io.InterruptedIOException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,7 +27,9 @@ class HttpUrlConnectionTransport : HttpTransport {
             connection.requestMethod = request.method
             connection.connectTimeout = request.timeoutMillis
             connection.readTimeout = request.timeoutMillis
-            connection.instanceFollowRedirects = true
+            // A redirect on a POST could carry an API key to another host; follow only
+            // the barcode GET, and the provider adapters treat a 3xx as a failure.
+            connection.instanceFollowRedirects = request.method == "GET"
             connection.setRequestProperty("Accept", request.accept)
             request.headers.forEach { (name, value) ->
                 connection.setRequestProperty(name, value)
@@ -42,6 +47,10 @@ class HttpUrlConnectionTransport : HttpTransport {
             }
             val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             HttpResponse(status, body)
+        } catch (timeout: SocketTimeoutException) {
+            throw HttpTimeoutException(timeout)
+        } catch (timeout: InterruptedIOException) {
+            throw HttpTimeoutException(timeout)
         } finally {
             connection.disconnect()
         }

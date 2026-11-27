@@ -3,6 +3,7 @@
 package app.openhealth.core.ai
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -125,10 +126,21 @@ object McpProtocol {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Suppress("ReturnCount", "CyclomaticComplexMethod")
-    fun handle(body: String, token: McpToken, host: McpToolHost): McpHttpResponse {
+    fun handle(
+        body: String,
+        token: McpToken,
+        host: McpToolHost,
+        onRefused: (McpToken, McpTool, McpScope) -> Unit = { _, _, _ -> },
+    ): McpHttpResponse {
         if (token.revoked) return McpHttpResponse(401)
-        val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull()
+        val parsed = runCatching { json.parseToJsonElement(body) }.getOrNull()
             ?: return McpHttpResponse(400, error(JsonNull, PARSE_ERROR, "Parse error"))
+        if (parsed is JsonArray) {
+            // JSON-RPC batches were removed from the 2025-06-18 transport.
+            return McpHttpResponse(400, error(JsonNull, INVALID_REQUEST, "Invalid Request"))
+        }
+        val root = parsed as? JsonObject
+            ?: return McpHttpResponse(400, error(JsonNull, INVALID_REQUEST, "Invalid Request"))
         val id = root["id"] ?: JsonNull
         if (root["jsonrpc"]?.jsonPrimitive?.contentOrNull != "2.0") {
             return McpHttpResponse(400, error(id, INVALID_REQUEST, "Invalid Request"))
@@ -138,11 +150,15 @@ object McpProtocol {
         val params = root["params"] as? JsonObject ?: JsonObject(emptyMap())
         val notification = root["id"] == null
         val response = when (method) {
-            "notifications/initialized" -> null
+            "notifications/initialized" -> if (notification) {
+                null
+            } else {
+                result(id, buildJsonObject {})
+            }
             "initialize" -> result(id, initialize())
             "ping" -> result(id, buildJsonObject {})
             "tools/list" -> result(id, toolsList(token))
-            "tools/call" -> callTool(id, params, token, host)
+            "tools/call" -> callTool(id, params, token, host, onRefused)
             else -> error(id, METHOD_NOT_FOUND, "Method not found")
         }
         return when {
@@ -277,10 +293,12 @@ object McpProtocol {
         params: JsonObject,
         token: McpToken,
         host: McpToolHost,
+        onRefused: (McpToken, McpTool, McpScope) -> Unit,
     ): String {
         val tool = McpTool.fromWire(params["name"]?.jsonPrimitive?.contentOrNull)
             ?: return error(id, INVALID_PARAMS, "Unknown tool")
         if (!token.allows(tool.scope)) {
+            onRefused(token, tool, tool.scope)
             return error(id, INSUFFICIENT_SCOPE, "Insufficient scope")
         }
         val arguments = params["arguments"] as? JsonObject ?: JsonObject(emptyMap())

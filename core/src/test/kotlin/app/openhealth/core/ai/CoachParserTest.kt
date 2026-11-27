@@ -118,6 +118,36 @@ class CoachParserTest {
     }
 
     @Test
+    fun theTenActionCapIsForTheWholeAnswerNotPerProposal() {
+        fun proposal(prefix: String) = """
+            {"summary":"$prefix","rationale":"Because.","actions":[
+            {"kind":"move_day","routine_id":"pull","weekday":2},
+            {"kind":"move_day","routine_id":"pull","weekday":3},
+            {"kind":"move_day","routine_id":"pull","weekday":4},
+            {"kind":"move_day","routine_id":"pull","weekday":5},
+            {"kind":"move_day","routine_id":"pull","weekday":6},
+            {"kind":"move_day","routine_id":"pull","weekday":7}]}
+        """.trimIndent()
+        val text = """{"note":"Two","proposals":[
+            ${proposal("A")},${proposal("B")}
+        ]}"""
+        assertTrue(CoachFindingCode.TOO_MANY_ACTIONS in codes(text))
+    }
+
+    @Test
+    fun commonDosingWordingIsAlsoRejected() {
+        listOf(
+            "Take 500 mg daily.",
+            "Take 500 mg twice daily.",
+            "Take 2 tablets daily.",
+            "Use 10 ml a day.",
+        ).forEach { sentence ->
+            assertTrue(CoachSafety.isUnsafe(sentence), sentence)
+        }
+        assertTrue(!CoachSafety.isUnsafe("Add one set at the same load."))
+    }
+
+    @Test
     fun moreThanTenActionsIsRejected() {
         val actions = (1..11).joinToString(",") {
             """{"kind":"move_day","routine_id":"pull","weekday":${it % 7 + 1}}"""

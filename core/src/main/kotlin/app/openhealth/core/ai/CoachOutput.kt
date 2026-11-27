@@ -26,6 +26,25 @@ object CoachParser {
     private val json = Json { ignoreUnknownKeys = false }
 
     private val ROOT_FIELDS = setOf("note", "proposals")
+    private val ADD_FIELDS = setOf(
+        "kind",
+        "routine_id",
+        "exercise_id",
+        "sets",
+        "reps",
+        "weight_kg",
+        "rir",
+    )
+    private val UPDATE_FIELDS = setOf(
+        "kind",
+        "routine_id",
+        "entry_id",
+        "sets",
+        "reps",
+        "weight_kg",
+        "rir",
+    )
+    private val MOVE_FIELDS = setOf("kind", "routine_id", "weekday")
     private val PROPOSAL_FIELDS = setOf("summary", "rationale", "actions")
     private const val MAX_NOTE = 600
     private const val MAX_SUMMARY = 200
@@ -68,6 +87,9 @@ object CoachParser {
         }
         // Safety is checked after structure so a well-formed but clinical answer still
         // fails, and the one repair round gets a precise finding.
+        if (proposals.sumOf { it.actions.size } > CoachActionValidator.MAX_ACTIONS) {
+            findings += CoachFinding(CoachFindingCode.TOO_MANY_ACTIONS)
+        }
         val texts = buildList {
             add(note)
             proposals.forEach {
@@ -133,6 +155,15 @@ object CoachParser {
             ?: return invalidAction(findings, CoachFindingCode.MISSING_FIELD, index)
         val routineId = value.stringField("routine_id")
             ?: return invalidAction(findings, CoachFindingCode.MISSING_FIELD, index)
+        val allowed = when (kind) {
+            "add_exercise" -> ADD_FIELDS
+            "update_target" -> UPDATE_FIELDS
+            "move_day" -> MOVE_FIELDS
+            else -> emptySet()
+        }
+        if ((value.keys - allowed).isNotEmpty()) {
+            findings += CoachFinding(CoachFindingCode.UNKNOWN_FIELD, index)
+        }
         return when (kind) {
             "add_exercise" -> {
                 val exerciseId = value.stringField("exercise_id")
@@ -215,7 +246,16 @@ object CoachSafety {
         Regex("\\bdiagnos", RegexOption.IGNORE_CASE),
         Regex("\\bprescri", RegexOption.IGNORE_CASE),
         Regex("\\bdos(e|age|ing)\\b", RegexOption.IGNORE_CASE),
-        Regex("\\b\\d+\\s?(mg|mcg|iu|ml) per (day|dose)\\b", RegexOption.IGNORE_CASE),
+        // Any dose-like quantity, and the frequency wording that makes it one.
+        Regex("\\b\\d+\\s?(mg|mcg|g|iu|ml|units?)\\b", RegexOption.IGNORE_CASE),
+        Regex(
+            "\\b(take|use|apply)\\s+\\d+\\s+(tablet|pill|capsule|dose|puff|unit)s?\\b",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            "\\b(once|twice|two times|three times)\\s+(daily|a day|per day)\\b",
+            RegexOption.IGNORE_CASE,
+        ),
         Regex("\\bstop taking\\b", RegexOption.IGNORE_CASE),
         Regex("\\bstart taking\\b", RegexOption.IGNORE_CASE),
         Regex("\\bcure\\b", RegexOption.IGNORE_CASE),

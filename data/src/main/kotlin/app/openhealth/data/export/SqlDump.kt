@@ -47,12 +47,16 @@ object SqlDump {
     )
 
     fun insert(driver: SqlDriver, table: ExportTable, rows: List<Map<String, JsonElement>>) {
-        val columns = table.columns.joinToString(", ") { it.name }
-        val placeholders = table.columns.joinToString(", ") { "?" }
-        val sql = "INSERT OR REPLACE INTO ${table.name} ($columns) VALUES ($placeholders)"
         rows.forEach { row ->
-            driver.execute(null, sql, table.columns.size) {
-                table.columns.forEachIndexed { index, column ->
+            // A backup written before a column existed omits its key. Binding a null
+            // would fail a NOT NULL column; omitting it lets SQLite apply the column
+            // default, which is exactly the upgrade rule (`ExportService.restoreBundle`).
+            val present = table.columns.filter { row.containsKey(it.name) }
+            val columns = present.joinToString(", ") { it.name }
+            val placeholders = present.joinToString(", ") { "?" }
+            val sql = "INSERT OR REPLACE INTO ${table.name} ($columns) VALUES ($placeholders)"
+            driver.execute(null, sql, present.size) {
+                present.forEachIndexed { index, column ->
                     val value = row[column.name] ?: JsonNull
                     when (column.type) {
                         ExportType.TEXT -> bindString(index, value.textOrNull())

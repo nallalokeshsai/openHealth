@@ -91,16 +91,18 @@ class McpProtocolTest {
     @Test
     fun aReadOnlyTokenCannotWrite() {
         val host = Host()
+        var refused = false
         val response = McpProtocol.handle(
             """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":
                {"name":"openhealth_log_weight","arguments":{"weight_kg":80}}}""",
             token,
             host,
-        )
+        ) { _, _, _ -> refused = true }
         val error = json.parseToJsonElement(response.body!!).jsonObject
             .getValue("error").jsonObject
         assertEquals(-32001, error.getValue("code").jsonPrimitive.content.toInt())
         assertTrue(host.calls.isEmpty())
+        assertTrue(refused, "a refused call must be visible to the audit")
     }
 
     @Test
@@ -146,6 +148,22 @@ class McpProtocolTest {
         )
         assertEquals(202, response.status)
         assertNull(response.body)
+    }
+
+    @Test
+    fun anAcknowledgedNotificationWithAnIdGetsAResult() {
+        val (status, body) = call(
+            """{"jsonrpc":"2.0","id":9,"method":"notifications/initialized"}""",
+        )
+        assertEquals(200, status)
+        assertTrue(body!!.contains("result"))
+    }
+
+    @Test
+    fun aBatchBodyIsAnInvalidRequest() {
+        val response = McpProtocol.handle("[{}]", token, Host())
+        assertEquals(400, response.status)
+        assertTrue(response.body!!.contains("-32600"))
     }
 
     @Test

@@ -75,6 +75,67 @@ class OlderSchemaRestoreTest {
     }
 
     @Test
+    fun aV11BundleRestoresWithTheTransportFlagAtItsDefault() {
+        val source = storeWithAnExercise()
+        app.openhealth.data.repo.SourceRepository(source.db).upsert(
+            app.openhealth.core.source.Source(
+                id = app.openhealth.core.ids.SourceId("health-connect"),
+                kind = app.openhealth.core.observation.SourceKind.HEALTH_CONNECT,
+                label = "Health Connect",
+                family = "health-connect",
+                viaHealthConnect = false,
+            ),
+        )
+        val current = service(source).snapshot()
+        val b15Tables = setOf(
+            "coach_message",
+            "coach_proposal",
+            "coach_action",
+            "coach_snapshot",
+            "mcp_token",
+            "mcp_access",
+        )
+        val older = current.copy(
+            schemaVersion = 11,
+            tables = current.tables
+                .filterNot { it.table in b15Tables }
+                .map { table ->
+                    if (table.table != "source") {
+                        table
+                    } else {
+                        table.copy(rows = table.rows.map { row -> row - "via_health_connect" })
+                    }
+                },
+        )
+        val target = inMemoryStore()
+        service(target).restoreBundle(older)
+        val manual = app.openhealth.data.repo.SourceRepository(target.db)
+            .byId(app.openhealth.core.ids.SourceId("manual"))
+        assertEquals(false, manual!!.viaHealthConnect)
+        assertEquals(
+            true,
+            app.openhealth.data.repo.SourceRepository(target.db)
+                .byId(app.openhealth.core.ids.SourceId("health-connect"))!!.viaHealthConnect,
+        )
+        assertEquals(0L, target.db.coachQueries.countMessages().executeAsOne())
+    }
+
+    @Test
+    fun restoredMcpTokensAreRevokedRatherThanRevived() {
+        val source = storeWithAnExercise()
+        app.openhealth.data.repo.McpRepository(source.db).issue(
+            label = "Old assistant",
+            scopes = setOf(app.openhealth.core.ai.McpScope.READ_DAY),
+            tokenHash = "digest-that-is-not-a-token",
+        )
+        val bundle = service(source).snapshot()
+        val target = inMemoryStore()
+        service(target).restoreBundle(bundle)
+        val restored = app.openhealth.data.repo.McpRepository(target.db).tokens().single()
+        assertEquals(true, restored.revoked)
+    }
+
+    @Test
     fun aBundleFromANewerSchemaIsRefused() {
         val source = storeWithAnExercise()
         val newer = service(source).snapshot().copy(schemaVersion = 99)

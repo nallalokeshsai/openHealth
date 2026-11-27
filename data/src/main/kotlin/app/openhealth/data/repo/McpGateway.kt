@@ -1,5 +1,6 @@
 package app.openhealth.data.repo
 
+import app.openhealth.core.ai.McpScope
 import app.openhealth.core.ai.McpToken
 import app.openhealth.core.ai.McpTool
 import app.openhealth.core.ai.McpToolHost
@@ -52,6 +53,7 @@ import kotlinx.serialization.json.putJsonArray
  * A host is bound to one token, so a write always names the token that made it and the
  * audit never has to guess.
  */
+@Suppress("LongParameterList")
 class McpGateway(
     @Suppress("UNUSED_PARAMETER") db: OpenHealthDb,
     private val store: app.openhealth.data.LocalStore,
@@ -59,6 +61,8 @@ class McpGateway(
     private val clock: ClockSeam = SystemClock,
     private val ids: IdGenerator = RandomIdGenerator(),
     private val appVersion: String = "",
+    /** Weight-neutral mode hides loads and volume here as on every other surface. */
+    private val weightNeutral: () -> Boolean = { false },
 ) {
     fun host(token: McpToken): McpToolHost = BoundHost(token)
 
@@ -111,6 +115,7 @@ class McpGateway(
             McpTool.LOG_WATER -> {
                 val millilitres = arguments.double("millilitres")
                     ?: return McpToolResult.Error("missing_value")
+                if (millilitres <= 0.0) return McpToolResult.Error("out_of_range")
                 val at =
                     happenedAt(arguments.string("date")) ?: return McpToolResult.Error("bad_date")
                 val check = ObservationValidator.validateNumber(ObservationType.WATER, millilitres)
@@ -121,6 +126,7 @@ class McpGateway(
                     UcumUnit.MILLILITRE,
                     at,
                     token,
+                    end = at,
                 )
                 McpToolResult.Ok(buildJsonObject { put("logged", id.value) }.toString())
             }
@@ -170,7 +176,9 @@ class McpGateway(
                                         put("target_sets", entry.target_sets)
                                         put("target_reps", entry.target_reps)
                                         put("target_reps_high", entry.target_reps_high)
-                                        put("target_weight_kg", entry.target_weight_kg)
+                                        if (!weightNeutral()) {
+                                            put("target_weight_kg", entry.target_weight_kg)
+                                        }
                                         put("target_rir", entry.target_rir)
                                         put("rest_seconds", entry.rest_seconds)
                                     },
@@ -197,10 +205,13 @@ class McpGateway(
                                 session.routine_id?.let { store.training.routineById(it)?.name },
                             )
                             put("sets", sets.size)
-                            put(
-                                "volume_kg",
-                                sets.filterNot { it.is_warmup }.sumOf { it.weight_kg * it.reps },
-                            )
+                            if (!weightNeutral()) {
+                                put(
+                                    "volume_kg",
+                                    sets.filterNot { it.is_warmup }
+                                        .sumOf { it.weight_kg * it.reps },
+                                )
+                            }
                             put("perceived_effort", session.perceived_effort)
                         },
                     )
@@ -209,8 +220,16 @@ class McpGateway(
     }.toString()
 
     private fun daySummary(date: LocalDate): String {
-        fun rollup(type: ObservationType): Double? =
-            store.rollups.forDayAndType(date, type)?.value?.value
+        val sources = store.sources.all()
+        fun rollup(type: ObservationType): Double? {
+            val row = store.rollups.forDayAndType(date, type) ?: return null
+            // A Health Connect-derived rollup is not sent to an external assistant
+            // without a dedicated opt-in (the MCP scopes are not that opt-in).
+            val platform = row.sourceId?.let { id ->
+                sources.firstOrNull { it.id == id }?.viaHealthConnect
+            } ?: true
+            return if (platform) null else row.value.value
+        }
         val sessions = store.training.sessionsForDay(date)
         val volume = sessions.sumOf { session ->
             store.training.setsForSession(session.id)
@@ -231,12 +250,14 @@ class McpGateway(
         }.toString()
     }
 
+    @Suppress("LongParameterList")
     private fun writeObservation(
         type: ObservationType,
         value: Double,
         unit: UcumUnit,
         at: Instant,
         token: McpToken,
+        end: Instant? = null,
     ): ObservationId {
         val sourceId = sourceId(token)
         val now = clock.now()
@@ -272,10 +293,10 @@ class McpGateway(
                 idempotencyKey = key,
                 device = DEVICE,
                 appVersion = appVersion,
-                method = MeasurementMethod.MANUAL_ENTRY,
+                method = MeasurementMethod.OTHER,
                 rawRecordId = raw.id,
             ),
-        )
+        ).copy(end = end)
         store.observations.record(observation, raw)
         return observation.id
     }
@@ -329,14 +350,17 @@ class McpGateway(
                 Source(
                     id = id,
                     kind = SourceKind.MCP,
-                    label = "Assistant",
+                    label = "Assistant · ${token.label}",
                     family = "mcp",
                     device = DEVICE,
-                    permissions = setOf(
-                        SourcePermission.WRITE_WEIGHT,
-                        SourcePermission.WRITE_NUTRITION,
-                        SourcePermission.WRITE_EXERCISE,
-                    ),
+                    permissions = buildSet {
+                        if (McpScope.WRITE_BODY in token.scopes) {
+                            add(SourcePermission.WRITE_WEIGHT)
+                        }
+                        if (McpScope.WRITE_NUTRITION in token.scopes) {
+                            add(SourcePermission.WRITE_NUTRITION)
+                        }
+                    },
                 ),
             )
         }

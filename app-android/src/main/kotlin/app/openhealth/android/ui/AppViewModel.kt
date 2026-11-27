@@ -3297,32 +3297,22 @@ class AppViewModel(
         }
     }
 
-    fun saveCoachProvider(
+    fun saveCoachSetup(
         kind: app.openhealth.core.ai.CoachProviderKind,
         model: String,
         baseUrl: String,
+        key: String,
     ) {
         launchGuarded {
             val updated = withContext(Dispatchers.IO) {
-                container.coach.setProvider(
-                    app.openhealth.core.ai.CoachProviderConfig(
-                        kind = kind,
-                        model = model.ifBlank {
-                            app.openhealth.core.ai.CoachProviderConfig.ANTHROPIC_DEEP_MODEL
-                        },
-                        baseUrl = baseUrl,
-                    ),
+                container.coach.saveProvider(
+                    kind = kind,
+                    model = model.ifBlank {
+                        app.openhealth.core.ai.CoachProviderConfig.ANTHROPIC_DEEP_MODEL
+                    },
+                    baseUrl = baseUrl,
+                    key = key,
                 )
-                container.coach.model()
-            }
-            _state.update { it.copy(coach = updated) }
-        }
-    }
-
-    fun saveCoachKey(key: String) {
-        launchGuarded {
-            val updated = withContext(Dispatchers.IO) {
-                container.coach.saveKey(key)
                 container.coach.model()
             }
             _state.update { it.copy(coach = updated) }

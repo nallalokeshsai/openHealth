@@ -54,8 +54,14 @@ class McpLoopbackServer(
     private fun acceptLoop(server: ServerSocket) {
         while (running) {
             val client = runCatching { server.accept() }.getOrNull() ?: break
-            runCatching { serve(client) }
-            runCatching { client.close() }
+            // One slow or silent client must not hold the endpoint for everyone else.
+            Thread({
+                runCatching { serve(client) }
+                runCatching { client.close() }
+            }, "oh-mcp-client").apply {
+                isDaemon = true
+                start()
+            }
         }
     }
 

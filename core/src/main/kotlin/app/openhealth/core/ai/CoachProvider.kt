@@ -4,6 +4,7 @@ package app.openhealth.core.ai
 
 import app.openhealth.core.seam.HttpRequest
 import app.openhealth.core.seam.HttpResponse
+import app.openhealth.core.seam.HttpTimeoutException
 import app.openhealth.core.seam.HttpTransport
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -72,7 +73,7 @@ class AnthropicCoachProvider(
 ) : CoachProvider {
     private val json = Json { ignoreUnknownKeys = true }
 
-    @Suppress("ReturnCount", "LongMethod")
+    @Suppress("ReturnCount", "LongMethod", "SwallowedException", "TooGenericExceptionCaught")
     override suspend fun complete(request: CoachProviderRequest): CoachProviderResult {
         val body = buildJsonObject {
             put("model", model)
@@ -90,19 +91,23 @@ class AnthropicCoachProvider(
                 },
             )
         }
-        val response = call(
-            HttpRequest(
-                url = "${baseUrl.trimEnd('/')}/v1/messages",
-                method = "POST",
-                headers = mapOf(
-                    "x-api-key" to apiKey,
-                    "anthropic-version" to CoachProviderConfig.ANTHROPIC_VERSION,
+        val response = try {
+            call(
+                HttpRequest(
+                    url = "${baseUrl.trimEnd('/')}/v1/messages",
+                    method = "POST",
+                    headers = mapOf(
+                        "x-api-key" to apiKey,
+                        "anthropic-version" to CoachProviderConfig.ANTHROPIC_VERSION,
+                    ),
+                    contentType = "application/json",
+                    body = json.encodeToString(JsonObject.serializer(), body),
+                    timeoutMillis = CoachProviderConfig.TIMEOUT_MILLIS,
                 ),
-                contentType = "application/json",
-                body = json.encodeToString(JsonObject.serializer(), body),
-                timeoutMillis = CoachProviderConfig.TIMEOUT_MILLIS,
-            ),
-        ) ?: return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.OFFLINE))
+            )
+        } catch (timeout: HttpTimeoutException) {
+            return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.TIMEOUT))
+        } ?: return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.OFFLINE))
         val failure = failureOf(response)
         if (failure != null) return CoachProviderResult.Failed(failure)
         val root = runCatching { json.parseToJsonElement(response.body).jsonObject }.getOrNull()
@@ -127,9 +132,14 @@ class AnthropicCoachProvider(
         )
     }
 
-    private suspend fun call(request: HttpRequest): HttpResponse? = runCatching {
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
+    private suspend fun call(request: HttpRequest): HttpResponse? = try {
         transport.post(request)
-    }.getOrNull()
+    } catch (timeout: HttpTimeoutException) {
+        throw timeout
+    } catch (other: Exception) {
+        null
+    }
 }
 
 /**
@@ -145,7 +155,7 @@ class SelfHostedCoachProvider(
 ) : CoachProvider {
     private val json = Json { ignoreUnknownKeys = true }
 
-    @Suppress("ReturnCount", "LongMethod")
+    @Suppress("ReturnCount", "LongMethod", "SwallowedException", "TooGenericExceptionCaught")
     override suspend fun complete(request: CoachProviderRequest): CoachProviderResult {
         if (!baseUrl.isAcceptableEndpoint()) {
             return CoachProviderResult.Failed(
@@ -177,7 +187,7 @@ class SelfHostedCoachProvider(
             put("Accept", "application/json")
             if (apiKey.isNotBlank()) put("Authorization", "Bearer $apiKey")
         }
-        val response = runCatching {
+        val response = try {
             transport.post(
                 HttpRequest(
                     url = chatUrl(baseUrl),
@@ -188,7 +198,11 @@ class SelfHostedCoachProvider(
                     timeoutMillis = CoachProviderConfig.TIMEOUT_MILLIS,
                 ),
             )
-        }.getOrNull() ?: return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.OFFLINE))
+        } catch (timeout: HttpTimeoutException) {
+            return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.TIMEOUT))
+        } catch (other: Exception) {
+            return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.OFFLINE))
+        }
         val failure = failureOf(response)
         if (failure != null) return CoachProviderResult.Failed(failure)
         val root = runCatching { json.parseToJsonElement(response.body).jsonObject }.getOrNull()
@@ -225,16 +239,26 @@ class SelfHostedCoachProvider(
  * privacy source scan does not have to special-case a literal; the exception is recorded
  * in `docs/adr/0020-ai-coach-and-mcp.md`.
  */
+@Suppress("ReturnCount")
 internal fun String.isAcceptableEndpoint(): Boolean {
     val scheme = substringBefore("://", missingDelimiterValue = "").lowercase()
-    val host = substringAfter("://", missingDelimiterValue = "")
+    if (scheme != "https" && scheme != "http") return false
+    val authority = substringAfter("://", missingDelimiterValue = "")
         .substringBefore('/')
-        .substringBefore(':')
-        .lowercase()
+        .substringBefore('?')
+        .substringBefore('#')
+    // A userinfo section can hide the real host (`http://127.0.0.1@evil.example`), and
+    // the URL parser would send the data there in the clear.
+    if (authority.isBlank() || '@' in authority) return false
+    val host = if (authority.startsWith("[")) {
+        authority.substringBefore(']') + "]"
+    } else {
+        authority.substringBefore(':')
+    }.lowercase()
+    if (host.isBlank()) return false
     return when (scheme) {
-        "https" -> host.isNotBlank()
-        "http" -> host in CoachProviderConfig.CLEARTEXT_HOSTS
-        else -> false
+        "https" -> true
+        else -> host in CoachProviderConfig.CLEARTEXT_HOSTS
     }
 }
 

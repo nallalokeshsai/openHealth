@@ -3565,7 +3565,7 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   | Scoped MCP tokens, revocation, same validation as the UI | `McpProtocolTest` (9 cases), `McpGatewayTest.anOutOfRangeValueIsRejectedAndNothingIsWritten`, `aWeightWriteCarriesProvenanceAndRebuildsTheDay`, `aBackfilledWeightKeepsItsOwnHappenedAtAndTheRecordingTime`; `CoachExitTest.theMcpEndpointNeedsATokenScopesAndAValidValue` (401 without a token, scope refusal, 900 kg refused, 80 kg written, revoked token refused). |
   | Weight-neutral mode hides weight, calories and body fat from a request | `CoachPromptTest.weightNeutralModeDropsWeightCaloriesAndBodyFat`. |
 - **What was run, and its result:** `./gradlew check :app-android:assembleDebug` **BUILD
-  SUCCESSFUL** (881 JVM tests and 368 goldens; `:server:test` now accepts schema 12);
+  SUCCESSFUL** (901 JVM tests and 372 goldens; `:server:test` now accepts schema 12);
   `CoachExitTest` **3/3** on the phone emulator; the whole instrumented suite is recorded
   in the QA section below.
 - **Regression over earlier phases:** `./gradlew check` covers every JVM and golden exit;
@@ -3582,7 +3582,7 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
 
 ### QA sweep on the emulators (section 4.2)
 
-- **The whole instrumented suite:** `am instrument` on the phone emulator, **69/69
+- **The whole instrumented suite:** `am instrument` on the phone emulator, **70/70
   pass** (B2–B14 plus the three B15 `CoachExitTest` cases). The first run had two
   failures; both were traced, not waved away.
 - **A real state race, found and fixed.** `ShellExitTest.waterGlassesAddUp…` timed out at
@@ -3593,7 +3593,7 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   read that started earlier cannot land after a newer one. The test passes, and the whole
   suite passed twice after the fix. This is the one product change the sweep made.
 - **`NutritionExitTest`:** its local-search timeout did not reproduce on a rerun and the
-  full 69-test run passed; recorded as the carried flake from B14, not closed.
+  full 70-test run passed; recorded as the carried flake from B14, not closed.
 - **Coach walk on the phone emulator:** onboarding → Today → Settings → Coach; the coach
   was turned on, Training was consented, the "what leaves the phone" list was accepted,
   and Send without a key produced "Add a provider key first." with no message stored and
@@ -3602,6 +3602,11 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   `127.0.0.1:8765`, a token was created with the default scopes, the one-time value was
   displayed in `ohm_…` form, and Revoke changed the row to Revoked. The audit showed
   "No calls yet"; no `AndroidRuntime` error appeared at any point.
+- **Two issues were raised and fixed in `1f0aa70`:** OH-01, the rebuild race above;
+  OH-02, Send could leave before the disclosure list was acknowledged (the card was shown
+  but not enforced). Both were re-tested: the suite is 70/70 and the device walk shows
+  "Add a provider key first." rather than any request when the setup is incomplete. The
+  temporary `issues.md` was deleted and never committed.
 - **No screenshot or device output entered the tree.**
 
 ### Invariant audit (`AGENTS.md`)
@@ -3626,10 +3631,76 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
 - **Portability:** `checkPortability` passes; `:core` and `:data` contain no `android.*`.
 - **Licence split:** unchanged; no new dependency.
 - **Tombstone undo, modules hide:** the coach's Undo is a snapshot-backed reversal of an
-  approved proposal (no user history deleted); turning the Coach module off hides the two
-  settings rows and the screen and keeps the conversation.
+  approved proposal (no user history deleted); turning the Coach module off hides the
+  Coach settings row and the screen and keeps the conversation; the external-access row is
+  a separate Data-sheet surface, not a coach module.
 - **Weight-neutral mode:** the request builder drops weight, body fat and calories, proved
   by `CoachPromptTest.weightNeutralModeDropsWeightCaloriesAndBodyFat`.
 - **Charts and reports:** no chart or report was added.
 - **Closed tokens and cut list:** `DESIGN.md` 0.7.1 adds copy and placeholder recipes only;
   no token, component or cut-list item moved.
+
+### Independent reviews (three fresh reviewers) and the fixes
+
+Three reviewers who did not build B15 read only the diff and the relevant contract text:
+correctness and tests, the `AGENTS.md` invariants and licences, and `DESIGN.md`
+conformance. Every finding below was confirmed in the code before it was changed; a fix
+was not accepted on the reviewer's word alone.
+
+- **A pre-v12 backup could not restore.** `SqlDump.insert` bound every current column,
+  including the new `source.via_health_connect`, as NULL into a NOT NULL column. It now
+  binds only the keys a row actually carries, so SQLite applies the column default.
+  `OlderSchemaRestoreTest.aV11BundleRestoresWithTheTransportFlagAtItsDefault` fails against
+  the old code and passes now.
+- **An approved reps change left an inverted target range.** `target_reps` rose while
+  `target_reps_high` stayed behind, which `ProgressionInput` rejects and the live session
+  would crash on. The applier and `CoachPlan.with` now raise the high bound, and
+  `raisingRepsAlsoRaisesTheRangeHighSoTheProgressionEngineCanReadIt` builds the real input.
+- **A double tap could apply one proposal twice.** The status check was outside the
+  transaction. `apply` now re-reads and decides inside one transaction; a second apply is
+  rejected and adds nothing.
+- **A failed action could commit partial rows.** A `Rejected` return commits, so the writes
+  are now rolled back by throwing a private `Abort` and translating it to `Rejected`
+  outside the transaction.
+- **Undo could roll back an unrelated manual edit.** The snapshot now holds only the rows a
+  proposal named (update targets and the weekday of a moved routine) plus the ids it
+  created; `undoLeavesAnUnrelatedEditInTheSameRoutineAlone` proves a later edit survives.
+- **Undo used creation order, not decision order.** A `latestAcceptedProposal` query orders
+  by `decided_at`; the test applies the newer card first and still undoes the older one.
+- **The self-hosted loopback endpoint was blocked by Android's network policy.**
+  `HttpURLConnection` honours `network_security_config.xml`, which refused all cleartext; a
+  loopback-only `domain-config` now permits `127.0.0.1`, `localhost`, `10.0.2.2` and `::1`.
+  `SecurityPostureTest.loopbackIsTheOnlyCleartextException` runs on the device, and
+  `PrivacySourceTest.theCleartextExceptionIsLoopbackOnly` pins the file.
+- **The endpoint gate could be bypassed with userinfo and never matched IPv6 loopback.**
+  `isAcceptableEndpoint` now rejects `@` in the authority and handles `[...]`; tests cover
+  `127.0.0.1@evil.example` and `[::1]`.
+- **SHA-256 padded a 55-byte message with a whole extra block.** The modulo missing from
+  the padding formula is back; 55, 56, 119 and 120-byte inputs are compared with
+  `java.security.MessageDigest`.
+- **A key could be filed under the wrong provider.** Provider and key are saved in one
+  presenter call that names the target kind; the screen clears the field when the
+  segmented control changes.
+- **MCP water replaced the day instead of adding to it.** Water is written with
+  `end = happened_at`, the increment shape the manual path uses; two 500 ml calls now sum
+  to 1000 ml.
+- **The safety filter missed ordinary dosing wording.** It now covers any mg/mcg/g/iu/ml/
+  unit quantity, "take 2 tablets daily" and "twice daily"; four sentences are pinned.
+- **Health Connect gating failed open on an unknown or multi-source rollup,** and the coach
+  sent training loads in weight-neutral mode. Unknown sources are now treated as
+  platform-derived, weights and volume are stripped in weight-neutral mode, and MCP reads
+  apply the same two rules.
+- **Restoring an export did not re-flag the platform sources or revoke old tokens.** The
+  restore now sets `via_health_connect` on `health-connect`/`garmin-hc` and marks every
+  restored MCP token revoked; two restore tests cover both.
+- **A refused MCP call was not audited.** A scope refusal is written as `Refused` with the
+  tool and scope, still with no arguments; an unauthenticated call has no token to name and
+  is refused without a row, as the ADR now says.
+- **The ten-action cap was per proposal and action objects accepted unknown fields.** The
+  parser enforces the total and rejects unknown action keys; two identical add actions now
+  create two rows rather than collapsing onto one id.
+- **Timeouts were reported as offline, and a POST followed redirects.** A typed
+  `HttpTimeoutException` carries the timeout to the UI, and a POST never follows a
+  redirect, so an API key cannot be forwarded to another host.
+- **The External access row was described as hidden with the Coach module.** Only the Coach
+  row is module-gated; the ADR and this log now say so.

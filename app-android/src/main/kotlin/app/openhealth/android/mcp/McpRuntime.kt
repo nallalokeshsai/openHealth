@@ -37,7 +37,15 @@ class McpRuntime(private val store: LocalStore, private val gateway: McpGateway)
         if (record.revoked) return McpHttpResponse(HTTP_UNAUTHORIZED)
         store.mcp.touch(record.id)
         val token = record.toProtocol()
-        return McpProtocol.handle(body, token, gateway.host(token))
+        return McpProtocol.handle(body, token, gateway.host(token)) { refusing, tool, scope ->
+            store.mcp.log(
+                tokenId = refusing.id,
+                tool = tool.wireName,
+                scope = scope.key,
+                ok = false,
+                detail = "insufficient_scope",
+            )
+        }
     }
 
     private companion object {

@@ -3,6 +3,7 @@ package app.openhealth.ui
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -87,6 +88,22 @@ class PrivacySourceTest {
     }
 
     /** B15: the local endpoint is loopback-only and every call needs a live token. */
+    /** The one declared cleartext exception covers loopback and nothing else. */
+    @Test
+    fun theCleartextExceptionIsLoopbackOnly() {
+        val config = File(
+            "../app-android/src/main/res/xml/network_security_config.xml",
+        ).readText()
+        assertTrue(config.contains("cleartextTrafficPermitted=\"true\""))
+        listOf("127.0.0.1", "localhost", "10.0.2.2", "::1").forEach {
+            assertTrue(config.contains(">$it<"), "$it must be the declared loopback host")
+        }
+        assertFalse(
+            config.contains("openfoodfacts") || config.contains("example.com"),
+            "no remote host is excepted",
+        )
+    }
+
     @Test
     fun theMcpListenerBindsLoopbackAndRequiresAToken() {
         val server = File(
@@ -126,8 +143,11 @@ class PrivacySourceTest {
             "http://hl7.org/fhir/",
             "http://terminology.hl7.org/",
         )
+        // A loopback endpoint is the one declared cleartext exception (the self-hosted
+        // coach, docs/adr/0020 §8); the network security config permits only these hosts.
+        val loopback = Regex("""http://(127\.0\.0\.1|localhost|10\.0\.2\.2|\[::1\])(?![\w.-])""")
         val hits = kotlinFiles().filter { file ->
-            var text = file.readText().replace(namespace, "")
+            var text = file.readText().replace(namespace, "").replace(loopback, "")
             identifiers.forEach { text = text.replace(it, "") }
             "http://" in text
         }

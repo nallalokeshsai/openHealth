@@ -107,7 +107,7 @@ object Sha256 {
 
     private fun pad(input: ByteArray): ByteArray {
         val messageBits = input.size.toLong() * Byte.SIZE_BITS
-        val padding = BLOCK - (input.size + 9) % BLOCK
+        val padding = (BLOCK - (input.size + 9) % BLOCK) % BLOCK
         val total = input.size + 1 + padding + Long.SIZE_BYTES
         return ByteArray(total).also { output ->
             input.copyInto(output)

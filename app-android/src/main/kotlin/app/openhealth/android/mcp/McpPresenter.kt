@@ -45,14 +45,17 @@ class McpPresenter(
     fun summary(): String {
         val enabled = preferences.snapshot().mcpEnabled
         if (!enabled) return context.getString(UiR.string.settings_mcp_off)
-        return context.getString(UiR.string.settings_mcp_on, mcp.tokens().count { !it.revoked })
+        val active = mcp.tokens().count { !it.revoked }
+        return context.resources.getQuantityString(
+            UiR.plurals.settings_mcp_tokens,
+            active,
+            active,
+        )
     }
 
     fun setEnabled(enabled: Boolean): String? {
-        val port = preferences.snapshot().mcpPort
         if (enabled) {
-            val started = runtime.start(port)
-            if (!started) return ERROR_START
+            if (!startOnFreePort()) return ERROR_START
             preferences.setMcpEnabled(true)
         } else {
             runtime.stop()
@@ -64,7 +67,23 @@ class McpPresenter(
     /** Starts the endpoint at app launch when it was left on. */
     fun startIfEnabled() {
         if (preferences.snapshot().mcpEnabled && !runtime.running) {
-            runtime.start(preferences.snapshot().mcpPort)
+            startOnFreePort()
+        }
+    }
+
+    /**
+     * The preferred port first, then the rest of the declared range. A port held by
+     * another app is not a dead end: the chosen one is stored so the endpoint line stays
+     * truthful across a relaunch.
+     */
+    private fun startOnFreePort(): Boolean {
+        val preferred = preferences.snapshot().mcpPort
+        val ports = listOf(preferred) + (PORT_RANGE.first..PORT_RANGE.last)
+            .filter { it != preferred }
+        return ports.any { port ->
+            runtime.start(port).also { started ->
+                if (started) preferences.setMcpPort(port)
+            }
         }
     }
 
@@ -99,10 +118,15 @@ class McpPresenter(
             ok = record.ok,
         )
 
-    private fun date(millis: Long): String = DateFormat.getDateTimeInstance(
-        DateFormat.MEDIUM,
-        DateFormat.SHORT,
-    ).format(Date(millis))
+    private fun date(millis: Long): String {
+        val formatted = DateFormat.getDateTimeInstance(
+            DateFormat.MEDIUM,
+            DateFormat.SHORT,
+        ).format(Date(millis))
+        // A date and a time are not mirrored in RTL; isolate them so the surrounding
+        // paragraph cannot reorder the two groups (§11.5).
+        return "\u2066$formatted\u2069"
+    }
 
     companion object {
         const val ERROR_LABEL = "mcp_error_label"
@@ -110,5 +134,6 @@ class McpPresenter(
         const val ERROR_START = "mcp_error_start"
         private const val TOKEN_BYTES = 32
         private const val MAX_LABEL = 60
+        private val PORT_RANGE = 8_765..8_775
     }
 }

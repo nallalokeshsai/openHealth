@@ -75,9 +75,9 @@ class CoachPlanApplier(
     private val json = Json { ignoreUnknownKeys = true }
 
     fun plan(): CoachPlan {
-        val exercises = training.exercises().associate { it.id to it.name }
+        val catalogue = training.exercises().associate { it.id to it.name }
         return CoachPlan(
-            training.routines()
+            routines = training.routines()
                 .filter { it.archived_at == null }
                 .map { routine ->
                     CoachPlanRoutine(
@@ -88,7 +88,7 @@ class CoachPlanApplier(
                             CoachPlanEntry(
                                 id = entry.id,
                                 exerciseId = entry.exercise_id,
-                                exerciseName = exercises[entry.exercise_id]
+                                exerciseName = catalogue[entry.exercise_id]
                                     ?: entry.exercise_id,
                                 sets = entry.target_sets?.toInt(),
                                 reps = entry.target_reps?.toInt(),
@@ -100,13 +100,15 @@ class CoachPlanApplier(
                         },
                     )
                 },
+            catalogue = catalogue,
         )
     }
 
     /**
      * The plan a diff must be drawn against: the live plan for a proposal that has not
-     * been applied, and the before-snapshot for one that has, so an accepted card keeps
-     * showing the change it made rather than two equal sides.
+     * been applied, and the before-snapshot for one that has. The snapshot now holds only
+     * the rows the proposal touched, so the added rows are removed from the live plan and
+     * the touched values are replaced.
      */
     @Suppress("ReturnCount")
     fun planFor(proposalId: String): CoachPlan {
@@ -114,123 +116,146 @@ class CoachPlanApplier(
         val snapshot = runCatching {
             json.decodeFromString(PlanSnapshot.serializer(), payload)
         }.getOrNull() ?: return plan()
-        val names = training.exercises().associate { it.id to it.name }
-        return CoachPlan(
-            snapshot.routines.map { routine ->
-                CoachPlanRoutine(
-                    id = routine.id,
-                    name = routine.name,
-                    weekday = routine.weekday?.toInt(),
-                    entries = snapshot.entries
-                        .filter { it.routineId == routine.id }
-                        .map { entry ->
-                            CoachPlanEntry(
-                                id = entry.id,
-                                exerciseId = entry.exerciseId,
-                                exerciseName = names[entry.exerciseId] ?: entry.exerciseId,
-                                sets = entry.targetSets?.toInt(),
-                                reps = entry.targetReps?.toInt(),
-                                repsHigh = entry.targetRepsHigh?.toInt(),
-                                weightKg = entry.targetWeightKg,
-                                rir = entry.targetRir,
-                                position = entry.position.toInt(),
+        val live = plan()
+        val added = snapshot.addedEntryIds.toSet()
+        return live.copy(
+            routines = live.routines.map { routine ->
+                val oldRoutine = snapshot.routines.firstOrNull { it.id == routine.id }
+                val entries = routine.entries
+                    .filterNot { it.id in added }
+                    .map { entry ->
+                        val old = snapshot.entries.firstOrNull { it.id == entry.id }
+                        if (old == null) {
+                            entry
+                        } else {
+                            entry.copy(
+                                sets = old.targetSets?.toInt(),
+                                reps = old.targetReps?.toInt(),
+                                repsHigh = old.targetRepsHigh?.toInt(),
+                                weightKg = old.targetWeightKg,
+                                rir = old.targetRir,
                             )
-                        },
+                        }
+                    }
+                routine.copy(
+                    weekday = oldRoutine?.weekday?.toInt() ?: routine.weekday,
+                    entries = entries,
                 )
             },
         )
     }
 
+    /**
+     * Validates, snapshots and writes in one transaction. The proposal's status is read
+     * again inside the transaction, so two taps cannot both apply the same card.
+     */
+    private class Abort(val findings: List<CoachFinding>) : RuntimeException()
+
     @Suppress("ReturnCount")
-    fun apply(proposalId: String): CoachApplyResult {
-        val proposal = coach.proposal(proposalId)
-            ?: return CoachApplyResult.Rejected(
-                listOf(CoachFinding(CoachFindingCode.NO_ACTIONS)),
-            )
-        if (proposal.status != CoachProposalStatus.PROPOSED) {
-            return CoachApplyResult.Rejected(listOf(CoachFinding(CoachFindingCode.NO_CHANGE)))
-        }
-        val actions = proposal.decodedActions
-        if (actions.size != proposal.actions.size) {
-            return CoachApplyResult.Rejected(listOf(CoachFinding(CoachFindingCode.WRONG_TYPE)))
-        }
-        val live = plan()
-        val findings = CoachActionValidator.validate(actions, live)
-        if (findings.isNotEmpty()) return CoachApplyResult.Rejected(findings)
-        val newIds = actions.filterIsInstance<CoachAction.AddExercise>()
-            .associateWith { ids.newId() }
-        val snapshot = snapshot(actions, newIds.values.toList())
-        db.transaction {
+    fun apply(proposalId: String): CoachApplyResult = try {
+        db.transactionWithResult {
+            val proposal = coach.proposal(proposalId)
+                ?: return@transactionWithResult CoachApplyResult.Rejected(
+                    listOf(CoachFinding(CoachFindingCode.NO_ACTIONS)),
+                )
+            if (proposal.status != CoachProposalStatus.PROPOSED) {
+                return@transactionWithResult CoachApplyResult.Rejected(
+                    listOf(CoachFinding(CoachFindingCode.NO_CHANGE)),
+                )
+            }
+            val actions = proposal.decodedActions
+            if (actions.size != proposal.actions.size) {
+                return@transactionWithResult CoachApplyResult.Rejected(
+                    listOf(CoachFinding(CoachFindingCode.WRONG_TYPE)),
+                )
+            }
+            val findings = CoachActionValidator.validate(actions, plan())
+            if (findings.isNotEmpty()) {
+                return@transactionWithResult CoachApplyResult.Rejected(findings)
+            }
+            val newIds = actions.filterIsInstance<CoachAction.AddExercise>()
+                .map { it to ids.newId() }
+                .toMutableList()
+            val snapshot = snapshot(actions, newIds.map { it.second })
             coach.saveSnapshot(proposalId, json.encodeToString(PlanSnapshot.serializer(), snapshot))
-            actions.forEach { write(it, newIds[it]) }
-            coach.decide(proposalId, CoachProposalStatus.ACCEPTED)
+            actions.forEach { action ->
+                val index = newIds.indexOfFirst { it.first == action }
+                val newId = if (index >= 0) newIds.removeAt(index).second else null
+                if (!write(action, newId)) {
+                    throw Abort(listOf(CoachFinding(CoachFindingCode.UNKNOWN_ENTRY)))
+                }
+            }
+            if (!coach.decide(proposalId, CoachProposalStatus.ACCEPTED)) {
+                throw Abort(listOf(CoachFinding(CoachFindingCode.NO_CHANGE)))
+            }
+            CoachApplyResult.Applied(proposalId)
         }
-        return CoachApplyResult.Applied(proposalId)
+    } catch (abort: Abort) {
+        CoachApplyResult.Rejected(abort.findings)
     }
 
     /**
-     * Restores the exact rows the proposal replaced. Only the newest accepted proposal
-     * can be undone, so an older snapshot can never overwrite a later edit.
+     * Restores only the rows the proposal changed: its added entries are removed and the
+     * named entries and weekday are put back. A later manual edit to another entry in the
+     * same routine is untouched.
      */
     @Suppress("ReturnCount")
-    fun undo(proposalId: String): Boolean {
-        val proposal = coach.proposal(proposalId) ?: return false
-        if (proposal.status != CoachProposalStatus.ACCEPTED) return false
-        val newest = coach.proposals().firstOrNull { it.status == CoachProposalStatus.ACCEPTED }
-        if (newest?.id != proposalId) return false
-        val payload = coach.snapshot(proposalId) ?: return false
+    fun undo(proposalId: String): Boolean = db.transactionWithResult {
+        val proposal = coach.proposal(proposalId) ?: return@transactionWithResult false
+        if (proposal.status != CoachProposalStatus.ACCEPTED) return@transactionWithResult false
+        if (coach.latestAcceptedId() != proposalId) return@transactionWithResult false
+        val payload = coach.snapshot(proposalId) ?: return@transactionWithResult false
         val snapshot = runCatching {
             json.decodeFromString(PlanSnapshot.serializer(), payload)
-        }.getOrNull() ?: return false
-        db.transaction {
-            snapshot.addedEntryIds.forEach { id ->
-                if (training.routineEntryById(id) != null) training.deleteRoutineEntry(id)
-            }
-            snapshot.routines.forEach { routine ->
-                val current = training.routineById(routine.id) ?: return@forEach
-                training.upsertRoutine(
-                    current.copy(
-                        weekday = routine.weekday,
-                        progression = routine.progression,
-                        target_rest_seconds = routine.targetRestSeconds,
-                        updated_at = clock.now().toEpochMilliseconds(),
-                        revision = current.revision + 1,
-                    ),
-                )
-            }
-            snapshot.entries.forEach { entry ->
-                training.upsertRoutineExercise(
-                    Routine_exercise(
-                        id = entry.id,
-                        routine_id = entry.routineId,
-                        exercise_id = entry.exerciseId,
-                        position = entry.position,
-                        target_sets = entry.targetSets,
-                        target_reps = entry.targetReps,
-                        target_reps_high = entry.targetRepsHigh,
-                        target_weight_kg = entry.targetWeightKg,
-                        notes = entry.notes,
-                        target_rir = entry.targetRir,
-                        rest_seconds = entry.restSeconds,
-                        progression = entry.progression,
-                        group_index = entry.groupIndex,
-                    ),
-                )
-            }
-            coach.markReverted(proposalId)
+        }.getOrNull() ?: return@transactionWithResult false
+        snapshot.addedEntryIds.forEach { id ->
+            if (training.routineEntryById(id) != null) training.deleteRoutineEntry(id)
         }
-        return true
+        snapshot.routines.forEach { routine ->
+            val current = training.routineById(routine.id) ?: return@forEach
+            training.upsertRoutine(
+                current.copy(
+                    weekday = routine.weekday,
+                    updated_at = clock.now().toEpochMilliseconds(),
+                    revision = current.revision + 1,
+                ),
+            )
+        }
+        snapshot.entries.forEach { entry ->
+            training.upsertRoutineExercise(
+                Routine_exercise(
+                    id = entry.id,
+                    routine_id = entry.routineId,
+                    exercise_id = entry.exerciseId,
+                    position = entry.position,
+                    target_sets = entry.targetSets,
+                    target_reps = entry.targetReps,
+                    target_reps_high = entry.targetRepsHigh,
+                    target_weight_kg = entry.targetWeightKg,
+                    notes = entry.notes,
+                    target_rir = entry.targetRir,
+                    rest_seconds = entry.restSeconds,
+                    progression = entry.progression,
+                    group_index = entry.groupIndex,
+                ),
+            )
+        }
+        coach.markReverted(proposalId)
+        true
     }
 
-    @Suppress("ReturnCount")
-    private fun write(action: CoachAction, newEntryId: String?) {
+    @Suppress("ReturnCount", "CyclomaticComplexMethod")
+    private fun write(action: CoachAction, newEntryId: String?): Boolean {
         when (action) {
             is CoachAction.AddExercise -> {
+                if (newEntryId == null) return false
+                if (training.routineById(action.routineId) == null) return false
+                if (training.exerciseById(action.exerciseId) == null) return false
                 val entries = training.routineEntries(action.routineId)
                 val position = (entries.maxOfOrNull { it.position } ?: -1L) + 1
                 training.upsertRoutineExercise(
                     Routine_exercise(
-                        id = newEntryId ?: return,
+                        id = newEntryId,
                         routine_id = action.routineId,
                         exercise_id = action.exerciseId,
                         position = position,
@@ -248,11 +273,20 @@ class CoachPlanApplier(
             }
 
             is CoachAction.UpdateTarget -> {
-                val entry = training.routineEntryById(action.entryId) ?: return
+                val entry = training.routineEntryById(action.entryId)
+                    ?: return false
+                val actionReps = action.reps
+                val reps = actionReps?.toLong() ?: entry.target_reps
+                val high = if (actionReps != null) {
+                    maxOf(actionReps.toLong(), entry.target_reps_high ?: actionReps.toLong())
+                } else {
+                    entry.target_reps_high
+                }
                 training.upsertRoutineExercise(
                     entry.copy(
                         target_sets = action.sets?.toLong() ?: entry.target_sets,
-                        target_reps = action.reps?.toLong() ?: entry.target_reps,
+                        target_reps = reps,
+                        target_reps_high = high,
                         target_weight_kg = action.weightKg ?: entry.target_weight_kg,
                         target_rir = action.rir ?: entry.target_rir,
                     ),
@@ -260,7 +294,7 @@ class CoachPlanApplier(
             }
 
             is CoachAction.MoveDay -> {
-                val routine = training.routineById(action.routineId) ?: return
+                val routine = training.routineById(action.routineId) ?: return false
                 training.upsertRoutine(
                     routine.copy(
                         weekday = action.weekday.toLong(),
@@ -270,14 +304,19 @@ class CoachPlanApplier(
                 )
             }
         }
+        return true
     }
 
     private fun snapshot(actions: List<CoachAction>, addedEntryIds: List<String>): PlanSnapshot {
-        val routineIds = actions.map(CoachAction::routineId).distinct()
-        val routines = routineIds.mapNotNull(training::routineById)
-        val entries = routineIds.flatMap(training::routineEntries)
+        val routineIds = actions.filterIsInstance<CoachAction.MoveDay>()
+            .map(CoachAction::routineId)
+            .distinct()
+        val entryIds = actions.filterIsInstance<CoachAction.UpdateTarget>()
+            .map(CoachAction.UpdateTarget::entryId)
+            .toSet()
+        val entries = entryIds.mapNotNull(training::routineEntryById)
         return PlanSnapshot(
-            routines = routines.map { row: Routine ->
+            routines = routineIds.mapNotNull(training::routineById).map { row: Routine ->
                 RoutineSnapshot(
                     id = row.id,
                     name = row.name,

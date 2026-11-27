@@ -2232,11 +2232,9 @@
     <string name="settings_coach">Coach</string>
     <string name="settings_coach_off">Off</string>
     <string name="settings_coach_setup">Set up</string>
-    <string name="settings_coach_on">On · %1$d categories</string>
     <string name="settings_coach_none">On · no categories</string>
     <string name="settings_mcp">External access</string>
     <string name="settings_mcp_off">Off</string>
-    <string name="settings_mcp_on">On · %1$d tokens</string>
 
     <string name="coach_title">Coach</string>
     <string name="coach_intro_title">Proposals, not commands</string>
@@ -2264,6 +2262,8 @@
     <string name="coach_key_note">The key is never written to the database, the change log or an export.</string>
     <string name="coach_key_save">Save key</string>
     <string name="coach_key_clear">Remove key</string>
+    <string name="coach_key_clear_title">Remove the provider key</string>
+    <string name="coach_key_clear_body">Sends stop until you add a key again. The conversation and plan stay.</string>
     <string name="coach_save">Save</string>
     <string name="coach_saved">Saved on this device.</string>
 
@@ -2280,6 +2280,7 @@
     <string name="coach_disclosure_title">What leaves the phone</string>
     <string name="coach_disclosure_body">The first request shows this list before anything is sent. It goes to the provider you chose, and to no one else.</string>
     <string name="coach_disclosure_accept">Send this to the provider</string>
+    <string name="coach_disclosure_open">See what leaves the phone</string>
     <string name="coach_disclosure_included">Included</string>
     <string name="coach_disclosure_excluded">Not included</string>
 
@@ -2296,6 +2297,11 @@
     <string name="coach_accept">Accept</string>
     <string name="coach_discard">Discard</string>
     <string name="coach_undo">Undo</string>
+    <string name="coach_accept_named">Accept: %1$s</string>
+    <string name="coach_discard_named">Discard: %1$s</string>
+    <string name="coach_undo_named">Undo: %1$s</string>
+    <string name="coach_switch_category">Share %1$s with the coach</string>
+    <string name="coach_switch_master">Coach on</string>
     <string name="coach_status_proposed">Proposed</string>
     <string name="coach_status_accepted">Accepted</string>
     <string name="coach_status_discarded">Discarded</string>
@@ -2312,7 +2318,7 @@
     <string name="coach_error_server">The provider returned an error. Nothing was applied.</string>
     <string name="coach_error_timeout">The provider did not answer in time. Nothing was applied.</string>
     <string name="coach_error_invalid_response">The provider sent something unreadable. Nothing was applied.</string>
-    <string name="coach_error_invalid_output">The coach answer did not pass the plan checks, even after a repair round. Nothing was applied.</string>
+    <string name="coach_error_invalid_output">The answer did not match your plan. Nothing was applied.</string>
     <string name="coach_error_safety">The answer contained a claim the coach does not make. Nothing was applied.</string>
     <string name="coach_error_disabled">Finish the provider setup first.</string>
     <string name="coach_error_no_key">Add a provider key first.</string>
@@ -2341,18 +2347,33 @@
     <string name="mcp_scope_write_nutrition">Write water</string>
     <string name="mcp_scope_write_notes">Write notes</string>
     <string name="mcp_tokens">Tokens</string>
-    <string name="mcp_no_tokens">No tokens yet. An assistant needs one to call a tool.</string>
+    <string name="mcp_no_tokens">No tokens yet</string>
+    <string name="mcp_no_tokens_body">Create one to let an assistant read or write only what you choose.</string>
     <string name="mcp_revoke">Revoke</string>
     <string name="mcp_revoked">Revoked</string>
     <string name="mcp_last_used">Last used %1$s</string>
     <string name="mcp_created">Created %1$s</string>
     <string name="mcp_never_used">Never used</string>
     <string name="mcp_audit">Recent calls</string>
-    <string name="mcp_no_audit">No calls yet. Only the tool and its scope are recorded, never the values.</string>
+    <string name="mcp_no_audit_title">No calls yet</string>
+    <string name="mcp_no_audit">Only the tool and its scope are recorded, never the values.</string>
+    <string name="mcp_revoke_named">Revoke: %1$s</string>
+    <string name="mcp_revoke_title">Revoke this token</string>
+    <string name="mcp_revoke_body">%1$s will stop working on the next call. This cannot be undone; create a new token if you need one again.</string>
     <string name="mcp_call_ok">Allowed</string>
+    <string name="mcp_call_at">At %1$s</string>
     <string name="mcp_call_failed">Refused</string>
     <string name="mcp_error_start">The local endpoint could not start. Another app may hold the port.</string>
     <string name="mcp_error_scope">Choose at least one scope.</string>
     <string name="mcp_error_label">Give the token a name.</string>
     <string name="mcp_close">Close</string>
+    <string name="mcp_cancel">Keep it</string>
+    <plurals name="settings_coach_categories">
+        <item quantity="one">On · %1$d category</item>
+        <item quantity="other">On · %1$d categories</item>
+    </plurals>
+    <plurals name="settings_mcp_tokens">
+        <item quantity="one">On · %1$d token</item>
+        <item quantity="other">On · %1$d tokens</item>
+    </plurals>
 </resources>

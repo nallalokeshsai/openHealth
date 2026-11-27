@@ -53,18 +53,19 @@ class McpRepository(
 ) {
     fun issue(label: String, scopes: Set<McpScope>, tokenHash: String): McpTokenRecord {
         val id = ids.newId()
+        val now = clock.now().toEpochMilliseconds()
         db.mcpQueries.insertToken(
             id = id,
             label = label,
             scopes = scopes.joinToString(",") { it.key },
             tokenHash = tokenHash,
-            createdAt = clock.now().toEpochMilliseconds(),
+            createdAt = now,
         )
         return McpTokenRecord(
             id = id,
             label = label,
             scopes = scopes,
-            createdAt = clock.now().toEpochMilliseconds(),
+            createdAt = now,
             revokedAt = null,
             lastUsedAt = null,
         )
@@ -101,7 +102,7 @@ class McpRepository(
             ok = ok,
             detail = detail,
         )
-        // Keep the audit readable rather than unbounded: the newest 500 calls.
+        // The audit is bounded by age, not by count: calls older than 30 days go.
         db.mcpQueries.deleteAccessBefore(
             cutoff = clock.now().toEpochMilliseconds() - RETENTION_MILLIS,
         )

@@ -100,7 +100,9 @@ class CoachDataBuilder(
             CoachDaily(
                 date = rollup.localDate.toString(),
                 value = transform(rollup.value.value),
-                viaHealthConnect = rollup.sourceId?.let { sources[it]?.viaHealthConnect } ?: false,
+                // Fail closed: a missing source or a multi-source rollup is treated as
+                // platform-derived until the registry proves otherwise.
+                viaHealthConnect = rollup.sourceId?.let { sources[it]?.viaHealthConnect } ?: true,
             )
         }
     }
@@ -130,7 +132,7 @@ class CoachDataBuilder(
                 unit = observation.value.unit.ucum,
                 at = observation.provenance.happenedAt.toString(),
                 viaHealthConnect = sources[observation.provenance.sourceId]?.viaHealthConnect
-                    ?: false,
+                    ?: true,
             )
         }
 

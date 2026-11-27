@@ -235,6 +235,157 @@ class CoachRepositoryTest {
     }
 
     @Test
+    fun aSecondApplyOfTheSameProposalIsRejectedAndAddsNothing() {
+        val store = store()
+        val coach = CoachRepository(store.db, clock, SeededIdGenerator(20))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(21))
+        val proposalId = coach.appendCoach(
+            answer(
+                listOf(
+                    CoachAction.AddExercise(
+                        routineId = "push",
+                        exerciseId = "bench",
+                        sets = 3,
+                        reps = 5,
+                        weightKg = 60.0,
+                    ),
+                ),
+            ),
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
+        ).second.single()
+        assertTrue(applier.apply(proposalId) is CoachApplyResult.Applied)
+        assertEquals(2, store.training.routineEntries("push").size)
+        assertTrue(applier.apply(proposalId) is CoachApplyResult.Rejected)
+        assertEquals(2, store.training.routineEntries("push").size)
+        store.close()
+    }
+
+    @Test
+    fun undoLeavesAnUnrelatedEditInTheSameRoutineAlone() {
+        val store = store()
+        store.training.upsertRoutineExercise(
+            app.openhealth.data.db.Routine_exercise(
+                id = "entry-2", routine_id = "push", exercise_id = "bench", position = 1,
+                target_sets = 5, target_reps = 5, target_reps_high = 5,
+                target_weight_kg = 40.0, notes = null, target_rir = null,
+                rest_seconds = null, progression = null, group_index = null,
+            ),
+        )
+        val coach = CoachRepository(store.db, clock, SeededIdGenerator(22))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(23))
+        val proposalId = coach.appendCoach(
+            answer(listOf(CoachAction.UpdateTarget("push", "entry", sets = 4))),
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
+        ).second.single()
+        assertTrue(applier.apply(proposalId) is CoachApplyResult.Applied)
+        // A later manual edit that the proposal never named.
+        store.training.upsertRoutineExercise(
+            store.training.routineEntryById("entry-2")!!.copy(target_sets = 9),
+        )
+        assertTrue(applier.undo(proposalId))
+        assertEquals(9L, store.training.routineEntryById("entry-2")!!.target_sets)
+        assertEquals(3L, store.training.routineEntryById("entry")!!.target_sets)
+        store.close()
+    }
+
+    @Test
+    fun raisingRepsAlsoRaisesTheRangeHighSoTheProgressionEngineCanReadIt() {
+        val store = store()
+        val coach = CoachRepository(store.db, clock, SeededIdGenerator(24))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(25))
+        val proposalId = coach.appendCoach(
+            answer(listOf(CoachAction.UpdateTarget("push", "entry", reps = 12))),
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
+        ).second.single()
+        assertTrue(applier.apply(proposalId) is CoachApplyResult.Applied)
+        val entry = store.training.routineEntryById("entry")!!
+        assertEquals(12L, entry.target_reps)
+        assertEquals(12L, entry.target_reps_high)
+        app.openhealth.core.training.ProgressionPlanner.input(
+            app.openhealth.core.training.ProgressionRequest(
+                sets = emptyList(),
+                currentSessionId = null,
+                targetRepsLow = entry.target_reps!!.toInt(),
+                targetRepsHigh = entry.target_reps_high!!.toInt(),
+                targetSets = entry.target_sets!!.toInt(),
+            ),
+        )
+        store.close()
+    }
+
+    @Test
+    fun anExerciseOutsideThePlannedRoutinesCanStillBeAdded() {
+        val store = store()
+        store.training.upsertExercise(
+            app.openhealth.data.db.Exercise(
+                id = "row", name = "Barbell row", primary_muscles = "back",
+                secondary_muscles = "biceps", equipment = "barbell", instructions = null,
+                level = null, mechanic = null, force = null, met_activity = null,
+                is_custom = false, source_id = null, created_at = 0, updated_at = 0,
+                revision = 1,
+            ),
+        )
+        val coach = CoachRepository(store.db, clock, SeededIdGenerator(26))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(27))
+        val proposalId = coach.appendCoach(
+            answer(
+                listOf(
+                    CoachAction.AddExercise("push", "row", sets = 3, reps = 8, weightKg = 40.0),
+                ),
+            ),
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
+        ).second.single()
+        assertTrue(applier.apply(proposalId) is CoachApplyResult.Applied)
+        val added = store.training.routineEntries("push")
+        assertEquals(2, added.size)
+        assertTrue(added.any { it.exercise_id == "row" })
+        store.close()
+    }
+
+    @Test
+    fun theNewestAcceptedByDecisionTimeIsTheOneUndoCanRestore() {
+        val store = store()
+        val coach = CoachRepository(store.db, clock, SeededIdGenerator(50))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(51))
+        val older = coach.appendCoach(
+            answer(listOf(CoachAction.UpdateTarget("push", "entry", sets = 4))),
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
+        ).second.single()
+        val newer = coach.appendCoach(
+            answer(listOf(CoachAction.UpdateTarget("push", "entry", reps = 10))),
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
+        ).second.single()
+        // The newer card is accepted first, then the older one.
+        assertTrue(applier.apply(newer) is CoachApplyResult.Applied)
+        clock.advance(kotlin.time.Duration.parse("1s"))
+        assertTrue(applier.apply(older) is CoachApplyResult.Applied)
+        assertEquals(false, applier.undo(newer))
+        assertTrue(applier.undo(older))
+        store.close()
+    }
+
+    @Test
+    fun twoIdenticalAddActionsCreateTwoRows() {
+        val store = store()
+        val coach = CoachRepository(store.db, clock, SeededIdGenerator(52))
+        val applier =
+            CoachPlanApplier(store.db, store.training, coach, clock, SeededIdGenerator(53))
+        val action = CoachAction.AddExercise("push", "bench", sets = 3, reps = 5, weightKg = 60.0)
+        val proposalId = coach.appendCoach(
+            answer(listOf(action, action)),
+            meta = app.openhealth.data.repo.CoachTurnMeta(provider = "p", model = "m"),
+        ).second.single()
+        assertTrue(applier.apply(proposalId) is CoachApplyResult.Applied)
+        assertEquals(3, store.training.routineEntries("push").size)
+        store.close()
+    }
+
+    @Test
     fun aDiscardedProposalNeverApplies() {
         val store = store()
         val coach = CoachRepository(store.db, clock, SeededIdGenerator(11))

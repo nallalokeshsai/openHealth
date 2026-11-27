@@ -68,6 +68,7 @@ object CoachPrompt {
     const val MAX_SESSIONS = 20
     const val MAX_DAYS = 14
     const val MAX_VITALS = 20
+    const val MAX_CATALOGUE = 1_000
     const val MAX_NOTE_LENGTH = 2_000
 
     private val json = Json { prettyPrint = false }
@@ -86,7 +87,7 @@ object CoachPrompt {
                 CoachCategory.entries.filter { consent.allows(it) }.forEach { add(it.key) }
             }
             if (consent.allows(CoachCategory.PROFILE)) profile(dataset.profile)
-            if (consent.allows(CoachCategory.TRAINING)) training(dataset)
+            if (consent.allows(CoachCategory.TRAINING)) training(dataset, weightNeutral)
             if (consent.allows(CoachCategory.RECOVERY)) recovery(dataset.recovery)
             if (consent.allows(CoachCategory.NUTRITION) && !weightNeutral) {
                 nutrition(dataset.nutrition, consent)
@@ -115,7 +116,7 @@ object CoachPrompt {
         }
     }
 
-    private fun JsonObjectBuilder.training(dataset: CoachDataset) {
+    private fun JsonObjectBuilder.training(dataset: CoachDataset, weightNeutral: Boolean) {
         putJsonObject("training") {
             putJsonArray("routines") {
                 dataset.plan.routines.forEach { routine ->
@@ -134,12 +135,22 @@ object CoachPrompt {
                                             put("sets", entry.sets)
                                             put("reps", entry.reps)
                                             put("reps_high", entry.repsHigh)
-                                            put("weight_kg", entry.weightKg)
+                                            if (!weightNeutral) put("weight_kg", entry.weightKg)
                                             put("rir", entry.rir)
                                         },
                                     )
                                 }
                             }
+                        },
+                    )
+                }
+            }
+            putJsonArray("catalogue") {
+                dataset.plan.catalogue.entries.take(MAX_CATALOGUE).forEach { (id, name) ->
+                    add(
+                        buildJsonObject {
+                            put("id", id)
+                            put("name", name)
                         },
                     )
                 }
@@ -151,7 +162,7 @@ object CoachPrompt {
                             put("date", session.date)
                             put("routine", session.routineName)
                             put("sets", session.sets)
-                            put("volume_kg", session.volumeKg)
+                            if (!weightNeutral) put("volume_kg", session.volumeKg)
                             put("effort", session.effort)
                         },
                     )
