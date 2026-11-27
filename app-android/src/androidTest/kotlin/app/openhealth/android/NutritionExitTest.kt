@@ -493,6 +493,8 @@ class NutritionExitTest {
             calls += 1
             return HttpResponse(200, PRODUCT)
         }
+
+        override suspend fun post(request: HttpRequest): HttpResponse = get(request)
     }
 
     private companion object {
