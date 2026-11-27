@@ -365,6 +365,9 @@ INSERT OR IGNORE INTO work_set(
 workSetById:
 SELECT * FROM work_set WHERE id = :id;
 
+workSetByIdempotencyKey:
+SELECT * FROM work_set WHERE idempotency_key = :key;
+
 setsForSession:
 SELECT * FROM work_set WHERE session_id = :sessionId ORDER BY position;
 

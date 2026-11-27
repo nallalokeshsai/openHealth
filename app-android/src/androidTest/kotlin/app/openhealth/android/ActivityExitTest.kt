@@ -25,8 +25,10 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
 import org.junit.After
 import org.junit.Before
@@ -175,14 +177,16 @@ class ActivityExitTest {
     fun aStepCounterRebootDoesNotLoseTheDaysCount() {
         seedProfile()
         val tracker = container.newStepTracker()
-        val boot = container.clock.now().minus(6.hours)
+        // Anchor the scenario to yesterday: the test runs at any hour, and a 10-minute
+        // window around midnight must not split one day's count across two.
+        val day = container.today.minus(DatePeriod(days = 1))
+        val boot = day.atStartOfDayIn(container.zone).plus(6.hours)
         val bootMillis = boot.toEpochMilliseconds()
         val first = StepCounterSample(1_000, bootMillis, boot.plus(5.hours))
         val second = StepCounterSample(1_600, bootMillis, boot.plus(5.hours).plus(10.minutes))
         tracker.persist(first)
         tracker.persist(second)
 
-        val day = container.today
         val beforeReboot = container.store.observations
             .forDayAndType(day, ObservationType.STEPS)
             .sumOf { it.value.value }

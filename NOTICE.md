@@ -327,6 +327,41 @@ dependency. Health Connect is a system module on Android 14 and later; on 13 and
 is a separate app published by Google, which the person installs themselves. openHealth
 never writes to it.
 
+### Wear OS companion (B14)
+
+`androidx.wear.compose:compose-material3` and `compose-foundation` 1.7.2 and
+`androidx.health:health-services-client` 1.1.0 are Apache-2.0 and used unmodified.
+Health Services reads the watch's own optical heart-rate sensor on the wrist; nothing is
+sent anywhere but the paired phone.
+
+### Google Play Services Wearable (Android SDK License, Play flavour only)
+
+`com.google.android.gms:play-services-wearable` 20.0.1 and the three artifacts it pulls
+in (`play-services-base`, `play-services-basement`, `play-services-tasks`) carry the
+**Android Software Development Kit License**, not Apache-2.0, in their POMs
+(<https://developer.android.com/studio/terms.html>). They are used unmodified under those
+terms, which the owner accepted with the Play-only Wear Data Layer decision
+(`docs/adr/0019`). They are the **only** Google Play Services artifacts in the client,
+and they are the Wear OS Data Layer transport, not an analytics path: the app writes its
+own data items and reads no Google account profile. They resolve in the `play` flavour of
+the phone app and in the Wear app only; `checkFdroidNoPlayServices` proves the F-Droid
+build resolves none of them, and `checkNoTelemetrySdks` still denies every other
+`com.google.android.gms`, `com.google.firebase` and `com.google.android.datatransport`
+coordinate. A phone on the F-Droid build keeps its Garmin watch over the direct Bluetooth
+LE link, which needs none of this.
+
+### Connect IQ app (watch/connectiq/, Apache-2.0)
+
+The Monkey C app is original work under this repository's Apache-2.0 licence. **No Garmin
+Connect IQ SDK file, sample, device profile, simulator asset or Mobile SDK is used,
+copied or bundled**, and the SDK is not installed here: Garmin's Connect IQ Developer
+Agreement is the owner's to accept, and a release needs a developer key from a Garmin
+Developer Account. `devices.json` records public per-device facts (screen size and shape,
+Connect IQ API level, Bluetooth and optical-heart-rate support) read from Garmin's
+published compatible-device list; it reproduces no Garmin text or artwork. The link is a
+standard Bluetooth LE GATT server on the phone, so no Garmin account, cloud or relay is
+involved.
+
 ### Garmin FIT: an independent decoder, no SDK
 
 The FIT importer in `integrations/` is written from the published FIT protocol

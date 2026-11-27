@@ -44,6 +44,7 @@ import app.openhealth.ui.components.OhIconButton
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRow
+import app.openhealth.ui.components.OhSwitch
 import app.openhealth.ui.components.OhTextField
 import app.openhealth.ui.components.ohClickable
 import app.openhealth.ui.components.rememberInteraction
@@ -82,6 +83,7 @@ fun DevicesScreen(
     onUnpair: (String) -> Unit,
     onConnect: (String) -> Unit,
     onMovePriority: (String, Boolean) -> Unit,
+    onToggleWatchLink: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var correcting by rememberSaveable { mutableStateOf(false) }
@@ -125,6 +127,8 @@ fun DevicesScreen(
                 onForget = { id -> confirmingForget = id },
                 onConnect,
             )
+            OhSectionTitle(stringResource(R.string.devices_watch_link))
+            WatchLinkCard(model.watchLink, onToggleWatchLink)
             OhSectionTitle(stringResource(R.string.devices_priority))
             PriorityCard(model.priority, onMovePriority)
             Spacer(Modifier.height(OhTheme.space.s3))
@@ -380,6 +384,29 @@ private fun GarminCard(model: GarminModel, onImport: () -> Unit) {
         style = OhTheme.type.footnote,
         color = OhTheme.colors.label2,
     )
+}
+
+@Composable
+private fun WatchLinkCard(model: WatchLinkModel, onToggle: (Boolean) -> Unit) {
+    OhInsetGroup {
+        OhRow(
+            title = stringResource(R.string.devices_watch_link_row),
+            subtitle = if (model.available) {
+                model.note
+            } else {
+                stringResource(R.string.devices_watch_link_permission)
+            },
+            mergeSemantics = false,
+            trailing = {
+                OhSwitch(
+                    checked = model.enabled,
+                    onCheckedChange = onToggle,
+                    enabled = model.available,
+                    contentDescription = stringResource(R.string.devices_watch_link_toggle),
+                )
+            },
+        )
+    }
 }
 
 @Composable

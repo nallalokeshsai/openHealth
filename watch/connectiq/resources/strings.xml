@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+    <strings>
+        <string id="AppName">openHealth</string>
+        <string id="Workout">Workout</string>
+        <string id="StartOnPhone">Start a workout on your phone</string>
+        <string id="Waiting">Waiting for your phone</string>
+        <string id="Connected">Phone connected</string>
+        <string id="Exercise">Exercise</string>
+        <string id="Set">Set</string>
+        <string id="LogSet">Log set</string>
+        <string id="Rest">Rest</string>
+        <string id="Skip">Skip</string>
+        <string id="Weight">Weight</string>
+        <string id="Reps">Reps</string>
+        <string id="HeartRate">Heart rate</string>
+        <string id="Offline">Sets are kept on the watch</string>
+        <string id="Start">Start</string>
+        <string id="Finish">Finish</string>
+    </strings>
+</resources>

@@ -1012,6 +1012,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                             arrayOf(
                                 Manifest.permission.BLUETOOTH_SCAN,
                                 Manifest.permission.BLUETOOTH_CONNECT,
+                                Manifest.permission.BLUETOOTH_ADVERTISE,
                             )
                         } else {
                             arrayOf(Manifest.permission.BLUETOOTH)
@@ -1065,6 +1066,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onUnpair = viewModel::unpairDevice,
                     onConnect = viewModel::connectDevice,
                     onMovePriority = viewModel::moveSourcePriority,
+                    onToggleWatchLink = viewModel::toggleWatchLink,
                 )
             }
         }

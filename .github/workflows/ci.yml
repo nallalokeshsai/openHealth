@@ -37,6 +37,11 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app-android:assembleDebug --no-daemon
 
+      # B14 adds the Wear OS companion as its own APK; it shares :core and is built in
+      # CI so a break in the Wear module cannot merge behind a green phone build.
+      - name: Assemble the Wear companion
+        run: ./gradlew :app-wear:assembleDebug --no-daemon
+
       # B6 introduced two store flavours (Play and the Play-Services-free F-Droid build);
       # both use the Apache-2.0 ZXing decoder and both must compile.
       - name: Assemble the F-Droid flavour

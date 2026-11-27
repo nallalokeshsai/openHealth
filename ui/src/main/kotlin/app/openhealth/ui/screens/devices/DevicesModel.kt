@@ -11,10 +11,14 @@ data class DevicesModel(
     val healthConnect: HealthConnectModel,
     val garmin: GarminModel,
     val bluetooth: BluetoothModel,
+    val watchLink: WatchLinkModel,
     val priority: PriorityModel,
     val note: String,
     val message: String? = null,
 )
+
+/** The Connect IQ direct link (`pr.md` §6.18; ADR 0019); off until the person turns it on. */
+data class WatchLinkModel(val enabled: Boolean, val available: Boolean, val note: String)
 
 data class StepsSourceModel(
     val available: Boolean,

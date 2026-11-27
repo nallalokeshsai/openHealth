@@ -114,6 +114,10 @@ dependencies {
     // Android 14+ and a Play app on 13 and lower.
     implementation(libs.androidx.health.connect)
 
+    // Wear OS Data Layer (B14, ADR 0019). It is Play-only: the F-Droid flavour has no
+    // Google Play Services on any classpath, and `checkFdroidNoPlayServices` proves it.
+    "playImplementation"(libs.play.services.wearable)
+
     // Encrypted storage behind the :core seam (Tech-Stack.md §5). SQLCipher is the
     // community edition; its attribution requirement is recorded in NOTICE.md.
     implementation(libs.sqldelight.android.driver)
@@ -129,3 +133,38 @@ dependencies {
     androidTestImplementation(libs.kotlin.test.junit)
     debugImplementation(libs.compose.ui.test.manifest)
 }
+
+/**
+ * B14 (ADR 0019): the F-Droid flavour must resolve no Google Play Services, Firebase or
+ * Data Transport artifact, even though the Play flavour carries the Wear Data Layer.
+ * This is the regression test for the one telemetry-gate exception, not a replacement
+ * for `checkNoTelemetrySdks`.
+ */
+val checkFdroidNoPlayServices = tasks.register("checkFdroidNoPlayServices") {
+    group = "verification"
+    description = "Fails when the F-Droid runtime resolves a Google Play Services artifact."
+    val runtime = configurations.named("fdroidDebugRuntimeClasspath")
+    doLast {
+        val hits = runtime.get().incoming.resolutionResult.allComponents
+            .mapNotNull { it.moduleVersion?.group }
+            .filter { group ->
+                group == "com.google.android.gms" ||
+                    group.startsWith("com.google.firebase") ||
+                    group.startsWith("com.google.android.datatransport")
+            }
+            .distinct()
+            .sorted()
+        check(hits.isEmpty()) {
+            "checkFdroidNoPlayServices failed: the Play-Services-free build resolved " +
+                hits.joinToString(", ") + " (pr.md §6.23; ADR 0019)."
+        }
+    }
+}
+tasks.named("check") { dependsOn(checkFdroidNoPlayServices) }
+
+/**
+ * `check` runs Android Lint on the default variant only, which is `fdroidDebug`. B14 put
+ * the Wear Data Layer bridge in `src/play`, so without this the one source set that
+ * touches Play Services would never be linted.
+ */
+tasks.named("check") { dependsOn("lintPlayDebug") }

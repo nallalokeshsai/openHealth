@@ -26,6 +26,10 @@ keystore.properties
 # local exports and generated corpora live under exports/ or build/ instead.
 exports/
 local-data/
+# A signed Connect IQ build is a local artefact, not source.
+*.prg
+*.iq
+watch/connectiq/bin/
 .env
 .env.*
 !.env.example

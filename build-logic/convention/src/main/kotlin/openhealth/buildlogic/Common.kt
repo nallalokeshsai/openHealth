@@ -94,6 +94,7 @@ internal fun Project.registerLicenceCheck() {
  * SDK cannot enter by adding an allowlist row.
  */
 internal fun Project.registerTelemetryCheck() {
+    val modulePath = path
     val telemetryConfigurations = configurations.matching {
         it.name.endsWith("RuntimeClasspath")
     }
@@ -116,6 +117,13 @@ internal fun Project.registerTelemetryCheck() {
         group = "verification"
         description = "Fails when an analytics, crash-reporting or attribution SDK resolves."
         modules.set(coordinates)
+        allowedModules.set(
+            // The Wear OS Data Layer is the one platform feature that needs Play Services
+            // (Tech-Stack.md §4; ADR 0019). Only these four exact coordinates, and only on
+            // the phone and Wear modules, may pass; every other Google artifact still
+            // fails, and the F-Droid build is held to zero by its own check.
+            if (modulePath == ":app-android" || modulePath == ":app-wear") WEARABLE_STACK else emptyList(),
+        )
         deniedGroups.set(
             listOf(
                 "com.google.firebase",
@@ -140,6 +148,17 @@ internal fun Project.registerTelemetryCheck() {
     }
     tasks.matching { it.name == "check" }.configureEach { dependsOn(checkNoTelemetrySdks) }
 }
+
+/**
+ * The exact Google coordinates the Wear Data Layer needs, and nothing else. It is a set
+ * of whole coordinates so a group prefix can never be widened into analytics (`ADR 0019`).
+ */
+private val WEARABLE_STACK: List<String> = listOf(
+    "com.google.android.gms:play-services-wearable",
+    "com.google.android.gms:play-services-base",
+    "com.google.android.gms:play-services-basement",
+    "com.google.android.gms:play-services-tasks",
+)
 
 /**
  * Adds `checkDesignTokens` to `check`: no colour literal, raw `.dp`/`.sp` or

@@ -13,6 +13,7 @@ import app.openhealth.android.activity.GpsRecordingService
 import app.openhealth.android.activity.YogaSessionService
 import app.openhealth.android.ui.OpenHealthRoot
 import app.openhealth.android.ui.StartupErrorScreen
+import app.openhealth.android.wear.WatchGattService
 
 /**
  * The one activity (`BUILD-ROADMAP.md` §B3). The system splash is installed before the
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
             runCatching {
                 GpsRecordingService.recoverIfNeeded(this)
                 YogaSessionService.recoverIfNeeded(this)
+                WatchGattService.recoverIfNeeded(this)
             }
         }
         setContent {

@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -99,7 +100,7 @@ class NutritionExitTest {
         compose.setContent { OpenHealthRoot(container, viewModel) }
         waitFor("loaded") { viewModel.state.value.loaded }
         waitFor("profile") { viewModel.state.value.onboardingComplete }
-        compose.onNodeWithContentDescription("Nutrition").performClick()
+        openNutrition()
         waitFor("nutrition") { viewModel.state.value.nutrition != null }
 
         compose.onNodeWithContentDescription("Scan a barcode").performClick()
@@ -196,7 +197,7 @@ class NutritionExitTest {
         viewModel.refresh()
         compose.setContent { OpenHealthRoot(container, viewModel) }
         waitFor("loaded") { viewModel.state.value.loaded }
-        compose.onNodeWithContentDescription("Nutrition").performClick()
+        openNutrition()
         waitFor("weight neutral") {
             viewModel.state.value.preferences.weightNeutral &&
                 viewModel.state.value.nutrition?.energy == null
@@ -326,7 +327,7 @@ class NutritionExitTest {
         seedProfile()
         compose.setContent { OpenHealthRoot(container, viewModel) }
         waitFor("loaded") { viewModel.state.value.loaded }
-        compose.onNodeWithContentDescription("Nutrition").performClick()
+        openNutrition()
         waitFor("nutrition") { viewModel.state.value.nutrition != null }
 
         compose.onNodeWithContentDescription("Scan a barcode").performClick()
@@ -358,7 +359,7 @@ class NutritionExitTest {
         seedProfile()
         compose.setContent { OpenHealthRoot(container, viewModel) }
         waitFor("loaded") { viewModel.state.value.loaded }
-        compose.onNodeWithContentDescription("Nutrition").performClick()
+        openNutrition()
         waitFor("nutrition") { viewModel.state.value.nutrition != null }
         compose.onAllNodesWithText("Add food").onFirst().performClick()
         waitFor("search") { viewModel.state.value.foodSearch != null }
@@ -386,7 +387,7 @@ class NutritionExitTest {
         seedProfile()
         compose.setContent { OpenHealthRoot(container, viewModel) }
         waitFor("loaded") { viewModel.state.value.loaded }
-        compose.onNodeWithContentDescription("Nutrition").performClick()
+        openNutrition()
         waitFor("nutrition") { viewModel.state.value.nutrition != null }
 
         val before = viewModel.state.value.nutrition?.water?.totalMl ?: 0.0
@@ -468,6 +469,14 @@ class NutritionExitTest {
         ) {
             Thread.sleep(50)
         }
+    }
+
+    /** The tab bar is composed after `loaded`; under load the click can race it. */
+    private fun openNutrition() {
+        compose.waitUntil(timeoutMillis = 30_000) {
+            compose.onAllNodesWithContentDescription("Nutrition").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("Nutrition").performClick()
     }
 
     private fun waitFor(what: String, timeoutMillis: Long = 30_000, condition: () -> Boolean) {

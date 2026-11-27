@@ -1,4 +1,4 @@
-# Licence allowlist for client modules (core, data, sync, integrations, ui, app-android).
+# Licence allowlist for client modules (core, data, sync, integrations, ui, app-android, app-wear).
 #
 # Format:  group:module<TAB>licence<TAB>note
 # `*` is a wildcard. Every resolved runtime dependency of a client module must match a
@@ -17,6 +17,12 @@ androidx.*:*	Apache-2.0	AndroidX libraries
 # Firebase or Play Services coordinate, which the telemetry gate and pr.md §6.23 forbid.
 # Every Google artifact the client resolves is listed by name below.
 com.google.zxing:*	Apache-2.0	ZXing barcode decoding in every store flavour (offline, free and telemetry-free)
+# B14 Wear OS Data Layer, Play flavour only (ADR 0019). The exact four coordinates the
+# transport resolves; the F-Droid flavour resolves none of them.
+com.google.android.gms:play-services-wearable	Android SDK License	Wear OS Data Layer transport (Play build only; https://developer.android.com/studio/terms.html)
+com.google.android.gms:play-services-base	Android SDK License	Play Services base, pulled in by the Wear Data Layer (Android SDK terms)
+com.google.android.gms:play-services-basement	Android SDK License	Play Services basement, pulled in by the Wear Data Layer (Android SDK terms)
+com.google.android.gms:play-services-tasks	Android SDK License	Play Services Task API, pulled in by the Wear Data Layer (Android SDK terms)
 com.google.auto.value:auto-value-annotations	Apache-2.0	Annotations pulled in by AndroidX and Guava
 com.google.errorprone:error_prone_annotations	Apache-2.0	Annotations pulled in by Guava and Robolectric
 com.google.j2objc:j2objc-annotations	Apache-2.0	Annotations pulled in by Guava

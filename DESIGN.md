@@ -1,8 +1,11 @@
 # openHealth — Design System
 
-**Version:** 0.6
+**Version:** 0.7
 **Status:** Living document, first pass
-**Last revision:** 2026-11-26 — B13 adds Settings → Data → Sync (§14.2): local-only,
+**Last revision:** 2026-11-27 — B14 adds the Wear OS companion recipe (§14.6) and the sixth Settings → Devices group (§14.2): one screen,
+the same tokens, one accent on Log set, 44 dp targets and the existing type roles. No new
+colour, type role, spacing value or component. Previous: 2026-11-26 — B13 adds Settings →
+Data → Sync (§14.2): local-only,
 synced, offline and conflict states from existing components and inks, with the sync
 problem in orange (§6.5) and no new colour, type role, spacing value or component.
 Previous: 2026-11-26 — B12 adds the clinical report paper (§8.9): the report is
@@ -1819,7 +1822,7 @@ buttons that name the value they keep ("Keep 8 412" / "Keep 9 103"). Every row i
 required for any other screen.
 
 **Devices and integrations** (pushed from the Settings row, not a root). One scrolling
-page in the Settings surface language: a page header with a back chevron, then five
+page in the Settings surface language: a page header with a back chevron, then six
 groups separated by 22 dp, each introduced by a 13/600 `label-2` title that is a
 heading to the screen reader.
 
@@ -1841,7 +1844,12 @@ heading to the screen reader.
 4. **Bluetooth.** An inset group: Scan (secondary, disabled with a reason in `label`
    when the radio is off), the paired devices with what each provides and whether the
    link is idle, connecting, reconnecting or connected, then anything the scan found.
-5. **Which source wins.** An inset group of the sources that report the type, in
+5. **Connect IQ watch.** An inset group with a closed-by-default switch and one
+   `footnote` line: it advertises a local Bluetooth link only while a workout is open,
+   and the Garmin app keeps its sets on the watch when the link is away. When nearby
+   devices are not allowed, the switch is disabled and the line says what to allow;
+   the row never spends the accent.
+6. **Which source wins.** An inset group of the sources that report the type, in
    priority order: a rank number in a 12 dp leading slot, the source's name, a plain
    human description beneath it (never an internal family key), and two 44 dp chevron
    buttons that move the row up or down. Moving a row rewrites the order and rebuilds
@@ -1961,6 +1969,43 @@ A screen is not done until all of these pass:
       fat or photos.
 - [ ] RTL checked; no physical `left`/`right`.
 - [ ] The screen's reason to exist is legible in three seconds.
+
+### 14.6 Wear OS companion
+
+The watch screen (`pr.md` §6.18; `docs/adr/0019`) is a remote for an open session, not a
+second app. It uses the same `OhTheme` tokens and no new colour, type role, spacing value
+or component.
+
+- **One screen, one column.** Round-safe: 16 dp side padding and a 40 dp top reserve for
+  the system time (32 + 8 from the existing token set, so the curved clock clears at
+  200 %); everything scrolls at 200 % text. Exercise `body` 17/600, set line
+  `caption2` 11, the selected weight `title3` 20 tabular with the other value `caption2`,
+  rest `timer` 28 tabular, labels `caption2` 11. There is no second title line: the
+  exercise is the title.
+- **One accent.** The accent is the Log set button and the rest bar's fill. Weight and
+  reps share one selector row: a 44 dp neutral `−`/`+` pair and two stacked values, the
+  selected one in `label`, the other in `label-3`; tapping the values switches which one
+  steps. This keeps Log set on the first screen of a 454 px watch; the rest and
+  heart-rate lines follow below and scroll.
+- **States.** No session: a `title3` "Workout", "Start a workout on your phone" as
+  `footnote`, and, only when disconnected, a plain connection line. Session: exercise name, "Set 2 of 3 · Exercise 1
+  of 1", the selector, Log set, rest clock with +15 s and Skip, and a `caption`
+  heart-rate line when the sensor is allowed. A queued command says "N waiting for the
+  phone"; disconnected says the sets stay on the watch. An ended session returns to the
+  empty state.
+- **Never here.** No body map, no chart, no calorie or weight goal, no clinical value, no
+  destructive action. Ending a workout is not destructive and has no confirm dialog.
+- **Connection.** "Waiting for your phone" is `caption-2` in `label-3`; no warning
+  triangle, no red and no "disconnected" blame.
+- **Connect IQ variant.** The Garmin app is a reduced remote for the same session. A
+  Connect IQ characteristic carries 20 bytes, so its packet has no exercise name and no
+  routine picker: it draws the set line, weight, reps, rest and heart rate, with the accent
+  on the set figure and the rest bar, and never a second accent. It starts nothing; a
+  workout is started on the phone. This is a deliberate departure from the full Watch
+  anatomy because the Garmin SDK and developer key are the owner's and the app is
+  source-only until they exist (`docs/adr/0019`).
+- **Both themes and RTL.** Dark is canonical; light is the same tokens. The screen mirrors
+  in RTL, but the clock and its figures stay left-to-right (`§11.5`).
 
 ---
 

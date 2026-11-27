@@ -64,6 +64,7 @@ class AppContainer(
         ensurePhoneSource(local)
         ensureRecordingSource(local)
         ensureStravaSource(local)
+        ensureWatchSources(local)
         ensureExerciseLibrary(local)
         local.trash.purgeExpired()
         local
@@ -94,6 +95,68 @@ class AppContainer(
     val restTimer: app.openhealth.core.seam.RestTimerSeam by lazy {
         app.openhealth.android.training.AndroidRestTimer(appContext)
     }
+
+    /**
+     * The one training presenter (`BUILD-ROADMAP.md` §B5). The phone screens and the
+     * wrist bridge use the same instance, so a watch command and a thumb on the live
+     * table take the same path through personal records, the rest alert and the rollup.
+     */
+    val training: app.openhealth.android.training.TrainingPresenter by lazy {
+        app.openhealth.android.training.TrainingPresenter(
+            store = store,
+            clock = clock,
+            zone = zone,
+            restTimer = restTimer,
+            ids = ids,
+            manualSource = MANUAL_SOURCE,
+            appVersion = versionName,
+            freestyleTitle = appContext.getString(app.openhealth.R.string.train_freestyle),
+            pastTitle = appContext.getString(app.openhealth.R.string.train_past_workout),
+            watchLink = { open ->
+                app.openhealth.android.wear.WatchGattService.sessionChanged(appContext, open)
+            },
+        )
+    }
+
+    /** The ids the phone already applied; a replayed watch message writes nothing twice. */
+    val watchApplied: app.openhealth.android.wear.WatchAppliedStore by lazy {
+        app.openhealth.android.wear.WatchAppliedStore(appContext)
+    }
+
+    /** What a watch may see: the open session, the routine list, rest and units. */
+    val watchSnapshots: app.openhealth.android.wear.WatchSnapshotBuilder by lazy {
+        app.openhealth.android.wear.WatchSnapshotBuilder(
+            store = store,
+            restTimer = restTimer,
+            clock = clock,
+            applied = watchApplied,
+            weightUnit = { profileUnit() },
+            weightIncrementKg = { if (profileUnit() == "lb") 5.0 * 0.45359237 else 2.5 },
+        )
+    }
+
+    /** Applies a Wear OS or Connect IQ command (`docs/adr/0019`). */
+    val watchCommands: app.openhealth.android.wear.WatchCommandHandler by lazy {
+        app.openhealth.android.wear.WatchCommandHandler(
+            store = store,
+            training = training,
+            clock = clock,
+            zone = zone,
+            ids = ids,
+            applied = watchApplied,
+            wearSource = WATCH_SOURCE,
+            garminSource = CONNECT_IQ_SOURCE,
+        )
+    }
+
+    private fun profileUnit(): String =
+        if (app.openhealth.core.preferences.UnitSystem.fromKey(store.profile.active()?.units) ==
+            app.openhealth.core.preferences.UnitSystem.IMPERIAL
+        ) {
+            "lb"
+        } else {
+            "kg"
+        }
     val export: ExportService by lazy {
         ExportService(
             driver = store.driver,
@@ -279,6 +342,44 @@ class AppContainer(
         )
     }
 
+    /**
+     * Two wrist sources with distinct provenance (`docs/adr/0019`). A Wear set is a
+     * device source with family `watch`; a Connect IQ set is a Garmin source, so it joins
+     * the existing `garmin` family for dedup and is never counted twice against a FIT file.
+     */
+    private fun ensureWatchSources(local: LocalStore) {
+        if (local.sources.byId(WATCH_SOURCE) == null) {
+            local.sources.upsert(
+                Source(
+                    id = WATCH_SOURCE,
+                    kind = SourceKind.DEVICE,
+                    label = "Wear OS watch",
+                    family = "watch",
+                    device = "wear",
+                    permissions = setOf(
+                        SourcePermission.READ_HEART_RATE,
+                        SourcePermission.WRITE_EXERCISE,
+                    ),
+                ),
+            )
+        }
+        if (local.sources.byId(CONNECT_IQ_SOURCE) == null) {
+            local.sources.upsert(
+                Source(
+                    id = CONNECT_IQ_SOURCE,
+                    kind = SourceKind.GARMIN,
+                    label = "Garmin Connect IQ",
+                    family = "garmin",
+                    device = "connect-iq",
+                    permissions = setOf(
+                        SourcePermission.READ_HEART_RATE,
+                        SourcePermission.WRITE_EXERCISE,
+                    ),
+                ),
+            )
+        }
+    }
+
     /** The source a CSV or file import names, so it is never labelled as a manual entry. */
     private fun ensureImportSource(local: LocalStore) {
         if (local.sources.byId(IMPORT_SOURCE) != null) return
@@ -391,6 +492,8 @@ class AppContainer(
         val LIBRARY_SOURCE = app.openhealth.core.ids.SourceId("exercise-library")
         val RECORDING_SOURCE = app.openhealth.core.ids.SourceId("phone-activity")
         val STRAVA_SOURCE = app.openhealth.core.ids.SourceId("strava-archive")
+        val WATCH_SOURCE = app.openhealth.core.ids.SourceId("wear")
+        val CONNECT_IQ_SOURCE = app.openhealth.core.ids.SourceId("garmin-connect-iq")
         private const val PRE_RESTORE = "pre-restore.ohe"
     }
 }

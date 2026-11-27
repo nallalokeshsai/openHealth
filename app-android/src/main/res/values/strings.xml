@@ -67,4 +67,9 @@
     <string name="clinical_reminder_taken">Taken</string>
     <string name="clinical_reminder_skipped">Skipped</string>
     <string name="clinical_editor_invalid">A required value is missing or not valid. Check the name, the number and any dates.</string>
+    <string name="watch_link_title">Watch link on</string>
+    <string name="watch_link_body">Your Connect IQ watch can log sets while a workout is open.</string>
+    <string name="watch_link_channel">Watch link</string>
+    <string name="watch_link_permission_title">Bluetooth permission needed</string>
+    <string name="watch_link_permission_body">Allow nearby devices in Settings to connect your watch.</string>
 </resources>
