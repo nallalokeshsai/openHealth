@@ -3565,7 +3565,7 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   | Scoped MCP tokens, revocation, same validation as the UI | `McpProtocolTest` (9 cases), `McpGatewayTest.anOutOfRangeValueIsRejectedAndNothingIsWritten`, `aWeightWriteCarriesProvenanceAndRebuildsTheDay`, `aBackfilledWeightKeepsItsOwnHappenedAtAndTheRecordingTime`; `CoachExitTest.theMcpEndpointNeedsATokenScopesAndAValidValue` (401 without a token, scope refusal, 900 kg refused, 80 kg written, revoked token refused). |
   | Weight-neutral mode hides weight, calories and body fat from a request | `CoachPromptTest.weightNeutralModeDropsWeightCaloriesAndBodyFat`. |
 - **What was run, and its result:** `./gradlew check :app-android:assembleDebug` **BUILD
-  SUCCESSFUL** (901 JVM tests and 372 goldens; `:server:test` now accepts schema 12);
+  SUCCESSFUL** (901 JVM tests and 376 goldens; `:server:test` now accepts schema 12);
   `CoachExitTest` **3/3** on the phone emulator; the whole instrumented suite is recorded
   in the QA section below.
 - **Regression over earlier phases:** `./gradlew check` covers every JVM and golden exit;
@@ -3704,3 +3704,76 @@ was not accepted on the reviewer's word alone.
   redirect, so an API key cannot be forwarded to another host.
 - **The External access row was described as hidden with the Coach module.** Only the Coach
   row is module-gated; the ADR and this log now say so.
+
+## B15 audit — independent phase-wise pass (2026-11-27)
+
+- **Scope.** A headless session that did not build B15 compared the tree against
+  `BUILD-ROADMAP.md` B0–B15, `prompts.md`, `pr.md` §6.15/§6.30/§7.1/§12.3,
+  `Tech-Stack.md` §3/§5/§6/§9, `DESIGN.md` §11/§14.2/§14.5/Appendix A and
+  `docs/adr/0020`, and ran `./gradlew check`, both assembles and the phone connected
+  suite on `emulator-5554`. No commit, push or outward action was made.
+- **Confirmed and fixed:**
+  - **The MCP day summary leaked two weight-neutral values.** `GET_DAY_SUMMARY` sent
+    `active_kcal` and `training_volume_kg` to an assistant while weight-neutral mode was
+    on, although `GET_TRAINING_PLAN` and `LIST_RECENT_SESSIONS` stripped loads and the
+    B15 entry above claims "weights and volume are stripped … and MCP reads apply the
+    same two rules". Energy is one of the four categories `pr.md` §6.25 hides, and volume
+    is load-derived. `McpGateway.daySummary` now omits both;
+    `McpGatewayTest.weightNeutralModeHidesEnergyAndVolumeFromTheDaySummary` fails against
+    the old code.
+  - **A stored coach failure always read as a server error.** `CoachRepository.appendError`
+    stores the failure's own stable code (`offline`, `invalid_output:bad_reps`), while
+    `CoachScreen.errorText` matched only `coach_error_*` resource names, so every error row
+    in the conversation fell through to "The provider returned an error" — including an
+    outage, which `pr.md` §6.15 requires to read as a graceful outage. `coachErrorKey`
+    maps both forms onto one key; `CoachErrorTextTest` (3 cases) renders the screen and
+    fails against the old code. The B15 exit test asserted the row's role, never its text.
+  - **The 90-day raw-payload window was never enforced.** `RawRecordRepository.compactExpired`
+    and `compactPayloadsBefore` existed and were unit-tested, but no production code called
+    them, so layer-1 payloads grew without limit against `pr.md` §7.1.
+    `LocalStore.runStartupMaintenance` now runs the Trash purge and the compaction
+    together and `AppContainer` calls it where it previously called `trash.purgeExpired()`
+    alone; `RawRecordTest.openingTheStoreCompactsExpiredPayloads` covers it.
+  - **Every allergy saved from the UI was stored inactive (B12).** The allergy editor
+    offers Yes/No for its Active field while `saveAllergy` compared the draft against the
+    medicine sheet's "Active", so the record never held what the person chose.
+    `ClinicalExitTest.anAllergySavedAsActiveComesBackActive` drives the editor's own draft
+    and fails against the old code.
+  - **A weight-neutral exit test could assert before the switch landed.**
+    `ShellExitTest.weightNeutralHidesWeightAndCaloriesAcrossToday` waited only on
+    `loaded`, which the view model's first rebuild already sets, and failed once in a full
+    suite run with the Today weight card still on screen; it passed alone. It now waits for
+    `preferences.weightNeutral`, as the nutrition case already did. This is the same class
+    of race the B15 QA sweep fixed with the rebuild `Mutex`, not a product defect.
+  - **Build-log claim.** The B15 entry said 372 goldens; the committed set is **376**.
+- **Verification after the fixes:** `./gradlew check :app-android:assembleDebug
+  :app-wear:assembleDebug` **BUILD SUCCESSFUL** — **906 JVM tests** (453 `:core`,
+  183 `:data`, 7 `:sync`, 55 `:integrations`, 172 `:ui`, 14 `:server`, 10 across the
+  three tools, 12 `:app-wear`) and 376 goldens — and **71/71** instrumented tests on the
+  phone emulator. Each fix was re-run against the pre-fix code to prove its test fails.
+- **Left as findings, not changed:**
+  - `pr.md` §7.1's "raw storage cost … shown in settings with a one-tap compaction" is
+    still unbuilt; only the automatic window is now enforced.
+  - `pr.md` §7.1/§2.2 "every manual entry creates an immutable ingestion record" remains
+    broken app-wide: hand-entered measurements, vitals, notes, sessions, work sets and CSV
+    imports are written with `raw_record_id = null`. Only the MCP, device and import-file
+    paths mint one. B14 recorded the watch and strength-set instances; the gap is wider.
+  - `pr.md` §6.30's MVP row is still largely unbuilt and was never owned by a B phase: no
+    deep links, no quick-settings tiles, no Android intents, and the MCP scopes are per
+    domain rather than per module (`docs/adr/0020` records the scope choice).
+  - B13 left the `network_security_config.xml` loopback exception explicitly to the owner
+    ("weakening a B10 control … the owner's call"). B15 declared it for the self-hosted
+    coach adapter without recording that it also closes that B13 question; the carried
+    open issue is therefore stale rather than open.
+  - `DESIGN.md` §10.4 names `x-octagon`, `trophy` and `snowflake`; none of the three
+    exists in `ui/src/main/kotlin/app/openhealth/ui/icons/` (a B1 asset gap).
+  - `CoachPresenter.model` hardcodes `healthConnectAvailable = true`, so the second opt-in
+    is offered on a device without Health Connect.
+  - `CoachRepository.recordChangesWith` sets a `sync` field nothing reads and no caller
+    uses it; `McpProtocol.unauthorizedBody`/`notFoundBody` and `McpRepository`'s private
+    `Mcp_access.toRecord` are unused. `AppContainer.close()` does not stop `McpRuntime`
+    (production never calls `close`; the daemon thread dies with the process).
+  - `tools:fixtures:QueryBenchmarkTest` is load-sensitive: `observationsForDayAndType`
+    measured **26.33 ms** against its 16 ms budget on a loaded machine and **3.04 ms** on a
+    quiet rerun. The budget was not touched; the gate can go red for reasons unrelated to a
+    change.

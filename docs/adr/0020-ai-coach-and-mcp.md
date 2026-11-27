@@ -73,9 +73,11 @@
    80, method other), runs `ObservationValidator`, and lands in the normal repositories so
    the day's rollup rebuilds exactly as for a typed value. Water is an increment
    (`end = happened_at`) so two glasses sum, never replace. A read tool omits a rollup
-   whose winning source is platform-derived, and weight-neutral mode hides loads and
-   volume; the token's scopes are consent for the tool surface, not a Health Connect
-   opt-in. This is the one plain-HTTP listener in the
+   whose winning source is platform-derived, and weight-neutral mode hides loads, volume
+   and energy on every read tool including the day summary (`pr.md` §6.25 names calories
+   beside weight; the day summary was corrected on 2026-11-27, see the B15 audit entry in
+   `docs/build-log.md`); the token's scopes are consent for the tool surface, not a Health
+   Connect opt-in. This is the one plain-HTTP listener in the
    client: it is loopback, token-gated and explicit, and the privacy source test names it.
 
 8. **One POST path, with a per-call timeout.** `HttpTransport` gains `post` and

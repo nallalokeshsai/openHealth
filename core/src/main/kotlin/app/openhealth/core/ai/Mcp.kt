@@ -342,9 +342,4 @@ object McpProtocol {
             },
         )
     }.toString()
-
-    /** A complete error envelope for the HTTP layer's refusal path. */
-    fun unauthorizedBody(): String = buildJsonObject { put("error", "unauthorized") }.toString()
-
-    fun notFoundBody(): String = buildJsonObject { put("error", "not_found") }.toString()
 }

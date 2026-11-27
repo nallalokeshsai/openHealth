@@ -27,6 +27,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -299,6 +300,115 @@ class McpGatewayTest {
         val plan = gateway.call(McpTool.GET_TRAINING_PLAN, token) as McpToolResult.Ok
         assertTrue(!plan.json.contains("target_weight_kg"))
         assertTrue(plan.json.contains("target_sets"))
+        store.close()
+    }
+
+    /**
+     * Weight-neutral mode hides calories and load-derived volume on every other surface
+     * (`pr.md` §6.25); the day summary is not an exception. The sibling assertions in
+     * [weightNeutralModeHidesTheLoadsFromTheReadTools] cover the plan.
+     */
+    @Test
+    fun weightNeutralModeHidesEnergyAndVolumeFromTheDaySummary() {
+        val (store, _, token) = setup()
+        val today = now.toLocalDateTime(TEST_ZONE).date
+        store.sources.upsert(
+            Source(
+                id = SourceId("phone"),
+                kind = SourceKind.DEVICE,
+                label = "Phone",
+                family = "phone",
+            ),
+        )
+        // The session first: writing training rows rebuilds the day, which would drop a
+        // rollup seeded before it.
+        seedFinishedSession(store, today)
+        store.rollups.upsert(
+            DailyRollup(
+                localDate = today,
+                type = ObservationType.ACTIVE_CALORIES,
+                value = Measure(430.0, ObservationType.ACTIVE_CALORIES.canonicalUnit),
+                sourceId = SourceId("phone"),
+                watermark = now,
+                computedAt = now,
+            ),
+        )
+
+        val plain = McpGateway(store.db, store, TEST_ZONE, clock, SeededIdGenerator(60))
+        val shown = json((plain.call(McpTool.GET_DAY_SUMMARY, token) as McpToolResult.Ok).json)
+        assertEquals(430.0, (shown.getValue("active_kcal") as JsonPrimitive).content.toDouble())
+        assertEquals(
+            1_000.0,
+            (shown.getValue("training_volume_kg") as JsonPrimitive).content.toDouble(),
+        )
+
+        val neutral = McpGateway(
+            store.db,
+            store,
+            TEST_ZONE,
+            clock,
+            SeededIdGenerator(61),
+            weightNeutral = { true },
+        )
+        val hidden = json((neutral.call(McpTool.GET_DAY_SUMMARY, token) as McpToolResult.Ok).json)
+        assertNull(hidden["active_kcal"], "weight-neutral mode hides energy")
+        assertNull(hidden["training_volume_kg"], "weight-neutral mode hides load volume")
+        // The values that are not weight-derived still answer.
+        assertNotNull(hidden["training_sets"])
+        assertTrue(hidden.getValue("date").toString().contains(today.toString()))
+
+        val sessions = neutral.call(McpTool.LIST_RECENT_SESSIONS, token) as McpToolResult.Ok
+        assertTrue(!sessions.json.contains("volume_kg"))
+        store.close()
+    }
+
+    /** One finished session with one 100 kg × 10 working set (1000 kg) and one warm-up. */
+    private fun seedFinishedSession(store: LocalStore, day: LocalDate) {
+        val start = now.toEpochMilliseconds()
+        store.training.upsertExercise(
+            app.openhealth.data.db.Exercise(
+                id = "squat", name = "Squat", primary_muscles = "quadriceps",
+                secondary_muscles = "", equipment = "barbell", instructions = null,
+                level = null, mechanic = null, force = null, met_activity = null,
+                is_custom = false, source_id = null, created_at = 0, updated_at = 0,
+                revision = 1,
+            ),
+        )
+        store.training.upsertSession(
+            app.openhealth.data.db.Session(
+                id = "s1", started_at = start, ended_at = start + 1, local_date = day.toString(),
+                zone_id = TEST_ZONE.id, happened_at = start, recorded_at = start,
+                routine_id = null, programme_id = null, notes = null, source_id = "manual",
+                idempotency_key = "s1-key", observation_id = null, raw_record_id = null,
+                device = "test", app_version = "test", revision = 1L, updated_at = start,
+                title = "Legs", feeling = null, perceived_effort = 7.0,
+            ),
+        )
+        store.training.upsertSessionExercise(
+            app.openhealth.data.db.Session_exercise(
+                id = "se1", session_id = "s1", exercise_id = "squat", position = 0L,
+                notes = null, group_index = null, target_sets = 2L, target_reps = 10L,
+                target_reps_high = 10L, target_weight_kg = null, progression = null,
+                rest_seconds = null,
+            ),
+        )
+        listOf(true to 20.0, false to 100.0).forEachIndexed { index, (warmup, weight) ->
+            store.training.upsertSet(
+                app.openhealth.data.db.Work_set(
+                    id = "set$index", session_id = "s1", session_exercise_id = "se1",
+                    exercise_id = "squat", position = index.toLong(), weight_kg = weight,
+                    reps = 10L, rir = null, rpe = null, is_warmup = warmup,
+                    is_backoff = false, is_failure = false, is_bodyweight = false,
+                    tempo = null, rest_seconds = null, notes = null, completed_at = start,
+                    happened_at = start, recorded_at = start, source_id = "manual",
+                    idempotency_key = "set$index-key", observation_id = null,
+                    raw_record_id = null, device = "test", app_version = "test", revision = 1L,
+                    is_drop = false, is_assisted = false, assistance_kg = null, band_kg = null,
+                    original_weight_kg = null, original_reps = null, edit_reason = null,
+                    edited_at = null, user_edited = false,
+                ),
+            )
+        }
     }
 
     @Test

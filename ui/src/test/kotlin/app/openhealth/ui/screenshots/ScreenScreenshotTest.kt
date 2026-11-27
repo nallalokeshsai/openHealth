@@ -211,7 +211,6 @@ class ScreenScreenshotTest {
         keyPresent = true,
         categories = setOf(CoachCategory.TRAINING, CoachCategory.RECOVERY),
         healthConnect = false,
-        healthConnectAvailable = true,
         disclosureAccepted = true,
         messages = listOf(
             CoachMessageModel(

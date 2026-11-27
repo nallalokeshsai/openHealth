@@ -6,7 +6,6 @@ import app.openhealth.core.ids.IdGenerator
 import app.openhealth.core.ids.RandomIdGenerator
 import app.openhealth.core.seam.ClockSeam
 import app.openhealth.core.seam.SystemClock
-import app.openhealth.data.db.Mcp_access
 import app.openhealth.data.db.Mcp_token
 import app.openhealth.data.db.OpenHealthDb
 
@@ -132,16 +131,6 @@ class McpRepository(
         createdAt = created_at,
         revokedAt = revoked_at,
         lastUsedAt = last_used_at,
-    )
-
-    private fun Mcp_access.toRecord(): McpAccessRecord = McpAccessRecord(
-        id = id,
-        tokenId = token_id,
-        tool = tool,
-        scope = scope,
-        at = at,
-        ok = ok,
-        detail = detail,
     )
 
     private companion object {

@@ -230,23 +230,30 @@ class McpGateway(
             } ?: true
             return if (platform) null else row.value.value
         }
-        val sessions = store.training.sessionsForDay(date)
-        val volume = sessions.sumOf { session ->
-            store.training.setsForSession(session.id)
-                .filterNot { it.is_warmup }
-                .sumOf { it.weight_kg * it.reps }
+        val volume = if (weightNeutral()) {
+            null
+        } else {
+            store.training.sessionsForDay(date).sumOf { session ->
+                store.training.setsForSession(session.id)
+                    .filterNot { it.is_warmup }
+                    .sumOf { it.weight_kg * it.reps }
+            }
         }
         return buildJsonObject {
             put("date", date.toString())
             put("steps", rollup(ObservationType.STEPS))
-            put("active_kcal", rollup(ObservationType.ACTIVE_CALORIES))
+            // Energy and load-derived volume are two of the values weight-neutral mode
+            // hides everywhere else (`pr.md` §6.25); an assistant is not an exception.
+            if (!weightNeutral()) {
+                put("active_kcal", rollup(ObservationType.ACTIVE_CALORIES))
+            }
             put("water_ml", rollup(ObservationType.WATER))
             put(
                 "sleep_hours",
                 rollup(ObservationType.SLEEP_DURATION)?.div(SECONDS_PER_HOUR),
             )
             put("training_sets", rollup(ObservationType.TRAINING_SETS))
-            put("training_volume_kg", if (volume > 0.0) volume else null)
+            if (volume != null) put("training_volume_kg", volume.takeIf { it > 0.0 })
         }.toString()
     }
 

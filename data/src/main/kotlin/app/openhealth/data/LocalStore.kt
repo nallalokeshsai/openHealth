@@ -23,6 +23,7 @@ import app.openhealth.data.repo.TrainingRepository
 import app.openhealth.data.repo.TrashService
 import app.openhealth.data.rollup.RollupEngine
 import app.openhealth.data.sync.SyncRepository
+import kotlin.time.Instant
 
 /**
  * The only production way to write: every repository that can change a day is wired to
@@ -33,8 +34,11 @@ import app.openhealth.data.sync.SyncRepository
  * B3 constructs this at application start; the plain repositories stay available for
  * importers and tests that do their own batching.
  */
-class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam = SystemClock) :
-    AutoCloseable {
+class LocalStore(
+    val driver: SqlDriver,
+    val db: OpenHealthDb,
+    private val clock: ClockSeam = SystemClock,
+) : AutoCloseable {
     val sources = SourceRepository(db, clock)
     val observations = ObservationRepository(db, clock)
     val rollups = RollupRepository(db)
@@ -103,7 +107,21 @@ class LocalStore(val driver: SqlDriver, val db: OpenHealthDb, clock: ClockSeam =
         }
     }
 
+    /**
+     * What the app owes the database every time it opens: the 30-day Trash purge
+     * (`pr.md` §6.29) and the 90-day raw-payload compaction (`pr.md` §7.1). Both are
+     * policies with a deadline, so neither may wait for a screen to ask; the audit fields
+     * of a compacted record stay, only the payload goes.
+     */
+    fun runStartupMaintenance(now: Instant = clock.now()) = StartupMaintenance(
+        trashPurged = trash.purgeExpired(now),
+        payloadsCompacted = raw.compactExpired(now),
+    )
+
     override fun close() {
         driver.close()
     }
 }
+
+/** What one [LocalStore.runStartupMaintenance] pass removed, so a test can assert it. */
+data class StartupMaintenance(val trashPurged: Int, val payloadsCompacted: Long)

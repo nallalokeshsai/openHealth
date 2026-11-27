@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  No cleartext, ever (pr.md §6.23; BUILD-ROADMAP.md §B10). The app opens a socket for
-  three explicit actions only, each over HTTPS: the Open Food Facts barcode lookup (B6),
-  the map-pack download (B11) and the paired sync client (B13). This file makes the rule
+  No cleartext, ever, except the declared loopback hosts below (pr.md §6.23;
+  BUILD-ROADMAP.md §B10). The app opens a socket for four explicit paths: the Open Food
+  Facts barcode lookup (B6), the map-pack download (B11), the paired sync client (B13) and
+  the coach's self-hosted provider adapter (B15). This file makes the rule
   explicit rather than inheriting the targetSdk default, so a future change that adds an
   http:// URL fails review instead of silently working.
 

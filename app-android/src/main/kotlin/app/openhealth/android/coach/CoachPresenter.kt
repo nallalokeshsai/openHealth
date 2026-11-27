@@ -89,7 +89,6 @@ class CoachPresenter(
             keyPresent = keyPresent,
             categories = consent.categories,
             healthConnect = consent.healthConnect,
-            healthConnectAvailable = true,
             disclosureAccepted = preferences.snapshot().coachDisclosed,
             messages = messages,
             busy = busy,

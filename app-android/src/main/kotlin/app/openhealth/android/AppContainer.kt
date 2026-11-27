@@ -67,7 +67,9 @@ class AppContainer(
         ensureWatchSources(local)
         ensureHealthConnectFlags(local)
         ensureExerciseLibrary(local)
-        local.trash.purgeExpired()
+        // The 30-day Trash purge and the 90-day raw-payload compaction (`pr.md` §6.29,
+        // §7.1). Both are deadlines the person never has to ask for.
+        local.runStartupMaintenance()
         local
     }
     val store: LocalStore get() = storeLazy.value
@@ -555,6 +557,7 @@ class AppContainer(
     ).toCharArray()
 
     fun close() {
+        runCatching { mcpRuntime.stop() }
         if (storeLazy.isInitialized()) store.close()
     }
 

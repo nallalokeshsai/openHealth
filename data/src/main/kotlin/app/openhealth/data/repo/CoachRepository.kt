@@ -96,12 +96,6 @@ class CoachRepository(
     private val clock: ClockSeam = SystemClock,
     private val ids: IdGenerator = RandomIdGenerator(),
 ) {
-    private var sync: app.openhealth.data.sync.SyncRepository? = null
-
-    fun recordChangesWith(recorder: app.openhealth.data.sync.SyncRepository?) {
-        sync = recorder
-    }
-
     fun appendPerson(text: String, threadId: String = THREAD): String = appendMessage(
         MessageDraft(
             threadId = threadId,

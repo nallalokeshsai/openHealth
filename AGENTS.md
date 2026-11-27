@@ -220,9 +220,9 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B15 AI Coach and MCP** (2026-11-27). B15 is the last planned
   phase; there is no B16.
 - Build: green. `./gradlew check :app-android:assembleDebug :app-wear:assembleDebug`
-  passes; **901 JVM tests** (453 `:core`, 181 `:data`, 7 `:sync`, 55 `:integrations`,
-  169 `:ui`, 14 `:server`, 10 across the three tools, 12 `:app-wear`) and **376 goldens**
-  in dark, light, 200 % text and RTL, plus **70 instrumented tests** on the phone
+  passes; **906 JVM tests** (453 `:core`, 183 `:data`, 7 `:sync`, 55 `:integrations`,
+  172 `:ui`, 14 `:server`, 10 across the three tools, 12 `:app-wear`) and **376 goldens**
+  in dark, light, 200 % text and RTL, plus **71 instrumented tests** on the phone
   emulator and **1** on the Wear emulator. Both `play` and `fdroid` debug APKs and the
   Wear APK build. The five-tab shell, B4 body map, B5 Train, B6 Nutrition, B7 Vitals,
   B8 Devices, B9 Today/Stats, B10 review, B11 movement, B12 sleep/clinical/report pages,
@@ -245,7 +245,7 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   outage keeps the note and changes nothing; MCP 401 without a token, scope refusal, an
   out-of-range value rejected, a valid write with provenance, a revoked token refused),
   the JVM parser/consent/provider/MCP/applier suites, `CoachScreen`/`McpScreen` goldens in
-  four variants, the whole **70-test** phone suite green, and a device walk of Settings →
+  four variants, the whole **71-test** phone suite green, and a device walk of Settings →
   Coach and Settings → Data → External access (toggle, consent, disclosure, no-key error,
   token reveal and revoke) with no `AndroidRuntime` error.
 - Owner answers recorded: Anthropic plus a self-hosted endpoint; the key in the Android
@@ -262,11 +262,17 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
   emulators, so its transport is compiled and its protocol/UI tested in-process; the GATT
   link is unauthenticated while advertising and only runs with a session open; the Wear
   APK is not embedded in the Play phone APK (a store packaging step); the optical heart
-  rate has no sensor on the emulator; the owner's phone was not attached. Carried: the
-  B13 loopback-http exception, Settings → Data golden, passkey live test, MinIO/OIDC,
+  rate has no sensor on the emulator; the owner's phone was not attached. Carried:
+  Settings → Data golden, passkey live test, MinIO/OIDC,
   single-instance server; the B12 lab import, medicine deletion, free-text
   conditions/allergies and report trend rollups; the B11 map pack, gear totals, FIT/TCX
   export, custom flows, Strava memory cap, phone Macrobenchmarks, review import dry run,
-  privacy-policy URL and force-RTL reboot. Run `connectedAndroidTest` on the emulator,
-  never the phone.
+  privacy-policy URL and force-RTL reboot. B13's loopback-http exception is **closed**:
+  B15 declared the four loopback hosts in `network_security_config.xml` for the
+  self-hosted coach adapter. Run `connectedAndroidTest` on the emulator, never the phone.
+- The B15 audit (2026-11-27, `docs/build-log.md`) fixed five defects and left findings:
+  manual entries still carry no layer-1 raw record (`pr.md` §7.1, §2.2); `pr.md` §6.30's
+  MVP automation row (deep links, quick-settings tiles, intents) was never owned by a
+  B phase; `DESIGN.md` §10.4's `x-octagon`, `trophy` and `snowflake` icons do not exist;
+  and `QueryBenchmarkTest` can fail from machine load rather than from a change.
 

@@ -31,6 +31,18 @@ data class CoachMessageModel(
 )
 
 /**
+ * The one key the coach screen translates. Two stable codes reach it: a live send failure
+ * already arrives as a `coach_error_*` name, while a stored row carries the failure's own
+ * code, `kind` or `kind:finding,finding` (`CoachRepository.appendError`). Both map onto
+ * the same message, so a stored outage reads as an outage rather than a generic error.
+ */
+fun coachErrorKey(raw: String?): String = when {
+    raw.isNullOrBlank() -> "coach_error_server"
+    raw.startsWith("coach_error_") -> raw
+    else -> "coach_error_" + raw.substringBefore(':')
+}
+
+/**
  * The coach surface and its setup, in one model. The key is presence-only: the plain key
  * never enters the state, the database or a log.
  */
@@ -43,7 +55,6 @@ data class CoachModel(
     val keyPresent: Boolean,
     val categories: Set<CoachCategory>,
     val healthConnect: Boolean,
-    val healthConnectAvailable: Boolean,
     val disclosureAccepted: Boolean,
     val messages: List<CoachMessageModel>,
     val busy: Boolean,

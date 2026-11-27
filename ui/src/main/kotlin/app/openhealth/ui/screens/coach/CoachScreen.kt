@@ -747,7 +747,7 @@ private fun categoryLabel(category: CoachCategory): String = when (category) {
 }
 
 @Composable
-private fun errorText(key: String?): String = when (key) {
+private fun errorText(raw: String?): String = when (coachErrorKey(raw)) {
     "coach_error_offline" -> stringResource(R.string.coach_error_offline)
     "coach_error_unauthorized" -> stringResource(R.string.coach_error_unauthorized)
     "coach_error_rate_limited" -> stringResource(R.string.coach_error_rate_limited)
