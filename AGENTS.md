@@ -217,48 +217,62 @@ Non-negotiables in the visual contract:
 
 Updated by every build phase at its exit (`prompts.md` "Log and finish").
 
-- Last completed phase: **B14 Wear OS and Connect IQ** (2026-11-27); next is **B15 AI
-  Coach and MCP** when the owner asks (B14–B15 are not MVP).
+- Last completed phase: **B15 AI Coach and MCP** (2026-11-27). B15 is the last planned
+  phase; there is no B16.
 - Build: green. `./gradlew check :app-android:assembleDebug :app-wear:assembleDebug`
-  passes; **808 JVM tests** (397 `:core`, 150 `:data`, 7 `:sync`, 55 `:integrations`,
-  163 `:ui`, 14 `:server`, 10 across the three tools, 12 `:app-wear`) and **360 goldens**
-  in dark, light, 200 % text and RTL, plus **66 instrumented tests** on the phone
+  passes; **906 JVM tests** (453 `:core`, 183 `:data`, 7 `:sync`, 55 `:integrations`,
+  172 `:ui`, 14 `:server`, 10 across the three tools, 12 `:app-wear`) and **376 goldens**
+  in dark, light, 200 % text and RTL, plus **72 instrumented tests** on the phone
   emulator and **1** on the Wear emulator. Both `play` and `fdroid` debug APKs and the
   Wear APK build. The five-tab shell, B4 body map, B5 Train, B6 Nutrition, B7 Vitals,
   B8 Devices, B9 Today/Stats, B10 review, B11 movement, B12 sleep/clinical/report pages,
-  B13 Sync page and the B14 watch surfaces are present.
-- B14 delivers: an `:app-wear` Compose for Wear companion (workout, sets, rest timer,
-  optical heart rate, light/dark, 200 % text) that shares `:core`; a pure `:core` watch
-  model (`WatchProtocol`/`WatchLiveController` for Wear, `WatchBlePacket` for Connect IQ),
-  a Data Layer bridge in the Play flavour only, an offline watch queue, a direct Android
-  BLE GATT server and foreground service with a Settings → Devices switch, and a Monkey C
-  Connect IQ app plus a validated per-device compatibility table. A watch set carries
-  `wear` or `garmin-connect-iq` provenance with the wrist's `happened_at` and the phone's
-  `recorded_at`; the normal training path rebuilds personal records, rest alerts and the
-  day's rollup. The Play-only Wearable stack is the one narrow telemetry-gate exception;
-  `checkFdroidNoPlayServices` proves the F-Droid build resolves none of it.
-- B14's decisions are in `docs/adr/0019-wear-and-connect-iq.md`; versions in
-  `docs/adr/0003-pinned-versions.md`; the watch recipe is `DESIGN.md` §14.6.
-- Verification: `WearExitTest` on the phone emulator (a queued watch set filed once with
-  wrist provenance and a rebuilt day rollup; a malformed command writes nothing),
-  `WearScreenTest`/`WatchStoreTest` on the JVM, `WearSmokeTest` on the Wear emulator, and
-  the Connect IQ table/manifest test. The whole 66-test phone suite is green on a clean
-  run and the B14 Wear test is green; the GATT service was started and stopped by a real
-  session on the emulator. The Wear screens were walked in dark, light and 200 % text.
-- Owner answers recorded: test on the Wear emulator and the vívoactive 5; no Connect IQ
-  developer setup; use emulators for QA; allow the Wear Data Layer in the Play build only;
-  use direct BLE for the Garmin link.
-- Open issues (see `docs/build-log.md`): the Connect IQ app is source and table only —
+  B13 Sync page, B14 watch surfaces and the B15 coach and external-access pages are
+  present.
+- B15 delivers: a provider-agnostic `:core` coach adapter (Anthropic Messages API and any
+  OpenAI-compatible self-hosted endpoint), per-category consent with a separate Health
+  Connect switch, a strict structured-output parser that validates plan changes with the
+  same bounds as the editor, one repair round then a visible failure, a safety filter for
+  diagnosis/prescription/dosing, diff-card proposals that apply only on approval and undo
+  from a before-snapshot, and an on-device MCP JSON-RPC endpoint (`127.0.0.1:8765/mcp`,
+  loopback only, off by default) with seven scoped tools, SHA-256 token digests,
+  revocation and an argument-free audit. The provider key lives only in the Android
+  Keystore through `SecretVault`. Schema v12 adds the coach and MCP tables and the
+  `source.via_health_connect` flag; neither table syncs, and the encrypted export carries
+  the conversation and only the token digest.
+- B15's decisions are in `docs/adr/0020-ai-coach-and-mcp.md`; the coach and
+  external-access recipes are `DESIGN.md` §14.2 (0.7.1); versions are unchanged.
+- Verification: `CoachExitTest` on the phone emulator (proposal → accept → undo; an
+  outage keeps the note and changes nothing; MCP 401 without a token, scope refusal, an
+  out-of-range value rejected, a valid write with provenance, a revoked token refused),
+  the JVM parser/consent/provider/MCP/applier suites, `CoachScreen`/`McpScreen` goldens in
+  four variants, the whole **72-test** phone suite green, and a device walk of Settings →
+  Coach and Settings → Data → External access (toggle, consent, disclosure, no-key error,
+  token reveal and revoke) with no `AndroidRuntime` error.
+- Owner answers recorded: Anthropic plus a self-hosted endpoint; the key in the Android
+  Keystore; the MCP server on-device and loopback; use the emulators for QA. Carried from
+  B14: the owner's phone was not attached.
+- Open issues (see `docs/build-log.md`): the coach has never called a real provider (no
+  key is stored in the repository or on the test device), so the adapters are proved
+  against the published request/response shapes and a recording transport, not a live
+  model; the self-hosted path has not met a real LM Studio/Ollama host; the MCP surface is
+  local only and has no server-side counterpart; the carried B14 issues remain: the
+  Connect IQ app is source and table only —
   Garmin's SDK and developer key were not accepted or installed, so Monkey C has not been
   compiled, signed or walked on the watch; the Data Layer was not paired between the two
   emulators, so its transport is compiled and its protocol/UI tested in-process; the GATT
   link is unauthenticated while advertising and only runs with a session open; the Wear
   APK is not embedded in the Play phone APK (a store packaging step); the optical heart
-  rate has no sensor on the emulator; the owner's phone was not attached. Carried: the
-  B13 loopback-http exception, Settings → Data golden, passkey live test, MinIO/OIDC,
+  rate has no sensor on the emulator; the owner's phone was not attached. Carried:
+  Settings → Data golden, passkey live test, MinIO/OIDC,
   single-instance server; the B12 lab import, medicine deletion, free-text
   conditions/allergies and report trend rollups; the B11 map pack, gear totals, FIT/TCX
   export, custom flows, Strava memory cap, phone Macrobenchmarks, review import dry run,
-  privacy-policy URL and force-RTL reboot. Run `connectedAndroidTest` on the emulator,
-  never the phone.
+  privacy-policy URL and force-RTL reboot. B13's loopback-http exception is **closed**:
+  B15 declared the four loopback hosts in `network_security_config.xml` for the
+  self-hosted coach adapter. Run `connectedAndroidTest` on the emulator, never the phone.
+- The B15 audit (2026-11-27, `docs/build-log.md`) fixed five defects and left findings:
+  manual entries still carry no layer-1 raw record (`pr.md` §7.1, §2.2); `pr.md` §6.30's
+  MVP automation row (deep links, quick-settings tiles, intents) was never owned by a
+  B phase; `DESIGN.md` §10.4's `x-octagon`, `trophy` and `snowflake` icons do not exist;
+  and `QueryBenchmarkTest` can fail from machine load rather than from a change.
 

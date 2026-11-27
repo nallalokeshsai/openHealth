@@ -98,6 +98,8 @@ fun SettingsScreen(
     onRestore: (Uri, CharArray) -> Unit,
     onOpenDevices: () -> Unit,
     onOpenSync: () -> Unit,
+    onOpenCoach: () -> Unit,
+    onOpenMcp: () -> Unit,
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenReview: () -> Unit,
@@ -155,6 +157,15 @@ fun SettingsScreen(
                     icon = OhModuleIcons.workout,
                     onClick = { sheet = SettingsSheet.MODULES },
                 )
+                if (HealthModule.COACH in state.modules) {
+                    GroupRow(
+                        title = stringResource(R.string.settings_coach),
+                        detail = state.coachDetail,
+                        icon = OhModuleIcons.coach,
+                        showDivider = true,
+                        onClick = onOpenCoach,
+                    )
+                }
                 GroupRow(
                     title = stringResource(R.string.settings_devices),
                     detail = state.devicesDetail,
@@ -277,6 +288,7 @@ fun SettingsScreen(
         onOpenTrash = onOpenTrash,
         onOpenReview = onOpenReview,
         onOpenSync = onOpenSync,
+        onOpenMcp = onOpenMcp,
         onExport = {
             sheet = SettingsSheet.NONE
             onExternalActivity()
@@ -669,6 +681,7 @@ private fun DataSheet(
     onOpenTrash: () -> Unit,
     onOpenReview: () -> Unit,
     onOpenSync: () -> Unit,
+    onOpenMcp: () -> Unit,
     onExport: () -> Unit,
     onRestore: () -> Unit,
     onUndoRestore: () -> Unit,
@@ -728,6 +741,14 @@ private fun DataSheet(
                 leadingIcon = OhIcons.refresh,
                 showChevron = true,
                 onClick = onOpenSync,
+            )
+            OhRow(
+                title = stringResource(R.string.settings_mcp),
+                subtitle = state.mcpDetail,
+                leadingIcon = OhIcons.externalLink,
+                showDivider = true,
+                showChevron = true,
+                onClick = onOpenMcp,
             )
             OhRow(
                 title = stringResource(R.string.settings_export),

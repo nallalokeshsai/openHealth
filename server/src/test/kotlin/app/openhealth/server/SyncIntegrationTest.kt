@@ -294,7 +294,7 @@ class SyncIntegrationTest {
             idempotencyKey = "future-key",
             hlc = "0000000000000001-00000000",
             deviceId = a.sync.deviceId(),
-            schemaVersion = 11,
+            schemaVersion = 12,
             recordedAt = 1,
         )
         transport.push(PushRequest(a.sync.deviceId(), listOf(opaque)))

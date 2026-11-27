@@ -18,7 +18,7 @@ data class ServerConfig(
     /** Passwords are a fallback, off unless the operator opts in. */
     val allowPassword: Boolean = false,
     val minSchemaVersion: Int = 1,
-    val maxSchemaVersion: Int = 11,
+    val maxSchemaVersion: Int = 12,
     val dbUrl: String? = null,
     val dbUser: String = "openhealth",
     val dbPassword: String = "openhealth",
@@ -56,7 +56,7 @@ data class ServerConfig(
                 allowedUsers = allowed,
                 allowPassword = env["OPENHEALTH_ALLOW_PASSWORD"]?.toBooleanStrictOrNull() ?: false,
                 minSchemaVersion = env["OPENHEALTH_MIN_SCHEMA_VERSION"]?.toIntOrNull() ?: 1,
-                maxSchemaVersion = env["OPENHEALTH_MAX_SCHEMA_VERSION"]?.toIntOrNull() ?: 11,
+                maxSchemaVersion = env["OPENHEALTH_MAX_SCHEMA_VERSION"]?.toIntOrNull() ?: 12,
                 dbUrl = env["OPENHEALTH_DB_URL"],
                 dbUser = env["OPENHEALTH_DB_USER"] ?: "openhealth",
                 dbPassword = env["OPENHEALTH_DB_PASSWORD"] ?: "openhealth",

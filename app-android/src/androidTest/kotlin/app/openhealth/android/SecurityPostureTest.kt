@@ -60,6 +60,21 @@ class SecurityPostureTest {
     }
 
     @Test
+    fun loopbackIsTheOnlyCleartextException() {
+        val policy = NetworkSecurityPolicy.getInstance()
+        assertTrue(
+            "a self-hosted coach on this device needs loopback http",
+            policy.isCleartextTrafficPermitted("127.0.0.1"),
+        )
+        assertTrue(policy.isCleartextTrafficPermitted("10.0.2.2"))
+        assertFalse(
+            "no remote host may be exempted",
+            policy.isCleartextTrafficPermitted("192.168.1.20"),
+        )
+        assertFalse(policy.isCleartextTrafficPermitted("health.example.com"))
+    }
+
+    @Test
     fun thePermissionListIsExactlyWhatTheProductUses() {
         val requested = context.packageManager
             .getPackageInfo(pack, PackageManager.GET_PERMISSIONS)

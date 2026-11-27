@@ -114,3 +114,11 @@ data object WeeklyReviewRoute
 /** B13: the optional server, pairing and the conflict list. */
 @Serializable
 data object SyncRoute
+
+/** B15: the coach conversation and its per-category consent. */
+@Serializable
+data object CoachRoute
+
+/** B15: the loopback MCP endpoint, its tokens and its audit. */
+@Serializable
+data object McpRoute

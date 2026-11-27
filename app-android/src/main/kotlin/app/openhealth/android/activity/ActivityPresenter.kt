@@ -479,6 +479,7 @@ class ActivityPresenter(
                 SourcePermission.READ_BODY_COMPOSITION,
             ),
             family = "health-connect",
+            viaHealthConnect = true,
         )
         val to = now()
         val last = store.devices.syncBook().latest(HEALTH_CONNECT_SOURCE.value)
@@ -524,6 +525,7 @@ class ActivityPresenter(
                             SourcePermission.READ_BODY_COMPOSITION,
                         ),
                         family = "garmin",
+                        viaHealthConnect = true,
                     )
                 }
                 val sourceId = if (garmin) GARMIN_HC_SOURCE else HEALTH_CONNECT_SOURCE
@@ -795,8 +797,17 @@ class ActivityPresenter(
         label: String,
         permissions: Set<SourcePermission>,
         family: String,
+        viaHealthConnect: Boolean = false,
     ) {
-        if (store.sources.byId(id) != null) return
+        val existing = store.sources.byId(id)
+        if (existing != null) {
+            // A source that already exists still gains the transport flag, so an
+            // upgraded install cannot leak Health Connect rows to the coach.
+            if (existing.viaHealthConnect != viaHealthConnect) {
+                store.sources.upsert(existing.copy(viaHealthConnect = viaHealthConnect))
+            }
+            return
+        }
         store.sources.upsert(
             Source(
                 id = id,
@@ -804,6 +815,7 @@ class ActivityPresenter(
                 label = label,
                 family = family,
                 permissions = permissions,
+                viaHealthConnect = viaHealthConnect,
             ),
         )
     }

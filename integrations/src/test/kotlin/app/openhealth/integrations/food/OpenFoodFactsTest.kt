@@ -121,6 +121,11 @@ class OpenFoodFactsClientTest {
             requests += request
             return response()
         }
+
+        override suspend fun post(request: HttpRequest): HttpResponse {
+            requests += request
+            return response()
+        }
     }
 
     @Test

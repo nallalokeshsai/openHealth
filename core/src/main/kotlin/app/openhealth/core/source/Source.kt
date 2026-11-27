@@ -39,6 +39,12 @@ data class Source(
     val reliabilityNote: String? = null,
     val lastSync: Instant? = null,
     val permissions: Set<SourcePermission> = emptySet(),
+    /**
+     * True when this source's readings arrived through the platform health bus
+     * (`pr.md` §12.3). Garmin over Health Connect is kind GARMIN but still carries this
+     * flag, so the AI coach's separate opt-in covers it (`docs/adr/0020`).
+     */
+    val viaHealthConnect: Boolean = false,
 ) {
     init {
         require(label.isNotBlank()) { "Source label must not be blank" }

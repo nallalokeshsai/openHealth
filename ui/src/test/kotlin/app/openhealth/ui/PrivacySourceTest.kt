@@ -3,6 +3,7 @@ package app.openhealth.ui
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -41,7 +42,7 @@ class PrivacySourceTest {
     }
 
     @Test
-    fun theOnlyTransportsAreTheBarcodeLookupTheMapPackDownloadAndTheSyncClient() {
+    fun theOnlyTransportsAreTheBarcodeLookupTheMapPackDownloadTheSyncClientAndTheLocalMcpServer() {
         val files = kotlinFiles()
         assertTrue(files.size > 100, "the scan found only ${files.size} files")
         val network = files.filter { file ->
@@ -64,12 +65,14 @@ class PrivacySourceTest {
         }
         // The barcode lookup and the map-pack download are B6/B11; the paired sync
         // client is B13 and is reached only after a pairing code is exchanged
-        // (`pr.md` §6.24, §6.11). No screen may open a socket of its own.
+        // (`pr.md` §6.24, §6.11); the loopback MCP listener is B15 and binds this device
+        // only. No screen may open a socket of its own.
         assertEquals(
             listOf(
                 "HttpUrlConnectionTransport.kt",
                 "KtorSyncTransport.kt",
                 "MapPackStore.kt",
+                "McpLoopbackServer.kt",
                 "SyncEngine.kt",
             ),
             network.map { it.name }.sorted(),
@@ -82,6 +85,44 @@ class PrivacySourceTest {
                 .contains("interface HttpTransport"),
             "the transport must sit behind the :core seam",
         )
+    }
+
+    /** B15: the local endpoint is loopback-only and every call needs a live token. */
+    /** The one declared cleartext exception covers loopback and nothing else. */
+    @Test
+    fun theCleartextExceptionIsLoopbackOnly() {
+        val config = File(
+            "../app-android/src/main/res/xml/network_security_config.xml",
+        ).readText()
+        assertTrue(config.contains("cleartextTrafficPermitted=\"true\""))
+        listOf("127.0.0.1", "localhost", "10.0.2.2", "::1").forEach {
+            assertTrue(config.contains(">$it<"), "$it must be the declared loopback host")
+        }
+        assertFalse(
+            config.contains("openfoodfacts") || config.contains("example.com"),
+            "no remote host is excepted",
+        )
+    }
+
+    @Test
+    fun theMcpListenerBindsLoopbackAndRequiresAToken() {
+        val server = File(
+            "../app-android/src/main/kotlin/app/openhealth/android/mcp/McpLoopbackServer.kt",
+        ).readText()
+        assertTrue(
+            server.contains("\"127.0.0.1\""),
+            "the MCP server must bind loopback, not every interface",
+        )
+        assertTrue(server.contains("ServerSocket"), "the endpoint is a local socket")
+        assertTrue(
+            server.contains("McpProtocol.MAX_BODY_BYTES"),
+            "the endpoint must cap the body it reads",
+        )
+        val runtime = File(
+            "../app-android/src/main/kotlin/app/openhealth/android/mcp/McpRuntime.kt",
+        ).readText()
+        assertTrue(runtime.contains("Sha256.hexDigest"), "a token is matched by its digest")
+        assertTrue(runtime.contains(".revoked"), "a revoked token is refused")
     }
 
     @Test
@@ -102,8 +143,11 @@ class PrivacySourceTest {
             "http://hl7.org/fhir/",
             "http://terminology.hl7.org/",
         )
+        // A loopback endpoint is the one declared cleartext exception (the self-hosted
+        // coach, docs/adr/0020 §8); the network security config permits only these hosts.
+        val loopback = Regex("""http://(127\.0\.0\.1|localhost|10\.0\.2\.2|\[::1\])(?![\w.-])""")
         val hits = kotlinFiles().filter { file ->
-            var text = file.readText().replace(namespace, "")
+            var text = file.readText().replace(namespace, "").replace(loopback, "")
             identifiers.forEach { text = text.replace(it, "") }
             "http://" in text
         }

@@ -23,7 +23,12 @@ class V10MigrationTest {
     private fun setupV10(path: String) {
         val driver = JdbcSqliteDriver("jdbc:sqlite:$path", Properties())
         OpenHealthDb.Schema.create(driver).value
-        listOf("change_log", "sync_row_state", "sync_conflict").forEach { table ->
+        driver.execute(null, "ALTER TABLE source DROP COLUMN via_health_connect", 0)
+        listOf(
+            "change_log", "sync_row_state", "sync_conflict",
+            "coach_message", "coach_proposal", "coach_action", "coach_snapshot",
+            "mcp_token", "mcp_access",
+        ).forEach { table ->
             driver.execute(null, "DROP TABLE IF EXISTS $table", 0)
         }
         driver.execute(
@@ -50,9 +55,13 @@ class V10MigrationTest {
         setupV10(path)
 
         val store = open(path)
-        assertEquals(11L, store.schemaVersion)
+        assertEquals(12L, store.schemaVersion)
         assertEquals("Before sync", store.db.noteQueries.noteById("n1").executeAsOne().body)
-        listOf("change_log", "sync_row_state", "sync_conflict").forEach { table ->
+        listOf(
+            "change_log", "sync_row_state", "sync_conflict",
+            "coach_message", "coach_proposal", "coach_action", "coach_snapshot",
+            "mcp_token", "mcp_access",
+        ).forEach { table ->
             assertTrue(tableExists(store.driver, table), "$table was not created")
         }
         assertEquals(0L, store.db.syncQueries.pendingChangeCount().executeAsOne())

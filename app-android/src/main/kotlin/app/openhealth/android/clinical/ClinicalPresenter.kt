@@ -705,7 +705,10 @@ class ClinicalPresenter(
                 substance = substance,
                 reaction = draft["reaction"]?.takeIf { it.isNotBlank() },
                 severity = severity,
-                active = draft["active"] == context.getString(R.string.clinical_active),
+                // The allergy editor offers Yes/No for this field, not the medicine
+                // sheet's Active/Stopped; comparing against "Active" filed every allergy
+                // as inactive, whatever the person chose.
+                active = draft["active"] == context.getString(R.string.clinical_yes),
                 notedOn = draft["noted"]?.let(::parseDate) ?: existing?.notedOn,
                 notes = draft["notes"]?.takeIf { it.isNotBlank() },
                 provenance = revised(

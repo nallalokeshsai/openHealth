@@ -1,0 +1,54 @@
+-- The local MCP access surface (B15, pr.md §6.30). A token is stored only as a SHA-256
+-- digest of a 256-bit random value; the plain token is shown once and never stored. The
+-- audit keeps the tool and scope, never the arguments. Neither table syncs.
+
+CREATE TABLE mcp_token (
+    id TEXT NOT NULL PRIMARY KEY,
+    label TEXT NOT NULL,
+    scopes TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    last_used_at INTEGER
+);
+
+CREATE TABLE mcp_access (
+    id TEXT NOT NULL PRIMARY KEY,
+    token_id TEXT,
+    tool TEXT NOT NULL,
+    scope TEXT,
+    at INTEGER NOT NULL,
+    ok INTEGER AS kotlin.Boolean NOT NULL,
+    detail TEXT
+);
+
+CREATE INDEX mcp_access_at ON mcp_access(at);
+
+insertToken:
+INSERT INTO mcp_token(id, label, scopes, token_hash, created_at, revoked_at, last_used_at)
+VALUES (:id, :label, :scopes, :tokenHash, :createdAt, NULL, NULL);
+
+allTokens:
+SELECT * FROM mcp_token ORDER BY created_at DESC;
+
+tokenByHash:
+SELECT * FROM mcp_token WHERE token_hash = :tokenHash;
+
+revokeToken:
+UPDATE mcp_token SET revoked_at = :revokedAt WHERE id = :id AND revoked_at IS NULL;
+
+touchToken:
+UPDATE mcp_token SET last_used_at = :at WHERE id = :id;
+
+insertAccess:
+INSERT INTO mcp_access(id, token_id, tool, scope, at, ok, detail)
+VALUES (:id, :tokenId, :tool, :scope, :at, :ok, :detail);
+
+recentAccess:
+SELECT * FROM mcp_access ORDER BY at DESC LIMIT :limit;
+
+countAccess:
+SELECT count(*) FROM mcp_access;
+
+deleteAccessBefore:
+DELETE FROM mcp_access WHERE at < :cutoff;

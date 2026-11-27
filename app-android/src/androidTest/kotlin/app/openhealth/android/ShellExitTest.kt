@@ -335,6 +335,10 @@ class ShellExitTest {
         viewModel.refresh()
         compose.setContent { OpenHealthRoot(container, viewModel) }
         waitFor("loaded") { viewModel.state.value.loaded }
+        // `loaded` is already true from the view model's own first rebuild, so waiting on
+        // it alone can assert against the state from before `setWeightNeutral`. Wait for
+        // the switch the assertions are about, as the nutrition case already does.
+        waitFor("weight neutral") { viewModel.state.value.preferences.weightNeutral }
         compose.onNodeWithText("Trend").assertDoesNotExist()
         compose.onNodeWithText("Log weight").assertDoesNotExist()
         assertTrue(
@@ -572,7 +576,8 @@ class ShellExitTest {
         assertTrue(
             reached,
             "timed out waiting for $what; step=${viewModel.state.value.onboarding.step}, " +
-                "issue=${viewModel.state.value.onboarding.issue}",
+                "issue=${viewModel.state.value.onboarding.issue}, " +
+                "fatal=${viewModel.state.value.fatal}",
         )
     }
 

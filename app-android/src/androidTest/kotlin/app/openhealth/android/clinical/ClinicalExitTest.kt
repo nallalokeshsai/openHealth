@@ -2,6 +2,8 @@ package app.openhealth.android.clinical
 
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import app.openhealth.android.AppContainer
 import app.openhealth.android.reports.AndroidPdfRenderer
 import app.openhealth.core.clinical.ClinicalReportBuilder
 import app.openhealth.core.clinical.ClinicalReportData
@@ -19,10 +21,13 @@ import app.openhealth.core.seam.PdfSection
 import app.openhealth.core.seam.PdfTable
 import app.openhealth.core.time.TimeProvenance
 import app.openhealth.core.units.Measure
+import app.openhealth.ui.R as UiR
+import app.openhealth.ui.screens.clinical.ClinicalSectionKind
 import java.time.DayOfWeek
 import java.time.ZonedDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
@@ -135,5 +140,51 @@ class ClinicalExitTest {
         )
         assertTrue(report.disclaimer.contains("not a diagnosis"))
         assertTrue(report.sourceNote.contains("source"))
+    }
+
+    /**
+     * The record has to hold what the person chose. The allergy editor's Active field
+     * offers Yes/No, and the save path compared it against the medicine sheet's "Active",
+     * so every allergy the UI wrote came back inactive (`pr.md` §6.9: the record is the
+     * person's own, shown back unchanged).
+     */
+    @Test
+    fun anAllergySavedAsActiveComesBackActive() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.deleteDatabase(ALLERGY_DATABASE)
+        val container = AppContainer(
+            context,
+            databaseName = ALLERGY_DATABASE,
+            vaultPreferences = ALLERGY_VAULT,
+        )
+        try {
+            val presenter = container.clinicalPresenter
+            val editor = presenter.editor(ClinicalSectionKind.ALLERGIES, id = null)
+            // The screen seeds its draft from the editor's own values, so this is the
+            // draft a person who only types the substance actually saves.
+            val draft = editor.fields.associate { it.key to it.value } +
+                mapOf("substance" to "Penicillin")
+            assertTrue(presenter.save(ClinicalSectionKind.ALLERGIES, id = null, draft = draft))
+
+            val stored = container.store.clinical.allergies().single()
+            assertEquals("Penicillin", stored.substance)
+            assertTrue(stored.active, "the editor said Yes, so the record must say active")
+
+            val inactive = presenter.save(
+                ClinicalSectionKind.ALLERGIES,
+                id = stored.id,
+                draft = draft + mapOf("active" to context.getString(UiR.string.clinical_no)),
+            )
+            assertTrue(inactive)
+            assertFalse(container.store.clinical.allergies().single().active)
+        } finally {
+            container.store.close()
+            context.deleteDatabase(ALLERGY_DATABASE)
+        }
+    }
+
+    private companion object {
+        const val ALLERGY_DATABASE = "clinical-allergy-test.db"
+        const val ALLERGY_VAULT = "clinical-allergy-test-vault"
     }
 }

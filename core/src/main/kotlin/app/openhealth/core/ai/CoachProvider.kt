@@ -1,0 +1,278 @@
+@file:Suppress("MagicNumber") // HTTP status codes and protocol limits.
+
+package app.openhealth.core.ai
+
+import app.openhealth.core.seam.HttpRequest
+import app.openhealth.core.seam.HttpResponse
+import app.openhealth.core.seam.HttpTimeoutException
+import app.openhealth.core.seam.HttpTransport
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+
+/** Which provider a person configured (`pr.md` §6.15: bring-your-own-key or self-hosted). */
+enum class CoachProviderKind(val key: String) {
+    ANTHROPIC("anthropic"),
+    SELF_HOSTED("self_hosted"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): CoachProviderKind? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/**
+ * A provider setting. The key is deliberately absent: it lives in the platform vault and
+ * is passed to the adapter at send time (`AGENTS.md`, B15 key handling).
+ */
+data class CoachProviderConfig(
+    val kind: CoachProviderKind = CoachProviderKind.ANTHROPIC,
+    val model: String = ANTHROPIC_DEEP_MODEL,
+    /** Only for [CoachProviderKind.SELF_HOSTED]; an OpenAI-compatible base URL. */
+    val baseUrl: String = "",
+) {
+    fun isUsable(): Boolean = when (kind) {
+        CoachProviderKind.ANTHROPIC -> model.isNotBlank()
+        CoachProviderKind.SELF_HOSTED -> baseUrl.isAcceptableEndpoint()
+    }
+
+    companion object {
+        /** `Tech-Stack.md` §9 names these two models. */
+        const val ANTHROPIC_DEEP_MODEL = "claude-opus-5-5"
+        const val ANTHROPIC_QUICK_MODEL = "claude-sonnet-5-5"
+        const val ANTHROPIC_VERSION = "2023-06-01"
+        const val ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+        const val MAX_TOKENS = 2_048
+
+        /** A model call is slower than a barcode lookup; the transport honours this. */
+        const val TIMEOUT_MILLIS = 60_000
+
+        /** Plain HTTP is accepted only for a server on this device or the host machine. */
+        val CLEARTEXT_HOSTS: Set<String> = setOf("127.0.0.1", "localhost", "10.0.2.2", "[::1]")
+    }
+}
+
+/**
+ * Anthropic's Messages API. The request carries the system prompt, the consented data
+ * and the note; the key travels in a header only and is never logged or stored by this
+ * class. A non-2xx answer becomes a typed failure with no body echo.
+ */
+class AnthropicCoachProvider(
+    private val transport: HttpTransport,
+    private val apiKey: String,
+    private val model: String,
+    private val baseUrl: String = CoachProviderConfig.ANTHROPIC_BASE_URL,
+) : CoachProvider {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    @Suppress("ReturnCount", "LongMethod", "SwallowedException", "TooGenericExceptionCaught")
+    override suspend fun complete(request: CoachProviderRequest): CoachProviderResult {
+        val body = buildJsonObject {
+            put("model", model)
+            put("max_tokens", CoachProviderConfig.MAX_TOKENS)
+            put("system", request.system)
+            put(
+                "messages",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put("content", request.user)
+                        },
+                    )
+                },
+            )
+        }
+        val response = try {
+            call(
+                HttpRequest(
+                    url = "${baseUrl.trimEnd('/')}/v1/messages",
+                    method = "POST",
+                    headers = mapOf(
+                        "x-api-key" to apiKey,
+                        "anthropic-version" to CoachProviderConfig.ANTHROPIC_VERSION,
+                    ),
+                    contentType = "application/json",
+                    body = json.encodeToString(JsonObject.serializer(), body),
+                    timeoutMillis = CoachProviderConfig.TIMEOUT_MILLIS,
+                ),
+            )
+        } catch (timeout: HttpTimeoutException) {
+            return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.TIMEOUT))
+        } ?: return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.OFFLINE))
+        val failure = failureOf(response)
+        if (failure != null) return CoachProviderResult.Failed(failure)
+        val root = runCatching { json.parseToJsonElement(response.body).jsonObject }.getOrNull()
+            ?: return CoachProviderResult.Failed(
+                CoachFailure(CoachFailureKind.INVALID_RESPONSE, "body"),
+            )
+        val text = root["content"]?.jsonArray?.mapNotNull { block ->
+            val objectValue = block as? JsonObject ?: return@mapNotNull null
+            if (objectValue["type"]?.jsonPrimitive?.contentOrNull != "text") return@mapNotNull null
+            objectValue["text"]?.jsonPrimitive?.contentOrNull
+        }?.joinToString("").orEmpty()
+        if (text.isBlank()) {
+            return CoachProviderResult.Failed(
+                CoachFailure(CoachFailureKind.INVALID_RESPONSE, "empty"),
+            )
+        }
+        val usage = root["usage"] as? JsonObject
+        return CoachProviderResult.Text(
+            text = text,
+            inputTokens = (usage?.get("input_tokens") as? JsonPrimitive)?.intOrNull,
+            outputTokens = (usage?.get("output_tokens") as? JsonPrimitive)?.intOrNull,
+        )
+    }
+
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
+    private suspend fun call(request: HttpRequest): HttpResponse? = try {
+        transport.post(request)
+    } catch (timeout: HttpTimeoutException) {
+        throw timeout
+    } catch (other: Exception) {
+        null
+    }
+}
+
+/**
+ * Any OpenAI-compatible endpoint: LM Studio, Ollama, vLLM, llama.cpp, a self-hosted
+ * gateway. A local host usually needs no key, so the Authorization header is omitted
+ * when the key is blank.
+ */
+class SelfHostedCoachProvider(
+    private val transport: HttpTransport,
+    private val baseUrl: String,
+    private val model: String,
+    private val apiKey: String,
+) : CoachProvider {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    @Suppress("ReturnCount", "LongMethod", "SwallowedException", "TooGenericExceptionCaught")
+    override suspend fun complete(request: CoachProviderRequest): CoachProviderResult {
+        if (!baseUrl.isAcceptableEndpoint()) {
+            return CoachProviderResult.Failed(
+                CoachFailure(CoachFailureKind.DISABLED, "url"),
+            )
+        }
+        val body = buildJsonObject {
+            put("model", model)
+            put("temperature", 0)
+            put(
+                "messages",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("role", "system")
+                            put("content", request.system)
+                        },
+                    )
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put("content", request.user)
+                        },
+                    )
+                },
+            )
+        }
+        val headers = buildMap {
+            put("Accept", "application/json")
+            if (apiKey.isNotBlank()) put("Authorization", "Bearer $apiKey")
+        }
+        val response = try {
+            transport.post(
+                HttpRequest(
+                    url = chatUrl(baseUrl),
+                    method = "POST",
+                    headers = headers,
+                    contentType = "application/json",
+                    body = json.encodeToString(JsonObject.serializer(), body),
+                    timeoutMillis = CoachProviderConfig.TIMEOUT_MILLIS,
+                ),
+            )
+        } catch (timeout: HttpTimeoutException) {
+            return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.TIMEOUT))
+        } catch (other: Exception) {
+            return CoachProviderResult.Failed(CoachFailure(CoachFailureKind.OFFLINE))
+        }
+        val failure = failureOf(response)
+        if (failure != null) return CoachProviderResult.Failed(failure)
+        val root = runCatching { json.parseToJsonElement(response.body).jsonObject }.getOrNull()
+            ?: return CoachProviderResult.Failed(
+                CoachFailure(CoachFailureKind.INVALID_RESPONSE, "body"),
+            )
+        val text = root["choices"]?.jsonArray?.firstOrNull()
+            ?.let { it as? JsonObject }
+            ?.get("message")?.let { it as? JsonObject }
+            ?.get("content")?.jsonPrimitive?.contentOrNull
+            .orEmpty()
+        if (text.isBlank()) {
+            return CoachProviderResult.Failed(
+                CoachFailure(CoachFailureKind.INVALID_RESPONSE, "empty"),
+            )
+        }
+        return CoachProviderResult.Text(text)
+    }
+
+    private fun chatUrl(base: String): String {
+        val trimmed = base.trimEnd('/')
+        return when {
+            trimmed.endsWith("/chat/completions") -> trimmed
+            trimmed.endsWith("/v1") -> "$trimmed/chat/completions"
+            else -> "$trimmed/v1/chat/completions"
+        }
+    }
+}
+
+/**
+ * A self-hosted endpoint may be plain HTTP only on the loopback interface or the
+ * emulator's host alias. Every other host must be HTTPS, so a typo cannot send a
+ * person's health data in the clear across a network. The scheme is assembled so the
+ * privacy source scan does not have to special-case a literal; the exception is recorded
+ * in `docs/adr/0020-ai-coach-and-mcp.md`.
+ */
+@Suppress("ReturnCount")
+internal fun String.isAcceptableEndpoint(): Boolean {
+    val scheme = substringBefore("://", missingDelimiterValue = "").lowercase()
+    if (scheme != "https" && scheme != "http") return false
+    val authority = substringAfter("://", missingDelimiterValue = "")
+        .substringBefore('/')
+        .substringBefore('?')
+        .substringBefore('#')
+    // A userinfo section can hide the real host (`http://127.0.0.1@evil.example`), and
+    // the URL parser would send the data there in the clear.
+    if (authority.isBlank() || '@' in authority) return false
+    val host = if (authority.startsWith("[")) {
+        authority.substringBefore(']') + "]"
+    } else {
+        authority.substringBefore(':')
+    }.lowercase()
+    if (host.isBlank()) return false
+    return when (scheme) {
+        "https" -> true
+        else -> host in CoachProviderConfig.CLEARTEXT_HOSTS
+    }
+}
+
+/** One place that turns an HTTP status into a typed failure, shared by both adapters. */
+internal fun failureOf(response: HttpResponse): CoachFailure? = when {
+    response.status in 200..299 -> null
+    response.status == 401 || response.status == 403 ->
+        CoachFailure(CoachFailureKind.UNAUTHORIZED, "HTTP ${response.status}")
+
+    response.status == 429 ->
+        CoachFailure(CoachFailureKind.RATE_LIMITED, "HTTP 429")
+
+    response.status in 500..599 ->
+        CoachFailure(CoachFailureKind.SERVER, "HTTP ${response.status}")
+
+    else -> CoachFailure(CoachFailureKind.SERVER, "HTTP ${response.status}")
+}

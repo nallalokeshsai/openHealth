@@ -263,11 +263,23 @@ class VitalsExitTest {
         val decoded = android.util.Base64.decode(photo.bytes_b64, android.util.Base64.NO_WRAP)
         assertEquals(0xFF.toByte(), decoded[0])
         assertEquals(0xD8.toByte(), decoded[1])
-        // The file on disk is SQLCipher: the JPEG magic must not appear in it.
+        // The file on disk is SQLCipher, so the photo must not be readable from it.
+        // `body_photo.bytes_b64` is a TEXT column, so what a plaintext database would
+        // hold is the base64 of the JPEG, not its `FF D8 FF` magic: searching for the
+        // magic tested nothing and, against ciphertext, matched three arbitrary bytes
+        // roughly once per 16 MB of file, which is how it failed a full suite run on
+        // 2026-11-27. The needle is now a long slice of the payload actually stored.
         val dbBytes = context.getDatabasePath(TEST_DATABASE).readBytes()
+        val payload = photo.bytes_b64
+        assertTrue(payload.length > PAYLOAD_NEEDLE * 2)
+        val needle = payload.substring(payload.length / 2, payload.length / 2 + PAYLOAD_NEEDLE)
         assertFalse(
-            containsBytes(dbBytes, byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())),
-            "the photo's JPEG header must not be readable from the encrypted database file",
+            containsBytes(dbBytes, needle.toByteArray(Charsets.US_ASCII)),
+            "the photo's bytes must not be readable from the encrypted database file",
+        )
+        assertFalse(
+            containsBytes(dbBytes, SQLITE_HEADER),
+            "an encrypted database never carries the plain SQLite header",
         )
 
         viewModel.addPhoto(jpeg, "Side")
@@ -357,5 +369,9 @@ class VitalsExitTest {
     private companion object {
         const val TEST_DATABASE = "vitals-exit.db"
         const val TEST_VAULT = "openhealth.vault.b7-test"
+
+        /** Long enough that a chance match in ciphertext is not a thing that happens. */
+        const val PAYLOAD_NEEDLE = 64
+        val SQLITE_HEADER: ByteArray = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
     }
 }

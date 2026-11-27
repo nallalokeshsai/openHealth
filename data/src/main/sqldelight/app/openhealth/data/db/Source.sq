@@ -12,6 +12,7 @@ CREATE TABLE source (
     reliability_note TEXT,
     last_sync INTEGER,
     permissions TEXT,
+    via_health_connect INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -21,10 +22,10 @@ CREATE INDEX source_family ON source(family);
 upsertSource:
 INSERT INTO source(
     id, kind, label, family, device, priorities, expected_cadence_seconds,
-    reliability_note, last_sync, permissions, created_at, updated_at
+    reliability_note, last_sync, permissions, via_health_connect, created_at, updated_at
 ) VALUES (
     :id, :kind, :label, :family, :device, :priorities, :expectedCadenceSeconds,
-    :reliabilityNote, :lastSync, :permissions, :createdAt, :updatedAt
+    :reliabilityNote, :lastSync, :permissions, :viaHealthConnect, :createdAt, :updatedAt
 )
 -- A real upsert, not INSERT OR REPLACE: source is referenced by a foreign
 -- key, and replacing the row would delete it and its children with it.
@@ -38,6 +39,7 @@ ON CONFLICT(id) DO UPDATE SET
     reliability_note = excluded.reliability_note,
     last_sync = excluded.last_sync,
     permissions = excluded.permissions,
+    via_health_connect = excluded.via_health_connect,
     updated_at = excluded.updated_at;
 
 sourceById:

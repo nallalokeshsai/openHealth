@@ -141,9 +141,9 @@ class ClinicalRepositoryTest {
     )
 
     @Test
-    fun theSchemaIsVersionTenAndCarriesEveryClinicalTable() {
+    fun theSchemaCarriesEveryClinicalTable() {
         val store = inMemoryStore()
-        assertEquals(11L, store.schemaVersion)
+        assertEquals(12L, store.schemaVersion)
         assertEquals(OpenHealthDb.Schema.version, store.schemaVersion)
         ClinicalRepository(store.db).counts().also {
             assertEquals(0L, it.medications)

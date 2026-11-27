@@ -1,5 +1,9 @@
 package app.openhealth.android.preferences
 
+import app.openhealth.core.ai.CoachCategory
+import app.openhealth.core.ai.CoachConsent
+import app.openhealth.core.ai.CoachProviderConfig
+import app.openhealth.core.ai.CoachProviderKind
 import app.openhealth.core.preferences.DisplayPolicy
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ModulePreset
@@ -7,6 +11,8 @@ import app.openhealth.data.repo.ProfileRepository
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.data.repo.SettingsRepository
 import app.openhealth.ui.theme.OhAccent
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /** The appearance choice of `DESIGN.md` §12.4. The theme setting, not the design token. */
 enum class ThemeMode(val key: String) {
@@ -33,6 +39,12 @@ data class Preferences(
     val highContrast: Boolean,
     val reduceTransparency: Boolean,
     val reducedMotion: Boolean,
+    /** B15: off by default, per-category, and Health Connect separately (`pr.md` §6.15). */
+    val coachConsent: CoachConsent,
+    val coachProvider: CoachProviderConfig,
+    val coachDisclosed: Boolean,
+    val mcpEnabled: Boolean,
+    val mcpPort: Int,
 ) {
     /** The object screens ask; none of them reads [weightNeutral] (`pr.md` §6.25). */
     val displayPolicy: DisplayPolicy get() = DisplayPolicy.of(weightNeutral)
@@ -71,7 +83,81 @@ class PreferencesStore(
             highContrast = settings.get(SettingKeys.HIGH_CONTRAST) == "true",
             reduceTransparency = settings.get(SettingKeys.REDUCE_TRANSPARENCY) == "true",
             reducedMotion = settings.get(SettingKeys.REDUCED_MOTION) == "true",
+            coachConsent = coachConsent(),
+            coachProvider = coachProvider(),
+            coachDisclosed = settings.get(SettingKeys.COACH_DISCLOSED) == "true",
+            mcpEnabled = settings.get(SettingKeys.MCP_ENABLED) == "true",
+            mcpPort = settings.get(SettingKeys.MCP_PORT)?.toIntOrNull()
+                ?.takeIf { it in MCP_PORTS } ?: DEFAULT_MCP_PORT,
         )
+    }
+
+    fun coachConsent(): CoachConsent {
+        val doc = settings.get(SettingKeys.COACH_CONSENT)?.let { raw ->
+            runCatching { json.decodeFromString(ConsentDoc.serializer(), raw) }.getOrNull()
+        }
+        return doc?.let {
+            CoachConsent(
+                enabled = it.enabled,
+                categories = it.categories.mapNotNull(CoachCategory::fromKey).toSet(),
+                healthConnect = it.healthConnect,
+            )
+        } ?: CoachConsent.Off
+    }
+
+    fun setCoachConsent(consent: CoachConsent) {
+        settings.put(
+            SettingKeys.COACH_CONSENT,
+            json.encodeToString(
+                ConsentDoc.serializer(),
+                ConsentDoc(
+                    enabled = consent.enabled,
+                    categories = consent.categories.map { it.key }.sorted(),
+                    healthConnect = consent.healthConnect,
+                ),
+            ),
+        )
+    }
+
+    fun coachProvider(): CoachProviderConfig {
+        val doc = settings.get(SettingKeys.COACH_PROVIDER)?.let { raw ->
+            runCatching { json.decodeFromString(ProviderDoc.serializer(), raw) }.getOrNull()
+        }
+        return doc?.let {
+            CoachProviderConfig(
+                kind = CoachProviderKind.fromKey(it.kind) ?: CoachProviderKind.ANTHROPIC,
+                model = it.model.takeIf { model -> model.isNotBlank() }
+                    ?: CoachProviderConfig.ANTHROPIC_DEEP_MODEL,
+                baseUrl = it.baseUrl,
+            )
+        } ?: CoachProviderConfig()
+    }
+
+    fun setCoachProvider(config: CoachProviderConfig) {
+        settings.put(
+            SettingKeys.COACH_PROVIDER,
+            json.encodeToString(
+                ProviderDoc.serializer(),
+                ProviderDoc(
+                    kind = config.kind.key,
+                    model = config.model,
+                    baseUrl = config.baseUrl,
+                ),
+            ),
+        )
+    }
+
+    fun setCoachDisclosed(accepted: Boolean) {
+        settings.put(SettingKeys.COACH_DISCLOSED, accepted.toString())
+    }
+
+    fun setMcpEnabled(enabled: Boolean) {
+        settings.put(SettingKeys.MCP_ENABLED, enabled.toString())
+    }
+
+    fun setMcpPort(port: Int) {
+        if (port !in MCP_PORTS) return
+        settings.put(SettingKeys.MCP_PORT, port.toString())
     }
 
     fun setWeightNeutral(enabled: Boolean) {
@@ -136,7 +222,25 @@ class PreferencesStore(
         settings.put(SettingKeys.ONBOARDING_COMPLETE, "true")
     }
 
+    @Serializable
+    private data class ConsentDoc(
+        val enabled: Boolean = false,
+        val categories: List<String> = emptyList(),
+        val healthConnect: Boolean = false,
+    )
+
+    @Serializable
+    private data class ProviderDoc(
+        val kind: String = CoachProviderKind.ANTHROPIC.key,
+        val model: String = CoachProviderConfig.ANTHROPIC_DEEP_MODEL,
+        val baseUrl: String = "",
+    )
+
     private companion object {
+        val json = Json { ignoreUnknownKeys = true }
+        val MCP_PORTS = 8_765..8_775
+        const val DEFAULT_MCP_PORT = 8_765
+
         fun moduleKey(module: HealthModule): String = "module.${module.key}.enabled"
     }
 }

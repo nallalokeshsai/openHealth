@@ -3529,3 +3529,374 @@ as layer-4 rows with layer-2 observations, location and yoga foreground services
   permanently rejected command stalls later ones), the one-byte bpm field clamps 256–260,
   and the Monkey C app remains uncompiled/unwalked. The full 66-test phone suite is green
   on a clean run; the `NutritionExitTest` weight-neutral case remains the carried flake.
+
+## B15 — AI Coach and MCP (2026-11-27)
+
+- **Status:** Completed. One phase only. Branch `build/b15-ai-coach-mcp`.
+- **Questions asked and answered (one batched dialog):** provider =
+  **Anthropic plus a self-hosted OpenAI-compatible endpoint**; key handling =
+  **Android Keystore through the `SecretVault` seam**; MCP surface = **on-device loopback,
+  off by default, scoped bearer tokens**; device = **the attached phone and Wear emulators**
+  (the owner's phone was not attached; the B14 precedent is recorded as the gap).
+- **Delivered:** a provider-agnostic `:core` adapter (`AnthropicCoachProvider` and
+  `SelfHostedCoachProvider`), per-category consent with a separate Health Connect switch,
+  a structured-output parser that validates against the live plan with the same bounds as
+  the editor, one repair round then a visible stored failure, a safety filter for
+  diagnosis/prescription/dosing, diff-card proposals that are applied only on approval and
+  restored by a snapshot-backed Undo, and a local MCP JSON-RPC server with seven scoped
+  tools, SHA-256 token digests, revocation and an argument-free audit.
+- **Schema v12** (`11.sqm`): the `source.via_health_connect` column and `coach_message`,
+  `coach_proposal`, `coach_action`, `coach_snapshot`, `mcp_token`, `mcp_access`. Coach and
+  MCP tables never sync; the encrypted export carries them (the token table only holds a
+  digest) and a pre-v12 export restores with them empty. Server `maxSchemaVersion` is 12.
+- **Decisions** are in `docs/adr/0020-ai-coach-and-mcp.md`. `DESIGN.md` 0.7.1 records the
+  coach and external-access recipes; no new colour, type role, spacing value, radius or
+  component. `pr.md` §6.15's MVP and the MCP V1 item are covered; weekly adaptation,
+  "ask my data", cost estimates, local models and a server-side MCP endpoint are not.
+- **Exit tests** (`BUILD-ROADMAP.md` §B15, `pr.md` §6.15 acceptance, `Tech-Stack.md` §9):
+  | Test | Evidence |
+  |---|---|
+  | Off by default; the app works fully without the coach | `CoachConsentTest.theDefaultSendsNothing`; the coach key is absent, `HealthModule.COACH` is on but the coach switch is off; no socket is opened until MCP is enabled. |
+  | Per-category consent, Health Connect excluded unless separately opted in | `CoachPromptTest.onlyConsentedCategoriesAreSerialised`, `healthConnectRowsAreExcludedUnlessSeparatelyOptedIn`, `aHealthConnectVitalIsExcludedWhileAManualOneIsSent`; `CoachDataSourceTest.aHealthConnectWeightIsExcludedUntilTheSecondSwitch` proves the `garmin-hc` producer. |
+  | Every answer parsed and validated; one repair round; fail visibly | `CoachParserTest` (12 cases), `CoachExchangeTest.anInvalidAnswerGetsExactlyOneRepairRound`, `twoInvalidAnswersFailVisiblyWithTheFindings`, `aRepairThatIsStillUnsafeFailsAsSafetyNotAsFormat`. |
+  | Proposal is a diff, never applied without approval, and undoable | `CoachRepositoryTest.approvingAppliesTheChangeAndUndoRestoresTheExactRow`, `undoRemovesOnlyTheEntryTheProposalAdded`, `onlyTheNewestAcceptedProposalCanBeUndone`; `CoachExitTest.theCoachProposesAcceptsAndUndoes` on the emulator. |
+  | A provider outage is graceful and non-blocking | `CoachProviderTest.aTransportFailureIsOfflineNotACrash`; `CoachExitTest.anOutageLeavesTheNoteAndAppliesNothing` keeps the note and applies nothing. |
+  | The key is never stored in the database, the change log, an export or a log | `SecretVault` only; `CoachProviderTest.anUnauthorizedAnswerIsTypedAndDoesNotEchoTheKey`; the model has `keyPresent`, never the key. |
+  | Scoped MCP tokens, revocation, same validation as the UI | `McpProtocolTest` (9 cases), `McpGatewayTest.anOutOfRangeValueIsRejectedAndNothingIsWritten`, `aWeightWriteCarriesProvenanceAndRebuildsTheDay`, `aBackfilledWeightKeepsItsOwnHappenedAtAndTheRecordingTime`; `CoachExitTest.theMcpEndpointNeedsATokenScopesAndAValidValue` (401 without a token, scope refusal, 900 kg refused, 80 kg written, revoked token refused). |
+  | Weight-neutral mode hides weight, calories and body fat from a request | `CoachPromptTest.weightNeutralModeDropsWeightCaloriesAndBodyFat`. |
+- **What was run, and its result:** `./gradlew check :app-android:assembleDebug` **BUILD
+  SUCCESSFUL** (901 JVM tests and 376 goldens; `:server:test` now accepts schema 12);
+  `CoachExitTest` **3/3** on the phone emulator; the whole instrumented suite is recorded
+  in the QA section below.
+- **Regression over earlier phases:** `./gradlew check` covers every JVM and golden exit;
+  the data migration tests now replay v11→v12 and the server schema window is 12, so the
+  B13 sync round-trip still passes. The instrumented suite (B2–B14) is rerun on the
+  emulator below.
+- **Placeholders and open issues:** the provider is never called against a live key in this
+  phase (no key is stored in the repository or the test device); the self-hosted path is
+  proved with a recording transport, not a real model host; the MCP endpoint is local only
+  and its server-side counterpart is not built; the coach's weekly adaptation, ask-my-data
+  citations, cost estimate and local model are V1+ and not started. The owner's phone was
+  not attached; the device walk uses the same emulator pair as B14.
+- **iOS gate (`pr.md` §13.17):** not yet.
+
+### QA sweep on the emulators (section 4.2)
+
+- **The whole instrumented suite:** `am instrument` on the phone emulator, **70/70
+  pass** (B2–B14 plus the three B15 `CoachExitTest` cases). The first run had two
+  failures; both were traced, not waved away.
+- **A real state race, found and fixed.** `ShellExitTest.waterGlassesAddUp…` timed out at
+  the shell with `fatal=false`: an initial `rebuild()` that began before the test seeded
+  its profile could finish after the later `refresh()` and overwrite `onboardingComplete`
+  with the older read. B15's extra rebuild work (MCP start, two new summaries) widened a
+  race that already existed. `AppViewModel.rebuild()` is now serialised by a `Mutex`, so a
+  read that started earlier cannot land after a newer one. The test passes, and the whole
+  suite passed twice after the fix. This is the one product change the sweep made.
+- **`NutritionExitTest`:** its local-search timeout did not reproduce on a rerun and the
+  full 70-test run passed; recorded as the carried flake from B14, not closed.
+- **Coach walk on the phone emulator:** onboarding → Today → Settings → Coach; the coach
+  was turned on, Training was consented, the "what leaves the phone" list was accepted,
+  and Send without a key produced "Add a provider key first." with no message stored and
+  no plan change. Back navigation to Settings worked.
+- **External access walk:** Settings → Data → External access; enabling it bound
+  `127.0.0.1:8765`, a token was created with the default scopes, the one-time value was
+  displayed in `ohm_…` form, and Revoke changed the row to Revoked. The audit showed
+  "No calls yet"; no `AndroidRuntime` error appeared at any point.
+- **Two issues were raised and fixed in `1f0aa70`:** OH-01, the rebuild race above;
+  OH-02, Send could leave before the disclosure list was acknowledged (the card was shown
+  but not enforced). Both were re-tested: the suite is 70/70 and the device walk shows
+  "Add a provider key first." rather than any request when the setup is incomplete. The
+  temporary `issues.md` was deleted and never committed.
+- **No screenshot or device output entered the tree.**
+
+### Invariant audit (`AGENTS.md`)
+
+- **Provenance on every value:** the MCP writes create a `raw_record` and a full
+  `Provenance` (source `mcp:<token>`, device, method, `happened_at`, `recorded_at`, local
+  date, zone, idempotency key, raw ref); `McpGatewayTest` asserts the row and the raw ref.
+- **`happened_at` ≠ `recorded_at`:** a backdated MCP weight keeps the chosen day as
+  `happened_at` and the send time as `recorded_at` (`aBackfilledWeightKeepsItsOwnHappenedAt…`).
+- **Five layers, rebuildable rollups:** an MCP write goes through `ObservationRepository`,
+  which invalidates and rebuilds the day; the coach writes only layer-4 plan rows and never
+  a rollup. `McpGatewayTest.aWeightWriteCarriesProvenanceAndRebuildsTheDay` proves the day.
+- **One source wins a day:** MCP is a source kind with priority 80; a manual weight still
+  wins the day. No summing, no largest-value rule.
+- **Local-first:** the coach is off by default; MCP is a local socket; no core action waits
+  on a network. `pr.md` §6.15's "the app works fully without the coach" holds.
+- **Not a medical device:** the parser rejects diagnosis/prescription/dosing wording and
+  the system prompt forbids it; the screen copy is neutral and the wording test scans it.
+- **No telemetry:** the only outbound call is the explicit Send through the existing
+  `HttpTransport` seam, after the disclosure; no analytics, no crash SDK, no background
+  call. The MCP listener is loopback and token-gated, named in `PrivacySourceTest`.
+- **Portability:** `checkPortability` passes; `:core` and `:data` contain no `android.*`.
+- **Licence split:** unchanged; no new dependency.
+- **Tombstone undo, modules hide:** the coach's Undo is a snapshot-backed reversal of an
+  approved proposal (no user history deleted); turning the Coach module off hides the
+  Coach settings row and the screen and keeps the conversation; the external-access row is
+  a separate Data-sheet surface, not a coach module.
+- **Weight-neutral mode:** the request builder drops weight, body fat and calories, proved
+  by `CoachPromptTest.weightNeutralModeDropsWeightCaloriesAndBodyFat`.
+- **Charts and reports:** no chart or report was added.
+- **Closed tokens and cut list:** `DESIGN.md` 0.7.1 adds copy and placeholder recipes only;
+  no token, component or cut-list item moved.
+
+### Independent reviews (three fresh reviewers) and the fixes
+
+Three reviewers who did not build B15 read only the diff and the relevant contract text:
+correctness and tests, the `AGENTS.md` invariants and licences, and `DESIGN.md`
+conformance. Every finding below was confirmed in the code before it was changed; a fix
+was not accepted on the reviewer's word alone.
+
+- **A pre-v12 backup could not restore.** `SqlDump.insert` bound every current column,
+  including the new `source.via_health_connect`, as NULL into a NOT NULL column. It now
+  binds only the keys a row actually carries, so SQLite applies the column default.
+  `OlderSchemaRestoreTest.aV11BundleRestoresWithTheTransportFlagAtItsDefault` fails against
+  the old code and passes now.
+- **An approved reps change left an inverted target range.** `target_reps` rose while
+  `target_reps_high` stayed behind, which `ProgressionInput` rejects and the live session
+  would crash on. The applier and `CoachPlan.with` now raise the high bound, and
+  `raisingRepsAlsoRaisesTheRangeHighSoTheProgressionEngineCanReadIt` builds the real input.
+- **A double tap could apply one proposal twice.** The status check was outside the
+  transaction. `apply` now re-reads and decides inside one transaction; a second apply is
+  rejected and adds nothing.
+- **A failed action could commit partial rows.** A `Rejected` return commits, so the writes
+  are now rolled back by throwing a private `Abort` and translating it to `Rejected`
+  outside the transaction.
+- **Undo could roll back an unrelated manual edit.** The snapshot now holds only the rows a
+  proposal named (update targets and the weekday of a moved routine) plus the ids it
+  created; `undoLeavesAnUnrelatedEditInTheSameRoutineAlone` proves a later edit survives.
+- **Undo used creation order, not decision order.** A `latestAcceptedProposal` query orders
+  by `decided_at`; the test applies the newer card first and still undoes the older one.
+- **The self-hosted loopback endpoint was blocked by Android's network policy.**
+  `HttpURLConnection` honours `network_security_config.xml`, which refused all cleartext; a
+  loopback-only `domain-config` now permits `127.0.0.1`, `localhost`, `10.0.2.2` and `::1`.
+  `SecurityPostureTest.loopbackIsTheOnlyCleartextException` runs on the device, and
+  `PrivacySourceTest.theCleartextExceptionIsLoopbackOnly` pins the file.
+- **The endpoint gate could be bypassed with userinfo and never matched IPv6 loopback.**
+  `isAcceptableEndpoint` now rejects `@` in the authority and handles `[...]`; tests cover
+  `127.0.0.1@evil.example` and `[::1]`.
+- **SHA-256 padded a 55-byte message with a whole extra block.** The modulo missing from
+  the padding formula is back; 55, 56, 119 and 120-byte inputs are compared with
+  `java.security.MessageDigest`.
+- **A key could be filed under the wrong provider.** Provider and key are saved in one
+  presenter call that names the target kind; the screen clears the field when the
+  segmented control changes.
+- **MCP water replaced the day instead of adding to it.** Water is written with
+  `end = happened_at`, the increment shape the manual path uses; two 500 ml calls now sum
+  to 1000 ml.
+- **The safety filter missed ordinary dosing wording.** It now covers any mg/mcg/g/iu/ml/
+  unit quantity, "take 2 tablets daily" and "twice daily"; four sentences are pinned.
+- **Health Connect gating failed open on an unknown or multi-source rollup,** and the coach
+  sent training loads in weight-neutral mode. Unknown sources are now treated as
+  platform-derived, weights and volume are stripped in weight-neutral mode, and MCP reads
+  apply the same two rules.
+- **Restoring an export did not re-flag the platform sources or revoke old tokens.** The
+  restore now sets `via_health_connect` on `health-connect`/`garmin-hc` and marks every
+  restored MCP token revoked; two restore tests cover both.
+- **A refused MCP call was not audited.** A scope refusal is written as `Refused` with the
+  tool and scope, still with no arguments; an unauthenticated call has no token to name and
+  is refused without a row, as the ADR now says.
+- **The ten-action cap was per proposal and action objects accepted unknown fields.** The
+  parser enforces the total and rejects unknown action keys; two identical add actions now
+  create two rows rather than collapsing onto one id.
+- **Timeouts were reported as offline, and a POST followed redirects.** A typed
+  `HttpTimeoutException` carries the timeout to the UI, and a POST never follows a
+  redirect, so an API key cannot be forwarded to another host.
+- **The External access row was described as hidden with the Coach module.** Only the Coach
+  row is module-gated; the ADR and this log now say so.
+
+## B15 audit — independent phase-wise pass (2026-11-27)
+
+- **Scope.** A headless session that did not build B15 compared the tree against
+  `BUILD-ROADMAP.md` B0–B15, `prompts.md`, `pr.md` §6.15/§6.30/§7.1/§12.3,
+  `Tech-Stack.md` §3/§5/§6/§9, `DESIGN.md` §11/§14.2/§14.5/Appendix A and
+  `docs/adr/0020`, and ran `./gradlew check`, both assembles and the phone connected
+  suite on `emulator-5554`. No commit, push or outward action was made.
+- **Confirmed and fixed:**
+  - **The MCP day summary leaked two weight-neutral values.** `GET_DAY_SUMMARY` sent
+    `active_kcal` and `training_volume_kg` to an assistant while weight-neutral mode was
+    on, although `GET_TRAINING_PLAN` and `LIST_RECENT_SESSIONS` stripped loads and the
+    B15 entry above claims "weights and volume are stripped … and MCP reads apply the
+    same two rules". Energy is one of the four categories `pr.md` §6.25 hides, and volume
+    is load-derived. `McpGateway.daySummary` now omits both;
+    `McpGatewayTest.weightNeutralModeHidesEnergyAndVolumeFromTheDaySummary` fails against
+    the old code.
+  - **A stored coach failure always read as a server error.** `CoachRepository.appendError`
+    stores the failure's own stable code (`offline`, `invalid_output:bad_reps`), while
+    `CoachScreen.errorText` matched only `coach_error_*` resource names, so every error row
+    in the conversation fell through to "The provider returned an error" — including an
+    outage, which `pr.md` §6.15 requires to read as a graceful outage. `coachErrorKey`
+    maps both forms onto one key; `CoachErrorTextTest` (3 cases) renders the screen and
+    fails against the old code. The B15 exit test asserted the row's role, never its text.
+  - **The 90-day raw-payload window was never enforced.** `RawRecordRepository.compactExpired`
+    and `compactPayloadsBefore` existed and were unit-tested, but no production code called
+    them, so layer-1 payloads grew without limit against `pr.md` §7.1.
+    `LocalStore.runStartupMaintenance` now runs the Trash purge and the compaction
+    together and `AppContainer` calls it where it previously called `trash.purgeExpired()`
+    alone; `RawRecordTest.openingTheStoreCompactsExpiredPayloads` covers it.
+  - **Every allergy saved from the UI was stored inactive (B12).** The allergy editor
+    offers Yes/No for its Active field while `saveAllergy` compared the draft against the
+    medicine sheet's "Active", so the record never held what the person chose.
+    `ClinicalExitTest.anAllergySavedAsActiveComesBackActive` drives the editor's own draft
+    and fails against the old code.
+  - **A weight-neutral exit test could assert before the switch landed.**
+    `ShellExitTest.weightNeutralHidesWeightAndCaloriesAcrossToday` waited only on
+    `loaded`, which the view model's first rebuild already sets, and failed once in a full
+    suite run with the Today weight card still on screen; it passed alone. It now waits for
+    `preferences.weightNeutral`, as the nutrition case already did. This is the same class
+    of race the B15 QA sweep fixed with the rebuild `Mutex`, not a product defect.
+  - **Build-log claim.** The B15 entry said 372 goldens; the committed set is **376**.
+- **Verification after the fixes:** `./gradlew check :app-android:assembleDebug
+  :app-wear:assembleDebug` **BUILD SUCCESSFUL** — **906 JVM tests** (453 `:core`,
+  183 `:data`, 7 `:sync`, 55 `:integrations`, 172 `:ui`, 14 `:server`, 10 across the
+  three tools, 12 `:app-wear`) and 376 goldens — and **71/71** instrumented tests on the
+  phone emulator. Each fix was re-run against the pre-fix code to prove its test fails.
+- **Left as findings, not changed:**
+  - `pr.md` §7.1's "raw storage cost … shown in settings with a one-tap compaction" is
+    still unbuilt; only the automatic window is now enforced.
+  - `pr.md` §7.1/§2.2 "every manual entry creates an immutable ingestion record" remains
+    broken app-wide: hand-entered measurements, vitals, notes, sessions, work sets and CSV
+    imports are written with `raw_record_id = null`. Only the MCP, device and import-file
+    paths mint one. B14 recorded the watch and strength-set instances; the gap is wider.
+  - `pr.md` §6.30's MVP row is still largely unbuilt and was never owned by a B phase: no
+    deep links, no quick-settings tiles, no Android intents, and the MCP scopes are per
+    domain rather than per module (`docs/adr/0020` records the scope choice).
+  - B13 left the `network_security_config.xml` loopback exception explicitly to the owner
+    ("weakening a B10 control … the owner's call"). B15 declared it for the self-hosted
+    coach adapter without recording that it also closes that B13 question; the carried
+    open issue is therefore stale rather than open.
+  - `DESIGN.md` §10.4 names `x-octagon`, `trophy` and `snowflake`; none of the three
+    exists in `ui/src/main/kotlin/app/openhealth/ui/icons/` (a B1 asset gap).
+  - `CoachPresenter.model` hardcodes `healthConnectAvailable = true`, so the second opt-in
+    is offered on a device without Health Connect.
+  - `CoachRepository.recordChangesWith` sets a `sync` field nothing reads and no caller
+    uses it; `McpProtocol.unauthorizedBody`/`notFoundBody` and `McpRepository`'s private
+    `Mcp_access.toRecord` are unused. `AppContainer.close()` does not stop `McpRuntime`
+    (production never calls `close`; the daemon thread dies with the process).
+  - `tools:fixtures:QueryBenchmarkTest` is load-sensitive: `observationsForDayAndType`
+    measured **26.33 ms** against its 16 ms budget on a loaded machine and **3.04 ms** on a
+    quiet rerun. The budget was not touched; the gate can go red for reasons unrelated to a
+    change.
+
+## B15 audit — second independent pass (2026-11-27)
+
+- **Scope.** A second headless session that did not build B15 and did not run the first
+  audit. It re-verified each of the first pass's five fixes against the code and the
+  tests, then looked for what remained across B0–B15. Ran `./gradlew check`, both
+  assembles and the phone connected suite on `emulator-5554` twice. No commit, push or
+  outward action was made.
+
+### The first pass's fixes, re-verified
+
+Every one is real, lands where it is claimed to, and is covered by a test that fails
+against the old code. Checked individually, not accepted on the entry's word:
+
+- **MCP day summary.** `McpGateway.daySummary` omits `active_kcal` and
+  `training_volume_kg` under weight-neutral mode; `McpGatewayTest` line 312 asserts both
+  and that `training_sets` still answers.
+- **Stored coach failure keys.** `coachErrorKey` maps the stored `kind[:findings]` form
+  and the live `coach_error_*` form onto one key. All nine `CoachFailureKind` values
+  resolve to an existing string; `errorText`'s two call sites are both inside a non-null
+  branch, so the new `null -> coach_error_server` default changes nothing that renders.
+- **The 90-day raw window.** `RawRetention.DEVICE_RETENTION` is 90 days,
+  `compactPayloadsBefore` clears `payload`/`payload_ref` and keeps the hash and the audit
+  fields, and `AppContainer` calls `runStartupMaintenance()` where it previously called
+  the Trash purge alone.
+- **Allergy Active.** `ClinicalPresenter.allergyEditor` offers `clinical_yes`/
+  `clinical_no`, so comparing the draft against `clinical_yes` is the right test.
+- **The weight-neutral race.** Waiting on `preferences.weightNeutral` is the switch the
+  assertions are about; the case passed in both full suite runs.
+- **The dead state that was removed** was genuinely unreferenced, and the Health Connect
+  switch the recipe requires still renders from `model.healthConnect`.
+
+### Confirmed and fixed
+
+- **`AppContainer.close()` opened the database it was closing.** The first pass added
+  `runCatching { mcpRuntime.stop() }` to `close()`, but `mcpRuntime` was a `by lazy` over
+  `store`, so closing a container that had never opened its store built the gateway, the
+  store, the encrypted database file and the whole seeding path on the way out — then
+  closed it. `mcpRuntime` now sits behind a named `lazy` and `close()` stops it only when
+  it exists (`AppContainer.kt`). The new case
+  `closingAContainerThatNeverOpenedTheStoreOpensNoDatabase` in `CoachExitTest` fails
+  against the pre-fix code with "close() must not create the database it is closing" and
+  passes now.
+- **A photo-encryption exit test that could not pass or fail for the right reason.**
+  `VitalsExitTest.aPhotoIsEncryptedInTheStoreAndComesBackFromTrash` scanned the whole
+  SQLCipher file for the three bytes `FF D8 FF` and called their absence proof that the
+  photo was encrypted. `body_photo.bytes_b64` is a TEXT column, so a *plaintext* database
+  would hold the base64 of the JPEG and never that magic — the assertion could not detect
+  the leak it names. What it could do is match three arbitrary bytes of ciphertext, with
+  probability about one per 16 MB of file, and it did: the test failed on the third full
+  emulator suite run of this audit having passed the first two. The needle is now a
+  64-character slice of the payload actually stored, which is what an unencrypted file
+  would contain, plus the plain SQLite header. Both are what `EncryptedDatabaseTest`
+  already checks deterministically, so the exit test is now sound in the same way instead
+  of a coin flip. The budget and the intent are unchanged; only the needle is.
+
+### Left as findings, not changed
+
+- **An MCP write can never be retried safely.** `McpGateway.writeObservation` mints
+  `mcp:<token>:<random>` as the idempotency key on every call, so
+  `ObservationRepository.record`'s duplicate check can never fire for it, and the result
+  is returned without reading `RecordOutcome`. `WATER` is a `sumAll` type, so an
+  assistant that retries `openhealth_log_water` after a timeout doubles the day's water.
+  The fix is an optional client-supplied key, which changes a documented tool schema
+  (`docs/adr/0020` §7) and is the owner's call.
+- **The coach's training data has no Health Connect gate.** `CoachDaily` and `CoachVital`
+  carry `viaHealthConnect` and `CoachPrompt` fails closed on an unknown source, but
+  `CoachSessionSummary`, the routines and `CoachRecovery` carry no flag and are
+  serialised unfiltered. No path writes a `session` row from Health Connect today (the
+  bus turns an `ExerciseSessionRecord` into an observation), so this is a fail-open seam
+  rather than a live leak — but it is the one half of the dataset that does not obey
+  `pr.md` §12.3 by construction.
+- **Activities never reach layer 3.** `RollupEngine.rebuildDayInternal` builds a day from
+  observations, nutrition entries, measurements, sessions and vitals; it never reads the
+  `activity` table, and `rebuildAll()` omits activity days. `ActivityRepository.record`
+  writes no observation either, so an in-app GPS run contributes no `DISTANCE`,
+  `ACTIVE_MINUTES` or `ACTIVE_CALORIES` rollup while the same run arriving through Health
+  Connect does. Layer 3 is therefore source-dependent and `pr.md` §7.6's dedup never
+  arbitrates between the two copies. Adding activity rollups before that dedup rule is
+  decided would double-count a run recorded on the phone and synced from the watch, so
+  the rule is the owner's call first (B11).
+- **One rejected change blocks the sync push queue for good.** `SyncEngine.pushPending`
+  throws `SyncFailure` as soon as `response.rejected` is non-empty, which aborts the pass
+  and leaves the change at the head of the queue; the next pass sends the same page and
+  is rejected again. There is no quarantine and no `SyncScreen` surface for a rejected
+  change, unlike `sync_conflict` (B13).
+- **The quick-add Vitals tile is still a stub.** `QuickAddSheet` renders
+  `QuickAddMode.VITALS` as `LaterForm` reading "Vital readings are not here yet /
+  Blood pressure, glucose and temperature arrive with the vitals screens", which B7
+  shipped. `FOOD` and `SET` were wired to their real flows; `VITALS` was not. The design
+  recipe says a quick-add tile "opens its own small sheet" (`DESIGN.md` §14.2), so the
+  repair is a sheet, not a navigation, and that is design work.
+- **`pr.md` §6.26's "set < 2 s" exit test does not hold reliably.**
+  `TrainingExitTest.aSetIsLoggedInUnderTwoSecondsWithTheFieldsPrefilled` failed at
+  **12 042 ms** in one full emulator suite run, passed in the next full run, and passes
+  alone. The window it measures spans a concurrent `rebuild()` holding the database, so
+  the assertion measures contention, not the action. The budget was not touched; this is
+  the `QueryBenchmarkTest` shape again, now on a product exit test.
+- **Smaller.** `HttpUrlConnectionTransport` reads a response body with no size cap, so a
+  self-hosted endpoint can exhaust memory; `CoachPresenter.model()` loads the whole
+  conversation and calls `applier.planFor` (a full plan and catalogue read) once per
+  proposal; `SyncRepository.resolveConflict` lacks the composite-key guard `applyOne`
+  has. The first pass's own open findings were re-confirmed: no manual entry mints a
+  layer-1 raw record (eight `raw_record_id = null` call sites in `BodyPresenter`,
+  `TrainingPresenter` and `AppViewModel`), `pr.md` §6.30's deep links, tiles and intents
+  are unbuilt, and `DESIGN.md` §10.4's status set is thinner than the first pass
+  recorded: `triangle` (attention) is missing as well as `x-octagon`, `trophy` and
+  `snowflake`, leaving only `check` and `flame` of the six.
+- **An uncommitted working tree was inherited.** `.gitignore` carries an uncommitted
+  `gaps.md` line and `gaps.md`, a 252-line scratch audit, sits in the tree. Neither is
+  recorded anywhere. They were left in place rather than deleted.
+
+### Verification
+
+`./gradlew check :app-android:assembleDebug :app-wear:assembleDebug` **BUILD SUCCESSFUL**
+— **906 JVM tests** (453 `:core`, 183 `:data`, 7 `:sync`, 55 `:integrations`, 172 `:ui`,
+14 `:server`, 10 across the three tools, 12 `:app-wear`) and **376 goldens**, both counts
+checked against the test XML and the committed PNGs rather than taken from the entry
+above. The phone connected suite was run three times end to end. The third run is what
+surfaced the photo-test defect above, and the `set < 2 s` budget failed in the first; with
+both addressed the suite is **72/72** (71 as recorded, plus the new case). Each of the two
+fixes was re-run against its pre-fix code to prove the test fails. No device output,
+serial or screenshot entered the tree.

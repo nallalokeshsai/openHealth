@@ -65,17 +65,23 @@ class AppContainer(
         ensureRecordingSource(local)
         ensureStravaSource(local)
         ensureWatchSources(local)
+        ensureHealthConnectFlags(local)
         ensureExerciseLibrary(local)
-        local.trash.purgeExpired()
+        // The 30-day Trash purge and the 90-day raw-payload compaction (`pr.md` §6.29,
+        // §7.1). Both are deadlines the person never has to ask for.
+        local.runStartupMaintenance()
         local
     }
     val store: LocalStore get() = storeLazy.value
     val foodIndex: app.openhealth.core.nutrition.BundledFoodIndex =
         foodIndexOverride ?: app.openhealth.android.nutrition.AssetFoodIndex(appContext)
+
+    /** The one outbound transport: the explicit barcode lookup and the coach's provider. */
+    private val httpTransport: app.openhealth.core.seam.HttpTransport by lazy {
+        app.openhealth.android.nutrition.HttpUrlConnectionTransport()
+    }
     val offClient: app.openhealth.integrations.food.OpenFoodFactsClient =
-        offClientOverride ?: app.openhealth.integrations.food.OpenFoodFactsClient(
-            app.openhealth.android.nutrition.HttpUrlConnectionTransport(),
-        )
+        offClientOverride ?: app.openhealth.integrations.food.OpenFoodFactsClient(httpTransport)
     val clock: ClockSeam = SystemClock
     val ids: IdGenerator = RandomIdGenerator()
 
@@ -94,6 +100,58 @@ class AppContainer(
     val preferences: PreferencesStore by lazy { PreferencesStore(store.settings, store.profile) }
     val restTimer: app.openhealth.core.seam.RestTimerSeam by lazy {
         app.openhealth.android.training.AndroidRestTimer(appContext)
+    }
+
+    /** B15: the coach's plan diff/apply/undo and the dataset it may send. */
+    val coachPlan: app.openhealth.data.repo.CoachPlanApplier by lazy {
+        app.openhealth.data.repo.CoachPlanApplier(store.db, store.training, store.coach)
+    }
+    val coachData: app.openhealth.data.repo.CoachDataBuilder by lazy {
+        app.openhealth.data.repo.CoachDataBuilder(store, coachPlan, zone)
+    }
+
+    /** B15: the local MCP tool surface, bound to one token per request. */
+    val mcpGateway: app.openhealth.data.repo.McpGateway by lazy {
+        app.openhealth.data.repo.McpGateway(
+            db = store.db,
+            store = store,
+            zone = zone,
+            appVersion = versionName,
+            weightNeutral = {
+                !preferences.snapshot().displayPolicy.shows(
+                    app.openhealth.core.preferences.SensitiveMetric.WEIGHT,
+                )
+            },
+        )
+    }
+
+    /** B15: the coach screen's holder. The provider key lives in [vault], never in state. */
+    val coach: app.openhealth.android.coach.CoachPresenter by lazy {
+        app.openhealth.android.coach.CoachPresenter(
+            context = appContext,
+            store = store,
+            vault = vault,
+            preferences = preferences,
+            data = coachData,
+            applier = coachPlan,
+            coach = store.coach,
+            transport = httpTransport,
+            policy = { preferences.snapshot().displayPolicy },
+        )
+    }
+
+    /** B15: the loopback MCP endpoint and its screen. Both are off by default. */
+    private val mcpRuntimeLazy = lazy {
+        app.openhealth.android.mcp.McpRuntime(store, mcpGateway)
+    }
+    val mcpRuntime: app.openhealth.android.mcp.McpRuntime get() = mcpRuntimeLazy.value
+    val mcp: app.openhealth.android.mcp.McpPresenter by lazy {
+        app.openhealth.android.mcp.McpPresenter(
+            context = appContext,
+            mcp = store.mcp,
+            preferences = preferences,
+            runtime = mcpRuntime,
+        )
     }
 
     /**
@@ -380,9 +438,28 @@ class AppContainer(
         }
     }
 
+    /**
+     * The transport flag on the two platform-bus sources (B15, `pr.md` §12.3). Schema v12
+     * adds the column with a false default, so an upgraded install gets the flag here
+     * even if Health Connect is never synced again.
+     */
+    private fun ensureHealthConnectFlags(local: LocalStore) {
+        listOf("health-connect", "garmin-hc").forEach { id ->
+            val source = local.sources.byId(app.openhealth.core.ids.SourceId(id))
+                ?: return@forEach
+            if (!source.viaHealthConnect) {
+                local.sources.upsert(source.copy(viaHealthConnect = true))
+            }
+        }
+    }
+
     /** The source a CSV or file import names, so it is never labelled as a manual entry. */
     private fun ensureImportSource(local: LocalStore) {
-        if (local.sources.byId(IMPORT_SOURCE) != null) return
+        if (local.sources.byId(IMPORT_SOURCE) !=
+            null
+        ) {
+            return
+        }
         local.sources.upsert(
             Source(
                 id = IMPORT_SOURCE,
@@ -481,6 +558,9 @@ class AppContainer(
     ).toCharArray()
 
     fun close() {
+        // Only a runtime that exists can hold a socket, and touching the lazy would
+        // open the database this call is here to close.
+        if (mcpRuntimeLazy.isInitialized()) runCatching { mcpRuntime.stop() }
         if (storeLazy.isInitialized()) store.close()
     }
 

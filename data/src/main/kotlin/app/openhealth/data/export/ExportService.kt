@@ -110,7 +110,16 @@ class ExportService(
         // A table added after an older export was written is restored empty, not
         // treated as corruption: the person's old backup still restores and the new
         // table starts clean. Column additions already default the same way.
-        val optional = setOf("body_photo")
+        val optional = setOf(
+            "body_photo",
+            // B15 tables, absent from every backup written before schema v12.
+            "coach_message",
+            "coach_proposal",
+            "coach_action",
+            "coach_snapshot",
+            "mcp_token",
+            "mcp_access",
+        )
         val missing = expected - byName.keys - optional
         val unknown = byName.keys - expected
         if (missing.isNotEmpty() || unknown.isNotEmpty()) {
@@ -135,6 +144,20 @@ class ExportService(
                     SqlDump.insert(driver, table, rowsOfTable)
                     rows += rowsOfTable.size
                 }
+            // A backup written before v12 has no transport flag and no revoked token
+            // state. The two known platform sources are platform-derived by definition,
+            // and a restored bearer token must be reissued rather than silently revived.
+            driver.execute(
+                null,
+                "UPDATE source SET via_health_connect = 1 " +
+                    "WHERE id IN ('health-connect', 'garmin-hc')",
+                0,
+            )
+            driver.execute(
+                null,
+                "UPDATE mcp_token SET revoked_at = ${clock.now().toEpochMilliseconds()}",
+                0,
+            )
             // Rebuild in the same transaction: a failed rebuild leaves the old database.
             RollupEngine(
                 observations = ObservationRepository(db),

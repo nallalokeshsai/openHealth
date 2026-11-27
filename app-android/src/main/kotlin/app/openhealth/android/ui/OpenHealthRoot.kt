@@ -856,6 +856,8 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onRestore = viewModel::restore,
                     onOpenDevices = { nav.navigate(DevicesRoute) },
                     onOpenSync = { nav.navigate(SyncRoute) },
+                    onOpenCoach = { nav.navigate(CoachRoute) },
+                    onOpenMcp = { nav.navigate(McpRoute) },
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
                     onOpenReview = { nav.navigate(ReviewRoute) },
@@ -879,6 +881,39 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                 onSyncNow = viewModel::syncNow,
                 onDisconnect = viewModel::disconnectSync,
                 onKeep = viewModel::keepSyncConflict,
+            )
+        }
+        composable<CoachRoute> {
+            LaunchedEffect(Unit) {
+                if (HealthModule.COACH in state.preferences.modules) {
+                    viewModel.openCoach()
+                } else {
+                    nav.popBackStack()
+                }
+            }
+            app.openhealth.ui.screens.coach.CoachScreen(
+                model = state.coach ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onToggle = viewModel::setCoachEnabled,
+                onCategory = viewModel::setCoachCategory,
+                onHealthConnect = viewModel::setCoachHealthConnect,
+                onProvider = viewModel::saveCoachSetup,
+                onClearKey = viewModel::clearCoachKey,
+                onAcceptDisclosure = viewModel::acceptCoachDisclosure,
+                onSend = viewModel::sendCoach,
+                onAccept = viewModel::acceptCoachProposal,
+                onDiscard = viewModel::discardCoachProposal,
+                onUndo = viewModel::undoCoachProposal,
+            )
+        }
+        composable<McpRoute> {
+            LaunchedEffect(Unit) { viewModel.openMcp() }
+            app.openhealth.ui.screens.mcp.McpScreen(
+                model = state.mcp ?: return@composable Loading(),
+                onBack = { nav.popBackStack() },
+                onToggle = viewModel::setMcpEnabled,
+                onCreate = viewModel::createMcpToken,
+                onRevoke = viewModel::revokeMcpToken,
             )
         }
         composable<SleepRoute> {

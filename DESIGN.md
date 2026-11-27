@@ -1,8 +1,11 @@
 # openHealth — Design System
 
-**Version:** 0.7
+**Version:** 0.7.1
 **Status:** Living document, first pass
-**Last revision:** 2026-11-27 — B14 adds the Wear OS companion recipe (§14.6) and the sixth Settings → Devices group (§14.2): one screen,
+**Last revision:** 2026-11-27 — B15 adds the coach surface and the external-access surface
+(§14.2): the coach setup, per-category consent, the diff card and the local MCP token list,
+all from existing components. The only new values are copy and the six consent labels; no
+new colour, type role, spacing value, radius or component. Previous: 2026-11-27 — B14 adds the Wear OS companion recipe (§14.6) and the sixth Settings → Devices group (§14.2): one screen,
 the same tokens, one accent on Log set, 44 dp targets and the existing type roles. No new
 colour, type role, spacing value or component. Previous: 2026-11-26 — B13 adds Settings →
 Data → Sync (§14.2): local-only,
@@ -1913,6 +1916,19 @@ the rationale as a 13 sp link, and **Accept** / **Discard**. The conversation
 is a list of proposals and notes, with no avatars, no typing dots and no accent
 bubble. The first send shows what leaves the phone, by category, before it
 leaves (`pr.md` §6.15).
+
+**Coach setup.** One pushed page from Settings → Coach: a card that turns the coach on,
+a provider card (`OhSegmentedControl` for Anthropic / self-hosted, a model field, a masked
+key field and the Keystore line), and a consent card of six `OhRow` + `OhSwitch` rows plus
+the separate Health Connect switch. The key is presence-only copy; the "what leaves the
+phone" list is a sheet of `OhRow` value rows. Accept is the one accent action on a diff
+card; Discard is quiet; Undo appears only for an accepted card in this session.
+
+**External access.** One pushed page from Settings → Data. A switch, the loopback
+endpoint in tabular figures, a token form (`OhChipStrip` of scopes) and two inset lists:
+tokens (label, scopes, created and last used, Revoke) and the audit (tool, time, Allowed /
+Refused). The one-time token is a selectable body line in `acc-ink`; it is never a modal
+and never a toast.
 
 **Search.** A sheet with a sticky field, recent items first, results grouped by
 type with a source chip, and a 13 sp count. Keyboard opens immediately; results
