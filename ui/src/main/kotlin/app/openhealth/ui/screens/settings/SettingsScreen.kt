@@ -1,6 +1,9 @@
 package app.openhealth.ui.screens.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -38,8 +41,12 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.core.content.ContextCompat
+import app.openhealth.core.formula.ActivityLevel
+import app.openhealth.core.formula.SexAtBirth
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ModulePreset
+import app.openhealth.core.preferences.NotificationPrefs
 import app.openhealth.core.preferences.ProfileGoal
 import app.openhealth.core.preferences.SensitiveMetric
 import app.openhealth.core.preferences.UnitSystem
@@ -66,14 +73,15 @@ private enum class SettingsSheet {
     NONE,
     PROFILE,
     MODULES,
+    NOTIFICATIONS,
     DEVICES,
     DATA,
     APPEARANCE,
     PRIVACY,
     ABOUT,
 }
-private enum class Confirm { NONE, DELETE_NOTES, EMPTY_TRASH }
-private enum class Passphrase { NONE, EXPORT, RESTORE }
+private enum class Confirm { NONE, DELETE_NOTES, EMPTY_TRASH, DELETE_ALL }
+private enum class Passphrase { NONE, EXPORT, RESTORE, VERIFY }
 
 /**
  * Settings, opened by the top-bar gear (`DESIGN.md` §14.1, §14.2). One scroll surface
@@ -87,6 +95,7 @@ fun SettingsScreen(
     onSaveProfile: (ProfileEdit) -> Unit,
     onToggleModule: (HealthModule, Boolean) -> Unit,
     onPreset: (ModulePreset) -> Unit,
+    onNotifications: (NotificationPrefs) -> Unit = {},
     onWeightNeutral: (Boolean) -> Unit,
     onTheme: (ThemeChoice) -> Unit,
     onAccent: (OhAccent) -> Unit,
@@ -96,11 +105,13 @@ fun SettingsScreen(
     onAppLock: (Boolean) -> Unit,
     onExport: (Uri, CharArray) -> Unit,
     onRestore: (Uri, CharArray) -> Unit,
+    onVerifyBackup: (Uri, CharArray) -> Unit = { _, _ -> },
     onOpenDevices: () -> Unit,
     onOpenSync: () -> Unit,
     onOpenCoach: () -> Unit,
     onOpenMcp: () -> Unit,
     onCompactRaw: () -> Unit = {},
+    onLeaveDemo: () -> Unit = {},
     onOpenTimeline: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenReview: () -> Unit,
@@ -111,15 +122,18 @@ fun SettingsScreen(
     onExternalActivity: () -> Unit,
     onDeleteAllNotes: () -> Unit,
     onEmptyTrash: () -> Unit,
+    onEraseAllData: () -> Unit = {},
     onUndoRestore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val notificationPermissionContext = androidx.compose.ui.platform.LocalContext.current
     var sheet by remember { mutableStateOf(SettingsSheet.NONE) }
     var confirm by remember { mutableStateOf(Confirm.NONE) }
     var passphrase by remember { mutableStateOf(Passphrase.NONE) }
     var confirmRestore by remember { mutableStateOf<CharArray?>(null) }
     var exportUri by remember { mutableStateOf<Uri?>(null) }
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    var verifyUri by remember { mutableStateOf<Uri?>(null) }
     val createDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
@@ -136,6 +150,17 @@ fun SettingsScreen(
             passphrase = Passphrase.RESTORE
         }
     }
+    val openVerify = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            verifyUri = uri
+            passphrase = Passphrase.VERIFY
+        }
+    }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -157,6 +182,13 @@ fun SettingsScreen(
                     ),
                     icon = OhModuleIcons.workout,
                     onClick = { sheet = SettingsSheet.MODULES },
+                )
+                GroupRow(
+                    title = stringResource(R.string.settings_notifications),
+                    detail = state.notificationsDetail,
+                    icon = OhIcons.timer,
+                    showDivider = true,
+                    onClick = { sheet = SettingsSheet.NOTIFICATIONS },
                 )
                 if (HealthModule.COACH in state.modules) {
                     GroupRow(
@@ -185,27 +217,29 @@ fun SettingsScreen(
                         onClick = onOpenSleep,
                     )
                 }
-                GroupRow(
-                    title = stringResource(R.string.clinical_open),
-                    detail = stringResource(R.string.clinical_settings_clinical),
-                    icon = OhObjectIcons.pill,
-                    showDivider = true,
-                    onClick = onOpenClinical,
-                )
-                GroupRow(
-                    title = stringResource(R.string.clinical_reports_title),
-                    detail = stringResource(R.string.clinical_settings_reports),
-                    icon = OhIcons.export,
-                    showDivider = true,
-                    onClick = onOpenReports,
-                )
-                GroupRow(
-                    title = stringResource(R.string.clinical_weekly_title),
-                    detail = stringResource(R.string.clinical_settings_weekly),
-                    icon = OhIcons.stats,
-                    showDivider = true,
-                    onClick = onOpenWeeklyReview,
-                )
+                if (HealthModule.VITALS in state.modules) {
+                    GroupRow(
+                        title = stringResource(R.string.clinical_open),
+                        detail = stringResource(R.string.clinical_settings_clinical),
+                        icon = OhObjectIcons.pill,
+                        showDivider = true,
+                        onClick = onOpenClinical,
+                    )
+                    GroupRow(
+                        title = stringResource(R.string.clinical_reports_title),
+                        detail = stringResource(R.string.clinical_settings_reports),
+                        icon = OhIcons.export,
+                        showDivider = true,
+                        onClick = onOpenReports,
+                    )
+                    GroupRow(
+                        title = stringResource(R.string.clinical_weekly_title),
+                        detail = stringResource(R.string.clinical_settings_weekly),
+                        icon = OhIcons.stats,
+                        showDivider = true,
+                        onClick = onOpenWeeklyReview,
+                    )
+                }
                 GroupRow(
                     title = stringResource(R.string.settings_data),
                     detail = stringResource(R.string.settings_data_detail),
@@ -262,11 +296,38 @@ fun SettingsScreen(
                     showChevron = true,
                     onClick = { confirm = Confirm.EMPTY_TRASH },
                 )
+                OhRow(
+                    title = stringResource(R.string.settings_erase_all),
+                    leadingIcon = OhIcons.delete,
+                    destructive = true,
+                    showDivider = true,
+                    showChevron = true,
+                    onClick = { confirm = Confirm.DELETE_ALL },
+                )
             }
             Spacer(Modifier.height(OhTheme.space.s8))
         }
     }
 
+    NotificationsSheet(
+        visible = sheet == SettingsSheet.NOTIFICATIONS,
+        state = state,
+        onDismiss = { sheet = SettingsSheet.NONE },
+        onChange = { prefs ->
+            // Ask at the point of use, once a reminder is actually switched on.
+            val wants = prefs.enabled && (prefs.medication || prefs.daily || prefs.weekly)
+            if (wants && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val granted = ContextCompat.checkSelfPermission(
+                    notificationPermissionContext,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+                if (!granted) {
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+            onNotifications(prefs)
+        },
+    )
     ProfileSheet(
         visible = sheet == SettingsSheet.PROFILE,
         state = state,
@@ -293,6 +354,7 @@ fun SettingsScreen(
         onOpenSync = onOpenSync,
         onOpenMcp = onOpenMcp,
         onCompactRaw = onCompactRaw,
+        onLeaveDemo = onLeaveDemo,
         onExport = {
             sheet = SettingsSheet.NONE
             onExternalActivity()
@@ -302,6 +364,11 @@ fun SettingsScreen(
             sheet = SettingsSheet.NONE
             onExternalActivity()
             openDocument.launch(arrayOf("application/octet-stream", "*/*"))
+        },
+        onVerify = {
+            sheet = SettingsSheet.NONE
+            onExternalActivity()
+            openVerify.launch(arrayOf("application/octet-stream", "*/*"))
         },
         onUndoRestore = onUndoRestore,
     )
@@ -334,9 +401,11 @@ fun SettingsScreen(
             when (passphrase) {
                 Passphrase.EXPORT -> exportUri?.let { onExport(it, secret) }
                 Passphrase.RESTORE -> if (restoreUri != null) confirmRestore = secret
+                Passphrase.VERIFY -> verifyUri?.let { onVerifyBackup(it, secret) }
                 Passphrase.NONE -> Unit
             }
             if (passphrase == Passphrase.EXPORT) exportUri = null
+            if (passphrase == Passphrase.VERIFY) verifyUri = null
             passphrase = Passphrase.NONE
         },
     )
@@ -373,6 +442,20 @@ fun SettingsScreen(
             onDeleteAllNotes()
         },
         cancelLabel = stringResource(R.string.settings_cancel),
+        onCancel = { confirm = Confirm.NONE },
+    )
+    OhDialog(
+        visible = confirm == Confirm.DELETE_ALL,
+        onDismiss = { confirm = Confirm.NONE },
+        title = stringResource(R.string.settings_erase_all_title),
+        message = stringResource(R.string.settings_erase_all_message),
+        primaryLabel = stringResource(R.string.settings_erase_all_confirm),
+        destructive = true,
+        onPrimary = {
+            confirm = Confirm.NONE
+            onEraseAllData()
+        },
+        cancelLabel = stringResource(R.string.settings_erase_all_cancel),
         onCancel = { confirm = Confirm.NONE },
     )
     OhDialog(
@@ -413,6 +496,8 @@ private fun MessageLine(message: SettingsMessage) {
                     SettingsMessage.WORKING -> R.string.settings_working
                     SettingsMessage.EXPORT_SAVED -> R.string.settings_export_saved
                     SettingsMessage.EXPORT_FAILED -> R.string.settings_export_failed
+                    SettingsMessage.BACKUP_VERIFIED -> R.string.settings_backup_verified
+                    SettingsMessage.BACKUP_INVALID -> R.string.settings_backup_invalid
                     SettingsMessage.RESTORE_DONE -> R.string.settings_restore_done
                     SettingsMessage.RESTORE_FAILED -> R.string.settings_restore_failed
                     SettingsMessage.WRONG_PASSPHRASE -> R.string.settings_wrong_passphrase
@@ -435,6 +520,7 @@ private fun MessageLine(message: SettingsMessage) {
 
 private val ERROR_MESSAGES = setOf(
     SettingsMessage.EXPORT_FAILED,
+    SettingsMessage.BACKUP_INVALID,
     SettingsMessage.RESTORE_FAILED,
     SettingsMessage.WRONG_PASSPHRASE,
     SettingsMessage.PASSWORDS_DIFFER,
@@ -509,6 +595,8 @@ private fun ProfileSheet(
     var name by remember(state.profileName) { mutableStateOf(state.profileName) }
     var birthDate by remember(state.profileName) { mutableStateOf(state.profileBirthDate) }
     var goal by remember(state.profileName) { mutableStateOf(state.profileGoal) }
+    var sex by remember(state.profileName) { mutableStateOf(state.profileSex) }
+    var activity by remember(state.profileName) { mutableStateOf(state.profileActivity) }
     var height by remember(state.profileName) { mutableStateOf(state.profileHeight) }
     var weight by remember(state.profileName) { mutableStateOf(state.profileWeight) }
     var units by remember(state.profileName) { mutableStateOf(state.profileUnits) }
@@ -527,6 +615,8 @@ private fun ProfileSheet(
                     name = name,
                     birthDate = birthDate,
                     goal = goal,
+                    sexAtBirth = sex,
+                    activityLevel = activity,
                     height = if (heightTyped) height else "",
                     weight = if (weightTyped) weight else "",
                     units = units,
@@ -570,6 +660,44 @@ private fun ProfileSheet(
                         onClick = { goal = option },
                     )
                 }
+        }
+        Spacer(Modifier.height(OhTheme.space.s5))
+        Text(
+            text = stringResource(R.string.settings_sex_title),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        OhChipStrip {
+            OhChip(
+                text = stringResource(R.string.onb_sex_female),
+                selected = sex == SexAtBirth.FEMALE,
+                onClick = { sex = SexAtBirth.FEMALE },
+            )
+            OhChip(
+                text = stringResource(R.string.onb_sex_male),
+                selected = sex == SexAtBirth.MALE,
+                onClick = { sex = SexAtBirth.MALE },
+            )
+            OhChip(
+                text = stringResource(R.string.onb_sex_not_saying),
+                selected = sex == null,
+                onClick = { sex = null },
+            )
+        }
+        Spacer(Modifier.height(OhTheme.space.s5))
+        Text(
+            text = stringResource(R.string.settings_activity_title),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        OhChipStrip {
+            ActivityLevel.entries.forEach { level ->
+                OhChip(
+                    text = level.label(),
+                    selected = activity == level,
+                    onClick = { activity = level },
+                )
+            }
         }
         Spacer(Modifier.height(OhTheme.space.s5))
         Row(horizontalArrangement = Arrangement.spacedBy(OhTheme.space.s3)) {
@@ -687,11 +815,15 @@ private fun DataSheet(
     onOpenSync: () -> Unit,
     onOpenMcp: () -> Unit,
     onCompactRaw: () -> Unit = {},
+    onLeaveDemo: () -> Unit = {},
+    onVerify: () -> Unit = {},
     onExport: () -> Unit,
     onRestore: () -> Unit,
     onUndoRestore: () -> Unit,
 ) {
     if (!visible) return
+    var confirmCompact by remember { mutableStateOf(false) }
+    var confirmLeaveDemo by remember { mutableStateOf(false) }
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
@@ -699,6 +831,18 @@ private fun DataSheet(
         cancelLabel = stringResource(R.string.settings_close),
         onCancel = onDismiss,
     ) {
+        if (state.demo) {
+            OhInsetGroup {
+                OhRow(
+                    title = stringResource(R.string.settings_demo_row),
+                    subtitle = stringResource(R.string.settings_demo_row_body),
+                    leadingIcon = OhIcons.info,
+                    showChevron = true,
+                    onClick = { confirmLeaveDemo = true },
+                )
+            }
+            Spacer(Modifier.height(OhTheme.space.s5))
+        }
         OhInsetGroup {
             OhRow(
                 title = stringResource(R.string.timeline_title),
@@ -765,7 +909,7 @@ private fun DataSheet(
                     leadingIcon = OhIcons.delete,
                     showDivider = true,
                     showChevron = true,
-                    onClick = onCompactRaw,
+                    onClick = { confirmCompact = true },
                 )
             }
             OhRow(
@@ -773,7 +917,9 @@ private fun DataSheet(
                 subtitle = if (state.busy) {
                     stringResource(R.string.settings_working)
                 } else {
-                    stringResource(R.string.settings_export_body)
+                    state.backupDetail.ifEmpty {
+                        stringResource(R.string.settings_export_body)
+                    }
                 },
                 leadingIcon = OhIcons.export,
                 showDivider = true,
@@ -793,6 +939,15 @@ private fun DataSheet(
                 showChevron = true,
                 enabled = !state.busy,
                 onClick = if (state.busy) null else onRestore,
+            )
+            OhRow(
+                title = stringResource(R.string.settings_verify),
+                subtitle = stringResource(R.string.settings_verify_body),
+                leadingIcon = OhIcons.check,
+                showDivider = true,
+                showChevron = true,
+                enabled = !state.busy,
+                onClick = if (state.busy) null else onVerify,
             )
         }
         if (state.hasRestoreSnapshot) {
@@ -827,7 +982,164 @@ private fun DataSheet(
             color = OhTheme.colors.label2,
         )
     }
+    OhDialog(
+        visible = confirmCompact,
+        onDismiss = { confirmCompact = false },
+        title = stringResource(R.string.settings_raw_compact_title),
+        message = stringResource(R.string.settings_raw_compact_body),
+        primaryLabel = stringResource(R.string.settings_raw_compact_confirm),
+        cancelLabel = stringResource(R.string.settings_close),
+        destructive = true,
+        onPrimary = {
+            confirmCompact = false
+            onCompactRaw()
+        },
+        onCancel = { confirmCompact = false },
+    )
+    OhDialog(
+        visible = confirmLeaveDemo,
+        onDismiss = { confirmLeaveDemo = false },
+        title = stringResource(R.string.settings_leave_demo_title),
+        message = stringResource(R.string.settings_leave_demo_body),
+        primaryLabel = stringResource(R.string.settings_leave_demo_confirm),
+        cancelLabel = stringResource(R.string.settings_leave_demo_cancel),
+        destructive = true,
+        onPrimary = {
+            confirmLeaveDemo = false
+            onLeaveDemo()
+        },
+        onCancel = { confirmLeaveDemo = false },
+    )
 }
+
+@Composable
+private fun NotificationsSheet(
+    visible: Boolean,
+    state: SettingsState,
+    onDismiss: () -> Unit,
+    onChange: (NotificationPrefs) -> Unit,
+) {
+    if (!visible) return
+    val prefs = state.notifications
+    OhModalSheet(
+        visible = true,
+        onDismiss = onDismiss,
+        title = stringResource(R.string.settings_notifications),
+        cancelLabel = stringResource(R.string.settings_close),
+        onCancel = onDismiss,
+    ) {
+        Text(
+            text = stringResource(R.string.settings_notifications_body),
+            style = OhTheme.type.footnote,
+            color = OhTheme.colors.label2,
+        )
+        Spacer(Modifier.height(OhTheme.space.s4))
+        OhInsetGroup {
+            OhRow(
+                title = stringResource(R.string.settings_notify_master),
+                subtitle = stringResource(R.string.settings_notify_master_body),
+                trailing = {
+                    OhSwitch(
+                        checked = prefs.enabled,
+                        onCheckedChange = { onChange(prefs.copy(enabled = it)) },
+                        contentDescription = stringResource(R.string.settings_notify_master),
+                    )
+                },
+            )
+            if (prefs.enabled) {
+                OhRow(
+                    title = stringResource(R.string.settings_notify_medication),
+                    subtitle = stringResource(R.string.settings_notify_medication_body),
+                    showDivider = true,
+                    trailing = {
+                        OhSwitch(
+                            checked = prefs.medication,
+                            onCheckedChange = { onChange(prefs.copy(medication = it)) },
+                            contentDescription = stringResource(
+                                R.string.settings_notify_medication,
+                            ),
+                        )
+                    },
+                )
+                OhRow(
+                    title = stringResource(R.string.settings_notify_daily),
+                    subtitle = stringResource(R.string.settings_notify_daily_body),
+                    showDivider = true,
+                    trailing = {
+                        OhSwitch(
+                            checked = prefs.daily,
+                            onCheckedChange = { onChange(prefs.copy(daily = it)) },
+                            contentDescription = stringResource(R.string.settings_notify_daily),
+                        )
+                    },
+                )
+                OhRow(
+                    title = stringResource(R.string.settings_notify_weekly),
+                    subtitle = stringResource(R.string.settings_notify_weekly_body),
+                    showDivider = true,
+                    trailing = {
+                        OhSwitch(
+                            checked = prefs.weekly,
+                            onCheckedChange = { onChange(prefs.copy(weekly = it)) },
+                            contentDescription = stringResource(
+                                R.string.settings_notify_weekly,
+                            ),
+                        )
+                    },
+                )
+                OhRow(
+                    title = stringResource(R.string.settings_notify_quiet),
+                    subtitle = stringResource(R.string.settings_notify_quiet_body),
+                    showDivider = true,
+                    trailing = {
+                        OhSwitch(
+                            checked = prefs.quietHours,
+                            onCheckedChange = { onChange(prefs.copy(quietHours = it)) },
+                            contentDescription = stringResource(
+                                R.string.settings_notify_quiet,
+                            ),
+                        )
+                    },
+                )
+            }
+        }
+        if (prefs.enabled && prefs.quietHours) {
+            Spacer(Modifier.height(OhTheme.space.s5))
+            Text(
+                text = stringResource(R.string.settings_notify_from),
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
+            OhChipStrip {
+                QUIET_STARTS.forEach { time ->
+                    OhChip(
+                        text = time,
+                        selected = prefs.quietStart == time,
+                        onClick = { onChange(prefs.copy(quietStart = time)) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(OhTheme.space.s3))
+            Text(
+                text = stringResource(R.string.settings_notify_to),
+                style = OhTheme.type.footnote,
+                color = OhTheme.colors.label2,
+            )
+            OhChipStrip {
+                QUIET_ENDS.forEach { time ->
+                    OhChip(
+                        text = time,
+                        selected = prefs.quietEnd == time,
+                        onClick = { onChange(prefs.copy(quietEnd = time)) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val QUIET_STARTS = listOf("20:00", "21:00", "22:00", "23:00", "00:00")
+private val QUIET_ENDS = listOf("06:00", "07:00", "08:00", "09:00", "10:00")
 
 @Composable
 private fun AppearanceSheet(
@@ -1053,18 +1365,19 @@ private fun PassphraseSheet(
     var second by remember(target) { mutableStateOf("") }
     var error by remember(target) { mutableStateOf(false) }
     val export = target == Passphrase.EXPORT
+    val verify = target == Passphrase.VERIFY
     OhModalSheet(
         visible = true,
         onDismiss = onDismiss,
-        title = if (export) {
-            stringResource(R.string.settings_export)
-        } else {
-            stringResource(R.string.settings_restore)
+        title = when {
+            export -> stringResource(R.string.settings_export)
+            verify -> stringResource(R.string.settings_verify)
+            else -> stringResource(R.string.settings_restore)
         },
-        primaryLabel = if (export) {
-            stringResource(R.string.settings_export_action)
-        } else {
-            stringResource(R.string.settings_restore_action)
+        primaryLabel = when {
+            export -> stringResource(R.string.settings_export_action)
+            verify -> stringResource(R.string.settings_verify_action)
+            else -> stringResource(R.string.settings_restore_action)
         },
         // An export sealed with an empty passphrase is not protected at all.
         primaryEnabled = first.isNotEmpty() && (!export || second.isNotEmpty()),
@@ -1079,10 +1392,10 @@ private fun PassphraseSheet(
         onCancel = onDismiss,
     ) {
         Text(
-            text = if (export) {
-                stringResource(R.string.settings_export_passphrase_body)
-            } else {
-                stringResource(R.string.settings_restore_passphrase_body)
+            text = when {
+                export -> stringResource(R.string.settings_export_passphrase_body)
+                verify -> stringResource(R.string.settings_verify_passphrase_body)
+                else -> stringResource(R.string.settings_restore_passphrase_body)
             },
             style = OhTheme.type.footnote,
             color = OhTheme.colors.label2,
@@ -1165,6 +1478,17 @@ private fun ModulePreset.label(): String = stringResource(
         ModulePreset.TRAINING_AND_BODY -> R.string.preset_training_body
         ModulePreset.EVERYTHING -> R.string.preset_everything
         ModulePreset.CUSTOM -> R.string.preset_custom
+    },
+)
+
+@Composable
+private fun ActivityLevel.label(): String = stringResource(
+    when (this) {
+        ActivityLevel.SEDENTARY -> R.string.activity_sedentary
+        ActivityLevel.LIGHTLY_ACTIVE -> R.string.activity_light
+        ActivityLevel.MODERATELY_ACTIVE -> R.string.activity_moderate
+        ActivityLevel.VERY_ACTIVE -> R.string.activity_very
+        ActivityLevel.EXTREMELY_ACTIVE -> R.string.activity_extremely
     },
 )
 

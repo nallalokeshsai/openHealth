@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The monochrome sibling of the mark for themed icons (Android 13+). An outline
+     keeps the pulse visible once the system tints the silhouette. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M54,82 C50,78 26,62 26,44 C26,34 33,27 43,27 C48,27 52,30 54,35 C56,30 60,27 65,27 C75,27 82,34 82,44 C82,62 58,78 54,82 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M34,53 H45 L49,46 L56,63 L61,53 H74"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

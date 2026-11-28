@@ -39,6 +39,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.ui.R
+import app.openhealth.ui.components.ChartTableModel
+import app.openhealth.ui.components.ChartTableSheet
 import app.openhealth.ui.components.OhBarRow
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonSize
@@ -403,6 +405,7 @@ private fun EnergyCard(
     onShowProvenance: () -> Unit,
 ) {
     val energy = model.energy ?: return
+    var showTable by rememberSaveable { mutableStateOf(false) }
     OhCard {
         OhCardHeader(
             eyebrow = dateEyebrow(model),
@@ -485,6 +488,56 @@ private fun EnergyCard(
         model.water?.let {
             WaterRow(it, onWater, onLogWater)
         }
+        Spacer(Modifier.height(OhTheme.space.s3))
+        OhRow(
+            title = stringResource(R.string.chart_show_table),
+            onClick = { showTable = true },
+            showChevron = true,
+        )
+    }
+    if (showTable) {
+        val measure = stringResource(R.string.nutrition_table_measure)
+        val amount = stringResource(R.string.nutrition_table_amount)
+        val rows = buildList {
+            add(
+                listOf(
+                    stringResource(R.string.nutrition_table_energy_in),
+                    stringResource(R.string.nutrition_table_kcal, number(energy.kcalIn)),
+                ),
+            )
+            add(
+                listOf(
+                    stringResource(R.string.nutrition_table_target),
+                    energy.kcalTarget?.let {
+                        stringResource(R.string.nutrition_table_kcal, number(it))
+                    } ?: stringResource(R.string.nutrition_energy_no_target),
+                ),
+            )
+            energy.remainingKcal?.let {
+                add(
+                    listOf(
+                        stringResource(R.string.nutrition_table_remaining),
+                        stringResource(R.string.nutrition_table_kcal, number(kotlin.math.abs(it))),
+                    ),
+                )
+            }
+            energy.bars.forEach { bar ->
+                add(
+                    listOf(
+                        macroLabel(bar.key),
+                        stringResource(R.string.nutrition_table_grams, number(bar.grams)),
+                    ),
+                )
+            }
+        }
+        ChartTableSheet(
+            model = ChartTableModel(
+                title = stringResource(R.string.nutrition_energy_table_title),
+                columns = listOf(measure, amount),
+                rows = rows,
+            ),
+            onDismiss = { showTable = false },
+        )
     }
 }
 

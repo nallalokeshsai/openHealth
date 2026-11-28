@@ -108,6 +108,7 @@ import app.openhealth.ui.screens.train.RoutineDetailScreen
 import app.openhealth.ui.screens.train.RoutineEditorScreen
 import app.openhealth.ui.screens.train.SessionSummaryScreen
 import app.openhealth.ui.screens.train.TrainRootScreen
+import app.openhealth.ui.screens.vitals.AddReadingSheet
 import app.openhealth.ui.screens.vitals.PhotoCompareSheet
 import app.openhealth.ui.screens.vitals.VitalDetailScreen
 import app.openhealth.ui.theme.OhTheme
@@ -166,7 +167,7 @@ fun OpenHealthRoot(container: AppContainer, injected: AppViewModel? = null) {
                     LockScreen(
                         message = state.lockMessage,
                         onUnlock = { activity?.let(viewModel::unlock) },
-                        onDisableLock = viewModel::disableAppLock,
+                        onDisableLock = { activity?.let(viewModel::disableAppLock) },
                     )
                 }
                 !state.onboardingComplete -> {
@@ -257,6 +258,17 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             launchSingleTop = true
         }
     }
+    // Every quick-add entry point (top bar sheet, Today's inline tiles) goes through the
+    // same routing: Set starts a live session, everything else opens its own form.
+    val quickAction: (QuickAction?) -> Unit = { action ->
+        if (action == QuickAction.SET) {
+            viewModel.closeQuickAdd()
+            viewModel.startFreestyle()
+            nav.navigate(LiveSessionRoute())
+        } else {
+            viewModel.openQuickAdd(action)
+        }
+    }
     NavHost(navController = nav, startDestination = TodayRoute) {
         composable<TodayRoute> {
             RootFrame(
@@ -275,7 +287,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     TodayScreen(
                         model = today,
                         displayPolicy = state.preferences.displayPolicy,
-                        onQuickAdd = viewModel::openQuickAdd,
+                        onQuickAdd = quickAction,
                         onOpenTimeline = { nav.navigate(TimelineRoute) },
                         onOpenTrain = { goTab(2) },
                         onOpenNutrition = { viewModel.openQuickAdd(QuickAction.FOOD) },
@@ -874,20 +886,30 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
                     onSaveProfile = viewModel::saveProfile,
                     onToggleModule = viewModel::toggleModule,
                     onPreset = viewModel::setPreset,
+                    onNotifications = viewModel::setNotifications,
                     onWeightNeutral = viewModel::setWeightNeutral,
                     onTheme = viewModel::setTheme,
                     onAccent = viewModel::setAccent,
                     onHighContrast = viewModel::setHighContrast,
                     onReduceTransparency = viewModel::setReduceTransparency,
                     onReducedMotion = viewModel::setReducedMotion,
-                    onAppLock = viewModel::setAppLock,
+                    onAppLock = { enabled ->
+                        if (enabled) {
+                            viewModel.setAppLock(true)
+                        } else {
+                            viewModel.disableAppLock(context.findActivity())
+                        }
+                    },
                     onExport = viewModel::export,
                     onRestore = viewModel::restore,
+                    onVerifyBackup = viewModel::verifyBackup,
                     onOpenDevices = { nav.navigate(DevicesRoute) },
                     onOpenSync = { nav.navigate(SyncRoute) },
                     onOpenCoach = { nav.navigate(CoachRoute) },
                     onOpenMcp = { nav.navigate(McpRoute) },
                     onCompactRaw = viewModel::compactRawPayloads,
+                    onLeaveDemo = viewModel::leaveDemoMode,
+                    onEraseAllData = viewModel::eraseAllData,
                     onOpenTimeline = { nav.navigate(TimelineRoute) },
                     onOpenTrash = { nav.navigate(TrashRoute) },
                     onOpenReview = { nav.navigate(ReviewRoute) },
@@ -961,7 +983,13 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             )
         }
         composable<ClinicalRoute> {
-            LaunchedEffect(Unit) { viewModel.openClinical() }
+            LaunchedEffect(Unit) {
+                if (HealthModule.VITALS in state.preferences.modules) {
+                    viewModel.openClinical()
+                } else {
+                    nav.popBackStack()
+                }
+            }
             val importLabs = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument(),
             ) { uri -> if (uri != null) viewModel.importLabsCsv(uri) }
@@ -1232,21 +1260,7 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
             },
         ),
         onDismiss = viewModel::closeQuickAdd,
-        onSelect = { action ->
-            if (action == QuickAction.SET) {
-                viewModel.closeQuickAdd()
-                viewModel.startFreestyle()
-                nav.navigate(LiveSessionRoute())
-            } else if (action == QuickAction.VITALS) {
-                viewModel.closeQuickAdd()
-                nav.navigate(TAB_ROUTES[1]) {
-                    popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
-                    launchSingleTop = true
-                }
-            } else {
-                viewModel.openQuickAdd(action)
-            }
-        },
+        onSelect = quickAction,
         onBack = viewModel::quickAddBack,
         onNoteChange = viewModel::onQuickAddNote,
         onWaterChange = viewModel::onQuickAddWater,
@@ -1256,6 +1270,19 @@ private fun AppShell(state: AppState, viewModel: AppViewModel) {
         onSave = viewModel::saveQuickAdd,
         onRepeat = viewModel::repeat,
     )
+    if (state.quickVital) {
+        AddReadingSheet(
+            visible = true,
+            initialType = null,
+            imperial = state.profile?.units == "imperial",
+            homeSlot = null,
+            onDismiss = viewModel::closeQuickVital,
+            onSave = { draft ->
+                viewModel.closeQuickVital()
+                viewModel.saveVitalReading(draft)
+            },
+        )
+    }
     val showKcal = state.preferences.displayPolicy.shows(
         app.openhealth.core.preferences.SensitiveMetric.CALORIES,
     )

@@ -18,6 +18,7 @@ import app.openhealth.ui.R
 import app.openhealth.ui.body.BodyMapModel
 import app.openhealth.ui.body.BodyMapVariant
 import app.openhealth.ui.body.OhBodyMap
+import app.openhealth.ui.body.PlanWindow
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhMediaRow
@@ -85,6 +86,7 @@ fun YogaLibraryScreen(
                             model = BodyMapModel.plan(
                                 sex = app.openhealth.core.body.BodySex.MALE,
                                 coverage = yogaCoverage(flow.primaryMuscles, flow.secondaryMuscles),
+                                window = PlanWindow.SESSION,
                             ),
                             variant = BodyMapVariant.MINI,
                         )
@@ -133,6 +135,7 @@ fun YogaLibraryScreen(
                 model = BodyMapModel.plan(
                     sex = app.openhealth.core.body.BodySex.MALE,
                     coverage = yogaCoverage(pose.primaryMuscles, pose.secondaryMuscles),
+                    window = PlanWindow.SESSION,
                 ),
                 variant = BodyMapVariant.MINI,
             )

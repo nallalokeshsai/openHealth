@@ -1,8 +1,10 @@
 # openHealth — Design System
 
-**Version:** 0.7.1
+**Version:** 0.7.2
 **Status:** Living document, first pass
-**Last revision:** 2026-11-27 — B15 adds the coach surface and the external-access surface
+**Last revision:** 2026-11-28 — the brand mark is decided (§10.5): a geometric heart with
+a pulse line, accent on `bg`, replacing the placeholder ring-and-dot splash and the
+clock-like launcher mark. Previous: 2026-11-27 — B15 adds the coach surface and the external-access surface
 (§14.2): the coach setup, per-category consent, the diff card and the local MCP token list,
 all from existing components. The only new values are copy and the six consent labels; no
 new colour, type role, spacing value, radius or component. Previous: 2026-11-27 — B14 adds the Wear OS companion recipe (§14.6) and the sixth Settings → Devices group (§14.2): one screen,
@@ -1471,17 +1473,18 @@ design.
 
 ### 10.5 Brand mark
 
-The product mark is **not decided** (`pr.md` §13.10) and openGym's logo is not
-ours to copy. Until it is:
+**Decided 2026-11-28 (owner request):** the product mark is a **geometric heart with
+a pulse line**, drawn on the same 24 dp grid as the icons, accent on `bg`, no
+gradient, gloss or shadow. It replaces the placeholder ring-and-dot splash and the
+earlier clock-like launcher mark. The heart is filled in `acc` with the pulse cut in
+`bg`; the monochrome sibling is an outline so themed icons keep the pulse. The app
+icon is the only place the mark may fill the frame.
 
-- In-app use the wordmark "openHealth" set in the UI font at 17/600, lower-case
+- In-app the wordmark stays "openHealth" set in the UI font at 17/600, lower-case
   except the H, in `label`. No custom lettering.
-- If a symbol is needed (app icon, splash), it is a geometric mark in `acc` on
-  `bg`, drawn on the same 24 dp grid as the icons, with no gradient, no gloss
-  and no drop shadow. The app icon is the only place the mark may fill the
-  frame.
-- The mark never appears inside a card, a chart or a report header. The person's
-  data is the identity of a screen, not our logo.
+- If a symbol is needed (app icon, splash), it is the mark above. It never appears
+  inside a card, a chart or a report header. The person's data is the identity of a
+  screen, not our logo.
 - No mascots, no anthropomorphic body parts, no "wellness" leaf.
 
 ---

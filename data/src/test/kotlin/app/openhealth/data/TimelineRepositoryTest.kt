@@ -14,6 +14,51 @@ import kotlinx.datetime.LocalDate
 
 class TimelineRepositoryTest {
     @Test
+    fun aLinkedVitalRowIsNotListedTwice() {
+        val store = inMemoryStore()
+        val date = LocalDate(2026, 3, 2)
+        app.openhealth.data.repo.ObservationRepository(store.db).record(
+            testObservation(
+                "obs-1",
+                ObservationType.RESTING_HEART_RATE,
+                58.0,
+                UcumUnit.PER_MINUTE,
+                dayStart(date).plus(9.hours),
+            ),
+        )
+        val body = app.openhealth.data.repo.BodyRepository(store.db)
+        fun vital(id: String, observationId: String?) = app.openhealth.data.db.Vital(
+            id = id,
+            type = "RESTING_HEART_RATE",
+            value_ = 58.0,
+            unit = "/min",
+            local_date = date.toString(),
+            zone_id = TEST_ZONE.id,
+            happened_at = dayStart(date).plus(9.hours).toEpochMilliseconds(),
+            recorded_at = dayStart(date).plus(9.hours).toEpochMilliseconds(),
+            source_id = "manual",
+            method = "MANUAL_ENTRY",
+            context = null,
+            note = null,
+            excluded_from_trends = false,
+            observation_id = observationId,
+            raw_record_id = null,
+            idempotency_key = "vital-$id",
+            device = "manual",
+            app_version = "test",
+            revision = 1L,
+        )
+        body.upsertVital(vital("linked", "obs-1"))
+        body.upsertVital(vital("orphan", null))
+
+        val vitals = TimelineRepository(store.db, store.driver)
+            .page(50)
+            .filter { it.kind == "vital" }
+        assertEquals(listOf("orphan"), vitals.map { it.entityId })
+        store.close()
+    }
+
+    @Test
     fun thePageIsNewestFirstAcrossEveryTable() {
         val store = inMemoryStore()
         val date = LocalDate(2026, 3, 1)

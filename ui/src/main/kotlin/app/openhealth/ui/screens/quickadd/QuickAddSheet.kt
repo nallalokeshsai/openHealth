@@ -19,9 +19,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.ui.R
-import app.openhealth.ui.components.OhButton
-import app.openhealth.ui.components.OhButtonSize
-import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhChip
 import app.openhealth.ui.components.OhChipStrip
 import app.openhealth.ui.components.OhInsetGroup
@@ -41,7 +38,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 
 /** What the one quick-add sheet is showing: the six tiles or one of their forms. */
-enum class QuickAddMode { TILES, NOTE, WATER, WEIGHT, FOOD, SET, VITALS }
+enum class QuickAddMode { TILES, NOTE, WATER, WEIGHT }
 
 /** A recently logged item, offered first (`pr.md` §6.27). */
 data class QuickAddRecent(
@@ -54,9 +51,9 @@ data class QuickAddRecent(
 
 /**
  * The global quick-add sheet of `DESIGN.md` §14.2: a 3 × 2 grid of 84 dp tiles, then
- * recent rows and a Backdate row. A tile opens its own small form inside the same
- * sheet; a sheet never nests another sheet. Food, set and vitals are shells here and
- * say what they are waiting for instead of pretending to log.
+ * recent rows and a Backdate row. A tile opens its own small form (note, water, weight)
+ * or hands off to the surface that owns it: food search, a live session, the vitals
+ * reading sheet.
  */
 @Composable
 fun QuickAddSheet(
@@ -93,13 +90,9 @@ fun QuickAddSheet(
             QuickAddMode.NOTE -> stringResource(R.string.quick_note)
             QuickAddMode.WATER -> stringResource(R.string.quick_water)
             QuickAddMode.WEIGHT -> stringResource(R.string.quick_weight)
-            QuickAddMode.FOOD -> stringResource(R.string.quick_food)
-            QuickAddMode.SET -> stringResource(R.string.quick_set)
-            QuickAddMode.VITALS -> stringResource(R.string.quick_vitals)
         },
         primaryLabel = when (mode) {
             QuickAddMode.TILES -> null
-            QuickAddMode.FOOD, QuickAddMode.SET, QuickAddMode.VITALS -> null
             else -> stringResource(R.string.quick_save)
         },
         primaryEnabled = canSave && !saving,
@@ -144,24 +137,6 @@ fun QuickAddSheet(
                 onWhenHour,
                 invalid,
                 weightUnit,
-            )
-            QuickAddMode.FOOD -> LaterForm(
-                title = stringResource(R.string.quick_food_later_title),
-                body = stringResource(R.string.quick_food_later_body),
-                action = stringResource(R.string.quick_note),
-                onAction = { onSelect(QuickAction.NOTE) },
-            )
-            QuickAddMode.SET -> LaterForm(
-                title = stringResource(R.string.quick_set_later_title),
-                body = stringResource(R.string.quick_set_later_body),
-                action = stringResource(R.string.quick_note),
-                onAction = { onSelect(QuickAction.NOTE) },
-            )
-            QuickAddMode.VITALS -> LaterForm(
-                title = stringResource(R.string.quick_vitals_later_title),
-                body = stringResource(R.string.quick_vitals_later_body),
-                action = stringResource(R.string.quick_note),
-                onAction = { onSelect(QuickAction.NOTE) },
             )
         }
     }
@@ -305,24 +280,6 @@ private fun WeightForm(
     )
     Spacer(Modifier.height(OhTheme.space.s5))
     WhenSection(whenDate, whenHour, onWhenDate, onWhenHour)
-}
-
-@Composable
-private fun LaterForm(title: String, body: String, action: String, onAction: () -> Unit) {
-    Text(
-        text = title,
-        style = OhTheme.type.body.copy(fontWeight = OhWeight.medium),
-        color = OhTheme.colors.label,
-    )
-    Spacer(Modifier.height(OhTheme.space.s0))
-    Text(text = body, style = OhTheme.type.footnote, color = OhTheme.colors.label2)
-    Spacer(Modifier.height(OhTheme.space.s5))
-    OhButton(
-        text = action,
-        onClick = onAction,
-        variant = OhButtonVariant.Secondary,
-        size = OhButtonSize.Small,
-    )
 }
 
 @Composable

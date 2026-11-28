@@ -1203,24 +1203,26 @@ class NutritionPresenter(
         )
     }
 
-    fun logWater(ml: Double, at: Instant = clock.now()) {
-        if (ml <= 0.0) return
+    fun logWater(ml: Double, at: Instant = clock.now()): String? {
+        if (ml <= 0.0) return null
+        val waterId = ids.newId()
         store.observations.record(
             Observation.of(
-                id = ObservationId(ids.newId()),
+                id = ObservationId(waterId),
                 type = ObservationType.WATER,
                 value = Measure(ml, UcumUnit.MILLILITRE),
                 start = at,
                 provenance = Provenance(
                     sourceId = manualSource,
                     time = TimeProvenance.of(at, clock.now(), zone),
-                    idempotencyKey = "water:${ids.newId()}",
+                    idempotencyKey = "water:$waterId",
                     device = "manual",
                     appVersion = appVersion,
                 ),
             ).copy(context = ObservationContext.OTHER),
         )
         store.settings.put(SettingKeys.LAST_WATER_ML, ml.toInt().toString())
+        return waterId
     }
 
     fun containers(): List<WaterContainerModel> = store.nutrition.waterContainers().map {

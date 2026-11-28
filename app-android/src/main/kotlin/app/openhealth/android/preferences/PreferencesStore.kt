@@ -7,6 +7,7 @@ import app.openhealth.core.ai.CoachProviderKind
 import app.openhealth.core.preferences.DisplayPolicy
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ModulePreset
+import app.openhealth.core.preferences.NotificationPrefs
 import app.openhealth.data.repo.ProfileRepository
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.data.repo.SettingsRepository
@@ -45,6 +46,8 @@ data class Preferences(
     val coachDisclosed: Boolean,
     val mcpEnabled: Boolean,
     val mcpPort: Int,
+    /** Reminders the person controls (`pr.md` §6.19); on by default, each revocable. */
+    val notifications: NotificationPrefs = NotificationPrefs(),
 ) {
     /** The object screens ask; none of them reads [weightNeutral] (`pr.md` §6.25). */
     val displayPolicy: DisplayPolicy get() = DisplayPolicy.of(weightNeutral)
@@ -89,6 +92,15 @@ class PreferencesStore(
             mcpEnabled = settings.get(SettingKeys.MCP_ENABLED) == "true",
             mcpPort = settings.get(SettingKeys.MCP_PORT)?.toIntOrNull()
                 ?.takeIf { it in MCP_PORTS } ?: DEFAULT_MCP_PORT,
+            notifications = NotificationPrefs(
+                enabled = settings.get(SettingKeys.NOTIFY_ENABLED) != "false",
+                medication = settings.get(SettingKeys.NOTIFY_MEDICATION) != "false",
+                daily = settings.get(SettingKeys.NOTIFY_DAILY) != "false",
+                weekly = settings.get(SettingKeys.NOTIFY_WEEKLY) != "false",
+                quietHours = settings.get(SettingKeys.NOTIFY_QUIET) == "true",
+                quietStart = settings.get(SettingKeys.NOTIFY_QUIET_START) ?: "22:00",
+                quietEnd = settings.get(SettingKeys.NOTIFY_QUIET_END) ?: "07:00",
+            ),
         )
     }
 
@@ -206,6 +218,16 @@ class PreferencesStore(
         settings.put(SettingKeys.DEMO_DATA, enabled.toString())
     }
 
+    fun setNotifications(prefs: NotificationPrefs) {
+        settings.put(SettingKeys.NOTIFY_ENABLED, prefs.enabled.toString())
+        settings.put(SettingKeys.NOTIFY_MEDICATION, prefs.medication.toString())
+        settings.put(SettingKeys.NOTIFY_DAILY, prefs.daily.toString())
+        settings.put(SettingKeys.NOTIFY_WEEKLY, prefs.weekly.toString())
+        settings.put(SettingKeys.NOTIFY_QUIET, prefs.quietHours.toString())
+        settings.put(SettingKeys.NOTIFY_QUIET_START, prefs.quietStart)
+        settings.put(SettingKeys.NOTIFY_QUIET_END, prefs.quietEnd)
+    }
+
     /** One write for the three accessibility options (`DESIGN.md` §12.4.1). */
     fun setAccessibility(
         highContrast: Boolean,
@@ -220,6 +242,12 @@ class PreferencesStore(
     fun markOnboardingComplete(tier: Int) {
         settings.put(SettingKeys.ONBOARDING_TIER, tier.toString())
         settings.put(SettingKeys.ONBOARDING_COMPLETE, "true")
+    }
+
+    /** Sent back to onboarding when demo mode is left or all data is erased. */
+    fun clearOnboarding() {
+        settings.remove(SettingKeys.ONBOARDING_TIER)
+        settings.remove(SettingKeys.ONBOARDING_COMPLETE)
     }
 
     @Serializable

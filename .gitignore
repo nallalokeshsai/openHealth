@@ -36,6 +36,7 @@ watch/connectiq/bin/
 local.properties
 *.log
 issues.md
+gaps.md
 
 # Local agent tooling (OpenCode command and permissions)
 .opencode/

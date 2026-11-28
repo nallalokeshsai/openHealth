@@ -1,7 +1,10 @@
 package app.openhealth.ui.screens.settings
 
+import app.openhealth.core.formula.ActivityLevel
+import app.openhealth.core.formula.SexAtBirth
 import app.openhealth.core.preferences.HealthModule
 import app.openhealth.core.preferences.ModulePreset
+import app.openhealth.core.preferences.NotificationPrefs
 import app.openhealth.core.preferences.ProfileGoal
 import app.openhealth.core.preferences.UnitSystem
 import app.openhealth.ui.theme.OhAccent
@@ -15,6 +18,8 @@ enum class SettingsMessage {
     WORKING,
     EXPORT_SAVED,
     EXPORT_FAILED,
+    BACKUP_VERIFIED,
+    BACKUP_INVALID,
     RESTORE_DONE,
     RESTORE_FAILED,
     WRONG_PASSPHRASE,
@@ -40,11 +45,15 @@ data class SettingsState(
     val profileSubtitle: String,
     val profileBirthDate: String,
     val profileGoal: ProfileGoal?,
+    val profileSex: SexAtBirth?,
+    val profileActivity: ActivityLevel?,
     val profileHeight: String,
     val profileWeight: String,
     val profileUnits: UnitSystem,
     val profileMayLoseWeight: Boolean,
     val hasRestoreSnapshot: Boolean,
+    /** The last successful export, or the empty state; never a guess. */
+    val backupDetail: String,
 
     /** Set when a corrupt database was replaced from the snapshot taken before a migration. */
     val recoveryNote: String?,
@@ -52,6 +61,8 @@ data class SettingsState(
     /** How many review questions are waiting; 0 hides nothing, the row stays visible. */
     val reviewCount: Int,
     val modules: Set<HealthModule>,
+    val notifications: NotificationPrefs,
+    val notificationsDetail: String,
 
     /** What the Devices row says: which sources are on, or nothing yet. */
     val devicesDetail: String,
@@ -89,6 +100,8 @@ data class ProfileEdit(
     val name: String,
     val birthDate: String,
     val goal: ProfileGoal?,
+    val sexAtBirth: SexAtBirth?,
+    val activityLevel: ActivityLevel?,
     val height: String,
     val weight: String,
     val units: UnitSystem,

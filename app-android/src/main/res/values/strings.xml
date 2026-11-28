@@ -10,6 +10,8 @@
     <string name="lock_prompt_title">Unlock openHealth</string>
     <string name="lock_prompt_body">Your health record is private to this phone.</string>
     <string name="lock_prompt_cancel">Cancel</string>
+    <string name="lock_disable_title">Turn off the app lock?</string>
+    <string name="lock_disable_body">Confirm it is you. Without the lock, anyone holding this unlocked phone can open your record.</string>
     <string name="startup_error_title">openHealth could not open its database</string>
     <string name="startup_error_retry">Try again</string>
     <string name="startup_error_body">The encrypted store is unavailable. Nothing was changed. Restart the app, or restore a backup on a working install.</string>
@@ -77,4 +79,9 @@
     <string name="widget_today_steps">%1$s steps</string>
     <string name="widget_today_goal">of %1$s</string>
     <string name="widget_today_empty">Open openHealth</string>
+    <string name="notify_channel">Check-ins</string>
+    <string name="notify_daily_title">A moment for today</string>
+    <string name="notify_daily_body">Weigh in, log water or write a note. Your record stays on this phone.</string>
+    <string name="notify_weekly_title">Your week is ready</string>
+    <string name="notify_weekly_body">Open the weekly review to see the week\'s trends and notes.</string>
 </resources>

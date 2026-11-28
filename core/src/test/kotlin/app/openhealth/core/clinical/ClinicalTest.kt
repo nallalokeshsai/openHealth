@@ -333,6 +333,14 @@ class ClinicalTest {
     }
 
     @Test
+    fun theVitalsTableCarriesTheUnitAPersonReadsNotItsUcumCode() {
+        val text = ClinicalReportBuilder.build(sampleData()).toPlainText()
+        assertTrue(text.contains("bpm"), "the heart-rate unit is bpm")
+        assertFalse(text.contains("/min"), "a UCUM code must not reach the report")
+        assertFalse(text.contains("{steps}"))
+    }
+
+    @Test
     fun weightNeutralRemovesWeightFromTheReportAndTheBundle() {
         val neutral = ClinicalReportBuilder.build(sampleData(weightNeutral = true))
         val text = neutral.toPlainText()

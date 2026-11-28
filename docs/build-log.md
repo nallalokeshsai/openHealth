@@ -3900,3 +3900,197 @@ surfaced the photo-test defect above, and the `set < 2 s` budget failed in the f
 both addressed the suite is **72/72** (71 as recorded, plus the new case). Each of the two
 fixes was re-run against its pre-fix code to prove the test fails. No device output,
 serial or screenshot entered the tree.
+
+---
+
+## Post-B15 device QA pass (2026-11-28)
+
+**Status:** Completed · **Branch:** `build/gap-fixes`
+**Goal:** reinstall the current release build on the owner's physical phone, walk every
+shipped surface, and fix each user-visible defect before moving on.
+
+### Install
+
+The phone already carried a release-signed build, so the debug APK was refused
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Rather than wipe the record, the Play release
+was rebuilt with the owner's key from `.env.local` and installed with `install -r`;
+signatures matched and the existing data stayed in place. The release shape (R8,
+resource shrinking) is what was walked, not a debug build. No serial, model, `adb`
+output or screenshot entered the tree; screenshots and UI dumps were kept in
+`/tmp/opencode`.
+
+### Walk
+
+Today (top and bottom, body map, readiness, plan, energy, steps, due, quick add), the
+global quick-add sheet and its forms, Vitals (weight, body model, composition,
+measurements, photos, readings, CSV), a planned live session (set, PR, rest timer,
+summary), Nutrition (search, portion, log, weight-neutral), Stats (all five segments,
+KPI taps), Settings and every sheet (profile, modules, appearance, data), Clinical,
+Doctor report, Sleep, Weekly review, Coach (on and off), Devices, External access,
+Timeline, Review inbox, 200 % text. Every fix below was re-checked on the phone after
+the build that carried it.
+
+### Defects found and fixed
+
+1. **Quick-add Vitals left the screen.** The tile switched to the Vitals tab; `DESIGN.md`
+   §14.2 says every tile opens its own small sheet. It now opens the existing
+   `AddReadingSheet` in place (`AppState.quickVital`, `AppViewModel.openQuickAdd`,
+   `OpenHealthRoot`), saving through the same `saveVitalReading` path.
+2. **Today's inline Set tile showed a stub.** `QuickAddSheet` intercepted Set but
+   `TodayScreen`'s inline tiles called `openQuickAdd` directly, reaching
+   "Session logging is not here yet" though training ships. Both entry points now share
+   one `quickAction` router in `OpenHealthRoot`; the now-unreachable stub branches are
+   left for the dead-code sweep noted below.
+3. **Logging left no undo.** Food, one-tap water and quick calories showed a plain
+   toast. All three now leave the undo toast §14.2 promises; `undoLast` gained the
+   `TrashEntity.ENTRY` branch and `NutritionPresenter.logWater` returns its id.
+4. **Session maps claimed weekly work.** The live session and summary maps reused the
+   plan description, so one set read "1 set a week". `BodyMapModel.PlanWindow` separates
+   weekly targets from one session's work; the live, summary, history and yoga maps use
+   `SESSION` and the table column follows.
+5. **The Vitals body model had no table alternative.** The only full-size map without
+   one now has a "Show as table" row and an `OhBodyMapTable` sheet (§8.6).
+6. **Clinical surfaces ignored the module switch.** Clinical, Doctor report and Weekly
+   review rows stayed visible with Vitals off, and the route opened. All four are gated
+   on `HealthModule.VITALS` like Coach and Sleep (§6.21).
+7. **Sleep debt and consistency opened the duration table**, which held neither number.
+   `StatsKpi` can now carry its own table; debt shows each night's shortfall against the
+   saved need, consistency shows the night-to-night change.
+8. **The Sessions KPI opened nothing.** It now opens "Sessions, 4 weeks" (day, session,
+   work sets), and the Training segment's copy uses it too.
+9. **The Nutrition energy ring and macro bars had no table** and the ring's description
+   was a fragment. The energy card now has "Show as table" with energy in, target, left
+   and each macro.
+10. **Activity and session-summary KPIs did not open provenance.** Duration, volume,
+    sets, distance, pace and time now open the sheet each page already had (§7.1).
+11. **Two destructive actions had no confirmation.** Sync Disconnect deleted the token
+    on one tap, and "Raw import data" dropped every payload immediately. Both now ask
+    in a destructive dialog naming what is lost.
+12. **The doctor report printed `/min`.** A UCUM code reached the Vitals table; clinical
+    pairs it with a person-readable unit through a shared `UcumUnit.displayLabel()` in
+    `:core`, and a test asserts `bpm` and no machine code.
+13. **Clinical rows showed ISO dates.** Symptom, lab and sleep rows and the weekly range
+    now read "28 Nov" / "22 Nov to 28 Nov", not `2026-11-28`.
+14. **The timeline printed `553 {steps}`** because the display map tested `{step}` while
+    the stored UCUM code is `{steps}`; Celsius was also unmapped. `displayUnit` now
+    covers both, plus count and score.
+15. **Every manual reading appeared twice in the timeline.** `logReading` writes a
+    layer-2 observation and a linked layer-4 vital row, and the page query listed both at
+    the same minute. The vital branch now lists only rows with no observation; the demo
+    corpus (which writes vitals alone) still appears. A `:data` test covers both cases.
+16. **Settings detail copy repeated its title.** Doctor report and Weekly review now say
+    what they do instead of naming themselves twice.
+
+### Verification
+
+`./gradlew check :app-android:assemblePlayRelease` **BUILD SUCCESSFUL**. JVM tests **928**
+(457 `:core`, 188 `:data`, 8 `:sync`, 58 `:integrations`, 178 `:ui`, 15 `:server`, 10
+across the three tools, 14 `:app-wear`), counted from the test XML. **376 goldens**;
+fifteen PNGs were re-recorded because Vitals, Nutrition and Settings gained visible
+rows or new detail copy, and the diffs were reviewed. The Play release APK was installed
+on the phone over the previous release and each fix was re-checked there. The new
+instrumented case (`quickAddVitalsOpensItsOwnSheetWithoutLeavingTheScreen`) is part of
+the 73-test phone suite.
+
+### Left open in this pass
+
+- **Demo mode has no exit.** The phone is in demo mode, but Settings offers no way to
+  leave it and the corpus is written under ordinary sources (`manual`, `garmin`,
+  `scale`, `fitbit`), so a clean removal needs either a demo source/tag or a recorded
+  span. That is a data-model decision, not a UI patch.
+- **The app lock can be switched off without re-authenticating.** The biometric gate is
+  only reached through the lock screen; disabling the lock needs an Activity-bound
+  prompt in the ViewModel, which this pass did not add.
+- **Profile sex at birth and activity level cannot be edited after onboarding**, and
+  energy (kcal/kJ) and glucose (mg/dL/mmol/L) units are not separately switchable.
+- **No notification or reminder controls exist** (`pr.md` §6.19), and no backup-health,
+  verify-restore (`§6.29`) or delete-all-data/account-deletion (`§6.23`) surface.
+- **Some numbers still open nothing.** The Stats "Days logged" KPI, the activity-list
+  weekly figures and chart point scrubs have no provenance/table path; the yoga player
+  map has no table alternative.
+- **Zero-set sessions count in Stats but not in history.** Finishing an empty freestyle
+  session leaves a row in "Sessions, 4 weeks" while the Train history hides it; the two
+  empty sessions created during this walk are the observed case.
+- **Dead stubs remain compiled.** `QuickAddMode.FOOD/SET/VITALS` `LaterForm` branches,
+  their three "not here yet" strings, and `RootScreens.kt` are unreachable but still
+  built and tested.
+- The B15 audit's carried findings are unchanged: manual entries still mint no layer-1
+  raw record, activities still never reach layer 3, a rejected sync change blocks the
+  push queue, and `pr.md` §6.30's deep links/tiles/intents remain unbuilt.
+
+---
+
+## Post-B15 production pass (2026-11-28)
+
+**Status:** Completed · **Branch:** `build/gap-fixes`
+**Goal:** make the app ready to use with real data from the next day, close the gaps the
+earlier QA pass had deliberately left, and replace the placeholder mark.
+
+### Brand
+
+The owner rejected the clock-like launcher icon. The product mark is now decided
+(`DESIGN.md` §10.5, `pr.md` §13.10): a geometric **heart with a pulse line**, accent on
+`bg`, drawn on the same grid as the icons. It ships as:
+- `ic_launcher_foreground` (lime heart, bg pulse) over a dark `ic_launcher_background`,
+  in both adaptive icons, with an `ic_launcher_monochrome` outline for themed icons;
+- the splash mark (`ic_splash_mark`) on `bg`, replacing the ring-and-dot placeholder;
+- a one-colour `ic_stat_checkin` for the new notification channel.
+
+The launcher and splash were checked on the phone; both show the heart and pulse.
+
+### Gaps closed
+
+1. **Demo mode can be left.** `DemoDataPurger` deletes only corpus rows (every corpus row
+   carries a `corpus-` idempotency key; demo writes were already outside the change log),
+   the demo profile and the synthetic search foods. A row logged by the person during the
+   demo is not tagged and survives. Settings → Data → "Sample data is on" confirms, then
+   returns to onboarding through `AppContainer.leaveDemoMode`. Verified on the emulator
+   end to end.
+2. **Delete all health data.** A confirmed destructive row closes the database, deletes
+   its files and the local snapshots, and restarts the process; the next launch is an
+   empty record and onboarding. Verified on the emulator (process returned to the
+   launcher, relaunch showed onboarding).
+3. **Notifications are controllable.** Settings → Notifications has a master switch,
+   medicine reminders, one daily check-in (09:00), one weekly review (Sunday 18:00), and
+   quiet hours (start/end chips, overnight windows supported). Check-ins are local
+   `AlarmManager` alarms with a boot/time-change receiver; the notification permission is
+   requested when a reminder is switched on. Medicine reminders are explicitly outside
+   quiet hours. Turning medicine reminders off cancels the alarms already set. Both
+   alarms were confirmed in `dumpsys alarm` and disappeared when the master switch went
+   off.
+4. **Sex at birth and activity level are editable** in Settings → Profile, not only at
+   onboarding; both write the profile row that BMR/TDEE read.
+5. **Backup health and verification.** A successful export records its time and size and
+   the Data sheet shows it; "Verify a backup" decrypts and validates a chosen file
+   without touching the record, and reports verified, wrong password or invalid.
+6. **Turning the app lock off re-authenticates.** Settings and the lock screen both call
+   the same device-credential prompt before the lock is removed; only a device that can
+   no longer authenticate may switch it off directly.
+7. **Numbers that opened nothing.** The Stats "Days logged" KPI opens its own day/energy
+   table; the Sessions figure opens a 4-week table; zero-set sessions no longer count as
+   sessions or appear in that table; the yoga player map has a table alternative.
+8. **Dead stubs removed.** The unreachable `LaterForm` branches, their six "not here yet"
+   strings, the old root stub screens and their orphan strings are gone;
+   `ModuleOffRootTest` now exercises the real module-off component.
+
+### Verification
+
+`./gradlew check :app-android:assemblePlayRelease` **BUILD SUCCESSFUL**. JVM tests **931**
+(461 `:core`, 189 `:data`, 8 `:sync`, 58 `:integrations`, 176 `:ui`, 15 `:server`, 10
+across the tools, 14 `:app-wear`), **400 goldens** (Settings, Data, Appearance, Yoga and
+the earlier Vitals/Nutrition goldens re-recorded and reviewed), **73/73** instrumented
+tests on the phone emulator. The phone build is the Play release signed with the owner's
+key; the emulator walked the demo exit, the full erase, the notification switches, the
+quiet-hours chips and the profile fields. No device identity or screenshot entered the
+tree.
+
+### Still open
+
+- **Separate energy (kcal/kJ) and glucose (mg/dL/mmol/L) unit switches** are not added;
+  glucose follows metric/imperial as before, and energy is kcal only.
+- The B15 audit's carried items remain: manual entries still mint no layer-1 raw record,
+  activities still never reach layer 3 (the dedup rule is the owner's call), a rejected
+  sync change still blocks the push queue, the coach's session/routine data has no
+  Health Connect flag, and `pr.md` §6.30's deep links/tiles/intents are unbuilt.
+- Chart point scrubs still show no source or "Details" row, the activity-list weekly
+  figures still open nothing, and the activity zone chart has no one-sentence description.

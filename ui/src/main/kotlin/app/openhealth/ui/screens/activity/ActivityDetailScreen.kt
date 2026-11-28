@@ -115,11 +115,17 @@ fun ActivityDetailScreen(
                 OhKpiFigure(
                     model.distanceText ?: stringResource(R.string.train_not_available),
                     stringResource(R.string.activity_detail_distance),
+                    onClick = { showProvenance = true },
                 ),
-                OhKpiFigure(model.durationText, stringResource(R.string.activity_detail_duration)),
+                OhKpiFigure(
+                    model.durationText,
+                    stringResource(R.string.activity_detail_duration),
+                    onClick = { showProvenance = true },
+                ),
                 OhKpiFigure(
                     model.paceText ?: stringResource(R.string.train_not_available),
                     stringResource(R.string.activity_detail_pace),
+                    onClick = { showProvenance = true },
                 ),
             ),
         )

@@ -39,6 +39,7 @@ import app.openhealth.core.observation.ObservationType
 import app.openhealth.core.vitals.RangePosition
 import app.openhealth.ui.R
 import app.openhealth.ui.body.OhBodyMap
+import app.openhealth.ui.body.OhBodyMapTable
 import app.openhealth.ui.body.measurementSiteLabel
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonVariant
@@ -489,6 +490,7 @@ private fun BodyModelCard(
     geometry: app.openhealth.ui.body.BodyGeometry? = null,
 ) {
     var showFat by rememberSaveable { mutableStateOf(true) }
+    var showTable by rememberSaveable { mutableStateOf(false) }
     var scrub by rememberSaveable { mutableStateOf(1f) }
     OhCard {
         OhCardHeader(
@@ -531,8 +533,15 @@ private fun BodyModelCard(
             descriptionOverride = stringResource(R.string.vitals_body_model_desc),
             geometry = geometry,
             synchronousLayers = synchronousLayers,
+            onShowTable = { showTable = true },
         )
-        Spacer(Modifier.height(OhTheme.space.s4))
+        Spacer(Modifier.height(OhTheme.space.s3))
+        OhRow(
+            title = stringResource(R.string.body_map_show_table),
+            onClick = { showTable = true },
+            showChevron = true,
+        )
+        Spacer(Modifier.height(OhTheme.space.s3))
         OhChipStrip {
             if (model.current.adipose != null) {
                 OhChip(
@@ -584,6 +593,15 @@ private fun BodyModelCard(
                 onValueChange = { scrub = it },
                 contentDescription = stringResource(R.string.vitals_body_before_after),
             )
+        }
+    }
+    model?.let { figure ->
+        OhModalSheet(
+            visible = showTable,
+            onDismiss = { showTable = false },
+            title = stringResource(R.string.body_map_table_title),
+        ) {
+            OhBodyMapTable(model = figure.current)
         }
     }
 }

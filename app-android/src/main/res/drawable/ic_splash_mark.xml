@@ -1,19 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The geometric splash mark of DESIGN.md §10.5: a ring and a dot on the 24 dp grid,
-     in the accent on bg, no gradient, no gloss, no shadow. The mark is not a logo; the
-     product mark is undecided (pr.md §13.10). -->
+<!-- The splash mark is the app mark decided 2026-11-28 (DESIGN.md §10.5): the same
+     heart and pulse as the launcher, accent on bg, no animation beyond the system
+     splash. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:pathData="M54,18 A36,36 0 1,0 54,90 A36,36 0 1,0 54,18"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M54,86 C49,81 22,63 22,42 C22,31 30,23 41,23 C47,23 52,27 54,33 C56,27 61,23 67,23 C78,23 86,31 86,42 C86,63 59,81 54,86 Z"
         android:strokeColor="@color/oh_splash_mark"
-        android:strokeWidth="7"
+        android:strokeWidth="6"
         android:strokeLineCap="round"
-        android:fillColor="@android:color/transparent" />
+        android:strokeLineJoin="round" />
     <path
-        android:pathData="M54,54 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0"
-        android:fillColor="@color/oh_splash_mark" />
+        android:fillColor="@android:color/transparent"
+        android:pathData="M29,54 H43 L48,44 L56,67 L62,54 H79"
+        android:strokeColor="@color/oh_splash_mark"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

@@ -44,6 +44,7 @@ import app.openhealth.data.repo.SetValues
 import app.openhealth.data.repo.SettingKeys
 import app.openhealth.ui.body.BodyMapExtras
 import app.openhealth.ui.body.BodyMapModel
+import app.openhealth.ui.body.PlanWindow
 import app.openhealth.ui.screens.train.EditorExerciseRow
 import app.openhealth.ui.screens.train.ExerciseChoice
 import app.openhealth.ui.screens.train.ExerciseHistoryModel
@@ -316,7 +317,7 @@ class TrainingPresenter(
                 volumeLabel = volumeOrNull(sets, profile)?.let { volume ->
                     "${shown(volume, profile)} ${unit(profile)}"
                 },
-                map = BodyMapModel.plan(sex(profile), loads),
+                map = BodyMapModel.plan(sex(profile), loads, window = PlanWindow.SESSION),
             )
         }
 
@@ -1027,7 +1028,11 @@ class TrainingPresenter(
             backdated = LocalDate.parse(session.local_date) != today(),
             exercises = exercises,
             weightUnit = unit(profile),
-            map = BodyMapModel.plan(sex(profile), SessionLoads.byMuscle(performed)),
+            map = BodyMapModel.plan(
+                sex(profile),
+                SessionLoads.byMuscle(performed),
+                window = PlanWindow.SESSION,
+            ),
             rest = rest?.let {
                 RestDisplay(
                     remainingSeconds = it.remainingSeconds,
@@ -1103,7 +1108,7 @@ class TrainingPresenter(
             weightUnit = unit(profile),
             sets = sets.count { !it.is_warmup }.toString(),
             prs = prs,
-            map = BodyMapModel.plan(sex(profile), loads),
+            map = BodyMapModel.plan(sex(profile), loads, window = PlanWindow.SESSION),
             topMuscles = top,
             feeling = session.feeling.orEmpty(),
             note = session.notes.orEmpty(),

@@ -31,6 +31,7 @@ import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonSize
 import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhCard
+import app.openhealth.ui.components.OhDialog
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhTextField
@@ -162,6 +163,7 @@ private fun UnpairedSection(
 
 @Composable
 private fun PairedSection(state: SyncModel, onSyncNow: () -> Unit, onDisconnect: () -> Unit) {
+    var confirming by rememberSaveable { mutableStateOf(false) }
     OhInsetGroup {
         OhRow(
             title = stringResource(R.string.sync_server_label),
@@ -222,12 +224,26 @@ private fun PairedSection(state: SyncModel, onSyncNow: () -> Unit, onDisconnect:
         )
         OhButton(
             text = stringResource(R.string.sync_disconnect),
-            onClick = onDisconnect,
+            onClick = { confirming = true },
             variant = OhButtonVariant.Secondary,
             enabled = !state.busy,
             modifier = Modifier.weight(1f),
         )
     }
+    OhDialog(
+        visible = confirming,
+        onDismiss = { confirming = false },
+        title = stringResource(R.string.sync_disconnect_title),
+        message = stringResource(R.string.sync_disconnect_body),
+        primaryLabel = stringResource(R.string.sync_disconnect),
+        cancelLabel = stringResource(R.string.sync_disconnect_keep),
+        destructive = true,
+        onPrimary = {
+            confirming = false
+            onDisconnect()
+        },
+        onCancel = { confirming = false },
+    )
 }
 
 @Composable

@@ -3,6 +3,7 @@ package app.openhealth.core.units
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class UnitsTest {
@@ -67,6 +68,16 @@ class UnitsTest {
         assertEquals(UcumUnit.METRE, UcumUnit.byUcum("m"))
         assertEquals(UcumUnit.METRE, UcumUnit.byUcum("m", Dimension.DISTANCE))
         assertFailsWith<IllegalArgumentException> { UcumUnit.byUcum("m", Dimension.MASS) }
+    }
+
+    @Test
+    fun aMachineUnitCodeIsNeverItsDisplayLabel() {
+        assertEquals("bpm", UcumUnit.PER_MINUTE.displayLabel())
+        assertEquals("mmHg", UcumUnit.MILLIMETRE_MERCURY.displayLabel())
+        assertEquals("\u00b0C", UcumUnit.CELSIUS.displayLabel())
+        assertEquals("steps", UcumUnit.STEP.displayLabel())
+        assertEquals("", UcumUnit.COUNT.displayLabel())
+        assertFalse(UcumUnit.STEP.displayLabel().contains("{"))
     }
 
     @Test

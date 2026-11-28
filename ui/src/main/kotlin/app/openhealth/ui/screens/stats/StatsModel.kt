@@ -16,6 +16,8 @@ data class StatsKpi(
     val label: String,
     val unit: String? = null,
     val chart: ChartId? = null,
+    /** A table of this number's own, for a figure no chart card carries. */
+    val table: ChartTableModel? = null,
 )
 
 /** A named segment of a stacked bar; the hue always arrives with its name. */
@@ -76,10 +78,8 @@ data class StatsCard(
  * on this segment, opens nothing: a number never opens another number's table
  * (`DESIGN.md` §7.1, §8.6).
  */
-fun tableForKpi(kpi: StatsKpi, cards: List<StatsCard>): ChartTableModel? {
-    val chart = kpi.chart ?: return null
-    return cards.firstOrNull { it.chart == chart }?.table
-}
+fun tableForKpi(kpi: StatsKpi, cards: List<StatsCard>): ChartTableModel? =
+    kpi.table ?: kpi.chart?.let { chart -> cards.firstOrNull { it.chart == chart }?.table }
 
 /** A plain row under the charts, for records that are lists rather than trends. */
 data class StatsRecords(val title: String, val rows: List<String>)
