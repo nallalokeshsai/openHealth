@@ -85,6 +85,15 @@ object SettingKeys {
     const val MODULE_PRESET = "module.preset"
     const val APP_LOCK = "privacy.app_lock"
     const val DEMO_DATA = "demo.sample_data"
+    const val NOTIFY_ENABLED = "notifications.enabled"
+    const val NOTIFY_MEDICATION = "notifications.medication"
+    const val NOTIFY_DAILY = "notifications.daily"
+    const val NOTIFY_WEEKLY = "notifications.weekly"
+    const val NOTIFY_QUIET = "notifications.quiet_hours"
+    const val NOTIFY_QUIET_START = "notifications.quiet_start"
+    const val NOTIFY_QUIET_END = "notifications.quiet_end"
+    const val LAST_EXPORT_AT = "backup.last_export_at"
+    const val LAST_EXPORT_BYTES = "backup.last_export_bytes"
     const val FAVOURITE_FLOWS = "activity.favourite_flows"
 
     /** Tier-3 answers with no observation or measurement type of their own. */

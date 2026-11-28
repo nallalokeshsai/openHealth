@@ -221,6 +221,7 @@ class StatsPresenter(
                 StatsKpi(
                     value = numberFormat.format(sessionsThisWeek(date)),
                     label = context.getString(UiR.string.stats_kpi_sessions),
+                    table = sessionsTable(date),
                 ),
             )
             if (HealthModule.STEPS in modules) {
@@ -314,6 +315,7 @@ class StatsPresenter(
                 StatsKpi(
                     value = numberFormat.format(sessionsThisWeek(date)),
                     label = context.getString(UiR.string.stats_kpi_sessions),
+                    table = sessionsTable(date),
                 ),
             )
         }
@@ -332,12 +334,12 @@ class StatsPresenter(
                 StatsKpi(
                     value = sleepDebt(date)?.let { kpiDuration(it.debtMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_debt),
-                    chart = ChartId.SLEEP_DURATION,
+                    table = sleepDebtTable(date),
                 ),
                 StatsKpi(
                     value = sleepDebt(date)?.let { kpiDuration(it.consistencyMinutes) } ?: DASH,
                     label = context.getString(UiR.string.stats_kpi_consistency),
-                    chart = ChartId.SLEEP_DURATION,
+                    table = sleepConsistencyTable(date),
                 ),
             )
         }
@@ -371,6 +373,7 @@ class StatsPresenter(
                         SEASON_DAYS,
                     ),
                     label = context.getString(UiR.string.stats_kpi_days),
+                    table = daysLoggedTable(date),
                 ),
             )
         }
@@ -971,6 +974,23 @@ class StatsPresenter(
     private fun loggedDays(date: LocalDate, type: ObservationType, days: Int): Int =
         rollups(date, type, days).size
 
+    /** The days behind the "days logged" figure, with what was logged on each. */
+    private fun daysLoggedTable(date: LocalDate): ChartTableModel? {
+        val rows = rollups(date, ObservationType.NUTRITION_ENERGY, SEASON_DAYS)
+        if (rows.isEmpty()) return null
+        return multiTable(
+            title = context.getString(UiR.string.stats_table_days_logged_title),
+            columns = listOf(
+                context.getString(UiR.string.stats_table_date),
+                context.getString(UiR.string.stats_table_kcal),
+            ),
+            rows = rows.sortedByDescending { it.first }.map {
+                listOf(shortDate(it.first), decimal(it.second))
+            },
+            chart = ChartId.ENERGY_TREND,
+        )
+    }
+
     private fun weeklyTotal(date: LocalDate, type: ObservationType): Double {
         val weekStart = StatsMath.startOfWeek(date)
         return rollups(date, type, 7).filter { it.first >= weekStart }.sumOf { it.second }
@@ -988,7 +1008,36 @@ class StatsPresenter(
 
     private fun sessionsThisWeek(date: LocalDate): Int {
         val start = StatsMath.startOfWeek(date)
-        return store.training.sessionsBetween(start, start.plus(DatePeriod(days = 7))).size
+        return store.training.sessionsBetween(start, start.plus(DatePeriod(days = 7)))
+            .count { session -> store.training.setsForSession(session.id).any { !it.is_warmup } }
+    }
+
+    /**
+     * The sessions behind the figure. A count with no table is a number that opens
+     * nothing, which the segment's own subtitle forbids (`DESIGN.md` §7.1, §8.6).
+     */
+    private fun sessionsTable(date: LocalDate): ChartTableModel? {
+        val from = date.minus(DatePeriod(days = 27))
+        val sessions = store.training.sessionsBetween(from, date.plus(DatePeriod(days = 1)))
+            .filter { session -> store.training.setsForSession(session.id).any { !it.is_warmup } }
+        if (sessions.isEmpty()) return null
+        return multiTable(
+            title = context.getString(UiR.string.stats_table_sessions_title),
+            columns = listOf(
+                context.getString(UiR.string.stats_table_date),
+                context.getString(UiR.string.stats_table_session),
+                context.getString(UiR.string.stats_table_sets),
+            ),
+            rows = sessions.sortedByDescending { it.happened_at }.map { session ->
+                val sets = store.training.setsForSession(session.id).count { !it.is_warmup }
+                listOf(
+                    shortDate(LocalDate.parse(session.local_date)),
+                    session.title ?: context.getString(UiR.string.stats_table_freestyle),
+                    sets.toString(),
+                )
+            },
+            chart = ChartId.TRAINING_VOLUME,
+        )
     }
 
     private fun weightChange(date: LocalDate, days: Int): Double? {
@@ -1043,12 +1092,70 @@ class StatsPresenter(
     }
 
     private fun sleepDebt(date: LocalDate): app.openhealth.core.formula.SleepDebtResult? {
-        val need = store.settings.get(SettingKeys.SLEEP_NEED_MINUTES)?.toDoubleOrNull()
-            ?.takeIf { it >= 60.0 } ?: DEFAULT_SLEEP_NEED_MINUTES
         val nights = sleepNights(date, NIGHTS).map {
             SleepNight(it.localDate, it.totals.asleepMinutes)
         }
-        return (SleepDebt.compute(nights, need) as? FormulaOutcome.Computed)?.value
+        return (SleepDebt.compute(nights, sleepNeedMinutes()) as? FormulaOutcome.Computed)?.value
+    }
+
+    private fun sleepNeedMinutes(): Double =
+        store.settings.get(SettingKeys.SLEEP_NEED_MINUTES)?.toDoubleOrNull()
+            ?.takeIf { it >= 60.0 } ?: DEFAULT_SLEEP_NEED_MINUTES
+
+    /**
+     * The debt figure is a total; its table is the per-night arithmetic behind it
+     * (`DESIGN.md` §8.6, §7.2). Tapping the KPI previously opened the duration table,
+     * which carried neither debt nor its need.
+     */
+    private fun sleepDebtTable(date: LocalDate): ChartTableModel? {
+        val nights = sleepNights(date, NIGHTS)
+        if (nights.isEmpty()) return null
+        val need = sleepNeedMinutes()
+        return multiTable(
+            title = context.getString(UiR.string.stats_table_debt_title),
+            columns = listOf(
+                context.getString(UiR.string.stats_table_night),
+                context.getString(UiR.string.stats_table_hours),
+                context.getString(UiR.string.stats_table_short_of_need),
+            ),
+            rows = nights.map { night ->
+                val short = (need - night.totals.asleepMinutes).coerceAtLeast(0.0)
+                listOf(
+                    shortDate(night.localDate),
+                    decimal(night.totals.asleepMinutes / MINUTES_PER_HOUR, 1),
+                    decimal(short / MINUTES_PER_HOUR, 1),
+                )
+            },
+            chart = ChartId.SLEEP_DURATION,
+        )
+    }
+
+    private fun sleepConsistencyTable(date: LocalDate): ChartTableModel? {
+        val nights = sleepNights(date, NIGHTS)
+        if (nights.isEmpty()) return null
+        return multiTable(
+            title = context.getString(UiR.string.stats_table_consistency_title),
+            columns = listOf(
+                context.getString(UiR.string.stats_table_night),
+                context.getString(UiR.string.stats_table_hours),
+                context.getString(UiR.string.stats_table_change),
+            ),
+            rows = nights.mapIndexed { index, night ->
+                val change = if (index == 0) {
+                    DASH
+                } else {
+                    duration(
+                        abs(night.totals.asleepMinutes - nights[index - 1].totals.asleepMinutes),
+                    )
+                }
+                listOf(
+                    shortDate(night.localDate),
+                    decimal(night.totals.asleepMinutes / MINUTES_PER_HOUR, 1),
+                    change,
+                )
+            },
+            chart = ChartId.SLEEP_DURATION,
+        )
     }
 
     private fun table(
@@ -1056,10 +1163,22 @@ class StatsPresenter(
         columns: List<String>,
         rows: List<Pair<String, String>>,
         chart: ChartId,
-    ): ChartTableModel = ChartTableModel(
+    ): ChartTableModel = multiTable(
         title = title,
         columns = columns,
         rows = rows.map { listOf(it.first, it.second) },
+        chart = chart,
+    )
+
+    private fun multiTable(
+        title: String,
+        columns: List<String>,
+        rows: List<List<String>>,
+        chart: ChartId,
+    ): ChartTableModel = ChartTableModel(
+        title = title,
+        columns = columns,
+        rows = rows,
         citation = context.getString(
             UiR.string.chart_citation,
             app.openhealth.core.citation.Citations.of(ChartRegistry.of(chart).citation).title,

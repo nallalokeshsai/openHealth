@@ -19,6 +19,7 @@ import app.openhealth.data.corpus.CorpusGenerator
 import app.openhealth.data.corpus.CorpusRequest
 import app.openhealth.data.export.Argon2ExportCipher
 import app.openhealth.data.export.ExportService
+import app.openhealth.data.repo.DemoDataPurger
 import app.openhealth.data.repo.SettingKeys
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -527,6 +528,44 @@ class AppContainer(
         }
         store.engine.rebuildAll()
         return stats.observations
+    }
+
+    /**
+     * Leaves demo mode: removes only the corpus rows (every corpus row carries a
+     * `corpus-` idempotency key, and demo writes are kept out of the change log), drops
+     * the demo profile and returns to onboarding. A row the person logged during the
+     * demo is not tagged and survives.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun leaveDemoMode(): Boolean {
+        store.sync.pauseCapture()
+        return try {
+            DemoDataPurger(store.driver).purge()
+            store.settings.remove(SettingKeys.GOAL_WEIGHT_KG)
+            store.settings.remove(SettingKeys.GOAL_TARGET_DATE)
+            preferences.clearOnboarding()
+            preferences.setDemo(false)
+            store.engine.rebuildAll()
+            true
+        } catch (error: Throwable) {
+            android.util.Log.w("openHealth", "leaving demo mode failed", error)
+            false
+        } finally {
+            store.sync.resumeCapture()
+        }
+    }
+
+    /**
+     * Erases the whole record: closes the encrypted database, deletes its files and the
+     * local snapshots, then lets the caller restart the process. Settings live in the
+     * same database, so they reset too; the copy says so before the action runs.
+     */
+    fun eraseEverything() {
+        runCatching { store.sync.pauseCapture() }
+        runCatching { store.close() }
+        appContext.deleteDatabase(AndroidDatabaseFactory.DEFAULT_DATABASE)
+        java.io.File(appContext.filesDir, "pre-restore.ohe").delete()
+        java.io.File(appContext.filesDir, "database-backups").deleteRecursively()
     }
 
     /** True when the last restore left an automatic local snapshot behind. */

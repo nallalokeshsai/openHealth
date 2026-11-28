@@ -17,7 +17,9 @@ import app.openhealth.core.body.AdiposeModel
 import app.openhealth.core.body.BodySex
 import app.openhealth.core.body.MuscleRegion
 import app.openhealth.core.body.RecoveryMap
+import app.openhealth.core.formula.ActivityLevel
 import app.openhealth.core.formula.RecoveryThresholds
+import app.openhealth.core.formula.SexAtBirth
 import app.openhealth.core.ids.EntryId
 import app.openhealth.core.ids.NoteId
 import app.openhealth.core.ids.ObservationId
@@ -183,6 +185,8 @@ data class AppState(
     val trash: List<TrashItemModel> = emptyList(),
     val onboarding: OnboardingUi,
     val quickAdd: QuickAddUi,
+    /** The quick-add Vitals tile's own sheet, opened in place instead of navigating. */
+    val quickVital: Boolean = false,
     val locked: Boolean = false,
     val lockMessage: LockMessage? = null,
     val toast: AppToast? = null,
@@ -384,6 +388,12 @@ class AppViewModel(
                         devices = activity.model(found = current.foundDevices),
                     )
                 }
+            }
+            // Put the local check-ins back on the alarm clock after an update or a reboot
+            // that missed the receiver. It runs off the main thread and never sends.
+            runCatching {
+                app.openhealth.android.notifications.HealthCheckIns
+                    .reschedule(container.context)
             }
         }
         viewModelScope.launch {
@@ -1436,8 +1446,9 @@ class AppViewModel(
 
     fun logPortion(grams: Double, servings: Double, servingLabel: String?) {
         val portion = state.value.portion ?: return
+        val editing = portion.entryId != null
         launchGuarded {
-            withContext(Dispatchers.IO) {
+            val id = withContext(Dispatchers.IO) {
                 nutritionPresenter.logFood(
                     food = portion.food,
                     meal = portion.meal,
@@ -1450,8 +1461,10 @@ class AppViewModel(
                 )
             }
             _state.update { it.copy(portion = null, entryDetail = null, foodSearch = null) }
+            if (!editing) undoAction = UndoAction.Added(TrashEntity.ENTRY, id)
             refreshNutritionModel()
-            showToast(UiR.string.nutrition_logged, undo = false)
+            // `DESIGN.md` §14.2: logging food leaves an undo toast, not a silent row.
+            showToast(UiR.string.nutrition_logged, undo = !editing)
         }
     }
 
@@ -1512,7 +1525,7 @@ class AppViewModel(
             ?: state.value.nutritionDate
             ?: container.clock.now().toLocalDateTime(zone).date
         launchGuarded {
-            withContext(Dispatchers.IO) {
+            val id = withContext(Dispatchers.IO) {
                 nutritionPresenter.selectContainer(containerId)
                 nutritionPresenter.logWater(
                     millilitres,
@@ -1521,7 +1534,8 @@ class AppViewModel(
             }
             _state.update { it.copy(waterSheet = null) }
             refreshNutritionModel()
-            showToast(UiR.string.nutrition_logged, undo = false)
+            if (id != null) undoAction = UndoAction.Added(TrashEntity.OBSERVATION, id)
+            showToast(UiR.string.nutrition_logged, undo = id != null)
         }
     }
 
@@ -1943,7 +1957,7 @@ class AppViewModel(
         val slot = mealForHour(hour)
         val date = state.value.nutritionDate ?: today
         launchGuarded {
-            withContext(Dispatchers.IO) {
+            val id = withContext(Dispatchers.IO) {
                 nutritionPresenter.logQuick(
                     kcal = kcal,
                     protein = protein,
@@ -1957,7 +1971,8 @@ class AppViewModel(
             }
             _state.update { it.copy(quickCalories = false) }
             refreshNutritionModel()
-            showToast(UiR.string.nutrition_logged, undo = false)
+            if (id.isNotBlank()) undoAction = UndoAction.Added(TrashEntity.ENTRY, id)
+            showToast(UiR.string.nutrition_logged, undo = id.isNotBlank())
         }
     }
 
@@ -2153,6 +2168,41 @@ class AppViewModel(
             }
             rebuild()
             _state.update { it.copy(onboarding = it.onboarding.copy(saving = false)) }
+        }
+    }
+
+    /**
+     * Erases everything after the Settings confirmation. The database object is closed
+     * and deleted, so the only safe continuation is a fresh process; the next launch
+     * opens an empty record and onboarding.
+     */
+    fun eraseAllData() {
+        launchGuarded {
+            withContext(Dispatchers.IO) { container.eraseEverything() }
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+    }
+
+    /** Leaves demo mode after the Settings confirmation (`AppContainer.leaveDemoMode`). */
+    fun leaveDemoMode() {
+        message = null
+        launchGuarded {
+            val left = withContext(Dispatchers.IO) { container.leaveDemoMode() }
+            if (left) {
+                _state.update {
+                    it.copy(
+                        onboardingComplete = false,
+                        onboarding = OnboardingUi(
+                            answers = OnboardingAnswers(units = detectUnits()),
+                        ),
+                        quickAdd = newQuickAdd(container),
+                        quickVital = false,
+                    )
+                }
+            } else {
+                message = SettingsMessage.DEMO_FAILED
+            }
+            rebuild()
         }
     }
 
@@ -2507,13 +2557,7 @@ class AppViewModel(
     // -------------------------------------------------------------------- quick add
 
     fun openQuickAdd(action: QuickAction?) {
-        if (action == QuickAction.FOOD &&
-            HealthModule.NUTRITION in _state.value.preferences.modules
-        ) {
-            _state.update { it.copy(quickAdd = it.quickAdd.copy(visible = false)) }
-            openFoodSearchDefault()
-            return
-        }
+        if (routeQuickAction(action)) return
         message = null
         val current = _state.value.quickAdd
         val mode = when (action) {
@@ -2521,9 +2565,9 @@ class AppViewModel(
             QuickAction.NOTE -> QuickAddMode.NOTE
             QuickAction.WATER -> QuickAddMode.WATER
             QuickAction.WEIGHT -> QuickAddMode.WEIGHT
-            QuickAction.FOOD -> QuickAddMode.FOOD
-            QuickAction.SET -> QuickAddMode.SET
-            QuickAction.VITALS -> QuickAddMode.VITALS
+            // Food and vitals open their own surfaces, and Set starts a session; none
+            // reaches the sheet as a mode.
+            QuickAction.FOOD, QuickAction.SET, QuickAction.VITALS -> return
         }
         val local = now().toLocalDateTime(zone)
         _state.update {
@@ -2541,10 +2585,38 @@ class AppViewModel(
         }
     }
 
+    /**
+     * Action that leaves the sheet for its own surface: food search, the vitals reading
+     * sheet, or a live session. Returns true when it has been handled.
+     */
+    private fun routeQuickAction(action: QuickAction?): Boolean = when {
+        action == QuickAction.FOOD &&
+            HealthModule.NUTRITION in _state.value.preferences.modules -> {
+            _state.update { it.copy(quickAdd = it.quickAdd.copy(visible = false)) }
+            openFoodSearchDefault()
+            true
+        }
+        // Vitals opens its own small sheet in place (`DESIGN.md` §14.2), never a tab
+        // switch: the quick add is a form over whatever the person was reading.
+        action == QuickAction.VITALS &&
+            HealthModule.VITALS in _state.value.preferences.modules -> {
+            _state.update {
+                it.copy(quickAdd = it.quickAdd.copy(visible = false), quickVital = true)
+            }
+            true
+        }
+        action == QuickAction.SET -> true
+        else -> false
+    }
+
     fun closeQuickAdd() {
         _state.update {
             it.copy(quickAdd = it.quickAdd.copy(visible = false, mode = QuickAddMode.TILES))
         }
+    }
+
+    fun closeQuickVital() {
+        _state.update { it.copy(quickVital = false) }
     }
 
     fun quickAddBack() {
@@ -2785,6 +2857,7 @@ class AppViewModel(
                         TrashEntity.MEASUREMENT -> store.trash.deleteMeasurement(
                             app.openhealth.core.ids.MeasurementId(action.id),
                         )
+                        TrashEntity.ENTRY -> store.trash.deleteEntry(EntryId(action.id))
                         else -> Unit
                     }
                     is UndoAction.Deleted -> store.trash.undo(action.tombstone)
@@ -3157,6 +3230,21 @@ class AppViewModel(
         }
     }
 
+    /** One write for every reminder switch; scheduling follows the same values. */
+    fun setNotifications(prefs: app.openhealth.core.preferences.NotificationPrefs) {
+        launchGuarded {
+            withContext(Dispatchers.IO) {
+                container.preferences.setNotifications(prefs)
+                app.openhealth.android.notifications.HealthCheckIns
+                    .reschedule(container.context)
+                // Turning medicine reminders off also cancels the alarms already set.
+                app.openhealth.android.clinical.MedicationReminders
+                    .rescheduleAll(container.context)
+            }
+            rebuild()
+        }
+    }
+
     fun setAppLock(enabled: Boolean) {
         val available = app.openhealth.android.security.BiometricGate().available(container.context)
         if (enabled && !available) {
@@ -3190,10 +3278,49 @@ class AppViewModel(
         suppressNextLock = true
     }
 
-    fun disableAppLock() {
+    /**
+     * Turning the lock off is a security action: it asks the same device credential the
+     * lock screen would. Only a device that can no longer authenticate (credential
+     * removed) may switch it off without a prompt, or the person could be locked out of
+     * their own record forever.
+     */
+    fun disableAppLock(activity: Activity?) {
+        val gate = app.openhealth.android.security.BiometricGate()
+        if (activity != null && gate.available(container.context)) {
+            gate.authenticate(
+                activity = activity,
+                prompt = app.openhealth.android.security.LockPrompt(
+                    title = container.context.getString(R.string.lock_disable_title),
+                    subtitle = container.context.getString(R.string.lock_disable_body),
+                    cancel = container.context.getString(R.string.lock_prompt_cancel),
+                ),
+                onSuccess = ::turnOffAppLock,
+                onError = { error ->
+                    _state.update {
+                        it.copy(
+                            lockMessage = when (error) {
+                                app.openhealth.android.security.LockError.NO_ENROLMENT ->
+                                    LockMessage.NO_ENROLMENT
+
+                                app.openhealth.android.security.LockError.LOCKED_OUT ->
+                                    LockMessage.LOCKED_OUT
+
+                                else -> LockMessage.CANCELLED
+                            },
+                        )
+                    }
+                },
+            )
+        } else {
+            turnOffAppLock()
+        }
+    }
+
+    private fun turnOffAppLock() {
         launchGuarded {
             withContext(Dispatchers.IO) { container.preferences.setAppLock(false) }
             _state.update { it.copy(locked = false, lockMessage = null) }
+            rebuild()
         }
     }
 
@@ -3254,6 +3381,8 @@ class AppViewModel(
             current.copy(
                 name = edit.name.trim().ifBlank { current.name },
                 date_of_birth = birth?.toString() ?: current.date_of_birth,
+                sex_at_birth = edit.sexAtBirth?.name,
+                activity_level = edit.activityLevel?.name,
                 goal = goal?.key,
                 height_cm = height,
                 weight_kg = weight,
@@ -3359,12 +3488,42 @@ class AppViewModel(
                 withContext(Dispatchers.IO) {
                     val bytes = container.export.export(passphrase)
                     container.documents.write(uri, bytes)
+                    store.settings.put(
+                        SettingKeys.LAST_EXPORT_AT,
+                        container.clock.now().toString(),
+                    )
+                    store.settings.put(SettingKeys.LAST_EXPORT_BYTES, bytes.size.toString())
                 }
             }
             message = if (result.isSuccess) {
                 SettingsMessage.EXPORT_SAVED
             } else {
                 SettingsMessage.EXPORT_FAILED
+            }
+            busy = false
+            rebuild()
+        }
+    }
+
+    /** Decrypts and validates a backup without touching the live record. */
+    fun verifyBackup(uri: Uri, passphrase: CharArray) {
+        if (busy) {
+            passphrase.fill('\u0000')
+            return
+        }
+        busy = true
+        refresh()
+        launchGuarded {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val bytes = container.documents.read(uri)
+                    container.export.read(bytes, passphrase)
+                }
+            }
+            message = when (result.exceptionOrNull()) {
+                null -> SettingsMessage.BACKUP_VERIFIED
+                is WrongPassphrase -> SettingsMessage.WRONG_PASSPHRASE
+                else -> SettingsMessage.BACKUP_INVALID
             }
             busy = false
             rebuild()
@@ -4342,6 +4501,61 @@ class AppViewModel(
         return result.take(RECENT_LIMIT)
     }
 
+    private fun notificationsDetail(
+        prefs: app.openhealth.core.preferences.NotificationPrefs,
+    ): String {
+        if (!prefs.enabled) {
+            return container.context.getString(UiR.string.settings_notifications_off)
+        }
+        val labels = listOfNotNull(
+            if (prefs.medication) {
+                container.context.getString(UiR.string.settings_notify_medication)
+            } else {
+                null
+            },
+            if (prefs.daily) {
+                container.context.getString(UiR.string.settings_notify_daily)
+            } else {
+                null
+            },
+            if (prefs.weekly) {
+                container.context.getString(UiR.string.settings_notify_weekly)
+            } else {
+                null
+            },
+        )
+        return labels.joinToString(" · ").ifEmpty {
+            container.context.getString(UiR.string.settings_notifications_on)
+        }
+    }
+
+    /** When the last export succeeded and how large it was, or empty. */
+    private fun backupLabel(): String {
+        val at = store.settings.get(SettingKeys.LAST_EXPORT_AT)
+        val instant = at?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        val size = store.settings.get(SettingKeys.LAST_EXPORT_BYTES)?.toLongOrNull()
+        if (instant == null || size == null) return ""
+        val local = instant.toLocalDateTime(zone)
+        val stamp = java.time.LocalDateTime.of(
+            local.year,
+            local.monthNumber,
+            local.dayOfMonth,
+            local.hour,
+            local.minute,
+        ).format(
+            java.time.format.DateTimeFormatter.ofPattern(
+                "d MMM, HH:mm",
+                java.util.Locale.getDefault(),
+            ),
+        )
+        val bytes = if (size < BYTES_PER_KB) {
+            "$size B"
+        } else {
+            "%.1f MB".format(size / BYTES_PER_MB)
+        }
+        return container.context.getString(UiR.string.settings_last_backup_value, stamp, bytes)
+    }
+
     /** The Settings line for a recovered database; a bad value simply shows nothing. */
     private fun parseRecoveryDate(raw: String): String? = runCatching {
         val instant = kotlin.time.Instant.parse(raw)
@@ -4366,6 +4580,12 @@ class AppViewModel(
         ).joinToString(" · "),
         profileBirthDate = profile?.date_of_birth.orEmpty(),
         profileGoal = ProfileGoal.fromKey(profile?.goal),
+        profileSex = profile?.sex_at_birth?.let {
+            runCatching { SexAtBirth.valueOf(it) }.getOrNull()
+        },
+        profileActivity = profile?.activity_level?.let {
+            runCatching { ActivityLevel.valueOf(it) }.getOrNull()
+        },
         profileHeight = profile?.height_cm?.let {
             displayLength(it, UnitSystem.fromKey(profile.units) ?: UnitSystem.METRIC)
         }.orEmpty(),
@@ -4377,10 +4597,13 @@ class AppViewModel(
             AgeRules.mayUseWeightLossGoal(it, now().toLocalDateTime(zone).date)
         } ?: true,
         hasRestoreSnapshot = container.hasPreRestoreSnapshot(),
+        backupDetail = backupLabel(),
         recoveryNote = store.settings
             .get(app.openhealth.android.data.AndroidDatabaseFactory.RECOVERED_AT)
             ?.let(::parseRecoveryDate),
         modules = preferences.modules,
+        notifications = preferences.notifications,
+        notificationsDetail = notificationsDetail(preferences.notifications),
         devicesDetail = activity.summary(),
         syncDetail = container.sync.summary(),
         coachDetail = container.coach.summary(),
@@ -5123,9 +5346,10 @@ class AppViewModel(
         "[lb_av]" -> "lb"
         "[in_i]" -> "in"
         "mm[Hg]" -> "mmHg"
-        "{step}" -> "steps"
-        "{score}" -> ""
+        "{steps}" -> "steps"
+        "{count}", "{score}" -> ""
         "/min" -> "bpm"
+        "Cel" -> container.context.getString(UiR.string.unit_degrees_c)
         else -> unit
     }
 

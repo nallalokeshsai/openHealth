@@ -172,6 +172,22 @@
             </intent-filter>
         </receiver>
 
+        <!-- Daily and weekly check-ins (pr.md §6.19). Local alarms only; quiet hours and
+             each type are controlled in Settings → Notifications. -->
+        <receiver
+            android:name="app.openhealth.android.notifications.CheckInReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="app.openhealth.android.notifications.CheckInBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+
         <!-- A GPS recording keeps running with the screen off (pr.md §6.11). Every fix
              is persisted, so a process death leaves a recoverable track. -->
         <service

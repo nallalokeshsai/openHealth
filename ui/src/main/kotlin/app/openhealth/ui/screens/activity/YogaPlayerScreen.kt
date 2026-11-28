@@ -37,9 +37,12 @@ import app.openhealth.ui.R
 import app.openhealth.ui.body.BodyMapModel
 import app.openhealth.ui.body.BodyMapVariant
 import app.openhealth.ui.body.OhBodyMap
+import app.openhealth.ui.body.OhBodyMapTable
+import app.openhealth.ui.body.PlanWindow
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhButtonVariant
 import app.openhealth.ui.components.OhIconButton
+import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.icons.OhIcons
 import app.openhealth.ui.screens.common.OhFocusedScreen
 import app.openhealth.ui.theme.OhTheme
@@ -70,6 +73,7 @@ fun YogaPlayerScreen(
     val pose = step?.let { app.openhealth.core.activity.YogaLibrary.pose(it.poseId) }
     val remaining = YogaPlayer.phaseRemaining(flow, state)
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var showTable by rememberSaveable { mutableStateOf(false) }
     OhFocusedScreen(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -173,19 +177,29 @@ fun YogaPlayerScreen(
             )
         }
         Spacer(Modifier.height(OhTheme.space.s6))
+        val coverage = pose.primaryMuscles.associateWith {
+            MusclePlan(it, weeklySets = 1.0, share = 1.0)
+        } + pose.secondaryMuscles.associateWith {
+            MusclePlan(it, weeklySets = 0.5, share = 0.5)
+        }
+        val map = BodyMapModel.plan(
+            sex = BodySex.MALE,
+            coverage = coverage,
+            selected = selected?.let(Muscle::fromKey),
+            window = PlanWindow.SESSION,
+        )
         OhBodyMap(
-            model = BodyMapModel.plan(
-                sex = BodySex.MALE,
-                coverage = pose.primaryMuscles.associateWith {
-                    MusclePlan(it, weeklySets = 1.0, share = 1.0)
-                } + pose.secondaryMuscles.associateWith {
-                    MusclePlan(it, weeklySets = 0.5, share = 0.5)
-                },
-                selected = selected?.let(Muscle::fromKey),
-            ),
+            model = map,
             onMuscle = { selected = it.key },
+            onShowTable = { showTable = true },
             variant = BodyMapVariant.FULL,
             synchronousLayers = synchronousLayers,
+        )
+        Spacer(Modifier.height(OhTheme.space.s2))
+        OhButton(
+            text = stringResource(R.string.body_map_show_table),
+            onClick = { showTable = true },
+            variant = OhButtonVariant.Quiet,
         )
         Spacer(Modifier.height(OhTheme.space.s4))
         val phase = breath.phaseAt(state.elapsedSeconds)
@@ -245,6 +259,25 @@ fun YogaPlayerScreen(
             style = OhTheme.type.caption,
             color = OhTheme.colors.label3,
         )
+    }
+    if (showTable && pose != null) {
+        OhModalSheet(
+            visible = true,
+            onDismiss = { showTable = false },
+            title = stringResource(R.string.body_map_table_title),
+        ) {
+            OhBodyMapTable(
+                model = BodyMapModel.plan(
+                    sex = BodySex.MALE,
+                    coverage = pose.primaryMuscles.associateWith {
+                        MusclePlan(it, weeklySets = 1.0, share = 1.0)
+                    } + pose.secondaryMuscles.associateWith {
+                        MusclePlan(it, weeklySets = 0.5, share = 0.5)
+                    },
+                    window = PlanWindow.SESSION,
+                ),
+            )
+        }
     }
 }
 

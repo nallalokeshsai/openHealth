@@ -18,8 +18,8 @@ It is not a screen-by-screen wireframe set: `DESIGN.md` §14.1–14.2 covers the
 
 | File | Version | Owns | Authority |
 |---|---|---|---|
-| `pr.md` | 0.4 · 2026-11-22 | Features and MVP/V1/Later tags (§6); five-layer data model (§7); architecture summary (§8); product roadmap (§9); metrics (§10); non-goals (§11); regulatory, licensing and platform constraints (§12); open decisions (§13); cut list (§14.5) | **Behaviour contract.** Wins on scope, wording and what a screen does. |
-| `DESIGN.md` | 0.7 · 2026-11-27 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
+| `pr.md` | 0.4.1 · 2026-11-28 | Features and MVP/V1/Later tags (§6); five-layer data model (§7); architecture summary (§8); product roadmap (§9); metrics (§10); non-goals (§11); regulatory, licensing and platform constraints (§12); open decisions (§13); cut list (§14.5) | **Behaviour contract.** Wins on scope, wording and what a screen does. |
+| `DESIGN.md` | 0.7.2 · 2026-11-28 | Every colour, type role, size, radius, state, motion, component, chart, provenance visual, body/media rule and a11y rule; closed token set (§0.2); screen inventory and recipes (§14.1–14.2); review gate (§14.5); canonical tokens (Appendix A); Compose mapping (Appendix B); asset licences (Appendix C) | **Appearance contract.** Wins on pixels, interaction feel and presentation. |
 | `Tech-Stack.md` | 2.5 · 2026-11-27 | Native-Android decision and rejected alternatives (§2); portability discipline (§3); client, storage, sync, server and Android APIs (§4–8); AI (§9); testing, CI and performance budgets (§10–12); repository layout (§13); versions (§14); closes §13 items | **Build contract.** Wins on stack, storage, sync and server. |
 | `BUILD-ROADMAP.md` | 1.0 · 2026-11-22 | Build phases B0–B15: deliverables, exit tests, hand-offs, what to ask the owner, risks | **Build sequence.** Wins on order and exit tests; owns no values. |
 | `prompts.md` | 1.0 · 2026-11-22 | One copy-paste prompt per phase and the Standing rules every agent follows | **Operating procedure** for build sessions. |
@@ -220,14 +220,26 @@ Updated by every build phase at its exit (`prompts.md` "Log and finish").
 - Last completed phase: **B15 AI Coach and MCP** (2026-11-27). B15 is the last planned
   phase; there is no B16.
 - Build: green. `./gradlew check :app-android:assembleDebug :app-wear:assembleDebug`
-  passes; **906 JVM tests** (453 `:core`, 183 `:data`, 7 `:sync`, 55 `:integrations`,
-  172 `:ui`, 14 `:server`, 10 across the three tools, 12 `:app-wear`) and **376 goldens**
-  in dark, light, 200 % text and RTL, plus **72 instrumented tests** on the phone
+  passes; **931 JVM tests** (461 `:core`, 189 `:data`, 8 `:sync`, 58 `:integrations`,
+  176 `:ui`, 15 `:server`, 10 across the three tools, 14 `:app-wear`) and **400 goldens**
+  in dark, light, 200 % text and RTL, plus **73 instrumented tests** on the phone
   emulator and **1** on the Wear emulator. Both `play` and `fdroid` debug APKs and the
   Wear APK build. The five-tab shell, B4 body map, B5 Train, B6 Nutrition, B7 Vitals,
   B8 Devices, B9 Today/Stats, B10 review, B11 movement, B12 sleep/clinical/report pages,
   B13 Sync page, B14 watch surfaces and the B15 coach and external-access pages are
   present.
+- A post-B15 device QA pass (2026-11-28, `docs/build-log.md`) fixed sixteen user-visible
+  defects found on the owner's phone, including the quick-add Vitals and Set stubs, the
+  missing food/water undo, duplicated timeline readings, the `{steps}` and `/min`
+  machine units, unconfirmed Sync disconnect and raw-payload drop, and the Sleep KPI
+  tables. It added three JVM tests and one instrumented test.
+- A second post-B15 pass (2026-11-28, `docs/build-log.md`) decided the brand mark as a
+  geometric heart with a pulse line (`DESIGN.md` §10.5; launcher, monochrome and splash),
+  added a safe exit from demo mode and a confirmed full erase, Settings → Notifications
+  with daily/weekly local check-ins and quiet hours, editable sex/activity on the profile,
+  backup health plus verify-backup, re-authentication before turning the lock off, the
+  remaining Stats tables and the yoga map table, and removed the dead quick-add/root
+  stubs. The suite is now 931 JVM and 73 instrumented, both green.
 - B15 delivers: a provider-agnostic `:core` coach adapter (Anthropic Messages API and any
   OpenAI-compatible self-hosted endpoint), per-category consent with a separate Health
   Connect switch, a strict structured-output parser that validates plan changes with the

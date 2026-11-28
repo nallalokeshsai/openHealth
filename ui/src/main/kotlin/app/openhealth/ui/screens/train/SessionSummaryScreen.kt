@@ -80,12 +80,21 @@ fun SessionSummaryScreen(
         Spacer(Modifier.height(OhTheme.space.s5))
         OhKpiBand(
             figures = listOf(
-                OhKpiFigure(model.duration, stringResource(R.string.train_summary_duration)),
+                OhKpiFigure(
+                    model.duration,
+                    stringResource(R.string.train_summary_duration),
+                    onClick = { provenance = true },
+                ),
                 OhKpiFigure(
                     model.volume ?: stringResource(R.string.train_not_available),
                     stringResource(R.string.train_summary_volume),
+                    onClick = { provenance = true },
                 ),
-                OhKpiFigure(model.sets, stringResource(R.string.train_summary_sets)),
+                OhKpiFigure(
+                    model.sets,
+                    stringResource(R.string.train_summary_sets),
+                    onClick = { provenance = true },
+                ),
             ),
             footer = stringResource(R.string.train_summary_volume_note),
         )

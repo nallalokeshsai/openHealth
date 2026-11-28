@@ -189,6 +189,22 @@ class ShellExitTest {
     }
 
     @Test
+    fun quickAddVitalsOpensItsOwnSheetWithoutLeavingTheScreen() {
+        seedProfile()
+        compose.setContent { OpenHealthRoot(container, viewModel) }
+        waitFor("loaded") { viewModel.state.value.loaded }
+        waitFor("shell") { viewModel.state.value.onboardingComplete }
+
+        viewModel.openQuickAdd(QuickAction.VITALS)
+        waitFor("reading sheet") { viewModel.state.value.quickVital }
+        assertFalse(viewModel.state.value.quickAdd.visible)
+        compose.onNodeWithText("Add reading").assertExists()
+
+        viewModel.closeQuickVital()
+        waitFor("sheet closed") { !viewModel.state.value.quickVital }
+    }
+
+    @Test
     fun quickAddWeightReplacesTheDaysWeight() {
         seedProfile()
         viewModel.refresh()
@@ -488,6 +504,8 @@ class ShellExitTest {
                 name = "Ana",
                 birthDate = seventeen.toString(),
                 goal = app.openhealth.core.preferences.ProfileGoal.LOSE_FAT,
+                sexAtBirth = null,
+                activityLevel = null,
                 height = "170",
                 weight = "70",
                 units = UnitSystem.METRIC,

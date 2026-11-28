@@ -1,12 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app mark decided 2026-11-28 (DESIGN.md §10.5): a geometric heart with a
+     pulse line, accent on bg, no gradient, gloss or shadow. Kept inside the 66 dp
+     adaptive-icon safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,30a24,24 0,1 0,0 48a24,24 0,1 0,0 -48zM54,37a17,17 0,1 1,0 34a17,17 0,1 1,0 -34z" />
+        android:fillColor="@color/oh_mark_heart"
+        android:pathData="M54,82 C50,78 26,62 26,44 C26,34 33,27 43,27 C48,27 52,30 54,35 C56,30 60,27 65,27 C75,27 82,34 82,44 C82,62 58,78 54,82 Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M51,44h6v13h9v6h-15z" />
+        android:fillColor="@android:color/transparent"
+        android:pathData="M32,53 H45 L49,45 L56,64 L61,53 H76"
+        android:strokeColor="@color/oh_mark_pulse"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

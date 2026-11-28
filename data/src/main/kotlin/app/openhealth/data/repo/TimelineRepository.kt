@@ -142,8 +142,12 @@ class TimelineRepository(private val db: OpenHealthDb, private val driver: SqlDr
                 "happened_at",
             ),
             Branch(
+                // A manual reading is written as both an observation and a linked vital
+                // row (BodyPresenter.logReading). Only the observation is listed, or the
+                // same reading appears twice at the same minute. A vital row with no
+                // observation (the demo corpus) still gets its own event.
                 "SELECT 'vital', id, local_date, happened_at, recorded_at, source_id, " +
-                    "type, 0 FROM vital",
+                    "type, 0 FROM vital WHERE observation_id IS NULL",
                 "happened_at",
             ),
             Branch(

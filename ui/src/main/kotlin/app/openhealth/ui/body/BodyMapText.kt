@@ -70,11 +70,18 @@ fun bodyMapDescription(model: BodyMapModel): String = when (model.type) {
             (model.shade(muscle) as? MuscleShade.Plan)?.let { muscle to it }
         }
         val top = plans.maxByOrNull { it.second.weeklySets }
+        val weekly = model.planWindow == PlanWindow.WEEK
         if (top == null) {
-            stringResource(R.string.body_map_desc_plan_empty)
+            stringResource(
+                if (weekly) {
+                    R.string.body_map_desc_plan_empty
+                } else {
+                    R.string.body_map_desc_session_empty
+                },
+            )
         } else {
             stringResource(
-                R.string.body_map_desc_plan,
+                if (weekly) R.string.body_map_desc_plan else R.string.body_map_desc_session,
                 pluralStringResource(
                     R.plurals.body_map_plan_muscles,
                     plans.size,
@@ -82,7 +89,11 @@ fun bodyMapDescription(model: BodyMapModel): String = when (model.type) {
                 ),
                 muscleLabel(top.first),
                 pluralStringResource(
-                    R.plurals.body_map_plan_sets,
+                    if (weekly) {
+                        R.plurals.body_map_plan_sets
+                    } else {
+                        R.plurals.body_map_session_sets
+                    },
                     top.second.weeklySets.toInt(),
                     number(top.second.weeklySets),
                 ),
@@ -193,7 +204,11 @@ fun bodyMapTableRows(model: BodyMapModel): List<BodyMapTableRow> =
             is MuscleShade.Plan -> BodyMapTableRow(
                 muscleLabel = muscleLabel(muscle),
                 valueLabel = stringResource(
-                    R.string.body_map_table_weekly_sets,
+                    if (model.planWindow == PlanWindow.WEEK) {
+                        R.string.body_map_table_weekly_sets
+                    } else {
+                        R.string.body_map_table_session_sets
+                    },
                     number(shade.weeklySets),
                 ),
                 stateLabel = stringResource(R.string.body_map_legend_plan),
@@ -202,7 +217,14 @@ fun bodyMapTableRows(model: BodyMapModel): List<BodyMapTableRow> =
             MuscleShade.None -> BodyMapTableRow(
                 muscleLabel = muscleLabel(muscle),
                 valueLabel = if (model.type == BodyMapType.PLAN) {
-                    stringResource(R.string.body_map_table_weekly_sets, number(0.0))
+                    stringResource(
+                        if (model.planWindow == PlanWindow.WEEK) {
+                            R.string.body_map_table_weekly_sets
+                        } else {
+                            R.string.body_map_table_session_sets
+                        },
+                        number(0.0),
+                    )
                 } else {
                     stringResource(R.string.body_map_table_no_load)
                 },

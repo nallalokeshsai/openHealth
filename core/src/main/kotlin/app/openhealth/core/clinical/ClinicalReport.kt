@@ -21,6 +21,7 @@ import app.openhealth.core.seam.PdfDocumentSpec
 import app.openhealth.core.seam.PdfParagraph
 import app.openhealth.core.seam.PdfSection
 import app.openhealth.core.seam.PdfTable
+import app.openhealth.core.units.displayLabel
 import app.openhealth.core.vitals.VitalRanges
 import kotlin.math.round
 import kotlin.time.Instant
@@ -214,7 +215,7 @@ object ClinicalReportBuilder {
             }
             if (readings.isEmpty()) return@forEach
             val latest = readings.maxBy { it.start }
-            val unit = latest.value.unit.ucum
+            val unit = latest.value.unit.displayLabel()
             val range = VitalRanges.forReading(type, latest.context?.name)
             rows += listOf(
                 label,

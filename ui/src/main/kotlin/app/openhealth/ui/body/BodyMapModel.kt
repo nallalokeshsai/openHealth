@@ -11,6 +11,13 @@ import app.openhealth.core.formula.RecoveryStep
 enum class BodyMapType { RECOVERY, PLAN }
 
 /**
+ * What the plan map counts: a routine's weekly target sets, or the sets actually done in
+ * one session, flow or pose. The two never share wording: a summary that says "1 set a
+ * week" about a single session is wrong.
+ */
+enum class PlanWindow { WEEK, SESSION }
+
+/**
  * One muscle's value on the map. A recovery step carries the hours and sets its sheet
  * states in words; a plan share carries the weekly sets behind the accent ramp.
  */
@@ -57,6 +64,8 @@ data class BodyMapModel(
     val selected: Muscle? = null,
     /** False when the profile did not state a sex at birth; the figure is then generic. */
     val sexStated: Boolean = true,
+    /** Only meaningful for a plan map: weekly targets or one session's work. */
+    val planWindow: PlanWindow = PlanWindow.WEEK,
 ) {
     fun shade(muscle: Muscle): MuscleShade = shades[muscle] ?: MuscleShade.None
 
@@ -90,6 +99,7 @@ data class BodyMapModel(
             sex: BodySex,
             coverage: Map<Muscle, MusclePlan>,
             selected: Muscle? = null,
+            window: PlanWindow = PlanWindow.WEEK,
         ): BodyMapModel = BodyMapModel(
             sex = sex,
             type = BodyMapType.PLAN,
@@ -97,6 +107,7 @@ data class BodyMapModel(
                 MuscleShade.Plan(share = plan.share.toFloat(), weeklySets = plan.weeklySets)
             },
             selected = selected,
+            planWindow = window,
         )
     }
 }

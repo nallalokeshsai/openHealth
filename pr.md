@@ -1,8 +1,9 @@
 # openHealth — Product Requirements & Feature Specification
 
-**Version:** 0.4 (build-ready draft)  
+**Version:** 0.4.1 (build-ready draft)  
 **Status:** Living document  
-**Last revision:** 2026-11-22 — five-tab IA (5), tiered onboarding and splash
+**Last revision:** 2026-11-28 — §13.10 records the decided brand mark: a geometric heart
+with a pulse line, matching `DESIGN.md` §10.5. Earlier 2026-11-22 — five-tab IA (5), tiered onboarding and splash
 (6.1), dynamic body model (6.8), Garmin as the watch (6.18, 13.8). Earlier
 2026-11-20 — platform pass: the first releases are Android
 only (0.1), iOS/web deferred behind a gate (13.17), section 8.1 superseded by
@@ -1984,7 +1985,7 @@ Closed 2026-11-22 with the recommended default; the full reasoning is in
 | 7 | AI | Closed | Off, BYOK or self-hosted, proposals only; not before build phase B11 |
 | 8 | First devices | Closed | Any Garmin (vívoactive 5 reference) via FIT then Health Connect; phone sensors; standard-GATT HR strap, scale, cuff (6.18) |
 | 9 | First languages | Closed | English; strings keyed for translation; RTL-correct |
-| 10 | Brand and domain | Closed (placeholder) | "openHealth", `app.openhealth`; no domain or store claim |
+| 10 | Brand and domain | Closed | "openHealth", `app.openhealth`; the mark is a geometric heart with a pulse line (`DESIGN.md` §10.5, decided 2026-11-28); no domain or store claim |
 | 11 | Offline food index | Closed | USDA FoodData Central (CC0) generic foods bundled; barcodes via Open Food Facts on demand, cached, attributed (12.2) |
 | 12 | Measurement | Closed | No telemetry; budgets measured on the owner's phone and an emulator; section 10 retention metrics not measured |
 | 13 | Business model | Closed | None: personal and household use |

@@ -157,7 +157,7 @@ class ClinicalPresenter(
                         id = episode.id,
                         kind = ClinicalKind.EPISODE,
                         title = episode.symptomName,
-                        subtitle = episode.localDate.toString(),
+                        subtitle = displayDate(episode.localDate),
                         value = context.getString(
                             R.string.clinical_severity_of_ten,
                             episode.severity,
@@ -178,7 +178,7 @@ class ClinicalPresenter(
                         title = lab.analyte.display,
                         subtitle = listOfNotNull(
                             lab.labName,
-                            lab.provenance.localDate.toString(),
+                            displayDate(lab.provenance.localDate),
                         ).joinToString(" · "),
                         value = "${number(lab.value, lab.analyte.decimals)} ${lab.unit.ucum}",
                         deletable = true,
@@ -877,7 +877,7 @@ class ClinicalPresenter(
         val rows = nights.sortedByDescending { it.localDate }.map { night ->
             val window = sleepWindow(night)
             SleepNightRow(
-                date = night.localDate.toString(),
+                date = displayDate(night.localDate),
                 asleep = duration(night.totals.asleepMinutes),
                 bedtime = window.first?.toLocalDateTime(zone)?.time?.text().orEmpty(),
                 wake = window.second?.toLocalDateTime(zone)?.time?.text().orEmpty(),
@@ -1241,8 +1241,8 @@ class ClinicalPresenter(
             title = context.getString(R.string.clinical_weekly_title),
             weekLabel = context.getString(
                 R.string.clinical_weekly_range,
-                from.toString(),
-                to.toString(),
+                displayDate(from),
+                displayDate(to),
             ),
             items = items,
             accessible = if (items.isEmpty()) {
@@ -1326,6 +1326,16 @@ class ClinicalPresenter(
 
     private fun number(value: Double, decimals: Int): String =
         String.format(java.util.Locale.ROOT, "%.${decimals}f", value)
+
+    /** A calendar day a person reads, never the ISO string the row stores. */
+    private fun displayDate(date: LocalDate): String =
+        java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
+            .format(
+                java.time.format.DateTimeFormatter.ofPattern(
+                    "d MMM",
+                    java.util.Locale.getDefault(),
+                ),
+            )
 
     private fun trim(value: Double): String =
         if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()

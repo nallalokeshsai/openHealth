@@ -244,6 +244,22 @@ fun Measure.rounded(decimals: Int): Measure {
     return copy(value = kotlin.math.round(value * factor) / factor)
 }
 
+/**
+ * The unit a person reads. A UCUM code is an identifier, never screen copy: "{steps}",
+ * "{count}", "mm[Hg]", "/min" and "Cel" must not reach a report, a timeline row or a
+ * chart (`DESIGN.md` §11.7). A counted unit is named by its row title, so it carries no
+ * unit at all.
+ */
+fun UcumUnit.displayLabel(): String = when (this) {
+    UcumUnit.PER_MINUTE -> "bpm"
+    UcumUnit.MILLIMETRE_MERCURY -> "mmHg"
+    UcumUnit.CELSIUS -> "\u00b0C"
+    UcumUnit.STEP -> "steps"
+    UcumUnit.COUNT, UcumUnit.SCORE -> ""
+    UcumUnit.MILLILITRE -> "ml"
+    else -> ucum
+}
+
 private const val MAX_DECIMALS = 6
 private const val TEN = 10.0
 private val POWERS_OF_TEN = DoubleArray(MAX_DECIMALS + 1) { index -> TEN.pow(index) }

@@ -25,53 +25,27 @@ class ModuleOffRootTest {
     val compose = createComposeRule()
 
     @Test
-    fun vitalsOffOffersSettingsAndNoWeightLog() {
+    fun anOffModuleOffersSettingsAndNoAction() {
         var opened = 0
         compose.setContent {
             OhTheme(dark = true) {
-                VitalsRoot(
-                    onLogWeight = { opened++ },
-                    moduleOff = true,
-                    onOpenSettings = { opened++ },
-                )
+                ModuleOffRoot(name = "Vitals", onOpenSettings = { opened++ })
             }
         }
         compose.onNodeWithText("Vitals is off").assertExists()
-        compose.onNodeWithText("Log weight").assertDoesNotExist()
         compose.onNodeWithText("Open settings").performClick()
         assertEquals(1, opened)
     }
 
     @Test
-    fun aModuleThatIsOnKeepsItsOwnRoot() {
+    fun theExplanationSaysTheDataIsKept() {
         compose.setContent {
             OhTheme(dark = true) {
-                VitalsRoot(onLogWeight = {}, moduleOff = false)
+                ModuleOffRoot(name = "Nutrition", onOpenSettings = {})
             }
         }
-        compose.onNodeWithText("No measurements yet").assertExists()
-        compose.onNodeWithText("Vitals is off").assertDoesNotExist()
-    }
-
-    @Test
-    fun nutritionOffDropsTheWaterAction() {
-        compose.setContent {
-            OhTheme(dark = true) {
-                NutritionRoot(onLogWater = {}, moduleOff = true)
-            }
-        }
-        compose.onNodeWithText("Nutrition is off").assertExists()
-        compose.onNodeWithText("Log water").assertDoesNotExist()
-    }
-
-    @Test
-    fun trainingOffDropsTheNoteAction() {
-        compose.setContent {
-            OhTheme(dark = true) {
-                TrainRoot(onAddNote = {}, moduleOff = true)
-            }
-        }
-        compose.onNodeWithText("Train is off").assertExists()
-        compose.onNodeWithText("Add note").assertDoesNotExist()
+        compose.onNodeWithText(
+            "Its cards are hidden and your data is kept. Turn it on in Settings, under Modules.",
+        ).assertExists()
     }
 }

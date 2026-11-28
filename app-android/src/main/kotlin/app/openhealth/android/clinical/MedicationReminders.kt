@@ -46,11 +46,19 @@ object MedicationReminders {
         val app = context.applicationContext as? OpenHealthApp ?: return
         val pending = runCatching { app.container.store.clinical.activeMedications() }
             .getOrDefault(emptyList())
+        if (!remindersAllowed(context)) {
+            cancelAll(context, pending)
+            return
+        }
         pending.forEach { medication -> schedule(context, medication) }
     }
 
     /** Schedules the next occurrence of every time on one medicine's schedule. */
     fun schedule(context: Context, medication: Medication) {
+        if (!remindersAllowed(context)) {
+            medication.schedule.times.forEach { time -> cancel(context, medication.id, time) }
+            return
+        }
         if (!medication.active || !medication.schedule.reminds) return
         medication.schedule.times.forEach { time ->
             scheduleNext(context, medication.id, time, medication.schedule.daysOfWeek)
@@ -197,6 +205,15 @@ object MedicationReminders {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    /** Off in Settings, or the whole reminder surface is off. */
+    internal fun remindersAllowed(context: Context): Boolean {
+        val app = context.applicationContext as? OpenHealthApp
+        val notifications = app?.let {
+            runCatching { it.container.preferences.snapshot().notifications }.getOrNull()
+        }
+        return notifications?.let { it.enabled && it.medication } ?: true
+    }
+
     /** Logs a dose from the notification; the app never assumes the person took it. */
     fun logDose(context: Context, medicationId: String, skipped: Boolean, atMillis: Long) {
         val app = context.applicationContext as? OpenHealthApp ?: return
@@ -265,6 +282,7 @@ class MedicationReminderReceiver : BroadcastReceiver() {
                 Thread({
                     try {
                         runCatching {
+                            if (!MedicationReminders.remindersAllowed(context)) return@runCatching
                             val medication = app.container.store.clinical
                                 .medication(medicationId)
                             if (medication == null || !medication.active) return@runCatching
