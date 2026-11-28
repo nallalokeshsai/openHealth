@@ -158,6 +158,67 @@ object OhGlyphIcons {
         }
     }
 
+    /** Status glyph: error (`DESIGN.md` §10.4). An octagon with a bar and a dot. */
+    val xOctagon: ImageVector = ohIcon("x-octagon") {
+        stroke {
+            moveTo(8.4f, 3.5f)
+            lineTo(15.6f, 3.5f)
+            lineTo(20.5f, 8.4f)
+            lineTo(20.5f, 15.6f)
+            lineTo(15.6f, 20.5f)
+            lineTo(8.4f, 20.5f)
+            lineTo(3.5f, 15.6f)
+            lineTo(3.5f, 8.4f)
+            close()
+            moveTo(9f, 9f)
+            lineTo(15f, 15f)
+            moveTo(15f, 9f)
+            lineTo(9f, 15f)
+        }
+    }
+
+    /** Status glyph: a record (`DESIGN.md` §10.4). A cup on a stem and a base. */
+    val trophy: ImageVector = ohIcon("trophy") {
+        stroke {
+            moveTo(7.5f, 4f)
+            lineTo(16.5f, 4f)
+            lineTo(16.5f, 9.5f)
+            quadTo(16.5f, 14f, 12f, 14f)
+            quadTo(7.5f, 14f, 7.5f, 9.5f)
+            close()
+            moveTo(7.5f, 6f)
+            lineTo(4.5f, 6f)
+            quadTo(4.5f, 10.5f, 8f, 11f)
+            moveTo(16.5f, 6f)
+            lineTo(19.5f, 6f)
+            quadTo(19.5f, 10.5f, 16f, 11f)
+            moveTo(12f, 14f)
+            lineTo(12f, 18f)
+            moveTo(8.5f, 20f)
+            lineTo(15.5f, 20f)
+            moveTo(9.5f, 18f)
+            lineTo(14.5f, 18f)
+        }
+    }
+
+    /** Status glyph: a freeze (`DESIGN.md` §10.4). Three crossed arms. */
+    val snowflake: ImageVector = ohIcon("snowflake") {
+        stroke {
+            moveTo(12f, 3.5f)
+            lineTo(12f, 20.5f)
+            moveTo(4.6f, 7.75f)
+            lineTo(19.4f, 16.25f)
+            moveTo(4.6f, 16.25f)
+            lineTo(19.4f, 7.75f)
+            moveTo(9.8f, 5.6f)
+            lineTo(12f, 7.8f)
+            lineTo(14.2f, 5.6f)
+            moveTo(9.8f, 18.4f)
+            lineTo(12f, 16.2f)
+            lineTo(14.2f, 18.4f)
+        }
+    }
+
     val bolt: ImageVector = ohIcon("bolt") {
         stroke {
             moveTo(13f, 3.5f)

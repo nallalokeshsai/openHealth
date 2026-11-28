@@ -34,12 +34,14 @@ object TrainingLoadMath {
     private const val MAX_HR_RATIO = 1.2
 
     /** Banister TRIMP for a steady effort with an average heart rate. */
+    @Suppress("LongParameterList")
     fun cardioLoad(
         minutes: Double,
         averageHeartRate: Double?,
         restingHeartRate: Double?,
         maxHeartRate: Double?,
         female: Boolean = false,
+        neutralSex: Boolean = false,
     ): Double {
         if (minutes <= 0.0) return 0.0
         val average = averageHeartRate
@@ -49,8 +51,18 @@ object TrainingLoadMath {
             return 0.0
         }
         val ratio = ((average - resting) / (maximum - resting)).coerceIn(MIN_HR_RATIO, MAX_HR_RATIO)
-        val a = if (female) TRIMP_FEMALE_A else TRIMP_MALE_A
-        val b = if (female) TRIMP_FEMALE_B else TRIMP_MALE_B
+        // With no sex at birth on file the two published coefficient sets are averaged
+        // rather than silently assuming one (`pr.md` §6.4: no hidden assumption).
+        val a = when {
+            neutralSex -> (TRIMP_MALE_A + TRIMP_FEMALE_A) / 2
+            female -> TRIMP_FEMALE_A
+            else -> TRIMP_MALE_A
+        }
+        val b = when {
+            neutralSex -> (TRIMP_MALE_B + TRIMP_FEMALE_B) / 2
+            female -> TRIMP_FEMALE_B
+            else -> TRIMP_MALE_B
+        }
         return minutes * ratio * a * exp(b * ratio)
     }
 
@@ -71,6 +83,7 @@ object TrainingLoadMath {
         restingHeartRate: Double?,
         maxHeartRate: Double?,
         female: Boolean = false,
+        neutralSex: Boolean = false,
     ): Double {
         val minutes = activity.durationSeconds / SECONDS_PER_MINUTE
         val trimp = cardioLoad(
@@ -79,6 +92,7 @@ object TrainingLoadMath {
             restingHeartRate = restingHeartRate,
             maxHeartRate = maxHeartRate,
             female = female,
+            neutralSex = neutralSex,
         )
         return if (trimp > 0.0) trimp else metLoad(minutes, activity.type.met.met)
     }
@@ -188,12 +202,14 @@ object TrainingLoad {
     }
 
     /** Load days from activities and finished strength sessions. */
+    @Suppress("LongParameterList")
     fun loadDays(
         activities: List<ActivityRecord>,
         strengthSessions: List<StrengthLoad>,
         restingHeartRate: Double?,
         maxHeartRate: Double?,
         female: Boolean = false,
+        neutralSex: Boolean = false,
     ): List<LoadDay> {
         val byDate = mutableMapOf<LocalDate, LoadDay>()
         activities.forEach { activity ->
@@ -202,6 +218,7 @@ object TrainingLoad {
                 restingHeartRate,
                 maxHeartRate,
                 female,
+                neutralSex,
             )
             val existing = byDate[activity.localDate]
             byDate[activity.localDate] = LoadDay(

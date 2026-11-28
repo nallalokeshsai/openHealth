@@ -40,6 +40,7 @@ class SyncEngine(
         var pushed = 0
         var pulled = 0
         var conflicts = 0
+        var rejected = 0
     }
 
     init {
@@ -55,8 +56,16 @@ class SyncEngine(
         }
         return outcome.fold(
             onSuccess = {
-                store.recordStatus(SyncStatus.SYNCED, now())
-                SyncResult(progress.pushed, progress.pulled, progress.conflicts, SyncStatus.SYNCED)
+                val note = progress.rejected.takeIf { it > 0 }
+                    ?.let { "$it change(s) were refused by the server and set aside" }
+                store.recordStatus(SyncStatus.SYNCED, now(), note)
+                SyncResult(
+                    progress.pushed,
+                    progress.pulled,
+                    progress.conflicts,
+                    SyncStatus.SYNCED,
+                    note,
+                )
             },
             onFailure = { failure ->
                 if (failure is CancellationException) throw failure
@@ -73,17 +82,23 @@ class SyncEngine(
             val pending = store.pendingChanges(pageSize)
             if (pending.isEmpty()) return
             val response = withRetry { transport.push(PushRequest(store.deviceId(), pending)) }
-            if (response.rejected.isNotEmpty()) {
-                throw SyncFailure(
-                    response.rejected.joinToString("; ") { "${it.idempotencyKey}: ${it.reason}" },
-                )
-            }
             // Only a key from this page can clear a pending change; anything else the
             // server echoes would leave the queue the same size and spin this loop.
             val sent = pending.mapTo(mutableSetOf(), ChangeRecord::idempotencyKey)
-            val acknowledged = response.acknowledged.filterTo(mutableSetOf(), sent::contains)
-            if (acknowledged.isEmpty()) throw SyncFailure("server acknowledged no changes")
-            store.markAcknowledged(acknowledged, response.serverSeq)
+            // A refused change is set aside, not retried forever: one bad change must not
+            // hold every later change back (the queue still strictly shrinks).
+            val refused = response.rejected.map { it.idempotencyKey }
+                .filterTo(mutableSetOf(), sent::contains)
+            if (refused.isNotEmpty()) {
+                store.quarantine(refused)
+                progress.rejected += refused.size
+            }
+            val acknowledged = response.acknowledged
+                .filterTo(mutableSetOf()) { it in sent && it !in refused }
+            if (acknowledged.isEmpty() && refused.isEmpty()) {
+                throw SyncFailure("server acknowledged no changes")
+            }
+            if (acknowledged.isNotEmpty()) store.markAcknowledged(acknowledged, response.serverSeq)
             progress.pushed += acknowledged.size
             // Every pass acknowledges at least one change, so the queue strictly shrinks
             // and the loop ends when it is empty. A backlog larger than one page — the

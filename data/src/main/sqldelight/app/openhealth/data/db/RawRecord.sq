@@ -60,3 +60,6 @@ SELECT count(*) FROM raw_record WHERE compacted_at IS NOT NULL;
 
 allRawRecords:
 SELECT * FROM raw_record ORDER BY received_at, id;
+
+payloadBytes:
+SELECT COALESCE(SUM(length(payload)), 0) FROM raw_record WHERE payload IS NOT NULL;

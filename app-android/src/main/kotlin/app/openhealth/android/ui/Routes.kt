@@ -34,6 +34,10 @@ data object TimelineRoute
 @Serializable
 data object TrashRoute
 
+/** Multi-week programmes (`pr.md` §6.5). */
+@Serializable
+data object ProgrammesRoute
+
 /** B10: the review inbox for duplicates, out-of-range values and disagreeing sources. */
 @Serializable
 data object ReviewRoute

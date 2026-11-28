@@ -374,9 +374,16 @@ class ActivityPresenter(
         }
     }
 
+    /** Which metric the priority list is ordering; steps until the person picks another. */
+    private var priorityType: ObservationType = ObservationType.STEPS
+
+    fun selectPriorityType(key: String) {
+        PRIORITY_TYPES.firstOrNull { it.name == key }?.let { priorityType = it }
+    }
+
     private fun priorityModel(): PriorityModel {
         val sources = stepSources()
-        val order = SourcePriorityPlan.order(sources, ObservationType.STEPS)
+        val order = SourcePriorityPlan.order(sources, priorityType)
         val rows = order.mapIndexed { index, id ->
             val source = sources.single { it.id == id }
             PriorityRowModel(
@@ -398,16 +405,26 @@ class ActivityPresenter(
             )
         }
         return PriorityModel(
+            types = PRIORITY_TYPES.map { it.name to context.getString(priorityTypeLabel(it)) },
+            selectedType = priorityType.name,
             rows = rows,
             typeLabel = context.getString(UiR.string.devices_priority_type),
             note = context.getString(UiR.string.devices_priority_note),
         )
     }
 
+    private fun priorityTypeLabel(type: ObservationType): Int = when (type) {
+        ObservationType.STEPS -> UiR.string.devices_priority_steps
+        ObservationType.DISTANCE -> UiR.string.devices_priority_distance
+        ObservationType.ACTIVE_CALORIES -> UiR.string.devices_priority_active_energy
+        ObservationType.SLEEP_DURATION -> UiR.string.devices_priority_sleep
+        else -> UiR.string.devices_priority_weight
+    }
+
     private fun stepSources(): List<Source> {
         val known = setOf(StepTracker.PHONE_SOURCE, GARMIN_SOURCE, HEALTH_CONNECT_SOURCE)
         val withSteps = store.observations.forTypeBetween(
-            ObservationType.STEPS,
+            priorityType,
             now() - 365.days,
             now().plus(1.days),
         ).map { it.provenance.sourceId }.toSet()
@@ -777,12 +794,12 @@ class ActivityPresenter(
 
     fun movePriority(sourceId: String, up: Boolean) {
         val sources = store.sources.all()
-        val order = SourcePriorityPlan.order(stepSources(), ObservationType.STEPS)
+        val order = SourcePriorityPlan.order(stepSources(), priorityType)
         val moved = SourcePriorityPlan.move(order, SourceId(sourceId), up)
         if (moved == order) return
         val updated = SourcePriorityPlan.priorities(
             moved,
-            ObservationType.STEPS,
+            priorityType,
             sources.associateBy(Source::id),
         )
         // One transaction, one rebuild: the winner of a day may have changed (§7.3, §7.6).
@@ -903,3 +920,12 @@ data class FitOutcome(
 ) {
     val ok: Boolean get() = error == null
 }
+
+/** The metrics whose source order the Devices page lets the person set (`pr.md` §7.6). */
+private val PRIORITY_TYPES = listOf(
+    ObservationType.STEPS,
+    ObservationType.DISTANCE,
+    ObservationType.ACTIVE_CALORIES,
+    ObservationType.SLEEP_DURATION,
+    ObservationType.WEIGHT,
+)

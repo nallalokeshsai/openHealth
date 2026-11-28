@@ -113,9 +113,12 @@ class SyncRowCodec(private val driver: SqlDriver) {
         if (changed > 0L) return true
         val columns = present
         val placeholders = columns.joinToString(", ") { "?" }
+        val verb = if (writable.isEmpty()) "OR IGNORE" else ""
+        // An all-key table has nothing for UPDATE to set, so an existing row would make a
+        // plain INSERT fail; OR IGNORE keeps the first-seen row and stays idempotent.
         driver.execute(
             identifier = null,
-            sql = "INSERT INTO $table(${columns.joinToString(", ")}) VALUES ($placeholders)",
+            sql = "INSERT $verb INTO $table(${columns.joinToString(", ")}) VALUES ($placeholders)",
             parameters = columns.size,
         ) {
             columns.forEachIndexed { index, column ->

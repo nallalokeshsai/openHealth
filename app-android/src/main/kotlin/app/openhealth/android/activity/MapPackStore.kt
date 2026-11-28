@@ -103,6 +103,7 @@ class MapPackStore(private val context: Context) {
                         path = target.absolutePath,
                         bytes = target.length(),
                         modifiedAtMillis = target.lastModified(),
+                        bounds = readBounds(target),
                     )
                 } finally {
                     connection.disconnect()

@@ -299,7 +299,13 @@ class YogaSessionService :
                     flowId = flow.id,
                     startedAt = kotlin.time.Instant.fromEpochMilliseconds(current.startedAtMillis),
                     endedAt = ended,
-                    muscles = YogaLoad.of(flow),
+                    // Only the poses reached count: a flow ended early must not credit
+                    // the muscles of the poses that were skipped.
+                    muscles = YogaLoad.of(
+                        flow.copy(
+                            steps = flow.steps.take((current.stepIndex + 1).coerceAtLeast(1)),
+                        ),
+                    ),
                 )
             }
         }

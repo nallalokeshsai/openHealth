@@ -29,6 +29,41 @@ class RawRecordRepository(private val db: OpenHealthDb) {
         return db.rawRecordQueries.countRawRecords().executeAsOne() > before
     }
 
+    /**
+     * Layer 1 for a hand-entered or app-originated row (`pr.md` §7.1, §2.2): every
+     * manual entry gets an immutable ingestion record so the value it produces has a
+     * raw-record ref. Returns the record id to store on the layer-4 row.
+     */
+    @Suppress("LongParameterList")
+    fun recordManual(
+        rawId: String,
+        sourceId: app.openhealth.core.ids.SourceId,
+        sourceKind: app.openhealth.core.observation.SourceKind,
+        kind: String,
+        payload: String,
+        happenedAt: Instant,
+        recordedAt: Instant,
+        appVersion: String?,
+    ): String {
+        insert(
+            RawRecord(
+                id = RawRecordId(rawId),
+                sourceId = sourceId,
+                sourceKind = sourceKind,
+                receivedAt = recordedAt,
+                recordedAt = recordedAt,
+                happenedAt = happenedAt,
+                payloadHash = app.openhealth.data.ingestion.PayloadHash.sha256(payload),
+                idempotencyKey = "manual-raw:$kind:$rawId",
+                schemaVersion = MANUAL_RAW_SCHEMA,
+                device = "android",
+                appVersion = appVersion,
+                payload = payload,
+            ),
+        )
+        return rawId
+    }
+
     fun byIdempotencyKey(key: String): RawRecord? =
         db.rawRecordQueries.rawRecordByIdempotencyKey(key).executeAsOneOrNull()?.toDomain()
 
@@ -52,4 +87,11 @@ class RawRecordRepository(private val db: OpenHealthDb) {
     }
 
     fun count(): Long = db.rawRecordQueries.countRawRecords().executeAsOne()
+
+    /** Payload bytes still held, for the Settings storage row (`pr.md` §7.1). */
+    fun payloadBytes(): Long = db.rawRecordQueries.payloadBytes().executeAsOne().toLong()
+
+    private companion object {
+        const val MANUAL_RAW_SCHEMA = 1
+    }
 }

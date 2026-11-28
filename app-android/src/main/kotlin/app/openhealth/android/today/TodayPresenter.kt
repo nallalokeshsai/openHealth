@@ -163,6 +163,7 @@ class TodayPresenter(
             sessionCount = sessionCount,
             plan = plan,
             energy = energy,
+            energyNeedsProfile = showsCalories && energy == null,
             stepsCard = stepsCard,
             weightCard = weightCard,
             due = due(date, moduleOn, preferences.weightNeutral),
@@ -431,6 +432,24 @@ class TodayPresenter(
 
     // --------------------------------------------------------------------- energy
 
+    /**
+     * A MET value already includes resting metabolism (1 MET is about the resting rate),
+     * and the day's BMR is added once on its own. Taking the workout's share of BMR off
+     * keeps `out = BMR + steps + workouts` from counting that minute of rest twice.
+     */
+    private fun netOfRest(
+        range: app.openhealth.core.formula.EnergyRange,
+        bmrKcal: Double,
+        minutes: Double,
+    ): app.openhealth.core.formula.EnergyRange {
+        val rest = bmrKcal * minutes / MINUTES_PER_DAY
+        return app.openhealth.core.formula.EnergyRange(
+            low = (range.low - rest).coerceAtLeast(0.0),
+            central = (range.central - rest).coerceAtLeast(0.0),
+            high = (range.high - rest).coerceAtLeast(0.0),
+        )
+    }
+
     private fun energy(
         date: LocalDate,
         profile: app.openhealth.data.db.Profile,
@@ -462,15 +481,19 @@ class TodayPresenter(
                     weightKg = weight,
                     minutes = minutes.toDouble(),
                 ) as? FormulaOutcome.Computed
-                )?.value
+                )?.value?.let { netOfRest(it, bmr, minutes.toDouble()) }
         }
         val activityRanges = activityRows.mapNotNull { activity ->
             val kcal = app.openhealth.core.activity.ActivityEnergy.estimate(activity, weight)
                 ?: return@mapNotNull null
-            app.openhealth.core.formula.EnergyRange(
-                low = kcal * 0.8,
-                central = kcal,
-                high = kcal * 1.2,
+            netOfRest(
+                app.openhealth.core.formula.EnergyRange(
+                    low = kcal * 0.8,
+                    central = kcal,
+                    high = kcal * 1.2,
+                ),
+                bmr,
+                activity.durationSeconds / SECONDS_PER_MINUTE,
             )
         }
         val workoutRanges = sessionRanges + activityRanges
@@ -1125,6 +1148,8 @@ class TodayPresenter(
 
 private const val MILLIS_PER_SECOND = 1_000.0
 private const val MILLIS_PER_MINUTE = 60_000L
+private const val SECONDS_PER_MINUTE = 60.0
+private const val MINUTES_PER_DAY = 1440.0
 private const val METRES_PER_KM = 1_000.0
 private const val TREND_DAYS = 90
 private const val SPARK_DAYS = 30

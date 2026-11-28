@@ -43,6 +43,7 @@ fun ActivityDetailScreen(
     model: ActivityDetailModel,
     onBack: () -> Unit,
     onExport: (String) -> Unit,
+    onExportTcx: (String) -> Unit = {},
     onDelete: (String) -> Unit,
     onOpenMapPacks: () -> Unit,
     modifier: Modifier = Modifier,
@@ -160,6 +161,14 @@ fun ActivityDetailScreen(
                 color = OhTheme.colors.label2,
             )
         }
+        if (model.bestEfforts.isNotEmpty()) {
+            OhSectionTitle(stringResource(R.string.activity_detail_best_efforts))
+            OhInsetGroup {
+                model.bestEfforts.forEachIndexed { index, (label, time) ->
+                    OhRow(title = label, value = time, showDivider = index > 0)
+                }
+            }
+        }
         if (model.splits.isNotEmpty()) {
             OhSectionTitle(stringResource(R.string.activity_detail_splits))
             OhInsetGroup {
@@ -213,6 +222,12 @@ fun ActivityDetailScreen(
             OhButton(
                 text = stringResource(R.string.activity_detail_export_gpx),
                 onClick = { onExport(model.id) },
+                variant = OhButtonVariant.Secondary,
+            )
+            Spacer(Modifier.height(OhTheme.space.s2))
+            OhButton(
+                text = stringResource(R.string.activity_detail_export_tcx),
+                onClick = { onExportTcx(model.id) },
                 variant = OhButtonVariant.Secondary,
             )
             Spacer(Modifier.height(OhTheme.space.s2))

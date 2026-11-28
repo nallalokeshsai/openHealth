@@ -19,6 +19,11 @@ module OpenHealth {
         var lastHeartRateSent = 0;
         var nextCommandId = 1;
         var writing = false;
+        // A command the phone never acknowledges (it rejects it) is retried this many
+        // times and then dropped, so it cannot block every later command in the queue.
+        const MAX_ATTEMPTS = 5;
+        var headId = 0;
+        var headTries = 0;
 
         function load() {
             // Command ids are the phone's idempotency key and its acknowledgement
@@ -181,7 +186,21 @@ module OpenHealth {
             if (writing || pending.size() == 0) {
                 return null;
             }
-            return pending[0][:packet];
+            var head = pending[0];
+            if (head[:id] == headId) {
+                headTries += 1;
+            } else {
+                headId = head[:id];
+                headTries = 1;
+            }
+            if (headTries > MAX_ATTEMPTS) {
+                pending = pending.slice(1, null);
+                savePending();
+                headId = 0;
+                headTries = 0;
+                return nextPacket();
+            }
+            return head[:packet];
         }
 
         function wrote() {

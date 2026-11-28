@@ -43,6 +43,7 @@ enum class TrashEntity(val table: String) {
     OBSERVATION("observation"),
     ACTIVITY("activity"),
     MEDICATION_DOSE("medication_dose"),
+    MEDICATION("medication"),
     SYMPTOM_EPISODE("symptom_episode"),
     LAB_RESULT("lab_result"),
     ALLERGY("allergy"),
@@ -380,6 +381,32 @@ data class MedicationDosePayload(
     val revision: Long,
 )
 
+/** A medicine and every dose logged against it, so a restore brings the history back. */
+@Serializable
+data class MedicationPayload(
+    val id: String,
+    val name: String,
+    val doseAmount: Double,
+    val doseUnit: String,
+    val form: String,
+    val scheduleJson: String,
+    val active: Boolean,
+    val startedOn: String?,
+    val endedOn: String?,
+    val notes: String?,
+    val localDate: String,
+    val zoneId: String,
+    val happenedAt: Long,
+    val recordedAt: Long,
+    val sourceId: String,
+    val rawRecordId: String?,
+    val idempotencyKey: String,
+    val device: String?,
+    val appVersion: String?,
+    val revision: Long,
+    val doses: List<MedicationDosePayload> = emptyList(),
+)
+
 @Serializable
 data class SymptomEpisodePayload(
     val id: String,
@@ -684,6 +711,46 @@ class TrashService(
         }
     }
 
+    /**
+     * Deletes a medicine through Trash. Its doses go with it in the same tombstone
+     * (the dose table restricts a delete of the parent), and come back on restore.
+     */
+    fun deleteMedication(id: String): TombstoneId? =
+        db.clinicalQueries.medicationById(id).executeAsOneOrNull()?.let { row ->
+            val doses = db.clinicalQueries.dosesForMedication(row.id).executeAsList()
+            val payload = MedicationPayload(
+                id = row.id,
+                name = row.name,
+                doseAmount = row.dose_amount,
+                doseUnit = row.dose_unit,
+                form = row.form,
+                scheduleJson = row.schedule_json,
+                active = row.active,
+                startedOn = row.started_on,
+                endedOn = row.ended_on,
+                notes = row.notes,
+                localDate = row.local_date,
+                zoneId = row.zone_id,
+                happenedAt = row.happened_at,
+                recordedAt = row.recorded_at,
+                sourceId = row.source_id,
+                rawRecordId = row.raw_record_id,
+                idempotencyKey = row.idempotency_key,
+                device = row.device,
+                appVersion = row.app_version,
+                revision = row.revision,
+                doses = doses.map { it.toPayload() },
+            )
+            record(
+                entity = TrashEntity.MEDICATION,
+                entityId = row.id,
+                payload = json.encodeToString(MedicationPayload.serializer(), payload),
+            ) {
+                doses.forEach { db.clinicalQueries.deleteDose(it.id) }
+                db.clinicalQueries.deleteMedication(row.id)
+            }
+        }
+
     fun deleteMedicationDose(id: String): TombstoneId? =
         db.clinicalQueries.doseById(id).executeAsOneOrNull()?.let { row ->
             record(
@@ -784,6 +851,7 @@ class TrashService(
                 TrashEntity.OBSERVATION -> restoreObservation(payload)
                 TrashEntity.ACTIVITY -> restoreActivity(payload)
                 TrashEntity.MEDICATION_DOSE -> restoreMedicationDose(payload)
+                TrashEntity.MEDICATION -> restoreMedication(payload)
                 TrashEntity.SYMPTOM_EPISODE -> restoreSymptomEpisode(payload)
                 TrashEntity.LAB_RESULT -> restoreLabResult(payload)
                 TrashEntity.ALLERGY -> restoreAllergy(payload)
@@ -882,6 +950,10 @@ class TrashService(
             TrashEntity.ACTIVITY.table -> {
                 val a = json.decodeFromString(ActivityPayload.serializer(), payload)
                 a.name ?: "${a.type.lowercase()} · ${a.localDate}"
+            }
+            TrashEntity.MEDICATION.table -> {
+                val m = json.decodeFromString(MedicationPayload.serializer(), payload)
+                "medicine · ${m.name}"
             }
             TrashEntity.MEDICATION_DOSE.table -> {
                 val d = json.decodeFromString(MedicationDosePayload.serializer(), payload)
@@ -992,7 +1064,7 @@ class TrashService(
         TrashEntity.VACCINATION ->
             json.decodeFromString(VaccinationPayload.serializer(), payload).localDate
         TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE, TrashEntity.ALLERGY,
-        TrashEntity.CONDITION,
+        TrashEntity.CONDITION, TrashEntity.MEDICATION,
         -> null
     }
 
@@ -1009,6 +1081,8 @@ class TrashService(
         TrashEntity.OBSERVATION ->
             db.observationQueries.observationById(id).executeAsOneOrNull() != null
         TrashEntity.ACTIVITY -> db.activityQueries.activityById(id).executeAsOneOrNull() != null
+        TrashEntity.MEDICATION ->
+            db.clinicalQueries.medicationById(id).executeAsOneOrNull() != null
         TrashEntity.MEDICATION_DOSE ->
             db.clinicalQueries.doseById(id).executeAsOneOrNull() != null
         TrashEntity.SYMPTOM_EPISODE ->
@@ -1047,7 +1121,7 @@ class TrashService(
             TrashEntity.VACCINATION ->
                 json.decodeFromString(VaccinationPayload.serializer(), payload).localDate
             TrashEntity.ROUTINE_EXERCISE, TrashEntity.NOTE, TrashEntity.ALLERGY,
-            TrashEntity.CONDITION,
+            TrashEntity.CONDITION, TrashEntity.MEDICATION,
             -> null
         }
         date?.let { rollupInvalidator?.invoke(LocalDate.parse(it)) }
@@ -1476,6 +1550,37 @@ class TrashService(
             appVersion = row.appVersion,
             revision = row.revision,
         )
+    }
+
+    private fun restoreMedication(payload: String) {
+        val row = json.decodeFromString(MedicationPayload.serializer(), payload)
+        db.clinicalQueries.insertMedication(
+            id = row.id,
+            name = row.name,
+            doseAmount = row.doseAmount,
+            doseUnit = row.doseUnit,
+            form = row.form,
+            scheduleJson = row.scheduleJson,
+            active = row.active,
+            startedOn = row.startedOn,
+            endedOn = row.endedOn,
+            notes = row.notes,
+            localDate = row.localDate,
+            zoneId = row.zoneId,
+            happenedAt = row.happenedAt,
+            recordedAt = row.recordedAt,
+            sourceId = row.sourceId,
+            rawRecordId = row.rawRecordId,
+            idempotencyKey = row.idempotencyKey,
+            device = row.device,
+            appVersion = row.appVersion,
+            revision = row.revision,
+        )
+        row.doses.forEach { dose ->
+            restoreMedicationDose(
+                json.encodeToString(MedicationDosePayload.serializer(), dose),
+            )
+        }
     }
 
     private fun restoreMedicationDose(payload: String) {

@@ -53,6 +53,7 @@ fun FoodEditorScreen(
     onDuplicate: () -> Unit,
     onLog: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onShare: (String) -> Unit = {},
 ) {
     var name by rememberSaveable(model.id) { mutableStateOf(model.name) }
     var brand by rememberSaveable(model.id) { mutableStateOf(model.brand) }
@@ -357,6 +358,29 @@ fun FoodEditorScreen(
             OhButton(
                 text = stringResource(R.string.nutrition_recipe_duplicate),
                 onClick = onDuplicate,
+                variant = OhButtonVariant.Secondary,
+                size = OhButtonSize.Small,
+            )
+            Spacer(Modifier.height(OhTheme.space.s2))
+            val shareHeading = stringResource(R.string.nutrition_recipe_share_ingredients)
+            val shareServings =
+                stringResource(R.string.nutrition_recipe_share_servings, model.servings)
+            OhButton(
+                text = stringResource(R.string.nutrition_recipe_share),
+                onClick = {
+                    // Plain text: any app can receive it, and it names no source or person.
+                    onShare(
+                        buildString {
+                            appendLine(model.name)
+                            appendLine(shareServings)
+                            appendLine()
+                            appendLine(shareHeading)
+                            model.ingredients.forEach { ingredient ->
+                                appendLine("- ${ingredient.name}: ${ingredient.grams.toInt()} g")
+                            }
+                        },
+                    )
+                },
                 variant = OhButtonVariant.Secondary,
                 size = OhButtonSize.Small,
             )

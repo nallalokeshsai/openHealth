@@ -46,3 +46,11 @@ jobs:
       # both use the Apache-2.0 ZXing decoder and both must compile.
       - name: Assemble the F-Droid flavour
         run: ./gradlew :app-android:assembleFdroidDebug --no-daemon
+
+      # R8, resource shrinking and the baseline-profile rewrite only run on release; a
+      # missing keep rule must fail here, not on the owner's machine. No keystore is
+      # present in CI, so these build unsigned.
+      - name: Assemble release variants
+        run: >-
+          ./gradlew :app-android:assemblePlayRelease :app-android:assembleFdroidRelease
+          :app-wear:assembleRelease --no-daemon

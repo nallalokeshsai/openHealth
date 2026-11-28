@@ -160,6 +160,17 @@ class WatchCommandHandler(
         now: Instant,
     ): WatchApply {
         val bpm = command.heartRateBpm ?: return WatchApply.REJECTED
+        val rawId = store.raw.recordManual(
+            rawId = ids.newId(),
+            sourceId = source,
+            sourceKind = app.openhealth.core.observation.SourceKind.DEVICE,
+            kind = "watch-hr",
+            payload = "watch-hr;command=${command.id};bpm=$bpm;" +
+                "at=${happened.toEpochMilliseconds()}",
+            happenedAt = happened,
+            recordedAt = now,
+            appVersion = null,
+        )
         store.observations.record(
             Observation.of(
                 id = ObservationId(ids.newId()),
@@ -173,6 +184,7 @@ class WatchCommandHandler(
                     device = kind.device,
                     appVersion = null,
                     method = MeasurementMethod.WATCH_OPTICAL,
+                    rawRecordId = app.openhealth.core.ids.RawRecordId(rawId),
                 ),
             ),
         )

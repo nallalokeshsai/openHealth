@@ -88,4 +88,27 @@ class RawRecordTest {
         assertEquals(0L, store.runStartupMaintenance().payloadsCompacted)
         store.close()
     }
+
+    /** A hand-entered value gets an immutable layer-1 record the row can point at. */
+    @Test
+    fun aManualEntryGetsALayerOneRecord() {
+        val store = inMemoryStore()
+        val repository = RawRecordRepository(store.db)
+        val at = Instant.parse("2026-03-01T08:00:00Z")
+        val id = repository.recordManual(
+            rawId = "raw-manual-1",
+            sourceId = SourceId("manual"),
+            sourceKind = SourceKind.MANUAL,
+            kind = "measurement",
+            payload = "type=waist;value=81.0",
+            happenedAt = at,
+            recordedAt = at,
+            appVersion = "test",
+        )
+        val saved = repository.byId(RawRecordId(id))!!
+        assertEquals(SourceKind.MANUAL, saved.sourceKind)
+        assertEquals("type=waist;value=81.0", saved.payload)
+        assertEquals(1L, repository.count())
+        store.close()
+    }
 }

@@ -23,6 +23,7 @@ import app.openhealth.data.repo.TrainingRepository
 import app.openhealth.data.repo.TrashService
 import app.openhealth.data.rollup.RollupEngine
 import app.openhealth.data.sync.SyncRepository
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
 /**
@@ -116,6 +117,7 @@ class LocalStore(
     fun runStartupMaintenance(now: Instant = clock.now()) = StartupMaintenance(
         trashPurged = trash.purgeExpired(now),
         payloadsCompacted = raw.compactExpired(now),
+        changesCompacted = sync.compactChangeLog(now - CHANGE_LOG_RETENTION),
     )
 
     override fun close() {
@@ -124,4 +126,10 @@ class LocalStore(
 }
 
 /** What one [LocalStore.runStartupMaintenance] pass removed, so a test can assert it. */
-data class StartupMaintenance(val trashPurged: Int, val payloadsCompacted: Long)
+data class StartupMaintenance(
+    val trashPurged: Int,
+    val payloadsCompacted: Long,
+    val changesCompacted: Long = 0,
+)
+
+private val CHANGE_LOG_RETENTION = 180.days

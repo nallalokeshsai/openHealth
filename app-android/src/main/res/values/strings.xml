@@ -72,4 +72,9 @@
     <string name="watch_link_channel">Watch link</string>
     <string name="watch_link_permission_title">Bluetooth permission needed</string>
     <string name="watch_link_permission_body">Allow nearby devices in Settings to connect your watch.</string>
+    <string name="widget_today_title">Today</string>
+    <string name="widget_today_description">Steps today against your goal. Opens openHealth.</string>
+    <string name="widget_today_steps">%1$s steps</string>
+    <string name="widget_today_goal">of %1$s</string>
+    <string name="widget_today_empty">Open openHealth</string>
 </resources>

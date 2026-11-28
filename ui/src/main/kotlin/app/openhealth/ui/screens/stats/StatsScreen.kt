@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +35,7 @@ import app.openhealth.ui.components.OhHeatmap
 import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhKpiBand
 import app.openhealth.ui.components.OhKpiFigure
+import app.openhealth.ui.components.OhMacroRing
 import app.openhealth.ui.components.OhRow
 import app.openhealth.ui.components.OhSegmentedControl
 import app.openhealth.ui.components.OhStackedBar
@@ -240,6 +242,25 @@ private fun StatsChartCard(
             is StatsPlot.Macros -> Column(
                 modifier = Modifier.semantics { contentDescription = card.description },
             ) {
+                // The ring splits energy by what each macro contributes: 4, 4 and 9 kcal a
+                // gram for protein, carbohydrate and fat; fibre has no share. The bars
+                // below carry the grams and the targets.
+                val energyShares = plot.rows.take(MACRO_RING_SEGMENTS).mapIndexed { index, macro ->
+                    (macro.grams * MACRO_KCAL_PER_GRAM[index]).toFloat() to hueInk(macro.hue)
+                }
+                if (energyShares.sumOf { it.first.toDouble() } > 0.0) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        OhMacroRing(
+                            segments = energyShares,
+                            centre = number(plot.rows.take(MACRO_RING_SEGMENTS).sumOf { it.grams }),
+                            contentDescription = card.description,
+                        )
+                    }
+                    Spacer(Modifier.height(OhTheme.space.s4))
+                }
                 plot.rows.forEach { macro ->
                     OhBarRow(
                         label = macro.name,
@@ -325,3 +346,8 @@ private fun formulaFor(id: ChartId): FormulaSheetModel {
 }
 
 private const val KPI_BAND = 3
+
+private const val MACRO_RING_SEGMENTS = 3
+
+@Suppress("MagicNumber") // Atwater factors: protein 4, carbohydrate 4, fat 9 kcal a gram
+private val MACRO_KCAL_PER_GRAM = listOf(4.0, 4.0, 9.0)

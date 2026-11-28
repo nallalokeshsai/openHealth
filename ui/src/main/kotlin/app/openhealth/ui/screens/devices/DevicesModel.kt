@@ -92,7 +92,14 @@ data class FoundDeviceModel(
     val kind: app.openhealth.core.activity.DeviceKindName,
 )
 
-data class PriorityModel(val rows: List<PriorityRowModel>, val typeLabel: String, val note: String)
+data class PriorityModel(
+    val rows: List<PriorityRowModel>,
+    val typeLabel: String,
+    val note: String,
+    /** The metrics whose order can be set, as key to label, and the one shown. */
+    val types: List<Pair<String, String>> = emptyList(),
+    val selectedType: String = "",
+)
 
 data class PriorityRowModel(
     val sourceId: String,

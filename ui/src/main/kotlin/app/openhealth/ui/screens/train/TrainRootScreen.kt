@@ -38,6 +38,7 @@ import app.openhealth.ui.body.muscleLabel
 import app.openhealth.ui.components.OhButton
 import app.openhealth.ui.components.OhCard
 import app.openhealth.ui.components.OhCardHeader
+import app.openhealth.ui.components.OhInsetGroup
 import app.openhealth.ui.components.OhMediaRow
 import app.openhealth.ui.components.OhModalSheet
 import app.openhealth.ui.components.OhRow
@@ -80,6 +81,7 @@ fun TrainRootScreen(
     movement: app.openhealth.ui.screens.activity.MovementModel? = null,
     onMovement: (String) -> Unit = {},
     strengthOff: Boolean = false,
+    onOpenProgrammes: () -> Unit = {},
 ) {
     if (moduleOff) {
         app.openhealth.ui.screens.roots.ModuleOffRoot(
@@ -183,6 +185,19 @@ fun TrainRootScreen(
                         color = OhTheme.colors.label2,
                     )
                 }
+            }
+        }
+        if (!strengthOff) {
+            OhSectionTitle(stringResource(R.string.train_programmes_open))
+            OhInsetGroup {
+                OhRow(
+                    title = model.programme?.let {
+                        stringResource(R.string.train_programme_card, it.name, it.week, it.weeks)
+                    } ?: stringResource(R.string.train_programmes_open),
+                    subtitle = model.programme?.routines?.takeIf { it.isNotBlank() },
+                    showChevron = true,
+                    onClick = onOpenProgrammes,
+                )
             }
         }
         if (!strengthOff) OhSectionTitle(stringResource(R.string.train_routines))

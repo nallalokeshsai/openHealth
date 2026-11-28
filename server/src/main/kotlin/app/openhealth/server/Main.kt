@@ -16,6 +16,16 @@ fun main() {
         PostgresChangeStore(it, config.minSchemaVersion)
     } ?: InMemoryChangeStore(config.minSchemaVersion)
     val auth = AuthService(config, authStore)
+    val media: MediaStore? = if (config.mediaConfigured) {
+        S3MediaStore(
+            endpoint = checkNotNull(config.s3Endpoint),
+            bucket = config.s3Bucket,
+            accessKey = checkNotNull(config.s3AccessKey),
+            secretKey = checkNotNull(config.s3SecretKey),
+        )
+    } else {
+        null
+    }
     Runtime.getRuntime().addShutdownHook(Thread { database?.close() })
 
     embeddedServer(
@@ -23,6 +33,6 @@ fun main() {
         port = config.port,
         host = config.host,
     ) {
-        openHealthModule(config, auth, changeStore)
+        openHealthModule(config, auth, changeStore, media)
     }.start(wait = true)
 }

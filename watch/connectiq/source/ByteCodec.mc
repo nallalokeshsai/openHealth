@@ -6,6 +6,9 @@ module OpenHealth {
         const SNAPSHOT_SIZE = 20;
 
         function encodeCommand(type, id, weightKg, reps, bpm, happenedSeconds, warmup) {
+            if (bpm > 255) {
+                bpm = 255; // one byte on the wire, never a wrap to 0..4
+            }
             var out = new [COMMAND_SIZE] as Lang.ByteArray;
             out[0] = MAGIC;
             out[1] = VERSION;

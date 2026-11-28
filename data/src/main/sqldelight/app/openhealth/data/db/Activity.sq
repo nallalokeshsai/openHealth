@@ -86,6 +86,9 @@ SELECT * FROM activity
 WHERE local_date = :localDate
 ORDER BY started_at ASC;
 
+activityDays:
+SELECT DISTINCT local_date FROM activity;
+
 recentActivities:
 SELECT * FROM activity ORDER BY started_at DESC LIMIT :limit;
 

@@ -66,6 +66,7 @@ data class TrainModel(
     val history: List<TrainingHistoryRow>,
     val openSession: OpenSessionCard?,
     val demo: Boolean,
+    val programme: ProgrammeSummary? = null,
 )
 
 /** One exercise in a routine, as its detail page lists it. */
@@ -169,7 +170,13 @@ data class LiveExerciseModel(
 data class RestDisplay(val remainingSeconds: Long, val totalSeconds: Long, val paused: Boolean)
 
 /** One library exercise offered by the live session's add sheet. */
-data class ExerciseChoice(val id: String, val name: String, val muscles: String)
+data class ExerciseChoice(
+    val id: String,
+    val name: String,
+    val muscles: String,
+    /** Set for an exercise the person created: its fields, so it can be edited. */
+    val custom: CustomExerciseDraft? = null,
+)
 
 /** The fields a person types for an exercise that is not in the bundled library. */
 data class CustomExerciseDraft(

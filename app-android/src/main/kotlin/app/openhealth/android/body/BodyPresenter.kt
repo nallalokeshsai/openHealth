@@ -1247,6 +1247,17 @@ class BodyPresenter(
             cm
         }
         val recorded = now()
+        val rawId = store.raw.recordManual(
+            rawId = ids.newId(),
+            sourceId = manualSource,
+            sourceKind = app.openhealth.core.observation.SourceKind.MANUAL,
+            kind = "measurement",
+            payload = "type=$type;value=$value;at=${at.toEpochMilliseconds()};" +
+                "method=${method.name}",
+            happenedAt = at,
+            recordedAt = recorded,
+            appVersion = appVersion,
+        )
         val row = Measurement(
             id = ids.newId(),
             type = type,
@@ -1261,7 +1272,7 @@ class BodyPresenter(
             notes = null,
             excluded_from_trends = false,
             observation_id = null,
-            raw_record_id = null,
+            raw_record_id = rawId,
             idempotency_key = ids.newId(),
             device = DEVICE,
             app_version = appVersion,
@@ -1312,6 +1323,17 @@ class BodyPresenter(
             )
             store.observations.record(observation)
             val id = ids.newId()
+            val vitalRawId = store.raw.recordManual(
+                rawId = ids.newId(),
+                sourceId = manualSource,
+                sourceKind = app.openhealth.core.observation.SourceKind.MANUAL,
+                kind = "vital",
+                payload = "type=${type.name};value=$canonical;at=${at.toEpochMilliseconds()};" +
+                    "method=${method.name}",
+                happenedAt = at,
+                recordedAt = recorded,
+                appVersion = appVersion,
+            )
             store.body.upsertVital(
                 Vital(
                     id = id,
@@ -1328,7 +1350,7 @@ class BodyPresenter(
                     note = draft.note.takeIf { it.isNotBlank() },
                     excluded_from_trends = false,
                     observation_id = observationId.value,
-                    raw_record_id = null,
+                    raw_record_id = vitalRawId,
                     idempotency_key = ids.newId(),
                     device = DEVICE,
                     app_version = appVersion,
@@ -1558,6 +1580,25 @@ class BodyPresenter(
                 )
             }
         }
+        // The person's own named measurements (`custom:<name>`) travel in the file too.
+        store.body.latestMeasurements(MAX_CUSTOM_SCAN)
+            .filter { it.type.startsWith(CUSTOM_PREFIX) }
+            .map { it.type }
+            .distinct()
+            .forEach { type ->
+                store.body.measurementsForTypeBetween(type, 0L, Long.MAX_VALUE).forEach { row ->
+                    rows += BodyCsvRow(
+                        date = LocalDate.parse(row.local_date),
+                        type = type,
+                        value = row.value_,
+                        unit = UcumUnit.CENTIMETRE,
+                        method = row.method?.let {
+                            runCatching { MeasurementMethod.valueOf(it) }.getOrNull()
+                        },
+                        notes = row.notes,
+                    )
+                }
+            }
         CompositionMeasure.entries.forEach { measure ->
             store.body.measurementsForTypeBetween(measure.type, 0L, Long.MAX_VALUE).forEach { row ->
                 rows += BodyCsvRow(
@@ -1615,6 +1656,16 @@ class BodyPresenter(
                 }
                 if (alreadyThere) return@forEach
                 val recorded = now()
+                val importRawId = store.raw.recordManual(
+                    rawId = ids.newId(),
+                    sourceId = importSource,
+                    sourceKind = app.openhealth.core.observation.SourceKind.CSV,
+                    kind = "measurement-csv",
+                    payload = "type=${row.type};value=${row.value};date=${row.date}",
+                    happenedAt = at,
+                    recordedAt = recorded,
+                    appVersion = appVersion,
+                )
                 val measurement = Measurement(
                     id = ids.newId(),
                     type = row.type,
@@ -1629,7 +1680,7 @@ class BodyPresenter(
                     notes = row.notes,
                     excluded_from_trends = false,
                     observation_id = null,
-                    raw_record_id = null,
+                    raw_record_id = importRawId,
                     idempotency_key = idempotencyKey,
                     device = DEVICE,
                     app_version = appVersion,
@@ -1736,7 +1787,7 @@ class BodyPresenter(
 
     private fun csvProvenance(at: Instant, method: MeasurementMethod, key: String): Provenance =
         Provenance(
-            sourceId = manualSource,
+            sourceId = importSource,
             time = TimeProvenance.of(at, now(), zone),
             idempotencyKey = key,
             device = DEVICE,
@@ -1867,5 +1918,6 @@ class BodyPresenter(
         const val READ_GROUP_WINDOW_MS = 2_000L
         const val POUNDS_PER_KILOGRAM = 2.2046226218
         const val CUSTOM_PREFIX = "custom:"
+        const val MAX_CUSTOM_SCAN = 5000L
     }
 }

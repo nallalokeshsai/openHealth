@@ -21,9 +21,31 @@ import app.openhealth.android.wear.WatchGattService
  * onboarding and every later launch to Today.
  */
 class MainActivity : ComponentActivity() {
+    /**
+     * The write path captures the zone when its presenters are built. After a flight or a
+     * DST change the view model is dropped and the activity recreated, so every new
+     * `local_date` and `zone_id` uses the live zone, not the one from process start.
+     */
+    private val zoneAtStart = kotlinx.datetime.TimeZone.currentSystemDefault()
+
+    private val zoneReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (zoneAtStart != kotlinx.datetime.TimeZone.currentSystemDefault()) {
+                viewModelStore.clear()
+                recreate()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            zoneReceiver,
+            android.content.IntentFilter(android.content.Intent.ACTION_TIMEZONE_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         enableEdgeToEdge()
         val app = application as OpenHealthApp
         if (app.startupError == null) {
@@ -51,5 +73,10 @@ class MainActivity : ComponentActivity() {
                 OpenHealthRoot(container)
             }
         }
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(zoneReceiver) }
+        super.onDestroy()
     }
 }

@@ -11,7 +11,9 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
@@ -59,6 +61,8 @@ class ServerApiTest {
         val auth: AuthService,
     )
 
+    private val media = InMemoryMediaStore()
+
     private fun ApplicationTestBuilder.fixture(): Fixture {
         val authStore = InMemoryAuthStore()
         val account = authStore.createAccount(
@@ -79,7 +83,7 @@ class ServerApiTest {
         )
         val auth = AuthService(config, authStore) { 1_000L }
         val changes = InMemoryChangeStore()
-        application { openHealthModule(config, auth, changes) }
+        application { openHealthModule(config, auth, changes, media) }
         return Fixture(authStore, changes, account, raw, auth)
     }
 
@@ -136,6 +140,30 @@ class ServerApiTest {
         }.body<app.openhealth.core.sync.PushResponse>()
         assertTrue(response.rejected.isNotEmpty())
         assertEquals(0, fixture.changes.pull(fixture.account.id, 0, 10).changes.size)
+    }
+
+    /** A blob round-trips for its own account and a bad id never reaches a storage key. */
+    @Test
+    fun mediaRoundTripsForItsOwnAccountAndRejectsABadId() = testApplication {
+        val fixture = fixture()
+        val client = jsonClient()
+        val bytes = byteArrayOf(1, 2, 3, 4)
+        val stored = client.put("/media/photo-1.bin") {
+            bearerAuth(fixture.token)
+            contentType(ContentType.Application.OctetStream)
+            setBody(bytes)
+        }
+        assertEquals(HttpStatusCode.NoContent, stored.status)
+        val read = client.get("/media/photo-1.bin") { bearerAuth(fixture.token) }
+        assertEquals(HttpStatusCode.OK, read.status)
+        assertTrue(bytes.contentEquals(read.readRawBytes()))
+        val missing = client.get("/media/nothing-here") { bearerAuth(fixture.token) }
+        assertEquals(HttpStatusCode.NotFound, missing.status)
+        val traversal = client.put("/media/..%2Fsecret") {
+            bearerAuth(fixture.token)
+            setBody(bytes)
+        }
+        assertEquals(HttpStatusCode.BadRequest, traversal.status)
     }
 
     @Test

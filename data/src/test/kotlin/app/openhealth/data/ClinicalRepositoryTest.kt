@@ -178,6 +178,29 @@ class ClinicalRepositoryTest {
         store.close()
     }
 
+    /**
+     * A medicine can be deleted through Trash. Its doses go in the same tombstone, because
+     * the dose table restricts a delete of the parent, and undo brings them all back.
+     */
+    @Test
+    fun deletingAMedicationTakesItsDosesToTrashAndUndoRestoresBoth() {
+        val store = inMemoryStore()
+        val repo = ClinicalRepository(store.db)
+        val trash = TrashService(store.db, app.openhealth.core.seam.FixedClock(at))
+        repo.saveMedication(medication())
+        repo.saveDose(dose())
+        repo.saveDose(dose(id = "dose-2"))
+
+        val tombstone = assertNotNull(trash.deleteMedication("med-1"))
+        assertNull(repo.medication("med-1"))
+        assertTrue(repo.dosesForMedication("med-1").isEmpty())
+
+        assertTrue(trash.undo(tombstone))
+        assertNotNull(repo.medication("med-1"))
+        assertEquals(2, repo.dosesForMedication("med-1").size)
+        store.close()
+    }
+
     @Test
     fun editingAMedicationKeepsItsIdempotencyKey() {
         val store = inMemoryStore()

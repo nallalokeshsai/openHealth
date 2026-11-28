@@ -12,6 +12,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import app.openhealth.core.ai.CoachCategory
@@ -121,7 +123,7 @@ class ScreenScreenshotTest {
         Rtl("rtl", true, 1f, true),
     }
 
-    private fun shot(name: String, content: @Composable () -> Unit) {
+    private fun shot(name: String, prepare: () -> Unit = {}, content: @Composable () -> Unit) {
         val variant = mutableStateOf(Variant.Dark)
         compose.setContent {
             val current = variant.value
@@ -146,6 +148,7 @@ class ScreenScreenshotTest {
                 }
             }
         }
+        prepare()
         Variant.entries.forEach { entry ->
             compose.runOnIdle { variant.value = entry }
             compose.waitForIdle()
@@ -564,6 +567,32 @@ class ScreenScreenshotTest {
     fun settings() {
         shot("screen-settings") { noopSettings() }
     }
+
+    /** Each Settings sheet is a surface of its own and is held to the same four variants. */
+    private fun settingsSheet(name: String, row: String) {
+        shot(
+            name,
+            prepare = {
+                compose.onNodeWithText(row).performClick()
+                compose.waitForIdle()
+            },
+        ) { noopSettings() }
+    }
+
+    @Test
+    fun settingsModulesSheet() = settingsSheet("screen-settings-modules", "Modules")
+
+    @Test
+    fun settingsDataSheet() = settingsSheet("screen-settings-data", "Data and backups")
+
+    @Test
+    fun settingsAppearanceSheet() = settingsSheet("screen-settings-appearance", "Appearance")
+
+    @Test
+    fun settingsPrivacySheet() = settingsSheet("screen-settings-privacy", "Privacy and security")
+
+    @Test
+    fun settingsAboutSheet() = settingsSheet("screen-settings-about", "About")
 
     @Test
     fun syncConflict() {

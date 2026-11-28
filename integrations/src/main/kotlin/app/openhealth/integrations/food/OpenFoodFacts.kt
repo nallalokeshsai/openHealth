@@ -34,6 +34,12 @@ sealed interface OffLookup {
     data class Unavailable(val reason: String) : OffLookup
 }
 
+sealed interface OffSearch {
+    data class Results(val products: List<OffProduct>) : OffSearch
+
+    data class Unavailable(val reason: String) : OffSearch
+}
+
 /**
  * Open Food Facts is ODbL and is used only when the person asks for one barcode
  * (`pr.md` §6.3, §12.2). The request carries the barcode and nothing else; there is no
@@ -71,7 +77,36 @@ class OpenFoodFactsClient(
         }
     }
 
+    /**
+     * A name search, sent only when the person taps "Search Open Food Facts". The request
+     * carries the typed text and nothing else (no account, no device id, no diary data).
+     */
+    suspend fun search(query: String, limit: Int = SEARCH_LIMIT): OffSearch {
+        val text = query.trim()
+        if (text.length < MIN_QUERY) return OffSearch.Results(emptyList())
+        val url =
+            "$baseUrl/cgi/search.pl?search_terms=${java.net.URLEncoder.encode(text, "UTF-8")}" +
+                "&search_simple=1&action=process&json=1&page_size=$limit" +
+                "&fields=product_name,brands,serving_quantity,serving_size,nutriments," +
+                "allergens_tags,ingredients_analysis_tags,ingredients_text,code"
+        val response = runCatching {
+            transport.get(
+                HttpRequest(
+                    url = url,
+                    headers = mapOf(
+                        "User-Agent" to userAgent,
+                        "Accept" to "application/json",
+                    ),
+                ),
+            )
+        }.getOrElse { return OffSearch.Unavailable(it.javaClass.simpleName) }
+        if (response.status !in 200..299) return OffSearch.Unavailable("HTTP ${response.status}")
+        return OffSearch.Results(OffParser.parseSearch(response.body))
+    }
+
     companion object {
+        const val SEARCH_LIMIT = 20
+        private const val MIN_QUERY = 3
         const val DEFAULT_BASE_URL = "https://world.openfoodfacts.org"
 
         /**
@@ -99,6 +134,18 @@ object OffParser {
         data class Invalid(val reason: String) : Result
     }
 
+    /** The products of a search payload; one without a name or nutrition is left out. */
+    fun parseSearch(body: String): List<OffProduct> {
+        val root = runCatching { json.parseToJsonElement(body) }.getOrNull() as? JsonObject
+            ?: return emptyList()
+        val products = root["products"] as? JsonArray ?: return emptyList()
+        return products.mapNotNull { element ->
+            val product = element as? JsonObject ?: return@mapNotNull null
+            val code = product.string("code")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            productOf(product, code)
+        }
+    }
+
     fun parse(body: String, barcode: String): Result {
         val root = runCatching { json.parseToJsonElement(body) }.getOrNull() as? JsonObject
             ?: return Result.Invalid("invalid-json")
@@ -109,27 +156,27 @@ object OffParser {
             ?: product.string("generic_name")
             ?: return Result.Invalid("no-name")
         if (name.isBlank()) return Result.Invalid("no-name")
-        val nutriments = product["nutriments"] as? JsonObject ?: JsonObject(emptyMap())
-        val per100g = nutrientMap(nutriments)
+        val per100g = nutrientMap(product["nutriments"] as? JsonObject ?: JsonObject(emptyMap()))
         if (per100g.isEmpty()) return Result.Invalid("no-nutrition")
-        val servingGrams = product.number("serving_quantity")
-            ?.takeIf { it > 0.0 }
-        val servingLabel = product.string("serving_size")
-            ?.takeIf { it.isNotBlank() }
-        return Result.Found(
-            OffProduct(
-                barcode = barcode,
-                name = name.trim(),
-                brand = product.string("brands")?.substringBefore(',')?.trim()
-                    ?.takeIf { it.isNotBlank() },
-                servingGrams = servingGrams,
-                servingLabel = servingLabel,
-                per100g = per100g,
-                allergens = product.stringSet("allergens_tags"),
-                analysisTags = product.stringSet("ingredients_analysis_tags"),
-                ingredientsText = product.string("ingredients_text")
-                    ?.takeIf { it.isNotBlank() },
-            ),
+        return Result.Found(productOf(product, barcode) ?: return Result.Invalid("no-name"))
+    }
+
+    private fun productOf(product: JsonObject, barcode: String): OffProduct? {
+        val name = (product.string("product_name") ?: product.string("generic_name"))
+            ?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val per100g = nutrientMap(product["nutriments"] as? JsonObject ?: JsonObject(emptyMap()))
+        if (per100g.isEmpty()) return null
+        return OffProduct(
+            barcode = barcode,
+            name = name,
+            brand = product.string("brands")?.substringBefore(',')?.trim()
+                ?.takeIf { it.isNotBlank() },
+            servingGrams = product.number("serving_quantity")?.takeIf { it > 0.0 },
+            servingLabel = product.string("serving_size")?.takeIf { it.isNotBlank() },
+            per100g = per100g,
+            allergens = product.stringSet("allergens_tags"),
+            analysisTags = product.stringSet("ingredients_analysis_tags"),
+            ingredientsText = product.string("ingredients_text")?.takeIf { it.isNotBlank() },
         )
     }
 

@@ -291,6 +291,22 @@ class AndroidHealthBus(private val context: Context) : HealthBus {
         metadata = metadata(record),
     )
 
+    /** The offset a record was written under, so a reading abroad keeps its local day. */
+    private fun offsetOf(record: Record): java.time.ZoneOffset? = when (record) {
+        is StepsRecord -> record.startZoneOffset
+        is DistanceRecord -> record.startZoneOffset
+        is ActiveCaloriesBurnedRecord -> record.startZoneOffset
+        is FloorsClimbedRecord -> record.startZoneOffset
+        is HeartRateRecord -> record.startZoneOffset
+        is androidx.health.connect.client.records.RestingHeartRateRecord -> record.zoneOffset
+        is androidx.health.connect.client.records.SleepSessionRecord -> record.startZoneOffset
+        is androidx.health.connect.client.records.ExerciseSessionRecord ->
+            record.startZoneOffset
+        is androidx.health.connect.client.records.WeightRecord -> record.zoneOffset
+        is androidx.health.connect.client.records.BodyFatRecord -> record.zoneOffset
+        else -> null
+    }
+
     private fun metadata(record: Record, group: String? = null): Map<String, String> {
         val meta = record.metadata
         val device = meta.device?.model ?: meta.device?.manufacturer
@@ -298,6 +314,10 @@ class AndroidHealthBus(private val context: Context) : HealthBus {
         values["uid"] = meta.id
         if (device != null) values["device"] = device
         if (group != null && group != meta.id) values["group"] = group
+        // The offset the record was written under: a reading taken abroad keeps the local
+        // day it happened on, not the day it would be in the phone's current zone.
+        val offset = offsetOf(record)
+        if (offset != null) values["zoneOffsetSeconds"] = offset.totalSeconds.toString()
         return values
     }
 

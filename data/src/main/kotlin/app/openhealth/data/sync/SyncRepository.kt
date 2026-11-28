@@ -232,6 +232,13 @@ class SyncRepository(
         }
     }
 
+    /** Drops acknowledged log rows older than [before]; returns how many went. */
+    fun compactChangeLog(before: kotlin.time.Instant): Long {
+        val total = db.syncQueries.changeLogCount().executeAsOne()
+        db.syncQueries.compactAcknowledgedChanges(before.toEpochMilliseconds())
+        return total - db.syncQueries.changeLogCount().executeAsOne()
+    }
+
     override fun cursor(): Long = db.settingsQueries.setting(SettingKeys.SYNC_PULL_CURSOR)
         .executeAsOneOrNull()?.value_?.toLongOrNull() ?: 0L
 
@@ -484,6 +491,8 @@ class SyncRepository(
             recordedAt = atMillis,
         )
         val keyValues = SyncRowCodec.keyValues(row.entity_id, table.keys.size)
+        // A malformed composite id must not reach the codec (the apply path refuses it too).
+        if (keyValues.size != table.keys.size) return null
         val localDate = fields["local_date"] ?: codec.read(table.table, table.keys, keyValues)
             ?.get("local_date")
         val deleting = chosen.operation == ChangeOperation.DELETE

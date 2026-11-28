@@ -109,9 +109,9 @@ fun TodayScreen(
     onSaveStepGoal: (Int) -> Unit = {},
     onOpenVitals: (app.openhealth.core.observation.ObservationType?) -> Unit = {},
 ) {
-    var readinessSheet by remember { mutableStateOf(false) }
-    var goalSheet by remember { mutableStateOf(false) }
-    var stepGoalSheet by remember { mutableStateOf(false) }
+    var readinessSheet by rememberSaveable { mutableStateOf(false) }
+    var goalSheet by rememberSaveable { mutableStateOf(false) }
+    var stepGoalSheet by rememberSaveable { mutableStateOf(false) }
     var formula by remember { mutableStateOf<FormulaSheetModel?>(null) }
     var table by remember { mutableStateOf<ChartTableModel?>(null) }
     var provenance by remember { mutableStateOf<ValueProvenance?>(null) }
@@ -166,6 +166,16 @@ fun TodayScreen(
                     },
                     onShowFormula = { formula = energyFormula },
                 )
+                Spacer(Modifier.height(OhTheme.space.s5))
+            }
+            if (model.energy == null && model.energyNeedsProfile) {
+                OhCard {
+                    Text(
+                        text = stringResource(R.string.today_energy_needs_profile),
+                        style = OhTheme.type.subhead,
+                        color = OhTheme.colors.label2,
+                    )
+                }
                 Spacer(Modifier.height(OhTheme.space.s5))
             }
         }

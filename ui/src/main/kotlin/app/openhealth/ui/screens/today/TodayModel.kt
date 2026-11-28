@@ -159,6 +159,8 @@ data class TodayModel(
     val sessionCount: Int = 0,
     val plan: TodayPlanModel? = null,
     val energy: TodayEnergyModel? = null,
+    /** True when the energy card is hidden only because a profile input is missing. */
+    val energyNeedsProfile: Boolean = false,
     val stepsCard: TodayStepsModel? = null,
     val weightCard: TodayWeightModel? = null,
     val due: List<TodayDueItem> = emptyList(),
